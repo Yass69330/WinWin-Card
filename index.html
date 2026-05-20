@@ -20,6 +20,7 @@
       --dark-2:   #13132a;
       --dark-3:   #1c1c38;
       --card-bg:  #16163a;
+      --navy:     #0f1b2e;
       --border:   rgba(124,58,237,.25);
       --text:     #f1f0ff;
       --muted:    #9896b8;
@@ -97,42 +98,33 @@
       border-bottom: 1px solid var(--border);
     }
     .nav-inner {
-      display: flex; align-items: center; justify-content: space-between;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
     }
-    .logo {
-      display: flex; align-items: center; gap: 10px;
-      font-size: 1.3rem; font-weight: 800;
-    }
-    .logo-icon {
-      width: 36px; height: 36px; border-radius: 10px;
-      background: linear-gradient(135deg, var(--purple), var(--indigo));
-      display: flex; align-items: center; justify-content: center;
-    }
-    .logo-icon svg { width: 20px; height: 20px; }
-    .nav-links { display: flex; align-items: center; gap: 32px; }
+    .logo { display: flex; align-items: center; flex-shrink: 0; }
+    .logo-img { height: 44px; width: auto; border-radius: 10px; display: block; }
+    @media (max-width: 480px) { .logo-img { height: 36px; } }
+    .nav-links { display: flex; align-items: center; gap: 28px; }
     .nav-links a { color: var(--muted); font-size: .9rem; font-weight: 500; transition: color .2s; }
     .nav-links a:hover { color: var(--text); }
-    .nav-cta { display: flex; gap: 10px; }
-    @media (max-width: 768px) {
-      .nav-links { display: none; }
+    .nav-right { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+    .lang-toggle { display: flex; align-items: center; gap: 2px; }
+    .lang-btn {
+      background: none; border: none; color: var(--muted);
+      font-size: .85rem; font-weight: 500; cursor: pointer;
+      padding: 4px 5px; transition: color .2s; font-family: inherit;
     }
+    .lang-btn:hover, .lang-btn.active { color: var(--text); }
+    .lang-sep { color: var(--muted); font-size: .8rem; opacity: .4; }
+    @media (max-width: 768px) { .nav-links { display: none; } }
 
     /* ── HERO ──────────────────────────────────────────────── */
     #hero {
       min-height: 100vh; display: flex; align-items: center;
       position: relative; overflow: hidden; padding-top: 80px;
     }
-    .hero-glow {
-      position: absolute; border-radius: 50%; filter: blur(120px); pointer-events: none;
-    }
-    .hero-glow-1 {
-      width: 600px; height: 600px; top: -200px; left: -200px;
-      background: rgba(124,58,237,.18);
-    }
-    .hero-glow-2 {
-      width: 400px; height: 400px; bottom: -100px; right: -100px;
-      background: rgba(245,158,11,.12);
-    }
+    .hero-glow { position: absolute; border-radius: 50%; filter: blur(120px); pointer-events: none; }
+    .hero-glow-1 { width: 600px; height: 600px; top: -200px; left: -200px; background: rgba(124,58,237,.18); }
+    .hero-glow-2 { width: 400px; height: 400px; bottom: -100px; right: -100px; background: rgba(245,158,11,.12); }
     .hero-inner {
       display: grid; grid-template-columns: 1fr 1fr; gap: 60px;
       align-items: center; position: relative; z-index: 1;
@@ -148,17 +140,18 @@
       letter-spacing: .1em; text-transform: uppercase;
       padding: 6px 14px; border-radius: 99px; margin-bottom: 24px;
     }
-    .hero-eyebrow span { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); display: inline-block; animation: pulse 2s infinite; }
+    .hero-eyebrow .pulse-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--gold); display: inline-block; animation: pulse 2s infinite;
+    }
     @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.8)} }
     .hero-title {
-      font-size: clamp(2.5rem, 5.5vw, 4.2rem); font-weight: 900;
+      font-size: clamp(2.4rem, 5vw, 3.8rem); font-weight: 900;
       line-height: 1.1; margin-bottom: 24px;
     }
-    .hero-desc { font-size: 1.15rem; color: var(--muted); max-width: 480px; margin-bottom: 36px; line-height: 1.7; }
+    .hero-desc { font-size: 1.1rem; color: var(--muted); max-width: 480px; margin-bottom: 36px; line-height: 1.7; }
     .hero-actions { display: flex; gap: 14px; flex-wrap: wrap; }
-    .hero-badges {
-      display: flex; gap: 10px; margin-top: 40px; flex-wrap: wrap;
-    }
+    .hero-badges { display: flex; gap: 10px; margin-top: 40px; flex-wrap: wrap; }
     .hero-badge {
       display: flex; align-items: center; gap: 8px;
       background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1);
@@ -166,256 +159,7 @@
     }
     .hero-badge svg { width: 16px; height: 16px; flex-shrink: 0; }
 
-    /* ── WALLET CARDS VISUAL ───────────────────────────────── */
-    .cards-visual { position: relative; height: 420px; perspective: 1000px; }
-    .wallet-card {
-      position: absolute; width: 320px; border-radius: 18px;
-      padding: 28px; color: #fff; font-size: .85rem;
-      transition: transform .3s; will-change: transform;
-    }
-    .wallet-card-1 {
-      background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
-      top: 40px; left: 20px; transform: rotate(-6deg);
-      box-shadow: 0 20px 60px rgba(124,58,237,.5);
-      animation: float1 6s ease-in-out infinite;
-    }
-    .wallet-card-2 {
-      background: linear-gradient(135deg, #d97706 0%, #92400e 100%);
-      top: 100px; left: 60px; transform: rotate(3deg);
-      box-shadow: 0 20px 60px rgba(217,119,6,.4);
-      animation: float2 6s ease-in-out infinite;
-    }
-    .wallet-card-3 {
-      background: linear-gradient(135deg, #065f46 0%, #10b981 100%);
-      top: 200px; left: 100px; transform: rotate(-2deg);
-      box-shadow: 0 20px 60px rgba(16,185,129,.3);
-      animation: float3 6s ease-in-out infinite;
-    }
-    @keyframes float1 { 0%,100%{transform:rotate(-6deg) translateY(0)} 50%{transform:rotate(-6deg) translateY(-12px)} }
-    @keyframes float2 { 0%,100%{transform:rotate(3deg) translateY(-6px)} 50%{transform:rotate(3deg) translateY(6px)} }
-    @keyframes float3 { 0%,100%{transform:rotate(-2deg) translateY(4px)} 50%{transform:rotate(-2deg) translateY(-8px)} }
-    .card-logo { font-size: 1.2rem; font-weight: 800; margin-bottom: 32px; letter-spacing: -.01em; }
-    .card-points { font-size: 2.4rem; font-weight: 900; line-height: 1; }
-    .card-points-label { font-size: .72rem; opacity: .7; text-transform: uppercase; letter-spacing: .08em; margin-top: 4px; margin-bottom: 20px; }
-    .card-name { font-size: .85rem; opacity: .8; }
-    .card-progress {
-      height: 4px; background: rgba(255,255,255,.2); border-radius: 99px; margin-top: 12px;
-    }
-    .card-progress-fill {
-      height: 100%; border-radius: 99px; background: rgba(255,255,255,.8);
-    }
-    .wallet-badges {
-      position: absolute; bottom: 0; right: 0;
-      display: flex; flex-direction: column; gap: 10px; align-items: flex-end;
-    }
-    .wallet-badge-pill {
-      display: flex; align-items: center; gap: 8px;
-      background: var(--dark-3); border: 1px solid var(--border);
-      border-radius: 99px; padding: 8px 14px; font-size: .8rem; font-weight: 600;
-    }
-
-    /* ── HOW IT WORKS ──────────────────────────────────────── */
-    #how-it-works { background: var(--dark-2); position: relative; overflow: hidden; }
-    .steps-grid {
-      display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px;
-      position: relative; z-index: 1;
-    }
-    @media (max-width: 860px) { .steps-grid { grid-template-columns: 1fr; } }
-    .steps-connector {
-      position: absolute; top: 80px; left: calc(16.66% + 40px); right: calc(16.66% + 40px);
-      height: 2px; background: linear-gradient(90deg, var(--purple), var(--indigo));
-      z-index: 0;
-    }
-    @media (max-width: 860px) { .steps-connector { display: none; } }
-    .step-card {
-      background: var(--card-bg); border: 1px solid var(--border);
-      border-radius: var(--r); padding: 36px 28px; position: relative;
-      transition: transform .3s, border-color .3s;
-    }
-    .step-card:hover { transform: translateY(-6px); border-color: rgba(124,58,237,.5); }
-    .step-number {
-      width: 52px; height: 52px; border-radius: 14px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 1.5rem; font-weight: 900; margin-bottom: 24px;
-      position: relative;
-    }
-    .step-number-1 { background: linear-gradient(135deg, var(--purple), var(--indigo)); }
-    .step-number-2 { background: linear-gradient(135deg, #d97706, #f59e0b); }
-    .step-number-3 { background: linear-gradient(135deg, #059669, #10b981); }
-    .step-icon-wrap {
-      width: 100%; height: 140px; border-radius: 12px; margin-bottom: 24px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 4rem; background: rgba(255,255,255,.04);
-    }
-    .step-card h3 { font-size: 1.2rem; font-weight: 700; margin-bottom: 12px; }
-    .step-card p  { font-size: .92rem; color: var(--muted); line-height: 1.7; }
-    .step-highlight {
-      display: inline-flex; align-items: center; gap: 6px;
-      background: rgba(16,185,129,.1); border: 1px solid rgba(16,185,129,.3);
-      color: var(--green); font-size: .75rem; font-weight: 700;
-      padding: 4px 10px; border-radius: 6px; margin-top: 14px;
-    }
-
-    /* ── FEATURES ──────────────────────────────────────────── */
-    #features { background: var(--dark); }
-    .features-grid {
-      display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
-    }
-    @media (max-width: 860px) { .features-grid { grid-template-columns: 1fr 1fr; } }
-    @media (max-width: 540px) { .features-grid { grid-template-columns: 1fr; } }
-    .feature-card {
-      background: var(--card-bg); border: 1px solid var(--border);
-      border-radius: var(--r); padding: 28px;
-      transition: transform .3s, border-color .3s;
-    }
-    .feature-card:hover { transform: translateY(-4px); border-color: rgba(124,58,237,.4); }
-    .feature-card.featured {
-      background: linear-gradient(135deg, rgba(124,58,237,.2) 0%, rgba(79,70,229,.15) 100%);
-      border-color: rgba(124,58,237,.4); grid-column: span 2;
-    }
-    @media (max-width: 860px) { .feature-card.featured { grid-column: span 1; } }
-    .feature-icon {
-      width: 48px; height: 48px; border-radius: 12px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 1.4rem; margin-bottom: 18px;
-    }
-    .fi-purple  { background: rgba(124,58,237,.2); }
-    .fi-gold    { background: rgba(245,158,11,.15); }
-    .fi-green   { background: rgba(16,185,129,.15); }
-    .fi-blue    { background: rgba(59,130,246,.15); }
-    .fi-pink    { background: rgba(236,72,153,.15); }
-    .fi-orange  { background: rgba(249,115,22,.15); }
-    .feature-card h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 10px; }
-    .feature-card p  { font-size: .88rem; color: var(--muted); line-height: 1.65; }
-
-    /* ── CLIENTS ───────────────────────────────────────────── */
-    #clients { background: var(--dark-2); }
-    .clients-grid {
-      display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px;
-    }
-    @media (max-width: 900px) { .clients-grid { grid-template-columns: repeat(3, 1fr); } }
-    @media (max-width: 540px) { .clients-grid { grid-template-columns: repeat(2, 1fr); } }
-    .client-card {
-      background: var(--card-bg); border: 1px solid var(--border);
-      border-radius: var(--r); padding: 24px 16px;
-      display: flex; flex-direction: column; align-items: center; gap: 12px;
-      transition: transform .3s, border-color .3s; text-align: center;
-    }
-    .client-card:hover { transform: translateY(-4px); border-color: rgba(124,58,237,.4); }
-    .client-emoji { font-size: 2.4rem; }
-    .client-card span { font-size: .85rem; font-weight: 600; color: var(--muted); }
-
-    /* ── ANALYTICS ─────────────────────────────────────────── */
-    #analytics { background: var(--dark); }
-    .analytics-inner {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center;
-    }
-    @media (max-width: 860px) { .analytics-inner { grid-template-columns: 1fr; } }
-    .analytics-mockup {
-      background: var(--card-bg); border: 1px solid var(--border);
-      border-radius: 20px; padding: 28px; position: relative; overflow: hidden;
-    }
-    .analytics-mockup::before {
-      content: ''; position: absolute; inset: 0;
-      background: linear-gradient(135deg, rgba(124,58,237,.08) 0%, transparent 60%);
-      pointer-events: none;
-    }
-    .mock-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
-    .mock-title { font-size: .95rem; font-weight: 700; }
-    .mock-badge { background: rgba(16,185,129,.15); color: var(--green); border: 1px solid rgba(16,185,129,.3); font-size: .7rem; font-weight: 700; padding: 3px 8px; border-radius: 6px; }
-    .mock-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-bottom: 24px; }
-    .mock-stat { background: rgba(255,255,255,.04); border-radius: 10px; padding: 14px; }
-    .mock-stat-value { font-size: 1.4rem; font-weight: 800; margin-bottom: 2px; }
-    .mock-stat-label { font-size: .72rem; color: var(--muted); }
-    .mock-chart { height: 80px; display: flex; align-items: flex-end; gap: 6px; }
-    .mock-bar {
-      flex: 1; border-radius: 4px 4px 0 0;
-      background: linear-gradient(180deg, rgba(124,58,237,.8) 0%, rgba(79,70,229,.4) 100%);
-      transition: height .5s;
-    }
-    .mock-notifs { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
-    .mock-notif {
-      display: flex; align-items: center; gap: 12px;
-      background: rgba(255,255,255,.04); border-radius: 10px; padding: 12px;
-      font-size: .8rem;
-    }
-    .notif-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-    .dot-green { background: var(--green); box-shadow: 0 0 6px var(--green); }
-    .dot-gold  { background: var(--gold);  box-shadow: 0 0 6px var(--gold); }
-    .dot-purple{ background: var(--purple-l); box-shadow: 0 0 6px var(--purple-l); }
-    .mock-notif-text { flex: 1; }
-    .mock-notif-text strong { display: block; color: var(--text); }
-    .mock-notif-text span   { color: var(--muted); font-size: .72rem; }
-    .analytics-features { display: flex; flex-direction: column; gap: 20px; }
-    .af-item { display: flex; gap: 16px; }
-    .af-icon {
-      width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
-      background: rgba(124,58,237,.15); display: flex; align-items: center;
-      justify-content: center; font-size: 1.2rem;
-    }
-    .af-item h4 { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
-    .af-item p  { font-size: .88rem; color: var(--muted); line-height: 1.6; }
-
-    /* ── WALLET COMPAT ─────────────────────────────────────── */
-    #wallet { background: var(--dark-2); }
-    .wallet-compat {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 32px; max-width: 720px; margin: 0 auto;
-    }
-    @media (max-width: 600px) { .wallet-compat { grid-template-columns: 1fr; } }
-    .compat-card {
-      background: var(--card-bg); border: 1px solid var(--border);
-      border-radius: var(--r); padding: 36px;
-      display: flex; flex-direction: column; align-items: center; gap: 16px;
-      text-align: center; transition: transform .3s;
-    }
-    .compat-card:hover { transform: translateY(-4px); }
-    .compat-logo { font-size: 3rem; }
-    .compat-card h3 { font-size: 1.1rem; font-weight: 700; }
-    .compat-card p  { font-size: .88rem; color: var(--muted); line-height: 1.6; }
-    .compat-tag {
-      background: rgba(16,185,129,.1); border: 1px solid rgba(16,185,129,.3);
-      color: var(--green); font-size: .72rem; font-weight: 700;
-      padding: 4px 10px; border-radius: 6px;
-    }
-
-    /* ── PRICING / CTA ─────────────────────────────────────── */
-    #cta { background: var(--dark); position: relative; overflow: hidden; }
-    .cta-glow {
-      position: absolute; width: 800px; height: 800px;
-      border-radius: 50%; filter: blur(140px); pointer-events: none;
-      background: rgba(124,58,237,.15); top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-    }
-    .cta-inner {
-      position: relative; z-index: 1; text-align: center;
-      max-width: 640px; margin: 0 auto;
-    }
-    .cta-inner h2 { font-size: clamp(2rem, 4vw, 3.2rem); font-weight: 900; margin-bottom: 20px; }
-    .cta-inner p  { font-size: 1.1rem; color: var(--muted); margin-bottom: 40px; }
-    .cta-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
-    .cta-note { margin-top: 20px; font-size: .82rem; color: var(--muted); }
-
-    /* ── FOOTER ────────────────────────────────────────────── */
-    footer {
-      background: var(--dark-2); border-top: 1px solid var(--border);
-      padding: 48px 0 32px;
-    }
-    .footer-inner {
-      display: flex; align-items: center; justify-content: space-between;
-      flex-wrap: wrap; gap: 20px;
-    }
-    .footer-links { display: flex; gap: 24px; }
-    .footer-links a { font-size: .85rem; color: var(--muted); transition: color .2s; }
-    .footer-links a:hover { color: var(--text); }
-    .footer-copy { font-size: .82rem; color: var(--muted); }
-
-    /* ── LOGO IMAGE ────────────────────────────────────────── */
-    .logo-img {
-      height: 44px; width: auto; border-radius: 10px; display: block;
-    }
-    @media (max-width: 480px) { .logo-img { height: 36px; } }
-
-    /* ── PHONE MOCKUPS (hero) ──────────────────────────────── */
+    /* ── PHONE MOCKUPS ─────────────────────────────────────── */
     .phones-visual {
       position: relative; height: 500px;
       display: flex; align-items: center; justify-content: center;
@@ -434,13 +178,11 @@
     }
     .phone-frame img { width: 100%; height: auto; display: block; }
     .phone-rose {
-      transform: rotate(-8deg) translateX(-60px) translateY(-20px);
-      z-index: 1;
+      transform: rotate(-8deg) translateX(-60px) translateY(-20px); z-index: 1;
       animation: floatPhone1 6s ease-in-out infinite;
     }
     .phone-gold {
-      transform: rotate(6deg) translateX(60px) translateY(25px);
-      z-index: 2;
+      transform: rotate(6deg) translateX(60px) translateY(25px); z-index: 2;
       animation: floatPhone2 7s ease-in-out infinite;
     }
     @keyframes floatPhone1 {
@@ -452,28 +194,208 @@
       50%     { transform: rotate(6deg) translateX(60px) translateY(10px); }
     }
     @media (max-width: 900px) {
-      .phones-visual { height: 380px; }
-      .phone-frame { width: 155px; }
-      .phone-rose { transform: rotate(-6deg) translateX(-46px) translateY(-14px); }
-      .phone-gold { transform: rotate(4deg) translateX(46px) translateY(18px); }
+      .phones-visual { height: 360px; }
+      .phone-frame { width: 150px; }
+      .phone-rose { animation: none; transform: rotate(-6deg) translateX(-44px) translateY(-12px); }
+      .phone-gold { animation: none; transform: rotate(4deg) translateX(44px) translateY(15px); }
     }
 
-    /* ── WALLET OFFICIAL BADGES ────────────────────────────── */
-    .wallet-badge-official { height: 38px; width: auto; margin-top: 10px; }
+    /* ── STATS BAR ─────────────────────────────────────────── */
+    #stats { background: var(--dark-2); padding: 56px 0; }
+    .stats-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      border: 1px solid var(--border); border-radius: 20px; overflow: hidden;
+    }
+    @media (max-width: 600px) { .stats-grid { grid-template-columns: 1fr; } }
+    .stat-item {
+      background: var(--card-bg); padding: 36px 24px; text-align: center;
+      border-right: 1px solid var(--border);
+    }
+    .stat-item:last-child { border-right: none; }
+    @media (max-width: 600px) {
+      .stat-item { border-right: none; border-bottom: 1px solid var(--border); }
+      .stat-item:last-child { border-bottom: none; }
+    }
+    .stat-value {
+      font-size: 2.6rem; font-weight: 900; margin-bottom: 10px; line-height: 1;
+      background: linear-gradient(135deg, var(--purple-l), var(--gold-l));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .stat-label { font-size: .88rem; color: var(--muted); line-height: 1.5; }
+
+    /* ── SECTION MARCHANDS ─────────────────────────────────── */
+    #avantages { background: var(--dark); }
+    .merchants-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px;
+    }
+    @media (max-width: 700px) { .merchants-grid { grid-template-columns: 1fr; } }
+    .merchant-card {
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 32px;
+      transition: transform .3s, border-color .3s;
+    }
+    .merchant-card:hover { transform: translateY(-4px); border-color: rgba(124,58,237,.4); }
+    .mc-icon {
+      width: 52px; height: 52px; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem; margin-bottom: 20px;
+    }
+    .mc-purple { background: rgba(124,58,237,.2); }
+    .mc-gold   { background: rgba(245,158,11,.15); }
+    .mc-green  { background: rgba(16,185,129,.15); }
+    .mc-pink   { background: rgba(236,72,153,.15); }
+    .merchant-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 10px; }
+    .merchant-card p  { font-size: .9rem; color: var(--muted); line-height: 1.7; }
+
+    /* ── HOW IT WORKS ──────────────────────────────────────── */
+    #how-it-works { background: var(--dark-2); position: relative; overflow: hidden; }
+    .steps-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px;
+      position: relative; z-index: 1;
+    }
+    @media (max-width: 860px) { .steps-grid { grid-template-columns: 1fr; } }
+    .steps-connector {
+      position: absolute; top: 80px; left: calc(16.66% + 40px); right: calc(16.66% + 40px);
+      height: 2px; background: linear-gradient(90deg, var(--purple), var(--indigo)); z-index: 0;
+    }
+    @media (max-width: 860px) { .steps-connector { display: none; } }
+    .step-card {
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 36px 28px; position: relative;
+      transition: transform .3s, border-color .3s;
+    }
+    .step-card:hover { transform: translateY(-6px); border-color: rgba(124,58,237,.5); }
+    .step-number {
+      width: 52px; height: 52px; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem; font-weight: 900; margin-bottom: 24px;
+    }
+    .step-number-1 { background: linear-gradient(135deg, var(--purple), var(--indigo)); }
+    .step-number-2 { background: linear-gradient(135deg, #d97706, #f59e0b); }
+    .step-number-3 { background: linear-gradient(135deg, #059669, #10b981); }
+    .step-icon-wrap {
+      width: 100%; height: 120px; border-radius: 12px; margin-bottom: 24px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 3.5rem; background: rgba(255,255,255,.04);
+    }
+    .step-card h3 { font-size: 1.15rem; font-weight: 700; margin-bottom: 12px; }
+    .step-card p  { font-size: .9rem; color: var(--muted); line-height: 1.7; }
+    .step-highlight {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(16,185,129,.1); border: 1px solid rgba(16,185,129,.3);
+      color: var(--green); font-size: .75rem; font-weight: 700;
+      padding: 4px 10px; border-radius: 6px; margin-top: 14px;
+    }
+
+    /* ── SECTION CLIENTS ───────────────────────────────────── */
+    #customers { background: var(--dark); }
+    .customers-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+      margin-bottom: 48px;
+    }
+    @media (max-width: 860px) { .customers-grid { grid-template-columns: 1fr; } }
+    .customer-card {
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 32px; text-align: center;
+      transition: transform .3s, border-color .3s;
+    }
+    .customer-card:hover { transform: translateY(-4px); border-color: rgba(124,58,237,.4); }
+    .cc-icon {
+      width: 64px; height: 64px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.8rem; margin: 0 auto 20px;
+    }
+    .cc-purple { background: rgba(124,58,237,.15); }
+    .cc-gold   { background: rgba(245,158,11,.12); }
+    .cc-green  { background: rgba(16,185,129,.12); }
+    .customer-card h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 10px; }
+    .customer-card p  { font-size: .88rem; color: var(--muted); line-height: 1.65; }
+    .wallet-compat-mini {
+      display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;
+    }
+    .compat-pill {
+      display: flex; align-items: center; gap: 14px;
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px 20px;
+    }
+    .compat-pill-info h4 { font-size: .88rem; font-weight: 700; margin-bottom: 2px; }
+    .compat-pill-info span { font-size: .75rem; color: var(--muted); }
+    .compat-ok {
+      background: rgba(16,185,129,.1); border: 1px solid rgba(16,185,129,.3);
+      color: var(--green); font-size: .72rem; font-weight: 700;
+      padding: 3px 8px; border-radius: 5px; white-space: nowrap;
+    }
+    .apple-badge-sm { height: 28px; width: auto; }
     .google-wallet-badge {
-      display: inline-flex; align-items: center; gap: 8px;
-      background: #fff; border-radius: 8px;
-      padding: 8px 16px; color: #3c4043;
-      font-weight: 700; font-size: .82rem; margin-top: 10px;
+      display: inline-flex; align-items: center; gap: 7px;
+      background: #fff; border-radius: 6px;
+      padding: 5px 11px; color: #3c4043;
+      font-weight: 700; font-size: .78rem;
       box-shadow: 0 1px 4px rgba(0,0,0,.35);
     }
-    .google-wallet-badge svg { width: 18px; height: 18px; flex-shrink: 0; }
+    .google-wallet-badge svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+    /* ── TÉMOIGNAGES ───────────────────────────────────────── */
+    #temoignages { background: var(--dark-2); }
+    .testi-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+    }
+    @media (max-width: 860px) { .testi-grid { grid-template-columns: 1fr; } }
+    .testi-card {
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 32px;
+      transition: transform .3s, border-color .3s;
+    }
+    .testi-card:hover { transform: translateY(-4px); border-color: rgba(124,58,237,.4); }
+    .testi-stars { color: var(--gold); letter-spacing: 2px; margin-bottom: 16px; font-size: .95rem; }
+    .testi-text {
+      font-size: .92rem; color: var(--muted); line-height: 1.75;
+      font-style: italic; margin-bottom: 24px;
+    }
+    .testi-author { display: flex; align-items: center; gap: 12px; }
+    .testi-avatar {
+      width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: .95rem; color: #fff;
+    }
+    .ta-purple { background: linear-gradient(135deg, var(--purple), var(--indigo)); }
+    .ta-gold   { background: linear-gradient(135deg, #d97706, #f59e0b); }
+    .ta-green  { background: linear-gradient(135deg, #059669, #10b981); }
+    .testi-name { font-weight: 700; font-size: .9rem; margin-bottom: 2px; }
+    .testi-role { font-size: .78rem; color: var(--muted); }
+
+    /* ── CTA ───────────────────────────────────────────────── */
+    #cta { background: var(--dark); position: relative; overflow: hidden; }
+    .cta-glow {
+      position: absolute; width: 800px; height: 800px;
+      border-radius: 50%; filter: blur(140px); pointer-events: none;
+      background: rgba(124,58,237,.15); top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .cta-inner {
+      position: relative; z-index: 1; text-align: center; max-width: 640px; margin: 0 auto;
+    }
+    .cta-inner h2 { font-size: clamp(2rem, 4vw, 3.2rem); font-weight: 900; margin-bottom: 14px; }
+    .cta-subtitle { font-size: 1.1rem; color: var(--muted); margin-bottom: 10px; }
+    .cta-desc { font-size: .88rem; color: var(--muted); margin-bottom: 40px; opacity: .7; }
+    .cta-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+
+    /* ── FOOTER ────────────────────────────────────────────── */
+    footer {
+      background: var(--dark-2); border-top: 1px solid var(--border); padding: 48px 0 32px;
+    }
+    .footer-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 20px;
+    }
+    .footer-links { display: flex; gap: 24px; }
+    .footer-links a { font-size: .85rem; color: var(--muted); transition: color .2s; }
+    .footer-links a:hover { color: var(--text); }
+    .footer-copy { font-size: .82rem; color: var(--muted); }
 
     /* ── Scroll animations ─────────────────────────────────── */
-    .reveal {
-      opacity: 0; transform: translateY(30px);
-      transition: opacity .6s ease, transform .6s ease;
-    }
+    .reveal { opacity: 0; transform: translateY(30px); transition: opacity .6s ease, transform .6s ease; }
     .reveal.visible { opacity: 1; transform: translateY(0); }
   </style>
 </head>
@@ -488,14 +410,17 @@
       <img src="assets/logo.png" alt="WinWin Card" class="logo-img">
     </a>
     <div class="nav-links">
-      <a href="#how-it-works">Fonctionnement</a>
-      <a href="#features">Fonctionnalités</a>
-      <a href="#clients">Secteurs</a>
-      <a href="#analytics">Analytics</a>
-      <a href="#wallet">Wallets</a>
+      <a href="#avantages" data-i18n="nav.link1">Avantages</a>
+      <a href="#how-it-works" data-i18n="nav.link2">Fonctionnement</a>
+      <a href="#temoignages" data-i18n="nav.link3">Témoignages</a>
     </div>
-    <div class="nav-cta">
-      <a href="#cta" class="btn btn-primary">Démarrer</a>
+    <div class="nav-right">
+      <div class="lang-toggle">
+        <button class="lang-btn" id="lang-fr" onclick="setLanguage('fr')">FR</button>
+        <span class="lang-sep">|</span>
+        <button class="lang-btn" id="lang-en" onclick="setLanguage('en')">EN</button>
+      </div>
+      <a href="#cta" class="btn btn-primary" data-i18n="nav.cta">Démarrer gratuitement</a>
     </div>
   </div>
 </nav>
@@ -511,39 +436,38 @@
       <!-- LEFT -->
       <div>
         <div class="hero-eyebrow">
-          <span></span> Fidélité digitale nouvelle génération
+          <span class="pulse-dot"></span>
+          <span data-i18n="hero.eyebrow">Fidélité digitale nouvelle génération</span>
         </div>
-        <h1 class="hero-title">
+        <h1 class="hero-title" data-i18n-html="hero.title">
           La carte de fidélité<br/>
-          <span class="grad-text">sans friction</span><br/>
-          dans leur Wallet
+          <span class="grad-text">qui s'enregistre</span><br/>
+          dans le wallet
         </h1>
-        <p class="hero-desc">
-          Un QR code, un prénom. Votre client a sa carte de fidélité dans Apple Wallet ou Google Wallet en 10 secondes. Zéro application à télécharger. Vos points, vos récompenses, vos notifications — tout automatique.
+        <p class="hero-desc" data-i18n="hero.desc">
+          Vos clients ajoutent leur carte en un scan — elle s'intègre à Apple Wallet et Google Wallet. Aucune application à télécharger, zéro friction, fidélité instantanée.
         </p>
         <div class="hero-actions">
           <a href="#cta" class="btn btn-primary">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-            Démarrer gratuitement
+            <span data-i18n="hero.cta1">Commencer gratuitement</span>
           </a>
-          <a href="#how-it-works" class="btn btn-ghost">Voir comment ça marche</a>
+          <a href="#how-it-works" class="btn btn-ghost">
+            <span data-i18n="hero.cta2">Voir une démo</span>
+          </a>
         </div>
         <div class="hero-badges">
           <div class="hero-badge">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-            0 app à télécharger
+            <span data-i18n="hero.badge1">0 app à télécharger</span>
           </div>
           <div class="hero-badge">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18"/></svg>
-            Apple &amp; Google Wallet
+            <span data-i18n="hero.badge2">compatible nativement</span>
           </div>
           <div class="hero-badge">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8h1a4 4 0 1 1 0 8h-1M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8zM6 1v3M10 1v3M14 1v3"/></svg>
-            Notifications push
-          </div>
-          <div class="hero-badge">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v4H3zM3 10h18v4H3zM3 17h18v4H3z"/></svg>
-            Design personnalisé
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <span data-i18n="hero.badge3">Notifications push</span>
           </div>
         </div>
       </div>
@@ -566,289 +490,109 @@
 </section>
 
 <!-- ═══════════════════════════════════════════════════════════
+     STATS
+════════════════════════════════════════════════════════════ -->
+<section id="stats">
+  <div class="container">
+    <div class="stats-grid reveal">
+      <div class="stat-item">
+        <div class="stat-value">68%</div>
+        <div class="stat-label" data-i18n="stats.s1.label">taux de retour client moyen</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">&lt; 15 min</div>
+        <div class="stat-label" data-i18n="stats.s2.label">pour démarrer votre programme</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">0 app</div>
+        <div class="stat-label" data-i18n="stats.s3.label">à installer pour vos clients</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SECTION MARCHANDS
+════════════════════════════════════════════════════════════ -->
+<section id="avantages" class="section">
+  <div class="container">
+    <div class="reveal" style="text-align:center; margin-bottom:60px;">
+      <div class="tag" style="margin:0 auto 20px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        <span data-i18n="merchants.tag">Pour les commerçants</span>
+      </div>
+      <h2 class="section-title" data-i18n-html="merchants.title">
+        Des données qui font <span class="grad-text">vraiment la différence</span>
+      </h2>
+    </div>
+    <div class="merchants-grid reveal">
+      <div class="merchant-card">
+        <div class="mc-icon mc-purple">📊</div>
+        <h3 data-i18n="merchants.f1.title">Data report sur vos clients</h3>
+        <p data-i18n="merchants.f1.desc">Fréquence de visite, panier moyen, meilleurs clients, périodes creuses — des chiffres réels pour prendre de vraies décisions.</p>
+      </div>
+      <div class="merchant-card">
+        <div class="mc-icon mc-gold">🚀</div>
+        <h3 data-i18n="merchants.f2.title">Valorisez votre commerce</h3>
+        <p data-i18n="merchants.f2.desc">Les données générées par vos clients fidèles deviennent un actif concret : partenariats, financements, développement.</p>
+      </div>
+      <div class="merchant-card">
+        <div class="mc-icon mc-pink">🔔</div>
+        <h3 data-i18n="merchants.f3.title">Notifications push ciblées</h3>
+        <p data-i18n="merchants.f3.desc">Relancez les clients inactifs ou annoncez une promo au bon moment — depuis votre tableau de bord, en deux clics.</p>
+      </div>
+      <div class="merchant-card">
+        <div class="mc-icon mc-green">🏆</div>
+        <h3 data-i18n="merchants.f4.title">Récompenses sur mesure</h3>
+        <p data-i18n="merchants.f4.desc">Définissez vos règles : points, paliers, offres anniversaires. Le programme s'adapte à votre commerce, pas l'inverse.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
      HOW IT WORKS
 ════════════════════════════════════════════════════════════ -->
 <section id="how-it-works" class="section">
   <div class="container">
-    <div class="reveal">
-      <div class="tag">
+    <div class="reveal" style="text-align:center; margin-bottom:60px;">
+      <div class="tag" style="margin:0 auto 20px;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
-        Fonctionnement
+        <span data-i18n="how.tag">Fonctionnement</span>
       </div>
-      <h2 class="section-title">3 étapes, c'est tout.</h2>
-      <p class="section-sub">Une expérience fluide pour vos clients — de zéro à fidèle en moins d'une minute.</p>
+      <h2 class="section-title" data-i18n-html="how.title">Lancé en <span class="grad-text">3 étapes</span></h2>
     </div>
-
     <div style="position:relative">
       <div class="steps-connector"></div>
       <div class="steps-grid">
-
-        <!-- STEP 1 -->
         <div class="step-card reveal">
           <div class="step-number step-number-1">1</div>
-          <div class="step-icon-wrap">
-            <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,.7)" stroke-width="1.5">
-              <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>
-              <rect x="5" y="5" width="3" height="3" fill="rgba(167,139,250,.5)"/>
-              <rect x="16" y="5" width="3" height="3" fill="rgba(167,139,250,.5)"/>
-              <rect x="5" y="16" width="3" height="3" fill="rgba(167,139,250,.5)"/>
-              <rect x="14" y="14" width="7" height="7" rx="1"/><rect x="16" y="16" width="3" height="3" fill="rgba(167,139,250,.5)"/>
-            </svg>
-          </div>
-          <h3>Scan du QR code</h3>
-          <p>Le client entre dans votre établissement et scanne le QR code affiché. Il saisit simplement son prénom et la carte s'ajoute instantanément dans son Apple Wallet ou Google Wallet.</p>
+          <div class="step-icon-wrap">🏪</div>
+          <h3 data-i18n="how.step1.title">Créez votre espace</h3>
+          <p data-i18n="how.step1.desc">Inscrivez-vous, personnalisez votre carte de fidélité aux couleurs de votre commerce en quelques minutes.</p>
           <div class="step-highlight">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-            0 application à télécharger
+            &lt; 15 min
           </div>
         </div>
-
-        <!-- STEP 2 -->
         <div class="step-card reveal" style="transition-delay:.15s">
           <div class="step-number step-number-2">2</div>
-          <div class="step-icon-wrap">
-            <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="rgba(252,211,77,.7)" stroke-width="1.5">
-              <circle cx="12" cy="12" r="9"/>
-              <path d="M12 8v4l2.5 2.5" stroke-linecap="round"/>
-              <path d="M7.5 13.5c.5 2 2.5 3.5 4.5 3.5s4-1.5 4.5-3.5" stroke-linecap="round"/>
-              <circle cx="8" cy="9" r="1" fill="rgba(252,211,77,.5)"/>
-              <circle cx="16" cy="9" r="1" fill="rgba(252,211,77,.5)"/>
-            </svg>
-          </div>
-          <h3>Accumulation des points</h3>
-          <p>À chaque visite, le commerçant valide la carte du client (scan ou code). Les points s'accumulent automatiquement et s'affichent en temps réel sur la carte dans le wallet.</p>
+          <div class="step-icon-wrap">📱</div>
+          <h3 data-i18n="how.step2.title">Affichez votre QR code</h3>
+          <p data-i18n="how.step2.desc">Votre client scanne, la carte s'enregistre automatiquement dans Apple Wallet ou Google Wallet.</p>
           <div class="step-highlight" style="background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.3);color:#f59e0b">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-            Points visibles sur la carte
+            Instantané
           </div>
         </div>
-
-        <!-- STEP 3 -->
         <div class="step-card reveal" style="transition-delay:.3s">
           <div class="step-number step-number-3">3</div>
-          <div class="step-icon-wrap">
-            <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="rgba(52,211,153,.7)" stroke-width="1.5">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke-linecap="round"/>
-              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-              <circle cx="18" cy="5" r="3" fill="rgba(52,211,153,.4)" stroke="none"/>
-              <text x="16.5" y="6.5" font-size="3" fill="white" font-weight="bold">!</text>
-            </svg>
-          </div>
-          <h3>Récompenses &amp; notifications</h3>
-          <p>À chaque offre promo, vos clients reçoivent une notification push directement sur leur téléphone. Quand le seuil de points est atteint, la récompense se débloque automatiquement.</p>
+          <div class="step-icon-wrap">📈</div>
+          <h3 data-i18n="how.step3.title">Fidélisez et analysez</h3>
+          <p data-i18n="how.step3.desc">Vos clients accumulent des points, reviennent plus souvent, vous récupérez des données client précieuses.</p>
           <div class="step-highlight" style="background:rgba(16,185,129,.1);border-color:rgba(16,185,129,.3);color:#10b981">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-            Notifs push sans app
-          </div>
-        </div>
-
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ═══════════════════════════════════════════════════════════
-     FEATURES
-════════════════════════════════════════════════════════════ -->
-<section id="features" class="section">
-  <div class="container">
-    <div class="reveal">
-      <div class="tag">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        Fonctionnalités
-      </div>
-      <h2 class="section-title">Tout ce qu'il faut pour<br/><span class="grad-text">fidéliser efficacement</span></h2>
-      <p class="section-sub">Une plateforme complète pensée pour les commerçants indépendants qui veulent des outils pro sans complexité.</p>
-    </div>
-
-    <div class="features-grid reveal">
-
-      <div class="feature-card featured">
-        <div class="feature-icon fi-purple">🎨</div>
-        <h3>Cartes 100% personnalisées</h3>
-        <p>Couleurs, logo, nom, fond — chaque commerçant a une carte à son image. Vos clients reconnaissent immédiatement votre marque dans leur wallet. La configuration se fait en quelques minutes depuis votre tableau de bord.</p>
-      </div>
-
-      <div class="feature-card reveal" style="transition-delay:.1s">
-        <div class="feature-icon fi-gold">🔔</div>
-        <h3>Notifications programmées</h3>
-        <p>Configurez des envois automatiques après X jours d'inactivité pour raviver l'intérêt de vos clients silencieux.</p>
-      </div>
-
-      <div class="feature-card reveal" style="transition-delay:.2s">
-        <div class="feature-icon fi-green">🏆</div>
-        <h3>Récompenses sur mesure</h3>
-        <p>Définissez librement vos récompenses : remise, produit offert, service gratuit. Le déclenchement est automatique au seuil de points choisi.</p>
-      </div>
-
-      <div class="feature-card reveal" style="transition-delay:.1s">
-        <div class="feature-icon fi-blue">📊</div>
-        <h3>Rapport mensuel</h3>
-        <p>Chaque mois, un rapport complet sur vos clients fidèles : fréquence de visites, points distribués, taux de retour.</p>
-      </div>
-
-      <div class="feature-card reveal" style="transition-delay:.2s">
-        <div class="feature-icon fi-pink">📣</div>
-        <h3>Campagnes promo ciblées</h3>
-        <p>Envoyez une notification push à l'ensemble de vos porteurs de carte en un clic pour promouvoir une offre spéciale.</p>
-      </div>
-
-      <div class="feature-card reveal" style="transition-delay:.3s">
-        <div class="feature-icon fi-orange">⚡</div>
-        <h3>Validation instantanée</h3>
-        <p>Validez les points d'un client via scan QR ou code court. Rapide, fluide, zéro friction à la caisse.</p>
-      </div>
-
-      <div class="feature-card reveal" style="transition-delay:.1s">
-        <div class="feature-icon fi-purple">📍</div>
-        <h3>Multi-établissements</h3>
-        <p>Un commerçant avec plusieurs adresses ? Une seule carte couvre tous ses points de vente.</p>
-      </div>
-
-      <div class="feature-card reveal" style="transition-delay:.2s">
-        <div class="feature-icon fi-gold">🛡️</div>
-        <h3>RGPD &amp; confidentialité</h3>
-        <p>Seul le prénom est collecté au départ. Zéro formulaire intrusif, zéro compte client à créer.</p>
-      </div>
-
-      <div class="feature-card reveal" style="transition-delay:.3s">
-        <div class="feature-icon fi-green">📱</div>
-        <h3>Mise à jour en temps réel</h3>
-        <p>La carte se met à jour automatiquement dans le wallet dès qu'un point est ajouté ou qu'une offre est activée.</p>
-      </div>
-
-    </div>
-  </div>
-</section>
-
-<!-- ═══════════════════════════════════════════════════════════
-     CLIENTS / SECTEURS
-════════════════════════════════════════════════════════════ -->
-<section id="clients" class="section">
-  <div class="container">
-    <div class="reveal" style="text-align:center">
-      <div class="tag" style="margin:0 auto 20px">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-        Secteurs
-      </div>
-      <h2 class="section-title">Fait pour votre <span class="grad-text">commerce</span></h2>
-      <p class="section-sub" style="margin:0 auto 48px">WinWin Card s'adapte à tous les commerces de proximité qui souhaitent fidéliser leur clientèle sans complexité.</p>
-    </div>
-    <div class="clients-grid reveal">
-      <div class="client-card"><div class="client-emoji">🍽️</div><span>Restaurant</span></div>
-      <div class="client-card"><div class="client-emoji">☕</div><span>Café &amp; Snack</span></div>
-      <div class="client-card"><div class="client-emoji">✂️</div><span>Barbier</span></div>
-      <div class="client-card"><div class="client-emoji">💅</div><span>Salon de beauté</span></div>
-      <div class="client-card"><div class="client-emoji">🍕</div><span>Pizzeria</span></div>
-      <div class="client-card"><div class="client-emoji">🥐</div><span>Boulangerie</span></div>
-      <div class="client-card"><div class="client-emoji">💈</div><span>Coiffeur</span></div>
-      <div class="client-card"><div class="client-emoji">🧴</div><span>Institut spa</span></div>
-      <div class="client-card"><div class="client-emoji">🍣</div><span>Sushi &amp; Asiatique</span></div>
-      <div class="client-card"><div class="client-emoji">🛍️</div><span>Boutique</span></div>
-    </div>
-  </div>
-</section>
-
-<!-- ═══════════════════════════════════════════════════════════
-     ANALYTICS
-════════════════════════════════════════════════════════════ -->
-<section id="analytics" class="section">
-  <div class="container">
-    <div class="analytics-inner">
-      <!-- LEFT — mockup -->
-      <div class="reveal">
-        <div class="analytics-mockup">
-          <div class="mock-header">
-            <div class="mock-title">📊 Tableau de bord — Mai 2025</div>
-            <div class="mock-badge">+18% ce mois</div>
-          </div>
-          <div class="mock-stats">
-            <div class="mock-stat">
-              <div class="mock-stat-value" style="color:var(--purple-l)">347</div>
-              <div class="mock-stat-label">Clients actifs</div>
-            </div>
-            <div class="mock-stat">
-              <div class="mock-stat-value" style="color:var(--gold)">8 240</div>
-              <div class="mock-stat-label">Points distribués</div>
-            </div>
-            <div class="mock-stat">
-              <div class="mock-stat-value" style="color:var(--green)">62</div>
-              <div class="mock-stat-label">Récompenses</div>
-            </div>
-          </div>
-          <div class="mock-chart">
-            <div class="mock-bar" style="height:40%"></div>
-            <div class="mock-bar" style="height:55%"></div>
-            <div class="mock-bar" style="height:48%"></div>
-            <div class="mock-bar" style="height:70%"></div>
-            <div class="mock-bar" style="height:62%"></div>
-            <div class="mock-bar" style="height:85%"></div>
-            <div class="mock-bar" style="height:78%"></div>
-            <div class="mock-bar" style="height:90%"></div>
-            <div class="mock-bar" style="height:75%"></div>
-            <div class="mock-bar" style="height:95%"></div>
-            <div class="mock-bar" style="height:88%"></div>
-            <div class="mock-bar" style="height:100%"></div>
-          </div>
-          <div class="mock-notifs">
-            <div class="mock-notif">
-              <div class="notif-dot dot-green"></div>
-              <div class="mock-notif-text">
-                <strong>Notification envoyée</strong>
-                <span>Happy Hour — 238 destinataires · il y a 2h</span>
-              </div>
-            </div>
-            <div class="mock-notif">
-              <div class="notif-dot dot-gold"></div>
-              <div class="mock-notif-text">
-                <strong>Relance inactivité</strong>
-                <span>42 clients inactifs depuis 30 jours · programmée</span>
-              </div>
-            </div>
-            <div class="mock-notif">
-              <div class="notif-dot dot-purple"></div>
-              <div class="mock-notif-text">
-                <strong>Rapport mensuel prêt</strong>
-                <span>Télécharger le PDF — Avril 2025</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- RIGHT — copy -->
-      <div class="reveal" style="transition-delay:.2s">
-        <div class="tag">Analytics</div>
-        <h2 class="section-title">Pilotez votre<br/><span class="grad-text">fidélité client</span></h2>
-        <p class="section-sub">Des données claires pour comprendre vos clients et déclencher les bonnes actions au bon moment.</p>
-        <div class="analytics-features">
-          <div class="af-item">
-            <div class="af-icon">📅</div>
-            <div>
-              <h4>Rapport mensuel PDF</h4>
-              <p>Évolution du nombre de cartes actives, points distribués, récompenses débloquées, fréquence de visite moyenne.</p>
-            </div>
-          </div>
-          <div class="af-item">
-            <div class="af-icon">😴</div>
-            <div>
-              <h4>Relance clients dormants</h4>
-              <p>Déclenchez automatiquement une notification push après X jours sans visite pour ramener les clients silencieux.</p>
-            </div>
-          </div>
-          <div class="af-item">
-            <div class="af-icon">🎯</div>
-            <div>
-              <h4>Campagnes ciblées</h4>
-              <p>Segmentez vos envois : clients proches d'une récompense, fidèles de longue date, nouveaux inscrits.</p>
-            </div>
-          </div>
-          <div class="af-item">
-            <div class="af-icon">🔄</div>
-            <div>
-              <h4>Taux de retour</h4>
-              <p>Mesurez concrètement l'impact de votre programme de fidélité sur le nombre de visites répétées.</p>
-            </div>
+            Notifs push
           </div>
         </div>
       </div>
@@ -857,32 +601,48 @@
 </section>
 
 <!-- ═══════════════════════════════════════════════════════════
-     WALLET COMPATIBILITY
+     SECTION CLIENTS
 ════════════════════════════════════════════════════════════ -->
-<section id="wallet" class="section">
+<section id="customers" class="section">
   <div class="container">
-    <div class="reveal" style="text-align:center">
-      <div class="tag" style="margin:0 auto 20px">
-        Compatibilité
+    <div class="reveal" style="text-align:center; margin-bottom:60px;">
+      <div class="tag" style="margin:0 auto 20px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span data-i18n="customers.tag">Pour vos clients</span>
       </div>
-      <h2 class="section-title" style="text-align:center">Nativement intégré aux<br/><span class="grad-text">wallets mobiles</span></h2>
-      <p class="section-sub" style="margin:0 auto 48px; text-align:center">Aucune application tierce. La carte vit directement dans l'app Wallet native de chaque téléphone — là où vos clients regardent déjà.</p>
+      <h2 class="section-title" data-i18n-html="customers.title">
+        Une expérience <span class="grad-text">sans friction</span>
+      </h2>
     </div>
-    <div class="wallet-compat reveal">
-      <div class="compat-card">
-        <div class="compat-logo">🍎</div>
-        <h3>Apple Wallet</h3>
-        <p>Compatible iPhone iOS 12+. La carte apparaît dans Wallet à côté des cartes bancaires et billets d'avion. Notifications via Apple Push.</p>
-        <div class="compat-tag">✓ Compatible</div>
-        <img src="assets/apple-wallet-badge.svg" alt="Download on the App Store" class="wallet-badge-official">
+    <div class="customers-grid reveal">
+      <div class="customer-card">
+        <div class="cc-icon cc-purple">📲</div>
+        <h3 data-i18n="customers.f1.title">Dans le wallet, pas dans une app</h3>
+        <p data-i18n="customers.f1.desc">La carte vit dans Apple Wallet ou Google Wallet — là où vous regardez déjà. Pas besoin de télécharger quoi que ce soit.</p>
       </div>
-      <div class="compat-card">
-        <div class="compat-logo" style="background:linear-gradient(135deg,#4285f4,#34a853,#fbbc04,#ea4335);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">G</div>
-        <h3>Google Wallet</h3>
-        <p>Compatible Android 5+. La carte s'intègre à Google Wallet nativement. Notifications via Google Pay Pass.</p>
-        <div class="compat-tag">✓ Compatible</div>
+      <div class="customer-card">
+        <div class="cc-icon cc-gold">⚡</div>
+        <h3 data-i18n="customers.f2.title">Points crédités en temps réel</h3>
+        <p data-i18n="customers.f2.desc">Dès que le commerçant valide votre passage, vos points s'affichent instantanément sur votre carte dans le wallet.</p>
+      </div>
+      <div class="customer-card">
+        <div class="cc-icon cc-green">🔔</div>
+        <h3 data-i18n="customers.f3.title">Notifications utiles</h3>
+        <p data-i18n="customers.f3.desc">Recevez une alerte quand vous approchez d'une récompense, ou quand votre commerçant a une offre spéciale.</p>
+      </div>
+    </div>
+    <div class="wallet-compat-mini reveal">
+      <div class="compat-pill">
+        <img src="assets/apple-wallet-badge.svg" alt="Apple Wallet" class="apple-badge-sm">
+        <div class="compat-pill-info">
+          <h4>Apple Wallet</h4>
+          <span>iOS 12+ · iPhone</span>
+        </div>
+        <div class="compat-ok">✓ Compatible</div>
+      </div>
+      <div class="compat-pill">
         <div class="google-wallet-badge">
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <svg viewBox="0 0 24 24" width="18" height="18">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
             <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
             <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
@@ -890,10 +650,70 @@
           </svg>
           Google Wallet
         </div>
+        <div class="compat-pill-info">
+          <h4>Google Wallet</h4>
+          <span>Android 5+ · Tous smartphones</span>
+        </div>
+        <div class="compat-ok">✓ Compatible</div>
       </div>
     </div>
-    <div class="reveal" style="text-align:center;margin-top:40px">
-      <p style="color:var(--muted);font-size:.9rem">🌍 Couvre 97% des smartphones en circulation en France</p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     TÉMOIGNAGES
+════════════════════════════════════════════════════════════ -->
+<section id="temoignages" class="section">
+  <div class="container">
+    <div class="reveal" style="text-align:center; margin-bottom:60px;">
+      <div class="tag" style="margin:0 auto 20px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        <span data-i18n="testi.tag">Ils nous font confiance</span>
+      </div>
+      <h2 class="section-title" data-i18n-html="testi.title">
+        Ce qu'en disent <span class="grad-text">nos commerçants</span>
+      </h2>
+    </div>
+    <div class="testi-grid">
+      <div class="testi-card reveal">
+        <div class="testi-stars">★★★★★</div>
+        <p class="testi-text">
+          "Depuis WinWin Card, mes clients réguliers reviennent encore plus souvent. La mise en place a pris 10 minutes et ils adorent retrouver leur carte directement dans leur iPhone."
+        </p>
+        <div class="testi-author">
+          <div class="testi-avatar ta-purple">S</div>
+          <div>
+            <div class="testi-name">Sophie M.</div>
+            <div class="testi-role">La Bonne Table · Lyon 6ème</div>
+          </div>
+        </div>
+      </div>
+      <div class="testi-card reveal" style="transition-delay:.15s">
+        <div class="testi-stars">★★★★★</div>
+        <p class="testi-text">
+          "Simple, efficace, zéro galère. Fini les cartes papier perdues. Et les notifs push pour les promos, c'est vraiment utile — mes clients apprécient."
+        </p>
+        <div class="testi-author">
+          <div class="testi-avatar ta-gold">K</div>
+          <div>
+            <div class="testi-name">Karim L.</div>
+            <div class="testi-role">Barber House · Lyon 2ème</div>
+          </div>
+        </div>
+      </div>
+      <div class="testi-card reveal" style="transition-delay:.3s">
+        <div class="testi-stars">★★★★★</div>
+        <p class="testi-text">
+          "On a 3× plus de clients fidèles qu'avant. Les données du tableau de bord m'aident à savoir quels jours sont creux pour lancer une promo au bon moment."
+        </p>
+        <div class="testi-author">
+          <div class="testi-avatar ta-green">J</div>
+          <div>
+            <div class="testi-name">Julie R.</div>
+            <div class="testi-role">Le Grain de Café · Lyon 3ème</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </section>
@@ -905,17 +725,16 @@
   <div class="cta-glow"></div>
   <div class="container">
     <div class="cta-inner reveal">
-      <div class="tag" style="margin:0 auto 20px">Démarrer</div>
-      <h2>Prêt à fidéliser<br/><span class="grad-text">sans friction</span> ?</h2>
-      <p>Rejoignez les commerçants qui ont remplacé leur tampon papier par une carte digitale moderne. Configuration en moins de 15 minutes.</p>
+      <div class="tag" style="margin:0 auto 20px;"><span data-i18n="cta.tag">Démarrer</span></div>
+      <h2><span data-i18n="cta.title">Prêt à démarrer ?</span></h2>
+      <p class="cta-subtitle" data-i18n="cta.subtitle">Rejoignez les commerçants lyonnais qui fidélisent intelligemment</p>
+      <p class="cta-desc" data-i18n="cta.desc">Gratuit pour commencer. Sans engagement.</p>
       <div class="cta-actions">
         <a href="mailto:contact@winwincard.fr" class="btn btn-primary" style="padding:16px 32px;font-size:1rem">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-          Contacter l'équipe WinWin
+          <span data-i18n="cta.btn">Créer mon espace gratuitement</span>
         </a>
-        <a href="#how-it-works" class="btn btn-ghost" style="padding:16px 32px;font-size:1rem">Revoir le fonctionnement</a>
       </div>
-      <div class="cta-note">✓ Sans engagement &nbsp;·&nbsp; ✓ Configuration offerte &nbsp;·&nbsp; ✓ Support inclus</div>
     </div>
   </div>
 </section>
@@ -930,12 +749,12 @@
         <img src="assets/logo.png" alt="WinWin Card" class="logo-img">
       </div>
       <div class="footer-links">
-        <a href="#how-it-works">Fonctionnement</a>
-        <a href="#features">Fonctionnalités</a>
-        <a href="#analytics">Analytics</a>
+        <a href="#avantages" data-i18n="nav.link1">Avantages</a>
+        <a href="#how-it-works" data-i18n="nav.link2">Fonctionnement</a>
+        <a href="#temoignages" data-i18n="nav.link3">Témoignages</a>
         <a href="mailto:contact@winwincard.fr">Contact</a>
       </div>
-      <div class="footer-copy">© 2025 WinWin Card. Tous droits réservés.</div>
+      <div class="footer-copy">© 2025 WinWin Card. <span data-i18n="footer.rights">Tous droits réservés</span>.</div>
     </div>
   </div>
 </footer>
@@ -944,37 +763,148 @@
      JS
 ════════════════════════════════════════════════════════════ -->
 <script>
-  // Nav scroll effect
+  /* ── TRANSLATIONS ──────────────────────────────────────── */
+  const translations = {
+    fr: {
+      'nav.link1': 'Avantages',
+      'nav.link2': 'Fonctionnement',
+      'nav.link3': 'Témoignages',
+      'nav.cta': 'Démarrer gratuitement',
+      'hero.eyebrow': 'Fidélité digitale nouvelle génération',
+      'hero.title': 'La carte de fidélité<br/><span class="grad-text">qui s\'enregistre</span><br/>dans le wallet',
+      'hero.desc': 'Vos clients ajoutent leur carte en un scan — elle s\'intègre à Apple Wallet et Google Wallet. Aucune application à télécharger, zéro friction, fidélité instantanée.',
+      'hero.cta1': 'Commencer gratuitement',
+      'hero.cta2': 'Voir une démo',
+      'hero.badge1': '0 app à télécharger',
+      'hero.badge2': 'compatible nativement',
+      'hero.badge3': 'Notifications push',
+      'stats.s1.label': 'taux de retour client moyen',
+      'stats.s2.label': 'pour démarrer votre programme',
+      'stats.s3.label': 'à installer pour vos clients',
+      'merchants.tag': 'Pour les commerçants',
+      'merchants.title': 'Des données qui font <span class="grad-text">vraiment la différence</span>',
+      'merchants.f1.title': 'Data report sur vos clients',
+      'merchants.f1.desc': 'Fréquence de visite, panier moyen, meilleurs clients, périodes creuses — des chiffres réels pour prendre de vraies décisions.',
+      'merchants.f2.title': 'Valorisez votre commerce',
+      'merchants.f2.desc': 'Les données générées par vos clients fidèles deviennent un actif concret : partenariats, financements, développement.',
+      'merchants.f3.title': 'Notifications push ciblées',
+      'merchants.f3.desc': 'Relancez les clients inactifs ou annoncez une promo au bon moment — depuis votre tableau de bord, en deux clics.',
+      'merchants.f4.title': 'Récompenses sur mesure',
+      'merchants.f4.desc': 'Définissez vos règles : points, paliers, offres anniversaires. Le programme s\'adapte à votre commerce, pas l\'inverse.',
+      'how.tag': 'Fonctionnement',
+      'how.title': 'Lancé en <span class="grad-text">3 étapes</span>',
+      'how.step1.title': 'Créez votre espace',
+      'how.step1.desc': 'Inscrivez-vous, personnalisez votre carte de fidélité aux couleurs de votre commerce en quelques minutes.',
+      'how.step2.title': 'Affichez votre QR code',
+      'how.step2.desc': 'Votre client scanne, la carte s\'enregistre automatiquement dans Apple Wallet ou Google Wallet.',
+      'how.step3.title': 'Fidélisez et analysez',
+      'how.step3.desc': 'Vos clients accumulent des points, reviennent plus souvent, vous récupérez des données client précieuses.',
+      'customers.tag': 'Pour vos clients',
+      'customers.title': 'Une expérience <span class="grad-text">sans friction</span>',
+      'customers.f1.title': 'Dans le wallet, pas dans une app',
+      'customers.f1.desc': 'La carte vit dans Apple Wallet ou Google Wallet — là où vous regardez déjà. Pas besoin de télécharger quoi que ce soit.',
+      'customers.f2.title': 'Points crédités en temps réel',
+      'customers.f2.desc': 'Dès que le commerçant valide votre passage, vos points s\'affichent instantanément sur votre carte dans le wallet.',
+      'customers.f3.title': 'Notifications utiles',
+      'customers.f3.desc': 'Recevez une alerte quand vous approchez d\'une récompense, ou quand votre commerçant a une offre spéciale.',
+      'testi.tag': 'Ils nous font confiance',
+      'testi.title': 'Ce qu\'en disent <span class="grad-text">nos commerçants</span>',
+      'cta.tag': 'Démarrer',
+      'cta.title': 'Prêt à démarrer ?',
+      'cta.subtitle': 'Rejoignez les commerçants lyonnais qui fidélisent intelligemment',
+      'cta.desc': 'Gratuit pour commencer. Sans engagement.',
+      'cta.btn': 'Créer mon espace gratuitement',
+      'footer.rights': 'Tous droits réservés',
+    },
+    en: {
+      'nav.link1': 'Benefits',
+      'nav.link2': 'How it works',
+      'nav.link3': 'Testimonials',
+      'nav.cta': 'Get started free',
+      'hero.eyebrow': 'Next-gen digital loyalty',
+      'hero.title': 'The loyalty card<br/><span class="grad-text">that saves</span><br/>directly to your wallet',
+      'hero.desc': 'Your customers add their card with one scan — it integrates with Apple Wallet and Google Wallet. No app to download, zero friction, instant loyalty.',
+      'hero.cta1': 'Get started free',
+      'hero.cta2': 'Watch a demo',
+      'hero.badge1': '0 app to download',
+      'hero.badge2': 'natively compatible',
+      'hero.badge3': 'Push notifications',
+      'stats.s1.label': 'average customer return rate',
+      'stats.s2.label': 'to launch your program',
+      'stats.s3.label': 'for your customers to install',
+      'merchants.tag': 'For merchants',
+      'merchants.title': 'Data that <span class="grad-text">truly makes the difference</span>',
+      'merchants.f1.title': 'Customer data reports',
+      'merchants.f1.desc': 'Visit frequency, average basket, top customers, slow periods — real numbers to make real decisions.',
+      'merchants.f2.title': 'Grow your business value',
+      'merchants.f2.desc': 'Data generated by your loyal customers becomes a real asset: partnerships, funding, growth.',
+      'merchants.f3.title': 'Targeted push notifications',
+      'merchants.f3.desc': 'Re-engage inactive customers or announce a promo at the right time — from your dashboard, in two clicks.',
+      'merchants.f4.title': 'Custom rewards',
+      'merchants.f4.desc': 'Set your own rules: points, tiers, birthday offers. The program adapts to your business, not the other way around.',
+      'how.tag': 'How it works',
+      'how.title': 'Up and running <span class="grad-text">in 3 steps</span>',
+      'how.step1.title': 'Create your account',
+      'how.step1.desc': 'Sign up and customize your loyalty card to match your brand in minutes.',
+      'how.step2.title': 'Display your QR code',
+      'how.step2.desc': 'Your customer scans, the card saves automatically to Apple Wallet or Google Wallet.',
+      'how.step3.title': 'Build loyalty and analyze',
+      'how.step3.desc': 'Your customers earn points, come back more often, and you collect valuable customer data.',
+      'customers.tag': 'For your customers',
+      'customers.title': 'A <span class="grad-text">frictionless</span> experience',
+      'customers.f1.title': 'In the wallet, not in an app',
+      'customers.f1.desc': 'Your card lives in Apple Wallet or Google Wallet — where you already look. No download required.',
+      'customers.f2.title': 'Real-time points credit',
+      'customers.f2.desc': 'As soon as the merchant validates your visit, your points appear instantly on your card in the wallet.',
+      'customers.f3.title': 'Useful notifications',
+      'customers.f3.desc': 'Get an alert when you\'re close to a reward, or when your merchant has a special offer.',
+      'testi.tag': 'They trust us',
+      'testi.title': 'What our <span class="grad-text">merchants say</span>',
+      'cta.tag': 'Get started',
+      'cta.title': 'Ready to start?',
+      'cta.subtitle': 'Join the merchants who loyalty smarter',
+      'cta.desc': 'Free to start. No commitment.',
+      'cta.btn': 'Create my free account',
+      'footer.rights': 'All rights reserved',
+    }
+  };
+
+  /* ── setLanguage ───────────────────────────────────────── */
+  function setLanguage(lang) {
+    if (!translations[lang]) return;
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      const key = el.dataset.i18n;
+      if (translations[lang][key] !== undefined) el.textContent = translations[lang][key];
+    });
+    document.querySelectorAll('[data-i18n-html]').forEach(el => {
+      const key = el.dataset.i18nHtml;
+      if (translations[lang][key] !== undefined) el.innerHTML = translations[lang][key];
+    });
+    document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+    const activeBtn = document.getElementById('lang-' + lang);
+    if (activeBtn) activeBtn.classList.add('active');
+    localStorage.setItem('winwin-lang', lang);
+    document.documentElement.lang = lang;
+  }
+
+  /* ── AUTO-DETECT ───────────────────────────────────────── */
+  const savedLang = localStorage.getItem('winwin-lang');
+  const autoLang = savedLang || (navigator.language && navigator.language.startsWith('en') ? 'en' : 'fr');
+  setLanguage(autoLang);
+
+  /* ── NAV SCROLL ────────────────────────────────────────── */
   const nav = document.getElementById('nav');
   window.addEventListener('scroll', () => {
     nav.classList.toggle('scrolled', window.scrollY > 40);
   });
 
-  // Reveal on scroll
-  const reveals = document.querySelectorAll('.reveal');
+  /* ── REVEAL ON SCROLL ──────────────────────────────────── */
   const observer = new IntersectionObserver((entries) => {
     entries.forEach(e => {
-      if (e.isIntersecting) {
-        e.target.classList.add('visible');
-        observer.unobserve(e.target);
-      }
+      if (e.isIntersecting) { e.target.classList.add('visible'); observer.unobserve(e.target); }
     });
   }, { threshold: 0.1 });
-  reveals.forEach(el => observer.observe(el));
-
-  // Chart bars animation
-  const bars = document.querySelectorAll('.mock-bar');
-  const chartObserver = new IntersectionObserver((entries) => {
-    if (entries[0].isIntersecting) {
-      bars.forEach((bar, i) => {
-        const h = bar.style.height;
-        bar.style.height = '0';
-        setTimeout(() => { bar.style.height = h; }, i * 60);
-      });
-      chartObserver.disconnect();
-    }
-  }, { threshold: 0.5 });
-  if (bars.length) chartObserver.observe(bars[0].parentElement);
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 </script>
 </body>
 </html>
