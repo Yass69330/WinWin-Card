@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WinWin Card — Fidélité digitale sans friction</title>
+  <title>WinWin Card · Fidélité digitale pour commerces</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
   <style>
@@ -51,7 +51,6 @@
       padding: 6px 14px; border-radius: 99px; margin-bottom: 20px;
     }
     .tag svg { width: 13px; height: 13px; }
-    /* tag on dark sections */
     .dark-bg .tag {
       background: rgba(255,255,255,.1);
       border-color: rgba(255,255,255,.18);
@@ -66,7 +65,6 @@
       font-size: 1.05rem; color: var(--muted); max-width: 560px; margin-bottom: 56px;
     }
     .dark-bg p.section-sub { color: rgba(255,255,255,.6); }
-    /* accent word — plain blue, no gradient */
     .grad-text { color: var(--blue); }
     .dark-bg .grad-text { color: #7ab8e8; }
 
@@ -99,7 +97,7 @@
     }
     .logo { display: flex; align-items: center; flex-shrink: 0; }
     .logo-img {
-      height: 44px; width: auto; display: block;
+      height: 70px; width: auto; display: block;
       object-fit: contain; object-position: left center;
     }
     .nav-links { display: flex; align-items: center; gap: 28px; }
@@ -252,9 +250,10 @@
     .mc-icon {
       width: 50px; height: 50px; border-radius: 13px;
       display: flex; align-items: center; justify-content: center;
-      font-size: 1.4rem; margin-bottom: 18px;
+      margin-bottom: 18px;
       background: rgba(46,111,168,.1);
     }
+    .mc-icon svg { width: 26px; height: 26px; stroke: var(--blue); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     .merchant-card h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 9px; color: var(--text); }
     .merchant-card p  { font-size: .88rem; color: var(--muted); line-height: 1.7; }
 
@@ -288,8 +287,9 @@
     .step-icon-wrap {
       width: 100%; height: 110px; border-radius: 10px; margin-bottom: 22px;
       display: flex; align-items: center; justify-content: center;
-      font-size: 3rem; background: var(--light);
+      background: var(--light);
     }
+    .step-icon-wrap svg { width: 44px; height: 44px; stroke: var(--blue); fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
     .step-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 10px; color: var(--text); }
     .step-card p  { font-size: .88rem; color: var(--muted); line-height: 1.7; }
     .step-highlight {
@@ -317,9 +317,10 @@
     .cc-icon {
       width: 60px; height: 60px; border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
-      font-size: 1.6rem; margin: 0 auto 18px;
+      margin: 0 auto 18px;
       background: rgba(46,111,168,.1);
     }
+    .cc-icon svg { width: 28px; height: 28px; stroke: var(--blue); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     .customer-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 9px; color: var(--text); }
     .customer-card p  { font-size: .87rem; color: var(--muted); line-height: 1.65; }
     .wallet-compat-mini { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
@@ -452,15 +453,15 @@
       <div>
         <div class="hero-eyebrow">
           <span class="pulse-dot"></span>
-          <span data-i18n="hero.eyebrow">Fidélité digitale nouvelle génération</span>
+          <span data-i18n="hero.eyebrow">La fidélité digitale, enfin simple</span>
         </div>
         <h1 class="hero-title" data-i18n-html="hero.title">
           La carte de fidélité<br/>
-          <span class="grad-text">qui s'enregistre</span><br/>
-          dans le wallet
+          <span class="grad-text">qui vit</span><br/>
+          dans le téléphone de vos clients
         </h1>
         <p class="hero-desc" data-i18n="hero.desc">
-          Vos clients ajoutent leur carte en un scan — elle s'intègre à Apple Wallet et Google Wallet. Aucune application à télécharger, zéro friction, fidélité instantanée.
+          Un scan suffit. La carte s'enregistre dans Apple Wallet ou Google Wallet, sans app à télécharger. Vos clients la retrouvent à chaque fois qu'ils ouvrent leur téléphone.
         </p>
         <div class="hero-actions">
           <a href="#cta" class="btn btn-primary">
@@ -489,10 +490,10 @@
           <div class="phone-glow-hero phone-glow-rose"></div>
           <div class="phone-glow-hero phone-glow-gold"></div>
           <div class="phone-frame phone-rose">
-            <img src="card-rose.png" alt="Carte de fidélité rose dans Apple Wallet">
+            <img src="card-rose2.PNG" alt="Carte de fidélité rose dans Apple Wallet">
           </div>
           <div class="phone-frame phone-gold">
-            <img src="card-gold.png" alt="Carte de fidélité gold dans Apple Wallet">
+            <img src="card-gold2.PNG" alt="Carte de fidélité gold dans Apple Wallet">
           </div>
         </div>
       </div>
@@ -507,8 +508,8 @@
   <div class="container">
     <div class="stats-grid reveal">
       <div class="stat-item">
-        <div class="stat-value">68%</div>
-        <div class="stat-label" data-i18n="stats.s1.label">taux de retour client moyen</div>
+        <div class="stat-value">+2×</div>
+        <div class="stat-label" data-i18n="stats.s1.label">plus de visites en moyenne</div>
       </div>
       <div class="stat-item">
         <div class="stat-value">&lt; 15 min</div>
@@ -538,24 +539,32 @@
     </div>
     <div class="merchants-grid reveal">
       <div class="merchant-card">
-        <div class="mc-icon">📊</div>
+        <div class="mc-icon">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>
+        </div>
         <h3 data-i18n="merchants.f1.title">Data report sur vos clients</h3>
-        <p data-i18n="merchants.f1.desc">Fréquence de visite, meilleurs clients, périodes creuses — des chiffres réels pour prendre de vraies décisions.</p>
+        <p data-i18n="merchants.f1.desc">Chaque mois retrouvez un résumé clair : qui sont vos clients les plus fidèles, quels jours sont creux, combien de visites en moyenne avant qu'ils décrochent. Des vraies données, pas des estimations.</p>
       </div>
       <div class="merchant-card">
-        <div class="mc-icon">🚀</div>
+        <div class="mc-icon">
+          <svg viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+        </div>
         <h3 data-i18n="merchants.f2.title">Valorisez votre commerce</h3>
-        <p data-i18n="merchants.f2.desc">Les données générées par vos clients fidèles deviennent un actif concret : partenariats, financements, développement.</p>
+        <p data-i18n="merchants.f2.desc">Une base clients active et des données de fidélité, c'est un vrai atout quand vous cherchez un financement, un partenariat ou que vous voulez ouvrir un deuxième point de vente.</p>
       </div>
       <div class="merchant-card">
-        <div class="mc-icon">🔔</div>
-        <h3 data-i18n="merchants.f3.title">Notifications push ciblées</h3>
-        <p data-i18n="merchants.f3.desc">Relancez les clients inactifs ou annoncez une promo au bon moment — depuis votre tableau de bord, en deux clics.</p>
+        <div class="mc-icon">
+          <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </div>
+        <h3 data-i18n="merchants.f3.title">Notifications push</h3>
+        <p data-i18n="merchants.f3.desc">Envoyez une notification à vos clients en quelques secondes depuis votre téléphone. Une promo flash, un rappel, une offre spéciale : ils la reçoivent directement sur leur écran de verrouillage.</p>
       </div>
       <div class="merchant-card">
-        <div class="mc-icon">🏆</div>
+        <div class="mc-icon">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>
+        </div>
         <h3 data-i18n="merchants.f4.title">Récompenses sur mesure</h3>
-        <p data-i18n="merchants.f4.desc">Définissez vos règles : points, paliers, offres anniversaires. Le programme s'adapte à votre commerce, pas l'inverse.</p>
+        <p data-i18n="merchants.f4.desc">Définissez vos règles : points, paliers, offres anniversaires. Le programme s'adapte à votre commerce, pas l'inverse. Par exemple : 10 cafés achetés = le 11ème offert. Ou 8 visites = une remise de 30%. C'est vous qui décidez.</p>
       </div>
     </div>
   </div>
@@ -578,9 +587,11 @@
       <div class="steps-grid">
         <div class="step-card reveal">
           <div class="step-number step-number-1">1</div>
-          <div class="step-icon-wrap">🏪</div>
-          <h3 data-i18n="how.step1.title">Créez votre espace</h3>
-          <p data-i18n="how.step1.desc">Inscrivez-vous, personnalisez votre carte de fidélité aux couleurs de votre commerce en quelques minutes.</p>
+          <div class="step-icon-wrap">
+            <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </div>
+          <h3 data-i18n="how.step1.title">Créez votre carte en quelques minutes</h3>
+          <p data-i18n="how.step1.desc">Choisissez vos couleurs, votre logo, vos règles de points. On s'occupe du reste.</p>
           <div class="step-highlight">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
             &lt; 15 min
@@ -588,9 +599,11 @@
         </div>
         <div class="step-card reveal" style="transition-delay:.15s">
           <div class="step-number step-number-2">2</div>
-          <div class="step-icon-wrap">📱</div>
-          <h3 data-i18n="how.step2.title">Affichez votre QR code</h3>
-          <p data-i18n="how.step2.desc">Votre client scanne, la carte s'enregistre automatiquement dans Apple Wallet ou Google Wallet.</p>
+          <div class="step-icon-wrap">
+            <svg viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="3" height="3"/><rect x="14" y="7" width="3" height="3"/><rect x="7" y="14" width="3" height="3"/><path d="M14 14h3v3"/></svg>
+          </div>
+          <h3 data-i18n="how.step2.title">Vos clients scannent, c'est dans leur wallet</h3>
+          <p data-i18n="how.step2.desc">Ils entrent dans votre commerce, scannent le QR code, tapent leur prénom. La carte apparaît dans leur Apple ou Google Wallet. C'est tout.</p>
           <div class="step-highlight">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
             Instantané
@@ -598,9 +611,11 @@
         </div>
         <div class="step-card reveal" style="transition-delay:.3s">
           <div class="step-number step-number-3">3</div>
-          <div class="step-icon-wrap">📈</div>
-          <h3 data-i18n="how.step3.title">Fidélisez et analysez</h3>
-          <p data-i18n="how.step3.desc">Vos clients accumulent des points, reviennent plus souvent, vous récupérez des données client précieuses.</p>
+          <div class="step-icon-wrap">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>
+          </div>
+          <h3 data-i18n="how.step3.title">Ils reviennent, vous analysez</h3>
+          <p data-i18n="how.step3.desc">À chaque visite, leurs points s'accumulent automatiquement. Vous recevez chaque semaine un résumé de votre activité.</p>
           <div class="step-highlight">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
             Notifs push
@@ -627,19 +642,25 @@
     </div>
     <div class="customers-grid reveal">
       <div class="customer-card">
-        <div class="cc-icon">📲</div>
+        <div class="cc-icon">
+          <svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+        </div>
         <h3 data-i18n="customers.f1.title">Dans le wallet, pas dans une app</h3>
-        <p data-i18n="customers.f1.desc">La carte vit dans Apple Wallet ou Google Wallet — là où vous regardez déjà. Pas besoin de télécharger quoi que ce soit.</p>
+        <p data-i18n="customers.f1.desc">Fini les cartes papier qu'on perd au fond du sac. La carte WinWin s'enregistre dans Apple Wallet ou Google Wallet, dans le même wallet que vos cartes bancaires.</p>
       </div>
       <div class="customer-card">
-        <div class="cc-icon">⚡</div>
+        <div class="cc-icon">
+          <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
         <h3 data-i18n="customers.f2.title">Points crédités en temps réel</h3>
-        <p data-i18n="customers.f2.desc">Dès que le commerçant valide votre passage, vos points s'affichent instantanément sur votre carte dans le wallet.</p>
+        <p data-i18n="customers.f2.desc">Dès que le commerçant valide votre passage, vos points s'affichent sur la carte. Pas besoin d'attendre, pas besoin de demander.</p>
       </div>
       <div class="customer-card">
-        <div class="cc-icon">🔔</div>
+        <div class="cc-icon">
+          <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </div>
         <h3 data-i18n="customers.f3.title">Notifications utiles</h3>
-        <p data-i18n="customers.f3.desc">Recevez une alerte quand vous approchez d'une récompense, ou quand votre commerçant a une offre spéciale.</p>
+        <p data-i18n="customers.f3.desc">Vous recevez un message quand vous êtes proche d'une récompense ou quand votre commerçant a une offre pour vous. Rien de superflu, juste ce qui vous profite.</p>
       </div>
     </div>
     <div class="wallet-compat-mini reveal">
@@ -688,7 +709,7 @@
     <div class="testi-grid">
       <div class="testi-card reveal">
         <div class="testi-stars">★★★★★</div>
-        <p class="testi-text">"Depuis WinWin Card, mes clients réguliers reviennent encore plus souvent. La mise en place a pris 10 minutes et ils adorent retrouver leur carte directement dans leur iPhone."</p>
+        <p class="testi-text">"Mes clients perdaient tous leurs cartes en papier. Depuis qu'on passe par WinWin Card, plus ce problème."</p>
         <div class="testi-author">
           <div class="testi-avatar ta-navy">S</div>
           <div>
@@ -699,7 +720,7 @@
       </div>
       <div class="testi-card reveal" style="transition-delay:.15s">
         <div class="testi-stars">★★★★★</div>
-        <p class="testi-text">"Simple, efficace, zéro galère. Fini les cartes papier perdues. Et les notifs push pour les promos, c'est vraiment utile — mes clients apprécient."</p>
+        <p class="testi-text">"Honnêtement je pensais que ça allait être compliqué à mettre en place. On m'a tout configuré en un soir. Le lendemain mes premiers clients scannaient déjà le QR code. Je recommande."</p>
         <div class="testi-author">
           <div class="testi-avatar ta-blue">K</div>
           <div>
@@ -710,7 +731,7 @@
       </div>
       <div class="testi-card reveal" style="transition-delay:.3s">
         <div class="testi-stars">★★★★★</div>
-        <p class="testi-text">"On a 3× plus de clients fidèles qu'avant. Les données du tableau de bord m'aident à savoir quels jours sont creux pour lancer une promo au bon moment."</p>
+        <p class="testi-text">"Ce que j'aime c'est pouvoir envoyer une notif quand on est calmes le mardi matin. Les clients qui passent ce jour-là ont souvent reçu un message la veille. Ça marche vraiment."</p>
         <div class="testi-author">
           <div class="testi-avatar ta-teal">J</div>
           <div>
@@ -731,13 +752,13 @@
   <div class="container">
     <div class="cta-inner reveal">
       <div class="tag" style="margin:0 auto 20px;"><span data-i18n="cta.tag">Démarrer</span></div>
-      <h2><span data-i18n="cta.title">Prêt à démarrer ?</span></h2>
+      <h2><span data-i18n="cta.title">Vous aussi, fidélisez vos clients autrement</span></h2>
       <p class="cta-subtitle" data-i18n="cta.subtitle">Rejoignez les commerçants lyonnais qui fidélisent intelligemment</p>
       <p class="cta-desc" data-i18n="cta.desc">Gratuit pour commencer. Sans engagement.</p>
       <div class="cta-actions">
         <a href="mailto:contact@winwincard.fr" class="btn-cta-primary">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-          <span data-i18n="cta.btn">Créer mon espace gratuitement</span>
+          <span data-i18n="cta.btn">Je veux essayer gratuitement</span>
         </a>
       </div>
     </div>
@@ -775,47 +796,47 @@
       'nav.link2': 'Fonctionnement',
       'nav.link3': 'Témoignages',
       'nav.cta': 'Démarrer gratuitement',
-      'hero.eyebrow': 'Fidélité digitale nouvelle génération',
-      'hero.title': 'La carte de fidélité<br/><span class="grad-text">qui s\'enregistre</span><br/>dans le wallet',
-      'hero.desc': 'Vos clients ajoutent leur carte en un scan — elle s\'intègre à Apple Wallet et Google Wallet. Aucune application à télécharger, zéro friction, fidélité instantanée.',
+      'hero.eyebrow': 'La fidélité digitale, enfin simple',
+      'hero.title': 'La carte de fidélité<br/><span class="grad-text">qui vit</span><br/>dans le téléphone de vos clients',
+      'hero.desc': 'Un scan suffit. La carte s\'enregistre dans Apple Wallet ou Google Wallet, sans app à télécharger. Vos clients la retrouvent à chaque fois qu\'ils ouvrent leur téléphone.',
       'hero.cta1': 'Commencer gratuitement',
       'hero.cta2': 'Voir une démo',
-      'stats.s1.label': 'taux de retour client moyen',
+      'stats.s1.label': 'plus de visites en moyenne',
       'stats.s2.label': 'pour démarrer votre programme',
       'stats.s3.label': 'à installer pour vos clients',
       'merchants.tag': 'Pour les commerçants',
       'merchants.title': 'Des données qui font <span class="grad-text">vraiment la différence</span>',
       'merchants.f1.title': 'Data report sur vos clients',
-      'merchants.f1.desc': 'Fréquence de visite, meilleurs clients, périodes creuses — des chiffres réels pour prendre de vraies décisions.',
+      'merchants.f1.desc': 'Chaque mois retrouvez un résumé clair : qui sont vos clients les plus fidèles, quels jours sont creux, combien de visites en moyenne avant qu\'ils décrochent. Des vraies données, pas des estimations.',
       'merchants.f2.title': 'Valorisez votre commerce',
-      'merchants.f2.desc': 'Les données générées par vos clients fidèles deviennent un actif concret : partenariats, financements, développement.',
-      'merchants.f3.title': 'Notifications push ciblées',
-      'merchants.f3.desc': 'Relancez les clients inactifs ou annoncez une promo au bon moment — depuis votre tableau de bord, en deux clics.',
+      'merchants.f2.desc': 'Une base clients active et des données de fidélité, c\'est un vrai atout quand vous cherchez un financement, un partenariat ou que vous voulez ouvrir un deuxième point de vente.',
+      'merchants.f3.title': 'Notifications push',
+      'merchants.f3.desc': 'Envoyez une notification à vos clients en quelques secondes depuis votre téléphone. Une promo flash, un rappel, une offre spéciale : ils la reçoivent directement sur leur écran de verrouillage.',
       'merchants.f4.title': 'Récompenses sur mesure',
-      'merchants.f4.desc': 'Définissez vos règles : points, paliers, offres anniversaires. Le programme s\'adapte à votre commerce, pas l\'inverse.',
+      'merchants.f4.desc': 'Définissez vos règles : points, paliers, offres anniversaires. Le programme s\'adapte à votre commerce, pas l\'inverse. Par exemple : 10 cafés achetés = le 11ème offert. Ou 8 visites = une remise de 30%. C\'est vous qui décidez.',
       'how.tag': 'Fonctionnement',
       'how.title': 'Lancé en <span class="grad-text">3 étapes</span>',
-      'how.step1.title': 'Créez votre espace',
-      'how.step1.desc': 'Inscrivez-vous, personnalisez votre carte de fidélité aux couleurs de votre commerce en quelques minutes.',
-      'how.step2.title': 'Affichez votre QR code',
-      'how.step2.desc': 'Votre client scanne, la carte s\'enregistre automatiquement dans Apple Wallet ou Google Wallet.',
-      'how.step3.title': 'Fidélisez et analysez',
-      'how.step3.desc': 'Vos clients accumulent des points, reviennent plus souvent, vous récupérez des données client précieuses.',
+      'how.step1.title': 'Créez votre carte en quelques minutes',
+      'how.step1.desc': 'Choisissez vos couleurs, votre logo, vos règles de points. On s\'occupe du reste.',
+      'how.step2.title': 'Vos clients scannent, c\'est dans leur wallet',
+      'how.step2.desc': 'Ils entrent dans votre commerce, scannent le QR code, tapent leur prénom. La carte apparaît dans leur Apple ou Google Wallet. C\'est tout.',
+      'how.step3.title': 'Ils reviennent, vous analysez',
+      'how.step3.desc': 'À chaque visite, leurs points s\'accumulent automatiquement. Vous recevez chaque semaine un résumé de votre activité.',
       'customers.tag': 'Pour vos clients',
       'customers.title': 'Une expérience <span class="grad-text">sans friction</span>',
       'customers.f1.title': 'Dans le wallet, pas dans une app',
-      'customers.f1.desc': 'La carte vit dans Apple Wallet ou Google Wallet — là où vous regardez déjà. Pas besoin de télécharger quoi que ce soit.',
+      'customers.f1.desc': 'Fini les cartes papier qu\'on perd au fond du sac. La carte WinWin s\'enregistre dans Apple Wallet ou Google Wallet, dans le même wallet que vos cartes bancaires.',
       'customers.f2.title': 'Points crédités en temps réel',
-      'customers.f2.desc': 'Dès que le commerçant valide votre passage, vos points s\'affichent instantanément sur votre carte dans le wallet.',
+      'customers.f2.desc': 'Dès que le commerçant valide votre passage, vos points s\'affichent sur la carte. Pas besoin d\'attendre, pas besoin de demander.',
       'customers.f3.title': 'Notifications utiles',
-      'customers.f3.desc': 'Recevez une alerte quand vous approchez d\'une récompense, ou quand votre commerçant a une offre spéciale.',
+      'customers.f3.desc': 'Vous recevez un message quand vous êtes proche d\'une récompense ou quand votre commerçant a une offre pour vous. Rien de superflu, juste ce qui vous profite.',
       'testi.tag': 'Ils nous font confiance',
       'testi.title': 'Ce qu\'en disent <span class="grad-text">nos commerçants</span>',
       'cta.tag': 'Démarrer',
-      'cta.title': 'Prêt à démarrer ?',
+      'cta.title': 'Vous aussi, fidélisez vos clients autrement',
       'cta.subtitle': 'Rejoignez les commerçants lyonnais qui fidélisent intelligemment',
       'cta.desc': 'Gratuit pour commencer. Sans engagement.',
-      'cta.btn': 'Créer mon espace gratuitement',
+      'cta.btn': 'Je veux essayer gratuitement',
       'footer.rights': 'Tous droits réservés',
     },
     en: {
@@ -823,47 +844,47 @@
       'nav.link2': 'How it works',
       'nav.link3': 'Testimonials',
       'nav.cta': 'Get started free',
-      'hero.eyebrow': 'Next-gen digital loyalty',
-      'hero.title': 'The loyalty card<br/><span class="grad-text">that saves</span><br/>directly to your wallet',
-      'hero.desc': 'Your customers add their card with one scan — it integrates with Apple Wallet and Google Wallet. No app to download, zero friction, instant loyalty.',
+      'hero.eyebrow': 'Digital loyalty, finally simple',
+      'hero.title': 'The loyalty card<br/><span class="grad-text">that lives</span><br/>in your customers\' phones',
+      'hero.desc': 'One scan is all it takes. The card saves to Apple Wallet or Google Wallet, no app to download. Your customers find it every time they open their phone.',
       'hero.cta1': 'Get started free',
       'hero.cta2': 'Watch a demo',
-      'stats.s1.label': 'average customer return rate',
+      'stats.s1.label': 'more visits on average',
       'stats.s2.label': 'to launch your program',
       'stats.s3.label': 'for your customers to install',
       'merchants.tag': 'For merchants',
       'merchants.title': 'Data that <span class="grad-text">truly makes the difference</span>',
       'merchants.f1.title': 'Customer data reports',
-      'merchants.f1.desc': 'Visit frequency, top customers, slow periods — real numbers to make real decisions.',
+      'merchants.f1.desc': 'Every month, get a clear summary: who your most loyal customers are, which days are slow, and how many visits on average before they drop off. Real data, not estimates.',
       'merchants.f2.title': 'Grow your business value',
-      'merchants.f2.desc': 'Data generated by your loyal customers becomes a real asset: partnerships, funding, growth.',
-      'merchants.f3.title': 'Targeted push notifications',
-      'merchants.f3.desc': 'Re-engage inactive customers or announce a promo at the right time — from your dashboard, in two clicks.',
+      'merchants.f2.desc': 'An active customer base and loyalty data are a real asset when seeking funding, a partnership, or planning to open a second location.',
+      'merchants.f3.title': 'Push notifications',
+      'merchants.f3.desc': 'Send a notification to your customers in seconds, straight from your phone. A flash deal, a reminder, a special offer: they get it directly on their lock screen.',
       'merchants.f4.title': 'Custom rewards',
-      'merchants.f4.desc': 'Set your own rules: points, tiers, birthday offers. The program adapts to your business, not the other way around.',
+      'merchants.f4.desc': 'Set your rules: points, tiers, birthday offers. The program adapts to your business, not the other way around. For example: buy 10 coffees, get the 11th free. Or 8 visits = 30% off. You decide.',
       'how.tag': 'How it works',
       'how.title': 'Up and running <span class="grad-text">in 3 steps</span>',
-      'how.step1.title': 'Create your account',
-      'how.step1.desc': 'Sign up and customize your loyalty card to match your brand in minutes.',
-      'how.step2.title': 'Display your QR code',
-      'how.step2.desc': 'Your customer scans, the card saves automatically to Apple Wallet or Google Wallet.',
-      'how.step3.title': 'Build loyalty and analyze',
-      'how.step3.desc': 'Your customers earn points, come back more often, and you collect valuable customer data.',
+      'how.step1.title': 'Create your card in minutes',
+      'how.step1.desc': 'Choose your colors, your logo, your point rules. We handle the rest.',
+      'how.step2.title': 'Customers scan, it goes to their wallet',
+      'how.step2.desc': 'They walk into your shop, scan the QR code, enter their first name. The card appears in their Apple or Google Wallet. That\'s it.',
+      'how.step3.title': 'They come back, you analyze',
+      'how.step3.desc': 'Every visit, their points accumulate automatically. You receive a weekly summary of your activity.',
       'customers.tag': 'For your customers',
       'customers.title': 'A <span class="grad-text">frictionless</span> experience',
       'customers.f1.title': 'In the wallet, not in an app',
-      'customers.f1.desc': 'Your card lives in Apple Wallet or Google Wallet — where you already look. No download required.',
+      'customers.f1.desc': 'No more paper cards lost at the bottom of a bag. The WinWin card saves to Apple Wallet or Google Wallet, right alongside your bank cards.',
       'customers.f2.title': 'Real-time points credit',
-      'customers.f2.desc': 'As soon as the merchant validates your visit, your points appear instantly on your card in the wallet.',
+      'customers.f2.desc': 'As soon as the merchant validates your visit, your points appear on the card. No waiting, no asking.',
       'customers.f3.title': 'Useful notifications',
-      'customers.f3.desc': 'Get an alert when you\'re close to a reward, or when your merchant has a special offer.',
+      'customers.f3.desc': 'You get a message when you\'re close to a reward or when your merchant has an offer for you. Nothing unnecessary, just what benefits you.',
       'testi.tag': 'They trust us',
       'testi.title': 'What our <span class="grad-text">merchants say</span>',
       'cta.tag': 'Get started',
-      'cta.title': 'Ready to start?',
+      'cta.title': 'Join the merchants who do loyalty differently',
       'cta.subtitle': 'Join the merchants who loyalty smarter',
       'cta.desc': 'Free to start. No commitment.',
-      'cta.btn': 'Create my free account',
+      'cta.btn': 'I want to try it for free',
       'footer.rights': 'All rights reserved',
     }
   };
