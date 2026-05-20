@@ -409,6 +409,66 @@
     .footer-links a:hover { color: var(--text); }
     .footer-copy { font-size: .82rem; color: var(--muted); }
 
+    /* ── LOGO IMAGE ────────────────────────────────────────── */
+    .logo-img {
+      height: 44px; width: auto; border-radius: 10px; display: block;
+    }
+    @media (max-width: 480px) { .logo-img { height: 36px; } }
+
+    /* ── PHONE MOCKUPS (hero) ──────────────────────────────── */
+    .phones-visual {
+      position: relative; height: 500px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .phone-glow-hero {
+      position: absolute; width: 240px; height: 240px;
+      border-radius: 50%; filter: blur(70px); pointer-events: none;
+    }
+    .phone-glow-rose { background: rgba(220,80,120,.2); left: 0; top: 10%; }
+    .phone-glow-gold { background: rgba(245,158,11,.18); right: 0; bottom: 10%; }
+    .phone-frame {
+      position: absolute; width: 195px;
+      border-radius: 34px; border: 5px solid #2c2c2c;
+      box-shadow: 0 0 0 1px #1a1a1a, 0 30px 80px rgba(0,0,0,.75);
+      overflow: hidden; background: #000;
+    }
+    .phone-frame img { width: 100%; height: auto; display: block; }
+    .phone-rose {
+      transform: rotate(-8deg) translateX(-60px) translateY(-20px);
+      z-index: 1;
+      animation: floatPhone1 6s ease-in-out infinite;
+    }
+    .phone-gold {
+      transform: rotate(6deg) translateX(60px) translateY(25px);
+      z-index: 2;
+      animation: floatPhone2 7s ease-in-out infinite;
+    }
+    @keyframes floatPhone1 {
+      0%,100% { transform: rotate(-8deg) translateX(-60px) translateY(-20px); }
+      50%      { transform: rotate(-8deg) translateX(-60px) translateY(-35px); }
+    }
+    @keyframes floatPhone2 {
+      0%,100% { transform: rotate(6deg) translateX(60px) translateY(25px); }
+      50%     { transform: rotate(6deg) translateX(60px) translateY(10px); }
+    }
+    @media (max-width: 900px) {
+      .phones-visual { height: 380px; }
+      .phone-frame { width: 155px; }
+      .phone-rose { transform: rotate(-6deg) translateX(-46px) translateY(-14px); }
+      .phone-gold { transform: rotate(4deg) translateX(46px) translateY(18px); }
+    }
+
+    /* ── WALLET OFFICIAL BADGES ────────────────────────────── */
+    .wallet-badge-official { height: 38px; width: auto; margin-top: 10px; }
+    .google-wallet-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: #fff; border-radius: 8px;
+      padding: 8px 16px; color: #3c4043;
+      font-weight: 700; font-size: .82rem; margin-top: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.35);
+    }
+    .google-wallet-badge svg { width: 18px; height: 18px; flex-shrink: 0; }
+
     /* ── Scroll animations ─────────────────────────────────── */
     .reveal {
       opacity: 0; transform: translateY(30px);
@@ -425,15 +485,7 @@
 <nav id="nav">
   <div class="container nav-inner">
     <a href="#" class="logo">
-      <div class="logo-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round">
-          <rect x="3" y="6" width="18" height="13" rx="3"/>
-          <path d="M3 10h18"/>
-          <path d="M7 15h2"/>
-          <path d="M12 15h5"/>
-        </svg>
-      </div>
-      WinWin<span class="grad-text">Card</span>
+      <img src="assets/logo.png" alt="WinWin Card" class="logo-img">
     </a>
     <div class="nav-links">
       <a href="#how-it-works">Fonctionnement</a>
@@ -496,39 +548,16 @@
         </div>
       </div>
 
-      <!-- RIGHT — wallet cards visual -->
+      <!-- RIGHT — phone mockups -->
       <div>
-        <div class="cards-visual">
-          <div class="wallet-card wallet-card-3">
-            <div class="card-logo">☕ Café Marcel</div>
-            <div class="card-points">340</div>
-            <div class="card-points-label">points fidélité</div>
-            <div class="card-name">Lucas D.</div>
-            <div class="card-progress"><div class="card-progress-fill" style="width:68%"></div></div>
+        <div class="phones-visual">
+          <div class="phone-glow-hero phone-glow-rose"></div>
+          <div class="phone-glow-hero phone-glow-gold"></div>
+          <div class="phone-frame phone-rose">
+            <img src="assets/card-rose.png" alt="Carte de fidélité rose dans Apple Wallet">
           </div>
-          <div class="wallet-card wallet-card-2">
-            <div class="card-logo">✂️ Barber King</div>
-            <div class="card-points">7/10</div>
-            <div class="card-points-label">visites • prochaine récompense</div>
-            <div class="card-name">Thomas R.</div>
-            <div class="card-progress"><div class="card-progress-fill" style="width:70%"></div></div>
-          </div>
-          <div class="wallet-card wallet-card-1">
-            <div class="card-logo">💜 Beauty Studio</div>
-            <div class="card-points">1 250</div>
-            <div class="card-points-label">points • 250 pts = 1 soin offert</div>
-            <div class="card-name">Marie L.</div>
-            <div class="card-progress"><div class="card-progress-fill" style="width:85%"></div></div>
-          </div>
-          <div class="wallet-badges">
-            <div class="wallet-badge-pill">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-              Apple Wallet
-            </div>
-            <div class="wallet-badge-pill">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="#4285f4"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
-              Google Wallet
-            </div>
+          <div class="phone-frame phone-gold">
+            <img src="assets/card-gold.png" alt="Carte de fidélité gold dans Apple Wallet">
           </div>
         </div>
       </div>
@@ -845,12 +874,22 @@
         <h3>Apple Wallet</h3>
         <p>Compatible iPhone iOS 12+. La carte apparaît dans Wallet à côté des cartes bancaires et billets d'avion. Notifications via Apple Push.</p>
         <div class="compat-tag">✓ Compatible</div>
+        <img src="assets/apple-wallet-badge.svg" alt="Download on the App Store" class="wallet-badge-official">
       </div>
       <div class="compat-card">
         <div class="compat-logo" style="background:linear-gradient(135deg,#4285f4,#34a853,#fbbc04,#ea4335);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">G</div>
         <h3>Google Wallet</h3>
         <p>Compatible Android 5+. La carte s'intègre à Google Wallet nativement. Notifications via Google Pay Pass.</p>
         <div class="compat-tag">✓ Compatible</div>
+        <div class="google-wallet-badge">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+          </svg>
+          Google Wallet
+        </div>
       </div>
     </div>
     <div class="reveal" style="text-align:center;margin-top:40px">
@@ -888,13 +927,7 @@
   <div class="container">
     <div class="footer-inner">
       <div class="logo">
-        <div class="logo-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round">
-            <rect x="3" y="6" width="18" height="13" rx="3"/>
-            <path d="M3 10h18"/><path d="M7 15h2"/><path d="M12 15h5"/>
-          </svg>
-        </div>
-        WinWin<span class="grad-text">Card</span>
+        <img src="assets/logo.png" alt="WinWin Card" class="logo-img">
       </div>
       <div class="footer-links">
         <a href="#how-it-works">Fonctionnement</a>
