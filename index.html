@@ -91,18 +91,24 @@
     nav {
       position: fixed; top: 0; left: 0; right: 0; z-index: 100;
       padding: 18px 0;
-      transition: background .3s, backdrop-filter .3s, border-color .3s;
+      background: var(--navy);
+      transition: background .3s, backdrop-filter .3s, border-color .3s, box-shadow .3s;
     }
     nav.scrolled {
-      background: rgba(10,10,20,.85); backdrop-filter: blur(20px);
+      background: rgba(15,27,46,.97); backdrop-filter: blur(20px);
       border-bottom: 1px solid var(--border);
+      box-shadow: 0 4px 24px rgba(0,0,0,.4);
     }
     .nav-inner {
       display: flex; align-items: center; justify-content: space-between; gap: 16px;
     }
     .logo { display: flex; align-items: center; flex-shrink: 0; }
-    .logo-img { height: 44px; width: auto; border-radius: 10px; display: block; }
-    @media (max-width: 480px) { .logo-img { height: 36px; } }
+    .logo-img {
+      height: 44px; width: auto; display: block;
+      object-fit: contain; object-position: left center;
+    }
+    footer .logo-img { height: 32px; }
+    @media (max-width: 480px) { .logo-img { height: 36px; } footer .logo-img { height: 28px; } }
     .nav-links { display: flex; align-items: center; gap: 28px; }
     .nav-links a { color: var(--muted); font-size: .9rem; font-weight: 500; transition: color .2s; }
     .nav-links a:hover { color: var(--text); }
@@ -171,33 +177,34 @@
     .phone-glow-rose { background: rgba(220,80,120,.2); left: 0; top: 10%; }
     .phone-glow-gold { background: rgba(245,158,11,.18); right: 0; bottom: 10%; }
     .phone-frame {
-      position: absolute; width: 195px;
+      position: absolute; width: 188px;
       border-radius: 34px; border: 5px solid #2c2c2c;
       box-shadow: 0 0 0 1px #1a1a1a, 0 30px 80px rgba(0,0,0,.75);
       overflow: hidden; background: #000;
     }
-    .phone-frame img { width: 100%; height: auto; display: block; }
+    .phone-frame img { width: 100%; height: auto; display: block; object-fit: cover; }
     .phone-rose {
-      transform: rotate(-8deg) translateX(-60px) translateY(-20px); z-index: 1;
+      width: 188px;
+      transform: rotate(-8deg) translateX(-62px) translateY(-20px); z-index: 1;
       animation: floatPhone1 6s ease-in-out infinite;
     }
     .phone-gold {
-      transform: rotate(6deg) translateX(60px) translateY(25px); z-index: 2;
+      width: 215px;
+      transform: rotate(6deg) translateX(65px) translateY(28px); z-index: 2;
       animation: floatPhone2 7s ease-in-out infinite;
     }
     @keyframes floatPhone1 {
-      0%,100% { transform: rotate(-8deg) translateX(-60px) translateY(-20px); }
-      50%      { transform: rotate(-8deg) translateX(-60px) translateY(-35px); }
+      0%,100% { transform: rotate(-8deg) translateX(-62px) translateY(-20px); }
+      50%      { transform: rotate(-8deg) translateX(-62px) translateY(-36px); }
     }
     @keyframes floatPhone2 {
-      0%,100% { transform: rotate(6deg) translateX(60px) translateY(25px); }
-      50%     { transform: rotate(6deg) translateX(60px) translateY(10px); }
+      0%,100% { transform: rotate(6deg) translateX(65px) translateY(28px); }
+      50%     { transform: rotate(6deg) translateX(65px) translateY(12px); }
     }
     @media (max-width: 900px) {
       .phones-visual { height: 360px; }
-      .phone-frame { width: 150px; }
-      .phone-rose { animation: none; transform: rotate(-6deg) translateX(-44px) translateY(-12px); }
-      .phone-gold { animation: none; transform: rotate(4deg) translateX(44px) translateY(15px); }
+      .phone-rose { width: 145px; animation: none; transform: rotate(-6deg) translateX(-46px) translateY(-12px); }
+      .phone-gold { width: 165px; animation: none; transform: rotate(4deg) translateX(46px) translateY(16px); }
     }
 
     /* ── STATS BAR ─────────────────────────────────────────── */
