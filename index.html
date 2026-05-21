@@ -911,7 +911,7 @@
 
   /* ── AUTO-DETECT ───────────────────────────────────────── */
   const savedLang = localStorage.getItem('winwin-lang');
-  const autoLang = savedLang || (navigator.language && navigator.language.startsWith('en') ? 'en' : 'fr');
+  const autoLang = savedLang || (navigator.language && navigator.language.startsWith('fr') ? 'fr' : 'en');
   setLanguage(autoLang);
 
   /* ── NAV SCROLL ────────────────────────────────────────── */
