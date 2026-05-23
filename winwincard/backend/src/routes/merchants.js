@@ -1,0 +1,97 @@
+const express = require('express');
+const router = express.Router();
+const jwt = require('jsonwebtoken');
+const supabase = require('../services/supabase');
+const { authMarchand } = require('../middleware/auth');
+
+// POST /merchants/login — connexion marchand
+router.post('/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'email et password requis' });
+  }
+
+  const { data: marchand } = await supabase
+    .from('marchands')
+    .select('id, nom, email_contact, password_hash, actif')
+    .eq('email_contact', email)
+    .single();
+
+  if (!marchand) return res.status(401).json({ error: 'Identifiants incorrects' });
+  if (!marchand.actif) return res.status(403).json({ error: 'Compte suspendu' });
+
+  const { comparePassword } = require('../services/auth-utils');
+  const valid = await comparePassword(password, marchand.password_hash);
+  if (!valid) return res.status(401).json({ error: 'Identifiants incorrects' });
+
+  const token = jwt.sign(
+    { role: 'marchand', marchand_id: marchand.id, nom: marchand.nom },
+    process.env.JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+
+  res.json({ token, marchand_id: marchand.id, nom: marchand.nom });
+});
+
+// GET /merchants/me — profil du marchand connecté
+router.get('/me', authMarchand, async (req, res) => {
+  const { data, error } = await supabase
+    .from('marchands')
+    .select('id, nom, slug, logo_url, couleur_fond, couleur_texte, couleur_label, image_strip_url, texte_landing, max_value, forfait, email_contact')
+    .eq('id', req.marchandId)
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// GET /merchants/me/stats — stats du dashboard
+router.get('/me/stats', authMarchand, async (req, res) => {
+  const [{ count: totalClients }, { count: scansAujourdhui }] = await Promise.all([
+    supabase
+      .from('clients')
+      .select('*', { count: 'exact', head: true })
+      .eq('marchand_id', req.marchandId)
+      .is('deleted_at', null),
+    supabase
+      .from('scans')
+      .select('*', { count: 'exact', head: true })
+      .eq('marchand_id', req.marchandId)
+      .gte('date_scan', new Date().toISOString().split('T')[0])
+  ]);
+
+  res.json({ total_clients: totalClients, scans_aujourdhui: scansAujourdhui });
+});
+
+// GET /merchants/qrcode — QR code de la landing page du marchand
+router.get('/me/qrcode', authMarchand, async (req, res) => {
+  const { data: marchand } = await supabase
+    .from('marchands')
+    .select('slug')
+    .eq('id', req.marchandId)
+    .single();
+
+  if (!marchand) return res.status(404).json({ error: 'Marchand introuvable' });
+
+  const QRCode = require('qrcode');
+  const url = `${process.env.LANDING_BASE_URL}/${marchand.slug}`;
+  const qr = await QRCode.toDataURL(url, { width: 400, margin: 2 });
+
+  res.json({ url, qrcode: qr });
+});
+
+// GET /merchants/:slug/public — infos publiques pour la landing page
+router.get('/:slug/public', async (req, res) => {
+  const { data, error } = await supabase
+    .from('marchands')
+    .select('id, nom, slug, logo_url, image_strip_url, texte_landing, couleur_fond, actif')
+    .eq('slug', req.params.slug)
+    .single();
+
+  if (error || !data) return res.status(404).json({ error: 'Marchand introuvable' });
+  if (!data.actif) return res.status(403).json({ error: 'Programme suspendu' });
+
+  res.json(data);
+});
+
+module.exports = router;
