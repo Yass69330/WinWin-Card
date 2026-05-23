@@ -46,11 +46,13 @@ const scanRoutes          = require('./routes/scan');
 const merchantsRoutes     = require('./routes/merchants');
 const notificationsRoutes = require('./routes/notifications');
 const adminRoutes         = require('./routes/admin');
+const passesRoutes        = require('./routes/passes');
 
 // Apple Wallet WebService — chemins standards Apple, pas de préfixe /api
 app.use('/', appleWalletRoutes);
 
 // API REST
+app.use('/api/passes', passesRoutes);
 app.use('/api/clients', limiterInscription, clientsRoutes);
 app.use('/api/scan', scanRoutes);
 app.use('/api/merchants', merchantsRoutes);

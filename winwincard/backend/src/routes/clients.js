@@ -50,19 +50,23 @@ router.post('/', async (req, res) => {
     return res.status(500).json({ error: 'Erreur création client', detail: errClient.message });
   }
 
-  // Créer l'entrée passes (les URLs seront remplies par apple-wallet.js et google-wallet.js)
+  // Créer l'entrée passes
   await supabase.from('passes').insert({
     client_id: client.id,
     marchand_id: marchand.id,
     serial_number: serialNumber
   });
 
+  const apiBase = process.env.API_BASE_URL || 'https://api.winwincard.fr';
+
   res.status(201).json({
-    client_id: client.id,
+    client_id:     client.id,
     serial_number: serialNumber,
-    prenom: client.prenom,
-    stored_value: 0,
-    marchand_id: marchand.id
+    prenom:        client.prenom,
+    stored_value:  0,
+    marchand_id:   marchand.id,
+    apple_pass_url:  `${apiBase}/api/passes/${serialNumber}/apple`,
+    google_pass_url: `${apiBase}/api/google-wallet/pass/${serialNumber}`,
   });
 });
 

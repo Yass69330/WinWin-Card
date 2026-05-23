@@ -1,6 +1,18 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const supabase = require('../services/supabase');
+
+// Vérifie le token ApplePass envoyé par Apple sur le webservice
+function verifyAppleToken(req, serialNumber) {
+  const header = req.headers['authorization'];
+  if (!header || !header.startsWith('ApplePass ')) return false;
+  const token = header.slice(10);
+  const { computeAuthToken } = require('../services/apple-pass');
+  const expected = computeAuthToken(serialNumber);
+  if (token.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected));
+}
 
 // ============================================================
 // Endpoints standard Apple Wallet (WebService URL)
@@ -14,6 +26,7 @@ router.post('/v1/devices/:deviceId/registrations/:passTypeId/:serialNumber', asy
   const { deviceId, serialNumber } = req.params;
   const { pushToken } = req.body;
 
+  if (!verifyAppleToken(req, serialNumber)) return res.status(401).send();
   if (!pushToken) return res.status(400).send();
 
   // Récupérer le pass et le client associé
@@ -88,6 +101,8 @@ router.get('/v1/devices/:deviceId/registrations/:passTypeId', async (req, res) =
 router.get('/v1/passes/:passTypeId/:serialNumber', async (req, res) => {
   const { serialNumber } = req.params;
   const ifModifiedSince = req.headers['if-modified-since'];
+
+  if (!verifyAppleToken(req, serialNumber)) return res.status(401).send();
 
   const { data: pass } = await supabase
     .from('passes')
