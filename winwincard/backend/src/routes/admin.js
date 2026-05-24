@@ -78,6 +78,13 @@ router.post('/marchands', authAdmin, async (req, res) => {
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
+
+  // Créer la LoyaltyClass Google Wallet pour ce marchand (async, non bloquant)
+  const { createOrUpdateLoyaltyClass } = require('../services/google-pass');
+  createOrUpdateLoyaltyClass(data).catch(err =>
+    console.error('[Google Wallet] Erreur création classe :', err.message)
+  );
+
   res.status(201).json(data);
 });
 
@@ -106,6 +113,13 @@ router.patch('/marchands/:id', authAdmin, async (req, res) => {
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
+
+  // Synchroniser la LoyaltyClass Google Wallet si les visuels ont changé
+  const { createOrUpdateLoyaltyClass } = require('../services/google-pass');
+  createOrUpdateLoyaltyClass(data).catch(err =>
+    console.error('[Google Wallet] Erreur mise à jour classe :', err.message)
+  );
+
   res.json(data);
 });
 

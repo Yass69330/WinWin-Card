@@ -58,8 +58,9 @@ router.post('/', authScanner, async (req, res) => {
     stored_value_apres: apresScan
   });
 
-  // Notifier Apple Wallet de mettre à jour le pass (async, sans bloquer la réponse)
+  // Mises à jour Apple + Google Wallet en parallèle, sans bloquer la réponse
   notifierMiseAJourPass(serial_number).catch(() => {});
+  mettreAJourGoogleWallet(serial_number, req.marchandId, apresScan, maxValue).catch(() => {});
 
   res.json({
     prenom: client.prenom,
@@ -73,7 +74,6 @@ router.post('/', authScanner, async (req, res) => {
   });
 });
 
-// Déclenche la mise à jour APNs pour que Apple re-télécharge le pass
 async function notifierMiseAJourPass(serialNumber) {
   const { data: tokens } = await supabase
     .from('device_tokens')
@@ -86,6 +86,11 @@ async function notifierMiseAJourPass(serialNumber) {
   for (const { push_token } of tokens) {
     await sendPushUpdate(push_token).catch(() => {});
   }
+}
+
+async function mettreAJourGoogleWallet(serialNumber, marchandId, storedValue, maxValue) {
+  const { updateLoyaltyObjectPoints } = require('../services/google-pass');
+  await updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue);
 }
 
 module.exports = router;
