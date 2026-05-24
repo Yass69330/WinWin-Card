@@ -189,21 +189,25 @@ async function generateApplePass({ client, marchand, serialNumber }) {
     stripUrl          ? fetchImage(stripUrl).catch(() => stripPng)           : stripPng,
   ]);
 
-  // Répertoire temporaire — passkit-generator v3 requiert un chemin string
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'winwincard-'));
+  // passkit-generator v3 ajoute automatiquement ".pass" au chemin fourni.
+  // On crée donc le répertoire AVEC l'extension .pass et on passe le chemin SANS.
+  const tempBase = path.join(os.tmpdir(), `winwincard-${Date.now()}`);
+  const modelDir = tempBase + '.pass';
+  fs.mkdirSync(modelDir, { recursive: true });
   try {
-    fs.writeFileSync(path.join(tempDir, 'pass.json'),    JSON.stringify(passJson));
-    fs.writeFileSync(path.join(tempDir, 'icon.png'),     iconPng);
-    fs.writeFileSync(path.join(tempDir, 'icon@2x.png'),  icon2Png);
-    fs.writeFileSync(path.join(tempDir, 'logo.png'),     logoBuf);
-    fs.writeFileSync(path.join(tempDir, 'logo@2x.png'),  logo2Buf);
-    fs.writeFileSync(path.join(tempDir, 'strip.png'),    stripBuf);
-    fs.writeFileSync(path.join(tempDir, 'strip@2x.png'), strip2Buf);
+    fs.writeFileSync(path.join(modelDir, 'pass.json'),    JSON.stringify(passJson));
+    fs.writeFileSync(path.join(modelDir, 'icon.png'),     iconPng);
+    fs.writeFileSync(path.join(modelDir, 'icon@2x.png'),  icon2Png);
+    fs.writeFileSync(path.join(modelDir, 'logo.png'),     logoBuf);
+    fs.writeFileSync(path.join(modelDir, 'logo@2x.png'),  logo2Buf);
+    fs.writeFileSync(path.join(modelDir, 'strip.png'),    stripBuf);
+    fs.writeFileSync(path.join(modelDir, 'strip@2x.png'), strip2Buf);
 
-    const pass = await PKPass.from({ model: tempDir, certificates: certs });
+    // On passe tempBase (sans .pass) — passkit-generator cherche tempBase + '.pass'
+    const pass = await PKPass.from({ model: tempBase, certificates: certs });
     return pass.getAsBuffer();
   } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    fs.rmSync(modelDir, { recursive: true, force: true });
   }
 }
 
