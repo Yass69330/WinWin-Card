@@ -1,5 +1,6 @@
 const { PKPass } = require('passkit-generator');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const https = require('https');
 const http = require('http');
@@ -7,8 +8,6 @@ const zlib = require('zlib');
 const crypto = require('crypto');
 
 // ── Auth token ───────────────────────────────────────────────
-// Calculé à la volée — jamais stocké.
-// Apple l'envoie en Authorization: ApplePass <token> sur le webservice.
 function computeAuthToken(serialNumber) {
   return crypto
     .createHmac('sha256', process.env.JWT_SECRET || 'dev-secret')
@@ -17,8 +16,17 @@ function computeAuthToken(serialNumber) {
     .slice(0, 32);
 }
 
+// ── Nettoyage PEM ────────────────────────────────────────────
+// openssl pkcs12 ajoute des "Bag Attributes" avant le bloc PEM.
+// passkit-generator ne les accepte pas — on extrait uniquement le bloc PEM.
+function cleanPem(buf) {
+  const str = buf.toString('utf8');
+  const match = str.match(/(-----BEGIN [\w ]+-----[\s\S]+?-----END [\w ]+-----)/);
+  if (!match) throw new Error('Fichier PEM invalide — bloc BEGIN/END introuvable');
+  return Buffer.from(match[1] + '\n');
+}
+
 // ── Chargement certificats ───────────────────────────────────
-// Priorité : variable env base64 (Railway prod) > chemin fichier (dev)
 function loadCert(b64EnvKey, filePathEnvKey, defaultPath) {
   if (process.env[b64EnvKey]) {
     return Buffer.from(process.env[b64EnvKey], 'base64');
@@ -29,9 +37,9 @@ function loadCert(b64EnvKey, filePathEnvKey, defaultPath) {
 
 function loadCerts() {
   return {
-    wwdr:       loadCert('APPLE_WWDR_CERT_B64',    'APPLE_WWDR_CERT',    './certs/wwdr.pem'),
-    signerCert: loadCert('APPLE_SIGNER_CERT_B64',  'APPLE_SIGNER_CERT',  './certs/signerCert.pem'),
-    signerKey:  loadCert('APPLE_SIGNER_KEY_B64',   'APPLE_SIGNER_KEY',   './certs/signerKey.pem'),
+    wwdr:       cleanPem(loadCert('APPLE_WWDR_CERT_B64',   'APPLE_WWDR_CERT',   './certs/wwdr.pem')),
+    signerCert: cleanPem(loadCert('APPLE_SIGNER_CERT_B64', 'APPLE_SIGNER_CERT', './certs/signerCert.pem')),
+    signerKey:  cleanPem(loadCert('APPLE_SIGNER_KEY_B64',  'APPLE_SIGNER_KEY',  './certs/signerKey.pem')),
   };
 }
 
@@ -51,8 +59,7 @@ function fetchImage(url) {
   });
 }
 
-// ── Générateur PNG minimal (pure Node.js, aucune dépendance) ─
-// Utilisé pour les images placeholder quand le marchand n'a pas encore uploadé ses assets.
+// ── Générateur PNG minimal (pure Node.js, zéro dépendance) ──
 function createSolidPng(width, height, r, g, b) {
   const table = new Uint32Array(256);
   for (let i = 0; i < 256; i++) {
@@ -73,12 +80,10 @@ function createSolidPng(width, height, r, g, b) {
     crcB.writeUInt32BE(crc32(Buffer.concat([t, data])));
     return Buffer.concat([len, t, data, crcB]);
   }
-
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(width, 0);
   ihdr.writeUInt32BE(height, 4);
   ihdr[8] = 8; ihdr[9] = 2; // bit depth 8, RGB
-
   const rowSize = 1 + width * 3;
   const raw = Buffer.alloc(height * rowSize, 0);
   for (let y = 0; y < height; y++) {
@@ -89,7 +94,6 @@ function createSolidPng(width, height, r, g, b) {
       raw[y * rowSize + 1 + x * 3 + 2] = b;
     }
   }
-
   return Buffer.concat([
     Buffer.from('89504e470d0a1a0a', 'hex'),
     chunk('IHDR', ihdr),
@@ -98,21 +102,15 @@ function createSolidPng(width, height, r, g, b) {
   ]);
 }
 
-// ── Conversion hex → rgb() ───────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────
 function hexToRgb(hex) {
-  const h = hex.replace('#', '');
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return `rgb(${r}, ${g}, ${b})`;
+  const h = (hex || '#1a1a2e').replace('#', '');
+  return `rgb(${parseInt(h.slice(0,2),16)}, ${parseInt(h.slice(2,4),16)}, ${parseInt(h.slice(4,6),16)})`;
 }
 
-// ── Sélection image strip selon tier ────────────────────────
 function selectStripImageUrl(marchand, storedValue) {
-  if (marchand.images_tiers && Array.isArray(marchand.images_tiers)) {
-    const tier = marchand.images_tiers.find(
-      t => storedValue >= t.min && storedValue <= t.max
-    );
+  if (Array.isArray(marchand.images_tiers)) {
+    const tier = marchand.images_tiers.find(t => storedValue >= t.min && storedValue <= t.max);
     if (tier?.url) return tier.url;
   }
   return marchand.image_strip_url || null;
@@ -120,9 +118,7 @@ function selectStripImageUrl(marchand, storedValue) {
 
 // ── Génération pass.json ─────────────────────────────────────
 function buildPassJson({ client, marchand, serialNumber }) {
-  const progression = `${client.stored_value} / ${marchand.max_value}`;
   const isRecompense = client.stored_value >= marchand.max_value;
-
   return {
     formatVersion: 1,
     passTypeIdentifier: process.env.APPLE_PASS_TYPE_IDENTIFIER || 'pass.com.winwincard.loyalty',
@@ -132,90 +128,83 @@ function buildPassJson({ client, marchand, serialNumber }) {
     authenticationToken: computeAuthToken(serialNumber),
     organizationName: 'WinWin Card',
     description: `Carte de fidélité ${marchand.nom}`,
-    backgroundColor: hexToRgb(marchand.couleur_fond  || '#1a1a2e'),
+    backgroundColor: hexToRgb(marchand.couleur_fond),
     foregroundColor: hexToRgb(marchand.couleur_texte || '#ffffff'),
     labelColor:      hexToRgb(marchand.couleur_label || '#a0a0b0'),
     logoText: marchand.nom,
     storeCard: {
       headerFields: [],
-      primaryFields: [
-        {
-          key: 'points',
-          label: 'PROGRESSION',
-          value: isRecompense ? '🎉 Récompense !' : progression,
-        }
-      ],
-      secondaryFields: [
-        {
-          key: 'prenom',
-          label: 'CLIENT',
-          value: client.prenom
-        }
-      ],
+      primaryFields: [{
+        key: 'points',
+        label: 'PROGRESSION',
+        value: isRecompense ? 'Récompense !' : `${client.stored_value} / ${marchand.max_value}`,
+      }],
+      secondaryFields: [{
+        key: 'prenom',
+        label: 'CLIENT',
+        value: client.prenom,
+      }],
       auxiliaryFields: [],
       backFields: [
         {
           key: 'programme',
           label: 'Comment ça marche ?',
-          value: `Présentez votre pass à chaque visite pour gagner des points.\nAprès ${marchand.max_value} passages, votre récompense est automatiquement débloquée.`
+          value: `Présentez votre pass à chaque visite.\nAprès ${marchand.max_value} passages, votre récompense est automatiquement débloquée.`,
         },
         {
           key: 'rgpd',
           label: 'Vos données',
-          value: 'Conformément au RGPD, vous pouvez demander la suppression de vos données directement en magasin.'
-        }
-      ]
+          value: 'Conformément au RGPD, vous pouvez demander la suppression de vos données directement en magasin.',
+        },
+      ],
     },
-    barcodes: [
-      {
-        message: serialNumber,
-        format: 'PKBarcodeFormatQR',
-        messageEncoding: 'iso-8859-1'
-      }
-    ]
+    barcodes: [{
+      message: serialNumber,
+      format: 'PKBarcodeFormatQR',
+      messageEncoding: 'iso-8859-1',
+    }],
   };
 }
 
 // ── Point d'entrée principal ─────────────────────────────────
+// passkit-generator v3 exige un chemin de répertoire (string) pour model.
+// On crée un répertoire temporaire, on y écrit les fichiers, puis on nettoie.
 async function generateApplePass({ client, marchand, serialNumber }) {
   const certs = loadCerts();
-
   const passJson = buildPassJson({ client, marchand, serialNumber });
 
-  // Prépare les images
-  const iconPlaceholder  = createSolidPng(29,  29,  26, 26, 46);
-  const icon2xPlaceholder = createSolidPng(58,  58,  26, 26, 46);
-  const stripPlaceholder = createSolidPng(375, 123, 26, 26, 46);
+  // Placeholders couleur du marchand
+  const [rf, gf, bf] = hexToRgb(marchand.couleur_fond || '#1a1a2e')
+    .match(/\d+/g).map(Number);
 
-  const [iconBuf, icon2xBuf, logoBuf, logo2xBuf, stripBuf, strip2xBuf] = await Promise.all([
-    marchand.icon_url    ? fetchImage(marchand.icon_url).catch(() => iconPlaceholder)   : iconPlaceholder,
-    marchand.icon_url    ? fetchImage(marchand.icon_url).catch(() => icon2xPlaceholder) : icon2xPlaceholder,
-    marchand.logo_url    ? fetchImage(marchand.logo_url).catch(() => iconPlaceholder)   : iconPlaceholder,
-    marchand.logo_url    ? fetchImage(marchand.logo_url).catch(() => icon2xPlaceholder) : icon2xPlaceholder,
-    (() => {
-      const url = selectStripImageUrl(marchand, client.stored_value);
-      return url ? fetchImage(url).catch(() => stripPlaceholder) : stripPlaceholder;
-    })(),
-    (() => {
-      const url = selectStripImageUrl(marchand, client.stored_value);
-      return url ? fetchImage(url).catch(() => stripPlaceholder) : stripPlaceholder;
-    })()
+  const iconPng  = createSolidPng(29,  29,  rf, gf, bf);
+  const icon2Png = createSolidPng(58,  58,  rf, gf, bf);
+  const stripPng = createSolidPng(375, 123, rf, gf, bf);
+
+  const stripUrl = selectStripImageUrl(marchand, client.stored_value);
+  const [logoBuf, logo2Buf, stripBuf, strip2Buf] = await Promise.all([
+    marchand.logo_url ? fetchImage(marchand.logo_url).catch(() => iconPng)  : iconPng,
+    marchand.logo_url ? fetchImage(marchand.logo_url).catch(() => icon2Png) : icon2Png,
+    stripUrl          ? fetchImage(stripUrl).catch(() => stripPng)           : stripPng,
+    stripUrl          ? fetchImage(stripUrl).catch(() => stripPng)           : stripPng,
   ]);
 
-  const pass = await PKPass.from({
-    model: {
-      'pass.json':    Buffer.from(JSON.stringify(passJson)),
-      'icon.png':     iconBuf,
-      'icon@2x.png':  icon2xBuf,
-      'logo.png':     logoBuf,
-      'logo@2x.png':  logo2xBuf,
-      'strip.png':    stripBuf,
-      'strip@2x.png': strip2xBuf,
-    },
-    certificates: certs,
-  });
+  // Répertoire temporaire — passkit-generator v3 requiert un chemin string
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'winwincard-'));
+  try {
+    fs.writeFileSync(path.join(tempDir, 'pass.json'),    JSON.stringify(passJson));
+    fs.writeFileSync(path.join(tempDir, 'icon.png'),     iconPng);
+    fs.writeFileSync(path.join(tempDir, 'icon@2x.png'),  icon2Png);
+    fs.writeFileSync(path.join(tempDir, 'logo.png'),     logoBuf);
+    fs.writeFileSync(path.join(tempDir, 'logo@2x.png'),  logo2Buf);
+    fs.writeFileSync(path.join(tempDir, 'strip.png'),    stripBuf);
+    fs.writeFileSync(path.join(tempDir, 'strip@2x.png'), strip2Buf);
 
-  return pass.getAsBuffer();
+    const pass = await PKPass.from({ model: tempDir, certificates: certs });
+    return pass.getAsBuffer();
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 }
 
 module.exports = { generateApplePass, computeAuthToken };
