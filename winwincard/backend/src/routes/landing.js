@@ -1,11 +1,23 @@
 const express = require('express');
 const router = express.Router();
 const path = require('path');
+const fs = require('fs');
 
-// GET /l/:slug — sert la landing page (HTML statique)
-// Le slug est dans l'URL, JavaScript l'extrait et appelle l'API
+const LANDING_HTML = path.resolve(__dirname, '../../public/landing.html');
+
+// Vérification au démarrage
+if (!fs.existsSync(LANDING_HTML)) {
+  console.error(`[landing] ERREUR : fichier introuvable : ${LANDING_HTML}`);
+}
+
+// GET /l/:slug — sert la landing page
 router.get('/:slug', (req, res) => {
-  res.sendFile(path.join(__dirname, '../../public/landing.html'));
+  res.sendFile(LANDING_HTML, err => {
+    if (err) {
+      console.error(`[landing] sendFile échoué pour ${LANDING_HTML} :`, err.message);
+      res.status(500).send('Erreur serveur — landing.html introuvable');
+    }
+  });
 });
 
 module.exports = router;
