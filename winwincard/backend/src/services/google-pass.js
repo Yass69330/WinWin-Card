@@ -1,6 +1,15 @@
 // Google Wallet Loyalty API
 // Auth : JWT service account → OAuth2 access token (jsonwebtoken + fetch natif Node 18+)
 // Aucune dépendance supplémentaire.
+//
+// Dimensions images Google Wallet :
+//   programLogo  : 660 × 660 px  — carré, affiché en cercle (top-left)
+//   wideLogo     : 1032 × 336 px — bannière top (remplace logo+nom si fourni)
+//   heroImage    : 1032 × 336 px — image bas de carte (~3:1)
+//
+// Dimensions images Apple Wallet (pour comparaison) :
+//   logo@2x.png  : 320 × 100 px  — rectangulaire, à côté du logoText
+//   strip@2x.png : 750 × 246 px  — milieu de la carte
 
 const jwt = require('jsonwebtoken');
 
@@ -23,13 +32,26 @@ function issuerId() {
   return process.env.GOOGLE_WALLET_ISSUER_ID;
 }
 
-// Slug stable pour l'ID de classe — Google n'accepte que alphanum, underscore, tiret
 function classId(marchandId) {
   return `${issuerId()}.merchant_${marchandId.replace(/-/g, '_')}`;
 }
 
 function objectId(serialNumber) {
   return `${issuerId()}.${serialNumber}`;
+}
+
+// ── Sélection images avec fallback ───────────────────────────
+// Google Wallet a ses propres dimensions — on supporte des URLs dédiées
+// avec fallback sur les colonnes Apple/générales.
+
+function googleLogoUrl(marchand) {
+  // 660×660 px carré → cercle. Fallback : logo_url (peut être rogné)
+  return marchand.google_logo_url || marchand.logo_url || null;
+}
+
+function googleHeroUrl(marchand) {
+  // 1032×336 px (~3:1). Fallback : image_strip_url (sera redimensionné par Google)
+  return marchand.google_hero_url || marchand.image_strip_url || null;
 }
 
 // ── Auth Google (OAuth2 via JWT service account) ─────────────
@@ -78,36 +100,51 @@ async function walletRequest(method, endpoint, body, token) {
   return { status: res.status, data: text ? JSON.parse(text) : null };
 }
 
-// ── Construction des objets ──────────────────────────────────
+// ── Construction LoyaltyClass ────────────────────────────────
 
 function buildLoyaltyClass(cId, marchand) {
+  const logoUrl = googleLogoUrl(marchand);
+  const heroUrl = googleHeroUrl(marchand);
+
   const obj = {
     id: cId,
     issuerName: 'WinWin Card',
+
+    // Nom du programme — affiché en grand sur la carte
     programName: marchand.nom,
+
+    // Titre de la catégorie — affiché sous le logo en petit
+    cardTitle: {
+      defaultValue: { language: 'fr', value: 'carte de fidélité' },
+    },
+
     hexBackgroundColor: marchand.couleur_fond || '#1a1a2e',
     countryCode: 'FR',
     reviewStatus: 'UNDER_REVIEW',
+
+    // Label affiché à côté du solde de points
     loyaltyPoints: {
-      label: 'PROGRESSION',
+      label: 'Progression',
       localizedLabel: {
-        defaultValue: { language: 'fr', value: 'PROGRESSION' },
+        defaultValue: { language: 'fr', value: 'Progression' },
       },
     },
   };
 
-  if (marchand.logo_url) {
+  // Logo circulaire 660×660 px (top-left)
+  if (logoUrl) {
     obj.programLogo = {
-      sourceUri: { uri: marchand.logo_url },
+      sourceUri: { uri: logoUrl },
       contentDescription: {
         defaultValue: { language: 'fr', value: `Logo ${marchand.nom}` },
       },
     };
   }
 
-  if (marchand.image_strip_url) {
+  // Hero image 1032×336 px (bas de carte)
+  if (heroUrl) {
     obj.heroImage = {
-      sourceUri: { uri: marchand.image_strip_url },
+      sourceUri: { uri: heroUrl },
       contentDescription: {
         defaultValue: { language: 'fr', value: marchand.nom },
       },
@@ -117,6 +154,8 @@ function buildLoyaltyClass(cId, marchand) {
   return obj;
 }
 
+// ── Construction LoyaltyObject ───────────────────────────────
+
 function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
   const isRecompense = client.stored_value >= marchand.max_value;
 
@@ -124,17 +163,23 @@ function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
     id: oId,
     classId: cId,
     state: 'ACTIVE',
+
+    // Prénom affiché sur la carte
     accountName: client.prenom,
     accountId: serialNumber,
+
+    // Solde de points
     loyaltyPoints: {
       balance: { int: client.stored_value },
-      label: isRecompense ? 'RÉCOMPENSE !' : 'PROGRESSION',
+      label: isRecompense ? 'Récompense !' : 'Progression',
     },
+
+    // Infos au dos de la carte
     textModulesData: [
       {
         id: 'details',
-        header: 'Programme de fidélité',
-        body: `${client.stored_value} / ${marchand.max_value} points — ${marchand.nom}`,
+        header: 'Comment ça marche ?',
+        body: `Présentez votre pass à chaque visite.\nAprès ${marchand.max_value} passages, votre récompense est débloquée automatiquement.`,
       },
       {
         id: 'rgpd',
@@ -142,10 +187,12 @@ function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
         body: 'Conformément au RGPD, vous pouvez demander la suppression de vos données directement en magasin.',
       },
     ],
+
+    // QR code — contient le serial_number scanné en caisse
     barcode: {
       type: 'QR_CODE',
       value: serialNumber,
-      alternateText: serialNumber.slice(0, 8).toUpperCase(),
+      alternateText: '',
     },
   };
 }
@@ -182,10 +229,15 @@ async function generateGoogleWalletUrl({ client, marchand, serialNumber }) {
   // Créer l'objet loyalty si inexistant
   const { status } = await walletRequest('GET', `/loyaltyObject/${encodeURIComponent(oId)}`, null, token);
   if (status === 404) {
-    await walletRequest('POST', '/loyaltyObject', buildLoyaltyObject(oId, cId, client, marchand, serialNumber), token);
+    await walletRequest(
+      'POST',
+      '/loyaltyObject',
+      buildLoyaltyObject(oId, cId, client, marchand, serialNumber),
+      token
+    );
   }
 
-  // JWT signé "save to wallet"
+  // JWT "save to wallet" signé avec la clé du service account
   const creds = getCredentials();
   const saveJwt = jwt.sign(
     {
@@ -202,7 +254,7 @@ async function generateGoogleWalletUrl({ client, marchand, serialNumber }) {
   return `https://pay.google.com/gp/v/save/${saveJwt}`;
 }
 
-// Mise à jour des points après un scan — appelé de façon asynchrone depuis scan.js
+// Mise à jour des points après un scan — appelé en async depuis scan.js
 async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue) {
   if (!isConfigured()) return;
 
@@ -216,7 +268,7 @@ async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, 
     {
       loyaltyPoints: {
         balance: { int: storedValue },
-        label: isRecompense ? 'RÉCOMPENSE !' : 'PROGRESSION',
+        label: isRecompense ? 'Récompense !' : 'Progression',
       },
     },
     token

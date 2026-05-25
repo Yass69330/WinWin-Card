@@ -38,7 +38,8 @@ router.post('/marchands', authAdmin, async (req, res) => {
     nom, slug, email_contact, password,
     couleur_fond, couleur_texte, couleur_label,
     texte_landing, max_value,
-    logo_url, image_strip_url
+    logo_url, image_strip_url,
+    google_logo_url, google_hero_url
   } = req.body;
 
   if (!nom || !slug || !email_contact || !password) {
@@ -72,9 +73,11 @@ router.post('/marchands', authAdmin, async (req, res) => {
       forfait: 'pro',
       logo_url,
       image_strip_url,
+      google_logo_url,
+      google_hero_url,
       actif: true
     })
-    .select('id, nom, slug, email_contact')
+    .select('id, nom, slug, email_contact, google_logo_url, google_hero_url')
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
@@ -93,6 +96,7 @@ router.patch('/marchands/:id', authAdmin, async (req, res) => {
   const allowedFields = [
     'nom', 'couleur_fond', 'couleur_texte', 'couleur_label',
     'logo_url', 'image_strip_url', 'images_tiers',
+    'google_logo_url', 'google_hero_url',
     'texte_landing', 'max_value'
   ];
 
