@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="theme-color" content="#1a1a2e">
+  <title>Carte de fidélité</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --brand:      #1a1a2e;
+      --brand-text: #ffffff;
+      --radius:     16px;
+      --shadow:     0 4px 24px rgba(0,0,0,.10);
+    }
+
+    html, body {
+      min-height: 100dvh;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f4f4f6;
+      color: #111;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Header marchand ── */
+    .header {
+      background: var(--brand);
+      color: var(--brand-text);
+      padding: 36px 24px 28px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      min-height: 160px;
+    }
+    .header-logo {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: rgba(255,255,255,.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--brand-text);
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .header-logo img { width: 100%; height: 100%; object-fit: cover; }
+    .header-name {
+      font-size: 22px;
+      font-weight: 700;
+      text-align: center;
+      line-height: 1.2;
+    }
+
+    /* ── Carte principale ── */
+    .card {
+      background: #fff;
+      border-radius: var(--radius) var(--radius) 0 0;
+      margin-top: -12px;
+      padding: 28px 24px 40px;
+      min-height: calc(100dvh - 148px);
+      box-shadow: var(--shadow);
+    }
+
+    .description {
+      font-size: 15px;
+      line-height: 1.6;
+      color: #444;
+      margin-bottom: 28px;
+      text-align: center;
+    }
+
+    /* ── Formulaire ── */
+    .field {
+      margin-bottom: 16px;
+    }
+    .field label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #666;
+      margin-bottom: 6px;
+      letter-spacing: .3px;
+      text-transform: uppercase;
+    }
+    .field input {
+      width: 100%;
+      padding: 14px 16px;
+      font-size: 16px; /* 16px min évite le zoom sur iOS */
+      border: 1.5px solid #ddd;
+      border-radius: 12px;
+      background: #fafafa;
+      color: #111;
+      outline: none;
+      transition: border-color .2s;
+      -webkit-appearance: none;
+    }
+    .field input:focus { border-color: var(--brand); background: #fff; }
+    .field input::placeholder { color: #aaa; }
+
+    /* Champs V2 — présents en DOM mais invisibles en V1 */
+    .field-v2 { display: none; }
+
+    .btn-submit {
+      width: 100%;
+      padding: 16px;
+      margin-top: 8px;
+      background: var(--brand);
+      color: var(--brand-text);
+      border: none;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity .2s, transform .1s;
+      position: relative;
+      min-height: 54px;
+    }
+    .btn-submit:active { transform: scale(.98); }
+    .btn-submit:disabled { opacity: .6; cursor: default; }
+    .btn-submit .spinner {
+      display: none;
+      width: 20px; height: 20px;
+      border: 2px solid rgba(255,255,255,.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      position: absolute;
+      left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .btn-submit.loading .btn-label { visibility: hidden; }
+    .btn-submit.loading .spinner { display: block; }
+
+    @keyframes spin { to { transform: translate(-50%,-50%) rotate(360deg); } }
+
+    .rgpd-note {
+      margin-top: 14px;
+      font-size: 12px;
+      color: #aaa;
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    /* ── Message d'erreur ── */
+    .error-msg {
+      display: none;
+      background: #fff0f0;
+      border: 1px solid #fcc;
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 14px;
+      color: #c00;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+    .error-msg.show { display: block; }
+
+    /* ── Écran succès ── */
+    .success-screen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding-top: 8px;
+    }
+    .success-screen.show { display: flex; }
+
+    .success-icon {
+      width: 64px; height: 64px;
+      background: #e8f8ef;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    .success-icon svg { width: 32px; height: 32px; }
+
+    .success-title {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .success-sub {
+      font-size: 15px;
+      color: #555;
+      line-height: 1.5;
+      margin-bottom: 32px;
+    }
+
+    /* ── Boutons Wallet ── */
+    .wallet-buttons {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .btn-wallet {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      padding: 15px 20px;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: opacity .2s, transform .1s;
+      cursor: pointer;
+      border: none;
+    }
+    .btn-wallet:active { transform: scale(.98); opacity: .85; }
+
+    .btn-apple {
+      background: #000;
+      color: #fff;
+    }
+    .btn-google {
+      background: #fff;
+      color: #1a73e8;
+      border: 1.5px solid #dadce0;
+    }
+    .btn-wallet svg { flex-shrink: 0; }
+
+    /* Bouton non dispo sur cette plateforme */
+    .btn-wallet.unavailable {
+      background: #f4f4f6;
+      color: #999;
+      border: 1.5px solid #e0e0e0;
+      cursor: default;
+      font-size: 14px;
+    }
+
+    /* ── États globaux ── */
+    .form-area.hidden { display: none; }
+
+    /* ── Squelette chargement ── */
+    .skeleton {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding-top: 8px;
+    }
+    .skel {
+      background: linear-gradient(90deg, #eee 25%, #f8f8f8 50%, #eee 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.2s infinite;
+      border-radius: 10px;
+    }
+    @keyframes shimmer { to { background-position: -200% 0; } }
+    .skel-text  { height: 16px; width: 80%; }
+    .skel-input { height: 52px; }
+    .skel-btn   { height: 54px; }
+
+    /* ── Erreur marchand introuvable ── */
+    .not-found {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding-top: 20px;
+      gap: 12px;
+    }
+    .not-found.show { display: flex; }
+    .not-found-icon { font-size: 48px; }
+    .not-found h2 { font-size: 20px; font-weight: 700; }
+    .not-found p { font-size: 15px; color: #666; }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-logo" id="header-logo">
+      <span id="logo-initial"></span>
+    </div>
+    <div class="header-name" id="header-name">Chargement…</div>
+  </header>
+
+  <main class="card">
+
+    <!-- Squelette pendant le chargement -->
+    <div class="skeleton" id="skeleton">
+      <div class="skel skel-text"></div>
+      <div class="skel skel-text" style="width:60%"></div>
+      <br>
+      <div class="skel skel-input"></div>
+      <div class="skel skel-btn"></div>
+    </div>
+
+    <!-- Marchand introuvable / suspendu -->
+    <div class="not-found" id="not-found">
+      <div class="not-found-icon">🔒</div>
+      <h2 id="not-found-title">Programme introuvable</h2>
+      <p id="not-found-msg">Ce programme de fidélité n'est pas disponible.</p>
+    </div>
+
+    <!-- Formulaire d'inscription -->
+    <div class="form-area hidden" id="form-area">
+      <p class="description" id="description"></p>
+
+      <div class="error-msg" id="error-msg"></div>
+
+      <form id="form" novalidate>
+
+        <!-- Prénom — V1 -->
+        <div class="field">
+          <label for="prenom">Prénom</label>
+          <input type="text" id="prenom" name="prenom"
+            placeholder="Votre prénom"
+            autocomplete="given-name"
+            autocapitalize="words"
+            maxlength="50"
+            required>
+        </div>
+
+        <!-- Email — V2 (masqué en V1) -->
+        <div class="field field-v2" id="field-email">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email"
+            placeholder="votre@email.fr"
+            autocomplete="email">
+        </div>
+
+        <!-- Téléphone — V2 (masqué en V1) -->
+        <div class="field field-v2" id="field-telephone">
+          <label for="telephone">Téléphone</label>
+          <input type="tel" id="telephone" name="telephone"
+            placeholder="06 00 00 00 00"
+            autocomplete="tel">
+        </div>
+
+        <!-- Date anniversaire — V2 (masqué en V1) -->
+        <div class="field field-v2" id="field-anniversaire">
+          <label for="date_anniversaire">Date de naissance</label>
+          <input type="date" id="date_anniversaire" name="date_anniversaire">
+        </div>
+
+        <button type="submit" class="btn-submit" id="btn-submit">
+          <span class="btn-label">Obtenir ma carte</span>
+          <span class="spinner"></span>
+        </button>
+      </form>
+
+      <p class="rgpd-note">
+        Seul votre prénom est enregistré. Conformément au RGPD,<br>
+        vous pouvez demander la suppression de vos données en magasin.
+      </p>
+    </div>
+
+    <!-- Écran succès + boutons Wallet -->
+    <div class="success-screen" id="success-screen">
+
+      <div class="success-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="9 12 11 14 15 10"/>
+        </svg>
+      </div>
+
+      <div class="success-title" id="success-title">Votre carte est prête !</div>
+      <div class="success-sub" id="success-sub"></div>
+
+      <div class="wallet-buttons" id="wallet-buttons">
+
+        <!-- Apple Wallet -->
+        <a class="btn-wallet btn-apple" id="btn-apple" href="#" target="_self">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="white">
+            <path d="M15.05 1C14.1 1.87 13.5 3.17 13.7 4.5c1.2.1 2.4-.6 3.2-1.5.8-.9 1.3-2.2 1.1-3.5-1.1.1-2.2.7-2.95 1.5zM16 6.3c-1.65-.1-3.05.93-3.83.93-.78 0-2-.88-3.3-.85C7.1 6.42 5.3 7.4 4.32 9.05c-1.98 3.35-.5 8.3 1.4 11.02.96 1.36 2.1 2.88 3.6 2.83 1.42-.06 1.98-.92 3.7-.92 1.74 0 2.24.92 3.76.89 1.56-.04 2.54-1.4 3.5-2.76a12.2 12.2 0 0 0 1.56-3.12c-3.1-1.18-3.6-5.55-.53-7.3A4.73 4.73 0 0 0 16 6.3z"/>
+          </svg>
+          <span>Ajouter à Apple Wallet</span>
+        </a>
+
+        <!-- Google Wallet -->
+        <a class="btn-wallet btn-google" id="btn-google" href="#" target="_blank" rel="noopener">
+          <svg width="20" height="20" viewBox="0 0 20 20">
+            <path d="M19.6 10.23c0-.68-.06-1.36-.18-2H10v3.77h5.38a4.6 4.6 0 0 1-2 3.02v2.5h3.23c1.9-1.74 2.99-4.3 2.99-7.3z" fill="#4285F4"/>
+            <path d="M10 20c2.7 0 4.96-.9 6.62-2.43l-3.23-2.5c-.9.6-2.04.95-3.39.95-2.6 0-4.81-1.76-5.6-4.12H1.06v2.58A10 10 0 0 0 10 20z" fill="#34A853"/>
+            <path d="M4.4 11.9A6 6 0 0 1 4.08 10c0-.66.12-1.3.32-1.9V5.52H1.06A10 10 0 0 0 0 10c0 1.62.39 3.15 1.06 4.48L4.4 11.9z" fill="#FBBC05"/>
+            <path d="M10 3.96c1.46 0 2.78.5 3.81 1.49l2.86-2.86C14.96.99 12.7 0 10 0A10 10 0 0 0 1.06 5.52L4.4 8.1C5.19 5.72 7.4 3.96 10 3.96z" fill="#EA4335"/>
+          </svg>
+          <span>Ajouter à Google Wallet</span>
+        </a>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <script>
+    // ── Détection plateforme ─────────────────────────────────
+    const isIOS     = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const isAndroid = /Android/.test(navigator.userAgent);
+
+    // ── État de l'application ────────────────────────────────
+    const $ = id => document.getElementById(id);
+
+    function showSkeleton()  { $('skeleton').style.display = 'flex'; }
+    function hideSkeleton()  { $('skeleton').style.display = 'none'; }
+    function showForm()      { $('form-area').classList.remove('hidden'); }
+    function showNotFound(title, msg) {
+      hideSkeleton();
+      $('not-found').classList.add('show');
+      $('not-found-title').textContent = title;
+      $('not-found-msg').textContent   = msg;
+    }
+    function showError(msg)  {
+      const el = $('error-msg');
+      el.textContent = msg;
+      el.classList.add('show');
+    }
+    function hideError()     { $('error-msg').classList.remove('show'); }
+    function setSubmitting(yes) {
+      const btn = $('btn-submit');
+      btn.disabled = yes;
+      btn.classList.toggle('loading', yes);
+    }
+
+    // ── Slug depuis l'URL ────────────────────────────────────
+    // URL : /l/:slug
+    const slug = location.pathname.split('/l/')[1]?.split('/')[0];
+    if (!slug) showNotFound('Lien invalide', 'Cette URL ne correspond à aucun programme de fidélité.');
+
+    // ── Chargement des données marchand ──────────────────────
+    const API = ''; // même origin que le backend
+
+    async function loadMarchand() {
+      try {
+        const res  = await fetch(`${API}/api/merchants/${encodeURIComponent(slug)}/public`);
+        const data = await res.json();
+
+        if (!res.ok) {
+          const msg = res.status === 403
+            ? 'Ce programme de fidélité est actuellement suspendu.'
+            : 'Programme de fidélité introuvable.';
+          return showNotFound('Non disponible', msg);
+        }
+
+        applyBranding(data);
+        hideSkeleton();
+        showForm();
+      } catch {
+        showNotFound('Erreur de connexion', 'Impossible de charger la page. Vérifiez votre connexion et réessayez.');
+      }
+    }
+
+    function applyBranding(m) {
+      // Couleurs CSS
+      const brand    = m.couleur_fond  || '#1a1a2e';
+      const textColor = m.couleur_texte || '#ffffff';
+      document.documentElement.style.setProperty('--brand',      brand);
+      document.documentElement.style.setProperty('--brand-text', textColor);
+      document.querySelector('meta[name=theme-color]').content = brand;
+
+      // Nom
+      document.title          = `Fidélité ${m.nom}`;
+      $('header-name').textContent = m.nom;
+
+      // Logo
+      if (m.logo_url) {
+        const img = document.createElement('img');
+        img.src = m.logo_url;
+        img.alt = m.nom;
+        $('header-logo').innerHTML = '';
+        $('header-logo').appendChild(img);
+      } else {
+        $('logo-initial').textContent = m.nom.charAt(0).toUpperCase();
+      }
+
+      // Texte descriptif
+      $('description').textContent = m.texte_landing || `Bienvenue dans le programme de fidélité ${m.nom} !`;
+
+      // Stocker le slug pour le submit
+      window._marchandSlug = m.slug;
+    }
+
+    // ── Soumission du formulaire ─────────────────────────────
+    $('form').addEventListener('submit', async e => {
+      e.preventDefault();
+      hideError();
+
+      const prenom = $('prenom').value.trim();
+      if (!prenom) {
+        showError('Veuillez saisir votre prénom.');
+        $('prenom').focus();
+        return;
+      }
+
+      setSubmitting(true);
+
+      try {
+        const res  = await fetch(`${API}/api/clients`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ prenom, marchand_slug: window._marchandSlug }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          setSubmitting(false);
+          showError(data.error || 'Une erreur est survenue. Veuillez réessayer.');
+          return;
+        }
+
+        showSuccess(prenom, data);
+      } catch {
+        setSubmitting(false);
+        showError('Connexion impossible. Vérifiez votre réseau et réessayez.');
+      }
+    });
+
+    // ── Écran succès ─────────────────────────────────────────
+    function showSuccess(prenom, data) {
+      $('form-area').classList.add('hidden');
+
+      $('success-title').textContent = `Votre carte est prête !`;
+      $('success-sub').textContent   = `Bonjour ${prenom}, ajoutez votre carte de fidélité à votre portefeuille pour l'avoir toujours avec vous.`;
+
+      // Bouton Apple Wallet
+      const btnApple  = $('btn-apple');
+      const btnGoogle = $('btn-google');
+
+      if (data.apple_pass_url) {
+        btnApple.href = data.apple_pass_url;
+        if (!isIOS) {
+          // Sur Android / desktop : informer que c'est pour iPhone
+          btnApple.classList.add('unavailable');
+          btnApple.querySelector('span').textContent = 'Apple Wallet (iPhone uniquement)';
+          btnApple.removeAttribute('href');
+          btnApple.style.pointerEvents = 'none';
+        }
+      } else {
+        btnApple.style.display = 'none';
+      }
+
+      if (data.google_wallet_url) {
+        btnGoogle.href = data.google_wallet_url;
+        if (isIOS) {
+          // Sur iOS, Google Wallet est moins courant — le mettre en second
+          $('wallet-buttons').appendChild(btnGoogle);
+        }
+      } else {
+        btnGoogle.style.display = 'none';
+      }
+
+      $('success-screen').classList.add('show');
+    }
+
+    // ── Init ─────────────────────────────────────────────────
+    if (slug) loadMarchand();
+  </script>
+
+</body>
+</html>

@@ -5,11 +5,14 @@ const helmet = require('helmet');
 const cors = require('cors');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
+const path = require('path');
 
 const app = express();
 
 // ── Sécurité & middlewares ───────────────────────────────────
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: false, // la landing page charge des ressources externes (logos marchands)
+}));
 app.use(cors({
   origin: [
     'https://winwincard.fr',
@@ -47,6 +50,13 @@ const merchantsRoutes     = require('./routes/merchants');
 const notificationsRoutes = require('./routes/notifications');
 const adminRoutes         = require('./routes/admin');
 const passesRoutes        = require('./routes/passes');
+const landingRoutes       = require('./routes/landing');
+
+// Fichiers statiques (landing page HTML)
+app.use(express.static(path.join(__dirname, '../public')));
+
+// Landing pages marchands
+app.use('/l', landingRoutes);
 
 // Apple Wallet WebService — chemins standards Apple, pas de préfixe /api
 app.use('/', appleWalletRoutes);
