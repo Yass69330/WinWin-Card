@@ -273,9 +273,15 @@
         <div class="form-section-title">Programme de fidélité</div>
         <div class="field-row">
           <div class="field">
-            <label for="f-maxval">Valeur max (tampons)</label>
+            <label for="f-maxval">Seuil de reset (tampons)</label>
             <input id="f-maxval" type="number" min="1" max="99" placeholder="10">
           </div>
+          <div class="field">
+            <label for="f-displaymax">Affichage dénominateur (X/?) — optionnel</label>
+            <input id="f-displaymax" type="number" min="1" max="99" placeholder="= seuil de reset par défaut">
+          </div>
+        </div>
+        <div class="field-row">
           <div class="field">
             <label for="f-forfait">Forfait</label>
             <select id="f-forfait">
@@ -633,8 +639,9 @@ function resetForm() {
   setColor('cp-fond',  'f-fond',  '#ffffff');
   setColor('cp-texte', 'f-texte-c', '#000000');
   setColor('cp-label', 'f-label', '#888888');
-  document.getElementById('f-maxval').value  = '10';
-  document.getElementById('f-forfait').value = 'pro';
+  document.getElementById('f-maxval').value     = '10';
+  document.getElementById('f-displaymax').value = '';
+  document.getElementById('f-forfait').value    = 'pro';
   document.getElementById('slug-preview').textContent = '…';
   document.getElementById('sheet-err').style.display = 'none';
 }
@@ -649,6 +656,7 @@ function fillForm(m) {
   v('f-glogo',  m.google_logo_url);
   v('f-ghero',  m.google_hero_url);
   v('f-maxval', m.max_value);
+  v('f-displaymax', m.display_max_value);
   if (['basic','pro','pro_plus'].includes(m.forfait)) document.getElementById('f-forfait').value = m.forfait;
   if (m.couleur_fond)  setColor('cp-fond',  'f-fond',    m.couleur_fond);
   if (m.couleur_texte) setColor('cp-texte', 'f-texte-c', m.couleur_texte);
@@ -752,8 +760,9 @@ function collectForm() {
     couleur_fond:  fondHex,
     couleur_texte: texteHex,
     couleur_label: labelHex,
-    max_value:     parseInt(document.getElementById('f-maxval').value) || 10,
-    forfait:       document.getElementById('f-forfait').value,
+    max_value:       parseInt(document.getElementById('f-maxval').value) || 10,
+    display_max_value: parseInt(document.getElementById('f-displaymax').value) || undefined,
+    forfait:         document.getElementById('f-forfait').value,
     texte_landing: document.getElementById('f-texte').value.trim()  || undefined,
     logo_url:      document.getElementById('f-logo').value.trim()   || undefined,
     image_strip_url: document.getElementById('f-strip').value.trim() || undefined,

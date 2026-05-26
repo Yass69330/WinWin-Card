@@ -164,7 +164,9 @@ function buildLoyaltyClass(cId, marchand) {
 // ── Construction LoyaltyObject ───────────────────────────────
 
 function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
-  const isRecompense = client.stored_value >= marchand.max_value;
+  const threshold = Math.max((marchand.max_value || 1) - 1, 1);
+  const isRecompense = client.stored_value > 0 && client.stored_value >= threshold;
+  const displayMax = marchand.display_max_value || marchand.max_value;
 
   return {
     id: oId,
@@ -186,7 +188,7 @@ function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
       {
         id: 'details',
         header: 'Comment ça marche ?',
-        body: `Présentez votre pass à chaque visite.\nAprès ${marchand.max_value} passages, votre récompense est débloquée automatiquement.`,
+        body: `Présentez votre pass à chaque visite.\nAprès ${displayMax} passages, votre récompense est débloquée automatiquement.`,
       },
       {
         id: 'rgpd',
@@ -262,12 +264,13 @@ async function generateGoogleWalletUrl({ client, marchand, serialNumber }) {
 }
 
 // Mise à jour des points après un scan — appelé en async depuis scan.js
-async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue) {
+async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue, displayMaxValue) {
   if (!isConfigured()) return;
 
   const oId = objectId(serialNumber);
   const token = await getAccessToken();
-  const isRecompense = storedValue >= maxValue;
+  const threshold = Math.max((maxValue || 1) - 1, 1);
+  const isRecompense = storedValue > 0 && storedValue >= threshold;
 
   await walletRequest(
     'PATCH',

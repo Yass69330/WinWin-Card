@@ -15,7 +15,7 @@ router.post('/', authScanner, async (req, res) => {
   // Récupérer le client avec son marchand
   const { data: client, error: errClient } = await supabase
     .from('clients')
-    .select('id, prenom, stored_value, marchand_id, marchands(max_value, actif, nom)')
+    .select('id, prenom, stored_value, marchand_id, marchands(max_value, display_max_value, actif, nom)')
     .eq('pass_serial_number', serial_number)
     .eq('marchand_id', req.marchandId)
     .is('deleted_at', null)
@@ -29,6 +29,7 @@ router.post('/', authScanner, async (req, res) => {
   }
 
   const maxValue = client.marchands.max_value;
+  const displayMaxValue = client.marchands.display_max_value || maxValue;
   const avantScan = client.stored_value;
   let apresScan;
   let recompense = false;
@@ -60,17 +61,18 @@ router.post('/', authScanner, async (req, res) => {
 
   // Mises à jour Apple + Google Wallet en parallèle, sans bloquer la réponse
   notifierMiseAJourPass(serial_number).catch(() => {});
-  mettreAJourGoogleWallet(serial_number, req.marchandId, apresScan, maxValue).catch(() => {});
+  mettreAJourGoogleWallet(serial_number, req.marchandId, apresScan, maxValue, displayMaxValue).catch(() => {});
 
   res.json({
     prenom: client.prenom,
     stored_value_avant: avantScan,
     stored_value_apres: apresScan,
     max_value: maxValue,
+    display_max_value: displayMaxValue,
     recompense,
     message: recompense
       ? `Félicitations ${client.prenom} ! Récompense débloquée 🎉`
-      : `+1 point — ${client.prenom} a ${apresScan}/${maxValue} points`
+      : `+1 point — ${client.prenom} a ${apresScan}/${displayMaxValue} points`
   });
 });
 
@@ -88,9 +90,9 @@ async function notifierMiseAJourPass(serialNumber) {
   }
 }
 
-async function mettreAJourGoogleWallet(serialNumber, marchandId, storedValue, maxValue) {
+async function mettreAJourGoogleWallet(serialNumber, marchandId, storedValue, maxValue, displayMaxValue) {
   const { updateLoyaltyObjectPoints } = require('../services/google-pass');
-  await updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue);
+  await updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue, displayMaxValue);
 }
 
 // GET /api/scans — historique des scans du marchand (100 derniers)

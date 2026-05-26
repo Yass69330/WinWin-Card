@@ -41,7 +41,7 @@ router.post('/login', async (req, res) => {
 router.get('/me', authMarchand, async (req, res) => {
   const { data, error } = await supabase
     .from('marchands')
-    .select('id, nom, slug, logo_url, couleur_fond, couleur_texte, couleur_label, image_strip_url, texte_landing, max_value, forfait, email_contact')
+    .select('id, nom, slug, logo_url, couleur_fond, couleur_texte, couleur_label, image_strip_url, texte_landing, max_value, display_max_value, forfait, email_contact')
     .eq('id', req.marchandId)
     .single();
 

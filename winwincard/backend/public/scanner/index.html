@@ -716,8 +716,9 @@ function showResult(data, ok, serial) {
     return;
   }
 
-  const { prenom, stored_value_apres: val, stored_value_avant, max_value, recompense } = data;
+  const { prenom, stored_value_apres: val, stored_value_avant, max_value, display_max_value, recompense } = data;
   const stored_value = val ?? data.stored_value ?? 0;
+  const displayMax = display_max_value || max_value;
 
   // Avatar
   const avatarEl = document.getElementById('result-avatar');
@@ -728,15 +729,15 @@ function showResult(data, ok, serial) {
   document.getElementById('result-serial').textContent = serial;
 
   // Progress
-  const pct = Math.min(stored_value / max_value * 100, 100);
+  const pct = Math.min(stored_value / displayMax * 100, 100);
   document.getElementById('progress-value').textContent = stored_value;
-  document.getElementById('progress-fraction').textContent = `${stored_value} / ${max_value}`;
+  document.getElementById('progress-fraction').textContent = `${stored_value} / ${displayMax}`;
   document.getElementById('progress-bar').style.width = pct + '%';
 
   // Dots
   const dotsWrap = document.getElementById('dots-wrap');
   dotsWrap.innerHTML = '';
-  for (let i = 1; i <= max_value; i++) {
+  for (let i = 1; i <= displayMax; i++) {
     const d = document.createElement('div');
     d.className = 'dot' + (i <= stored_value ? ' filled' : '');
     if (!d.classList.contains('filled')) d.textContent = i;
@@ -747,7 +748,7 @@ function showResult(data, ok, serial) {
   if (recompense) {
     document.getElementById('reward-banner').style.display = 'flex';
     document.getElementById('reward-sub').textContent =
-      `${prenom} a atteint ${max_value} points — offrez la récompense !`;
+      `${prenom} a atteint ${displayMax} points — offrez la récompense !`;
     document.getElementById('reset-banner').style.display = 'flex';
     try { navigator.vibrate && navigator.vibrate([100, 50, 100, 50, 200]); } catch {}
   }

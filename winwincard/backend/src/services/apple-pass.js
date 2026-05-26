@@ -108,6 +108,14 @@ function hexToRgb(hex) {
   return `rgb(${parseInt(h.slice(0,2),16)}, ${parseInt(h.slice(2,4),16)}, ${parseInt(h.slice(4,6),16)})`;
 }
 
+// Le pass devient doré à stored_value >= max_value - 1 :
+// à max_value le reset se déclenche au prochain scan, donc le client
+// ne verrait jamais l'état doré si on attendait max_value.
+function isPassDoré(client, marchand) {
+  const threshold = Math.max((marchand.max_value || 1) - 1, 1);
+  return client.stored_value > 0 && client.stored_value >= threshold;
+}
+
 function selectStripImageUrl(marchand, storedValue) {
   if (Array.isArray(marchand.images_tiers)) {
     const tier = marchand.images_tiers.find(t => storedValue >= t.min && storedValue <= t.max);
@@ -118,7 +126,8 @@ function selectStripImageUrl(marchand, storedValue) {
 
 // ── Génération pass.json ─────────────────────────────────────
 function buildPassJson({ client, marchand, serialNumber }) {
-  const isRecompense = client.stored_value >= marchand.max_value;
+  const doré = isPassDoré(client, marchand);
+  const displayMax = marchand.display_max_value || marchand.max_value;
   return {
     formatVersion: 1,
     passTypeIdentifier: process.env.APPLE_PASS_TYPE_IDENTIFIER || 'pass.com.winwincard.loyalty',
@@ -128,16 +137,16 @@ function buildPassJson({ client, marchand, serialNumber }) {
     authenticationToken: computeAuthToken(serialNumber),
     organizationName: 'WinWin Card',
     description: `Carte de fidélité ${marchand.nom}`,
-    backgroundColor: hexToRgb(marchand.couleur_fond),
-    foregroundColor: hexToRgb(marchand.couleur_texte || '#ffffff'),
-    labelColor:      hexToRgb(marchand.couleur_label || '#a0a0b0'),
+    backgroundColor: doré ? 'rgb(201, 168, 76)' : hexToRgb(marchand.couleur_fond),
+    foregroundColor: doré ? 'rgb(25, 15, 0)'    : hexToRgb(marchand.couleur_texte || '#ffffff'),
+    labelColor:      doré ? 'rgb(90, 65, 10)'   : hexToRgb(marchand.couleur_label || '#a0a0b0'),
     logoText: marchand.nom,
     storeCard: {
       headerFields: [],
       primaryFields: [{
         key: 'points',
         label: 'PROGRESSION',
-        value: isRecompense ? 'Récompense !' : `${client.stored_value} / ${marchand.max_value}`,
+        value: doré ? '🎉 Récompense !' : `${client.stored_value} / ${displayMax}`,
       }],
       secondaryFields: [{
         key: 'prenom',
@@ -149,7 +158,7 @@ function buildPassJson({ client, marchand, serialNumber }) {
         {
           key: 'programme',
           label: 'Comment ça marche ?',
-          value: `Présentez votre pass à chaque visite.\nAprès ${marchand.max_value} passages, votre récompense est automatiquement débloquée.`,
+          value: `Présentez votre pass à chaque visite.\nAprès ${displayMax} passages, votre récompense est automatiquement débloquée.`,
         },
         {
           key: 'rgpd',
@@ -173,9 +182,10 @@ async function generateApplePass({ client, marchand, serialNumber }) {
   const certs = loadCerts();
   const passJson = buildPassJson({ client, marchand, serialNumber });
 
-  // Placeholders couleur du marchand
-  const [rf, gf, bf] = hexToRgb(marchand.couleur_fond || '#1a1a2e')
-    .match(/\d+/g).map(Number);
+  const doré = isPassDoré(client, marchand);
+  const [rf, gf, bf] = doré
+    ? [201, 168, 76]
+    : hexToRgb(marchand.couleur_fond || '#1a1a2e').match(/\d+/g).map(Number);
 
   const iconPng  = createSolidPng(29,  29,  rf, gf, bf);
   const icon2Png = createSolidPng(58,  58,  rf, gf, bf);
