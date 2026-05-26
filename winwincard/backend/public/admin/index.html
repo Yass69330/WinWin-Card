@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Admin">
+  <link rel="manifest" href="/admin/manifest.json">
+  <link rel="apple-touch-icon" href="/admin/icon-192.png">
+  <title>WinWin Admin</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f172a;
+      --surface:  #1e293b;
+      --surface2: #273548;
+      --border:   #334155;
+      --accent:   #7c3aed;
+      --accent-d: rgba(124,58,237,.15);
+      --text:     #f1f5f9;
+      --muted:    #94a3b8;
+      --success:  #22c55e;
+      --warning:  #f59e0b;
+      --error:    #ef4444;
+      --r:        12px;
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased; }
+
+    #app { height: 100%; }
+    .screen { display: none; height: 100%; flex-direction: column; }
+    .screen.active { display: flex; }
+
+    /* ═══ LOGIN ═══ */
+    #screen-login { justify-content: center; align-items: center; padding: 28px; gap: 28px; }
+    .login-logo { width: 72px; height: 72px; background: var(--accent); border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 34px; }
+    .login-title { font-size: 24px; font-weight: 800; }
+    .login-sub   { font-size: 13px; color: var(--muted); }
+    .login-form  { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 14px; }
+
+    /* ═══ FORMS ═══ */
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .field label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    .field input, .field textarea, .field select {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      color: var(--text); font-size: 15px; padding: 12px 14px; outline: none;
+      transition: border-color .15s; -webkit-appearance: none; font-family: inherit;
+    }
+    .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--accent); }
+    .field textarea { resize: vertical; min-height: 80px; }
+    .field select option { background: var(--surface); }
+
+    /* Color row */
+    .color-row { display: flex; gap: 8px; align-items: center; }
+    .color-row input[type="color"] { width: 44px; height: 44px; padding: 2px; border-radius: 8px; cursor: pointer; flex-shrink: 0; }
+    .color-row input[type="text"]  { flex: 1; }
+
+    .field-hint { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+    .btn {
+      padding: 13px 18px; border-radius: 10px; font-size: 14px; font-weight: 600;
+      border: none; cursor: pointer; transition: opacity .15s, transform .1s;
+      -webkit-tap-highlight-color: transparent; display: flex; align-items: center; justify-content: center; gap: 7px;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn:disabled { opacity: .5; pointer-events: none; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-ghost   { background: transparent; color: var(--muted); }
+    .btn-danger  { background: rgba(239,68,68,.1); color: var(--error); border: 1px solid rgba(239,68,68,.2); }
+    .btn-success { background: rgba(34,197,94,.1); color: var(--success); border: 1px solid rgba(34,197,94,.2); }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-sm { padding: 7px 12px; font-size: 12px; border-radius: 8px; }
+
+    .alert { border-radius: 10px; padding: 12px 14px; font-size: 13px; }
+    .alert-error   { background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.25); color: var(--error); }
+    .alert-success { background: rgba(34,197,94,.1); border: 1px solid rgba(34,197,94,.25); color: var(--success); }
+
+    /* ═══ DASHBOARD ═══ */
+    .dash-header {
+      flex-shrink: 0; height: 54px; display: flex; align-items: center;
+      padding: 0 16px; gap: 10px; background: var(--surface); border-bottom: 1px solid var(--border);
+    }
+    .dash-brand { font-size: 16px; font-weight: 800; flex: 1; }
+    .badge-admin { background: var(--accent-d); color: #a78bfa; border: 1px solid rgba(124,58,237,.3); font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 20px; }
+    .btn-icon { background: none; border: none; cursor: pointer; color: var(--muted); padding: 6px; border-radius: 8px; font-size: 18px; -webkit-tap-highlight-color: transparent; }
+
+    .dash-content { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px; padding-bottom: 32px; }
+
+    /* Stats */
+    .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+    .stat-card { background: var(--surface); border-radius: var(--r); padding: 14px 12px; }
+    .stat-icon  { font-size: 18px; margin-bottom: 6px; }
+    .stat-val   { font-size: 24px; font-weight: 800; line-height: 1; }
+    .stat-lbl   { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    /* Action bar */
+    .action-bar { display: flex; gap: 10px; margin-bottom: 14px; }
+    .search-wrap { flex: 1; position: relative; }
+    .search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+    .search-input {
+      width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      color: var(--text); font-size: 14px; padding: 10px 12px 10px 34px; outline: none; -webkit-appearance: none;
+    }
+    .search-input:focus { border-color: var(--accent); }
+
+    /* Merchant cards */
+    .merchant-card {
+      background: var(--surface); border-radius: var(--r); padding: 14px;
+      margin-bottom: 10px; display: flex; flex-direction: column; gap: 10px;
+    }
+    .merchant-top { display: flex; align-items: center; gap: 12px; }
+    .merchant-avatar {
+      width: 44px; height: 44px; border-radius: 10px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 800; color: #fff;
+    }
+    .merchant-info { flex: 1; min-width: 0; }
+    .merchant-name { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .merchant-slug { font-size: 11px; color: var(--muted); font-family: monospace; }
+    .badges { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+    .badge {
+      font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 20px; text-transform: uppercase; letter-spacing: .04em;
+    }
+    .badge-actif    { background: rgba(34,197,94,.15);  color: var(--success); }
+    .badge-suspendu { background: rgba(239,68,68,.15);  color: var(--error); }
+    .badge-pro      { background: var(--accent-d);      color: #a78bfa; }
+    .badge-basic    { background: rgba(148,163,184,.1); color: var(--muted); }
+    .badge-pro_plus { background: rgba(245,158,11,.15); color: var(--warning); }
+
+    .merchant-stats { display: flex; gap: 16px; }
+    .merchant-stat  { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+    .merchant-stat strong { color: var(--text); font-weight: 700; }
+
+    .merchant-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    /* Skeleton */
+    .skeleton { background: var(--surface2); border-radius: var(--r); animation: shimmer 1.4s ease-in-out infinite; }
+    @keyframes shimmer { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+    /* ═══ SHEET (Create / Edit) ═══ */
+    .sheet-backdrop {
+      display: none; position: fixed; inset: 0; z-index: 50;
+      background: rgba(0,0,0,.65); align-items: flex-end;
+    }
+    .sheet-backdrop.open { display: flex; }
+
+    .sheet {
+      background: var(--bg); border-radius: 24px 24px 0 0;
+      width: 100%; max-height: 92vh;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .sheet-header {
+      flex-shrink: 0; padding: 16px 20px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px;
+    }
+    .sheet-title { font-size: 17px; font-weight: 800; flex: 1; }
+    .sheet-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+    .sheet-footer { flex-shrink: 0; padding: 14px 20px; border-top: 1px solid var(--border); display: flex; gap: 10px; }
+    .sheet-footer .btn { flex: 1; }
+
+    .form-section { display: flex; flex-direction: column; gap: 12px; }
+    .form-section-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    /* ═══ MISC ═══ */
+    .spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .empty { text-align: center; padding: 40px 20px; color: var(--muted); }
+    .empty-icon { font-size: 36px; margin-bottom: 8px; }
+    .section-meta { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+    .divider { height: 1px; background: var(--border); }
+  </style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════ LOGIN ═══════════ -->
+<div id="screen-login" class="screen active">
+  <div class="login-logo">⚙️</div>
+  <div style="text-align:center">
+    <div class="login-title">WinWin Admin</div>
+    <div class="login-sub">Accès réservé à Yacine</div>
+  </div>
+  <form class="login-form" id="login-form" onsubmit="return false">
+    <div class="field">
+      <label for="in-pwd">Mot de passe admin</label>
+      <input id="in-pwd" type="password" placeholder="••••••••••••" autocomplete="current-password">
+    </div>
+    <div id="login-err" class="alert alert-error" style="display:none"></div>
+    <button type="submit" class="btn btn-primary" id="btn-login">Accéder</button>
+  </form>
+</div>
+
+<!-- ═══════════ DASHBOARD ═══════════ -->
+<div id="screen-dashboard" class="screen">
+
+  <header class="dash-header">
+    <span style="font-size:20px">⚙️</span>
+    <span class="dash-brand">WinWin</span>
+    <span class="badge-admin">Admin</span>
+    <button class="btn-icon" id="btn-logout" title="Déconnexion">⏏</button>
+  </header>
+
+  <div class="dash-content">
+
+    <!-- Stats globales -->
+    <div class="stats-row" id="stats-row">
+      <div class="skeleton" style="height:82px"></div>
+      <div class="skeleton" style="height:82px"></div>
+      <div class="skeleton" style="height:82px"></div>
+    </div>
+
+    <!-- Barre de recherche + bouton créer -->
+    <div class="action-bar">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input class="search-input" id="search-merchants" type="search" placeholder="Rechercher un marchand…">
+      </div>
+      <button class="btn btn-primary btn-sm" id="btn-new-merchant" style="white-space:nowrap">+ Nouveau</button>
+    </div>
+
+    <div id="merchants-meta" class="section-meta"></div>
+    <div id="merchants-list"></div>
+
+  </div>
+</div>
+
+</div><!-- /app -->
+
+<!-- ═══════════ SHEET : CRÉER / MODIFIER ═══════════ -->
+<div class="sheet-backdrop" id="sheet-backdrop">
+  <div class="sheet" id="sheet">
+    <div class="sheet-header">
+      <div class="sheet-title" id="sheet-title">Nouveau marchand</div>
+      <button class="btn-icon" id="btn-close-sheet">✕</button>
+    </div>
+    <div class="sheet-body" id="sheet-body">
+
+      <!-- Section : Identité -->
+      <div class="form-section">
+        <div class="form-section-title">Identité</div>
+        <div class="field">
+          <label for="f-nom">Nom du commerce *</label>
+          <input id="f-nom" type="text" placeholder="Café Le Central">
+        </div>
+        <div class="field">
+          <label for="f-slug">Slug (URL) *</label>
+          <input id="f-slug" type="text" placeholder="cafe-le-central" autocorrect="off" autocapitalize="none">
+          <div class="field-hint">Utilisé dans l'URL de la landing page : winwincard.fr/l/<strong id="slug-preview">…</strong></div>
+        </div>
+        <div class="field">
+          <label for="f-email">Email de contact *</label>
+          <input id="f-email" type="email" placeholder="contact@moncommerce.fr">
+        </div>
+        <div class="field" id="field-password">
+          <label for="f-pwd">Mot de passe *</label>
+          <input id="f-pwd" type="password" placeholder="Mot de passe du marchand" autocomplete="new-password">
+        </div>
+        <div class="field" id="field-new-password" style="display:none">
+          <label for="f-new-pwd">Nouveau mot de passe <span style="color:var(--muted)">(laisser vide pour ne pas changer)</span></label>
+          <input id="f-new-pwd" type="password" placeholder="Laisser vide = inchangé" autocomplete="new-password">
+        </div>
+      </div>
+
+      <!-- Section : Programme -->
+      <div class="form-section">
+        <div class="form-section-title">Programme de fidélité</div>
+        <div class="field-row">
+          <div class="field">
+            <label for="f-maxval">Valeur max (tampons)</label>
+            <input id="f-maxval" type="number" min="1" max="99" placeholder="10">
+          </div>
+          <div class="field">
+            <label for="f-forfait">Forfait</label>
+            <select id="f-forfait">
+              <option value="pro">Pro</option>
+              <option value="basic">Basic</option>
+              <option value="pro_plus">Pro+</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="f-texte">Texte landing page</label>
+          <textarea id="f-texte" placeholder="Collectez vos points à chaque visite…"></textarea>
+        </div>
+      </div>
+
+      <!-- Section : Couleurs -->
+      <div class="form-section">
+        <div class="form-section-title">Couleurs du pass</div>
+        <div class="field">
+          <label>Fond</label>
+          <div class="color-row">
+            <input type="color" id="cp-fond" value="#ffffff">
+            <input type="text"  id="f-fond"  placeholder="#ffffff" maxlength="7">
+          </div>
+        </div>
+        <div class="field">
+          <label>Texte principal</label>
+          <div class="color-row">
+            <input type="color" id="cp-texte" value="#000000">
+            <input type="text"  id="f-texte-c" placeholder="#000000" maxlength="7">
+          </div>
+        </div>
+        <div class="field">
+          <label>Texte secondaire (labels)</label>
+          <div class="color-row">
+            <input type="color" id="cp-label" value="#888888">
+            <input type="text"  id="f-label" placeholder="#888888" maxlength="7">
+          </div>
+        </div>
+      </div>
+
+      <!-- Section : Images -->
+      <div class="form-section">
+        <div class="form-section-title">Images</div>
+        <div class="field">
+          <label for="f-logo">Logo URL (Apple : 320×100 px)</label>
+          <input id="f-logo" type="url" placeholder="https://…">
+        </div>
+        <div class="field">
+          <label for="f-strip">Strip URL (Apple : 750×246 px)</label>
+          <input id="f-strip" type="url" placeholder="https://…">
+        </div>
+        <div class="field">
+          <label for="f-glogo">Logo Google Wallet (660×660 px, cercle)</label>
+          <input id="f-glogo" type="url" placeholder="https://… (fallback : Logo URL si vide)">
+        </div>
+        <div class="field">
+          <label for="f-ghero">Hero Google Wallet (1032×336 px)</label>
+          <input id="f-ghero" type="url" placeholder="https://… (fallback : Strip URL si vide)">
+        </div>
+      </div>
+
+      <!-- Section : Avancé -->
+      <div class="form-section">
+        <div class="form-section-title">Avancé</div>
+        <div class="field">
+          <label for="f-tiers">Images tier (JSON)</label>
+          <textarea id="f-tiers" style="font-family:monospace;font-size:12px" placeholder='[{"min":0,"max":4,"url":"…"},{"min":5,"max":9,"url":"…"}]'></textarea>
+          <div class="field-hint">Optionnel — images différentes selon le niveau de points du client</div>
+        </div>
+      </div>
+
+      <div id="sheet-err" class="alert alert-error" style="display:none"></div>
+
+    </div><!-- /sheet-body -->
+    <div class="sheet-footer">
+      <button class="btn btn-primary" id="btn-save-merchant">Enregistrer</button>
+      <button class="btn btn-ghost"   id="btn-cancel-sheet">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════
+// STATE
+// ════════════════════════════════════
+const S = {
+  token:     null,
+  merchants: null,
+  stats:     null,
+  editId:    null,  // null = création, uuid = modification
+};
+
+// ════════════════════════════════════
+// SESSION
+// ════════════════════════════════════
+function saveToken(t) {
+  S.token = t;
+  try { localStorage.setItem('ww_admin_token', t); } catch {}
+}
+function clearToken() {
+  S.token = null;
+  try { localStorage.removeItem('ww_admin_token'); } catch {}
+}
+function restoreToken() {
+  try { const t = localStorage.getItem('ww_admin_token'); if (t) { S.token = t; return true; } } catch {}
+  return false;
+}
+
+// ════════════════════════════════════
+// API WRAPPER
+// ════════════════════════════════════
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${S.token}`,
+      ...(opts.headers || {}),
+    },
+  });
+  if (res.status === 401) { clearToken(); showLogin(); throw new Error('Session expirée'); }
+  return res;
+}
+
+// ════════════════════════════════════
+// LOGIN
+// ════════════════════════════════════
+document.getElementById('login-form').addEventListener('submit', async () => {
+  const pwd = document.getElementById('in-pwd').value;
+  const err = document.getElementById('login-err');
+  const btn = document.getElementById('btn-login');
+  err.style.display = 'none';
+  if (!pwd) { err.textContent = 'Mot de passe requis'; err.style.display = 'block'; return; }
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res  = await fetch('/api/admin/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pwd }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Mot de passe incorrect');
+    saveToken(data.token);
+    showDashboard();
+  } catch (e) {
+    err.textContent = e.message; err.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Accéder';
+  }
+});
+
+function showLogin() {
+  document.getElementById('screen-dashboard').classList.remove('active');
+  document.getElementById('screen-login').classList.add('active');
+}
+
+function showDashboard() {
+  document.getElementById('screen-login').classList.remove('active');
+  document.getElementById('screen-dashboard').classList.add('active');
+  loadAll();
+}
+
+document.getElementById('btn-logout').addEventListener('click', () => {
+  if (!confirm('Se déconnecter ?')) return;
+  clearToken(); S.merchants = null; S.stats = null; showLogin();
+});
+
+// ════════════════════════════════════
+// CHARGEMENT DONNÉES
+// ════════════════════════════════════
+async function loadAll() {
+  await Promise.all([loadStats(), loadMerchants()]);
+}
+
+async function loadStats() {
+  try {
+    const res  = await api('/api/admin/stats');
+    S.stats    = await res.json();
+    renderStats();
+  } catch {}
+}
+
+async function loadMerchants() {
+  document.getElementById('merchants-list').innerHTML =
+    Array(3).fill('<div class="skeleton" style="height:120px;margin-bottom:10px"></div>').join('');
+  try {
+    const res   = await api('/api/admin/marchands');
+    S.merchants = await res.json();
+    renderMerchants();
+  } catch (e) {
+    document.getElementById('merchants-list').innerHTML =
+      `<div class="alert alert-error">${e.message}</div>`;
+  }
+}
+
+// ════════════════════════════════════
+// RENDER STATS
+// ════════════════════════════════════
+function renderStats() {
+  document.getElementById('stats-row').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-icon">🏪</div>
+      <div class="stat-val">${S.stats?.marchands_actifs ?? '–'}</div>
+      <div class="stat-lbl">marchands actifs</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">👥</div>
+      <div class="stat-val">${S.stats?.total_clients ?? '–'}</div>
+      <div class="stat-lbl">clients totaux</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">✅</div>
+      <div class="stat-val">${S.stats?.total_scans ?? '–'}</div>
+      <div class="stat-lbl">scans cumulés</div>
+    </div>`;
+}
+
+// ════════════════════════════════════
+// RENDER MERCHANTS
+// ════════════════════════════════════
+function renderMerchants(filter = '') {
+  const list = document.getElementById('merchants-list');
+  const meta = document.getElementById('merchants-meta');
+  if (!S.merchants) return;
+  const q     = filter.toLowerCase().trim();
+  const shown = q
+    ? S.merchants.filter(m => m.nom.toLowerCase().includes(q) || m.slug.includes(q))
+    : S.merchants;
+
+  meta.textContent = `${shown.length} marchand${shown.length > 1 ? 's' : ''}`;
+
+  if (shown.length === 0) {
+    list.innerHTML = `<div class="empty"><div class="empty-icon">🏪</div><div>Aucun résultat</div></div>`;
+    return;
+  }
+
+  list.innerHTML = shown.map(m => {
+    const bg  = m.couleur_fond || '#6366f1';
+    const ini = (m.nom || '?').charAt(0).toUpperCase();
+    const statusBadge = m.actif
+      ? '<span class="badge badge-actif">Actif</span>'
+      : '<span class="badge badge-suspendu">Suspendu</span>';
+    const forfaitBadge = `<span class="badge badge-${m.forfait}">${m.forfait.replace('_', '+')}</span>`;
+    const toggleLabel  = m.actif ? 'Suspendre' : 'Activer';
+    const toggleClass  = m.actif ? 'btn-danger' : 'btn-success';
+
+    return `<div class="merchant-card" data-id="${m.id}">
+      <div class="merchant-top">
+        <div class="merchant-avatar" style="background:${esc(bg)}">${esc(ini)}</div>
+        <div class="merchant-info">
+          <div class="merchant-name">${esc(m.nom)}</div>
+          <div class="merchant-slug">${esc(m.slug)}</div>
+          <div class="badges">${statusBadge}${forfaitBadge}</div>
+        </div>
+      </div>
+      <div class="merchant-stats">
+        <div class="merchant-stat">👥 <strong>${m.total_clients}</strong> clients</div>
+        <div class="merchant-stat">✅ <strong>${m.scans_aujourdhui}</strong> scans aujourd'hui</div>
+        <div class="merchant-stat">🎯 <strong>${m.max_value}</strong> tampons</div>
+      </div>
+      <div class="merchant-actions">
+        <button class="btn btn-outline btn-sm btn-edit" data-id="${m.id}">✏️ Modifier</button>
+        <button class="btn ${toggleClass} btn-sm btn-toggle" data-id="${m.id}" data-actif="${m.actif}">${toggleLabel}</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.btn-edit').forEach(b => b.addEventListener('click', () => openEditSheet(b.dataset.id)));
+  list.querySelectorAll('.btn-toggle').forEach(b => {
+    b.addEventListener('click', () => toggleSuspension(b.dataset.id, b.dataset.actif === 'true'));
+  });
+}
+
+document.getElementById('search-merchants').addEventListener('input', e => renderMerchants(e.target.value));
+
+// ════════════════════════════════════
+// SUSPENSION
+// ════════════════════════════════════
+async function toggleSuspension(id, estActif) {
+  const action = estActif ? 'suspendre' : 'activer';
+  const m = S.merchants?.find(m => m.id === id);
+  if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} "${m?.nom || id}" ?`)) return;
+
+  try {
+    const res = await api(`/api/admin/marchands/${id}/suspension`, {
+      method: 'PATCH',
+      body: JSON.stringify({ actif: !estActif }),
+    });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+    if (S.merchants) {
+      const idx = S.merchants.findIndex(m => m.id === id);
+      if (idx >= 0) S.merchants[idx].actif = !estActif;
+    }
+    renderMerchants(document.getElementById('search-merchants').value);
+    // Mettre à jour le compteur stats
+    if (S.stats) {
+      S.stats.marchands_actifs += estActif ? -1 : 1;
+      renderStats();
+    }
+  } catch (e) {
+    alert('Erreur : ' + e.message);
+  }
+}
+
+// ════════════════════════════════════
+// SHEET : OUVRIR / FERMER
+// ════════════════════════════════════
+function openCreateSheet() {
+  S.editId = null;
+  resetForm();
+  document.getElementById('sheet-title').textContent = 'Nouveau marchand';
+  document.getElementById('field-password').style.display    = '';
+  document.getElementById('field-new-password').style.display = 'none';
+  document.getElementById('btn-save-merchant').textContent = 'Créer le marchand';
+  openSheet();
+}
+
+async function openEditSheet(id) {
+  S.editId = id;
+  resetForm();
+  document.getElementById('sheet-title').textContent         = 'Modifier le marchand';
+  document.getElementById('field-password').style.display    = 'none';
+  document.getElementById('field-new-password').style.display = '';
+  document.getElementById('btn-save-merchant').textContent   = 'Enregistrer les modifications';
+
+  // Charger les données complètes du marchand
+  try {
+    const res = await api(`/api/admin/marchands/${id}`);
+    const m   = await res.json();
+    fillForm(m);
+  } catch (e) {
+    alert('Impossible de charger le marchand : ' + e.message);
+    return;
+  }
+  openSheet();
+}
+
+function openSheet()  { document.getElementById('sheet-backdrop').classList.add('open'); }
+function closeSheet() { document.getElementById('sheet-backdrop').classList.remove('open'); }
+
+document.getElementById('btn-new-merchant').addEventListener('click', openCreateSheet);
+document.getElementById('btn-close-sheet').addEventListener('click', closeSheet);
+document.getElementById('btn-cancel-sheet').addEventListener('click', closeSheet);
+document.getElementById('sheet-backdrop').addEventListener('click', e => {
+  if (e.target === document.getElementById('sheet-backdrop')) closeSheet();
+});
+
+// ════════════════════════════════════
+// FORM : REMPLIR / VIDER
+// ════════════════════════════════════
+function resetForm() {
+  ['f-nom','f-slug','f-email','f-pwd','f-new-pwd','f-logo','f-strip','f-glogo','f-ghero','f-texte','f-tiers'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  setColor('cp-fond',  'f-fond',  '#ffffff');
+  setColor('cp-texte', 'f-texte-c', '#000000');
+  setColor('cp-label', 'f-label', '#888888');
+  document.getElementById('f-maxval').value  = '10';
+  document.getElementById('f-forfait').value = 'pro';
+  document.getElementById('slug-preview').textContent = '…';
+  document.getElementById('sheet-err').style.display = 'none';
+}
+
+function fillForm(m) {
+  v('f-nom',    m.nom);
+  v('f-slug',   m.slug);
+  v('f-email',  m.email_contact);
+  v('f-texte',  m.texte_landing);
+  v('f-logo',   m.logo_url);
+  v('f-strip',  m.image_strip_url);
+  v('f-glogo',  m.google_logo_url);
+  v('f-ghero',  m.google_hero_url);
+  v('f-maxval', m.max_value);
+  if (['basic','pro','pro_plus'].includes(m.forfait)) document.getElementById('f-forfait').value = m.forfait;
+  if (m.couleur_fond)  setColor('cp-fond',  'f-fond',    m.couleur_fond);
+  if (m.couleur_texte) setColor('cp-texte', 'f-texte-c', m.couleur_texte);
+  if (m.couleur_label) setColor('cp-label', 'f-label',   m.couleur_label);
+  if (m.images_tiers)  document.getElementById('f-tiers').value = JSON.stringify(m.images_tiers, null, 2);
+  document.getElementById('slug-preview').textContent = m.slug || '…';
+}
+
+function v(id, val) { const el = document.getElementById(id); if (el && val != null) el.value = val; }
+
+function setColor(cpId, txtId, hex) {
+  const cp  = document.getElementById(cpId);
+  const txt = document.getElementById(txtId);
+  if (cp && isHex(hex))  cp.value  = hex;
+  if (txt) txt.value = hex || '';
+}
+
+function isHex(s) { return /^#[0-9a-fA-F]{6}$/.test(s); }
+
+// Synchronisation color picker ↔ champ texte
+[['cp-fond','f-fond'],['cp-texte','f-texte-c'],['cp-label','f-label']].forEach(([cpId, txtId]) => {
+  document.getElementById(cpId).addEventListener('input', e => {
+    document.getElementById(txtId).value = e.target.value;
+  });
+  document.getElementById(txtId).addEventListener('input', e => {
+    if (isHex(e.target.value)) document.getElementById(cpId).value = e.target.value;
+  });
+});
+
+// Auto-génération slug depuis le nom (création uniquement)
+document.getElementById('f-nom').addEventListener('input', e => {
+  if (S.editId) return;
+  const slug = toSlug(e.target.value);
+  document.getElementById('f-slug').value = slug;
+  document.getElementById('slug-preview').textContent = slug || '…';
+});
+document.getElementById('f-slug').addEventListener('input', e => {
+  document.getElementById('slug-preview').textContent = e.target.value || '…';
+});
+
+// ════════════════════════════════════
+// SAUVEGARDE
+// ════════════════════════════════════
+document.getElementById('btn-save-merchant').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-save-merchant');
+  const err = document.getElementById('sheet-err');
+  err.style.display = 'none';
+
+  const body = collectForm();
+  if (!body) return;
+
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Enregistrement…';
+
+  try {
+    const url    = S.editId ? `/api/admin/marchands/${S.editId}` : '/api/admin/marchands';
+    const method = S.editId ? 'PATCH' : 'POST';
+    const res    = await api(url, { method, body: JSON.stringify(body) });
+    const data   = await res.json();
+
+    if (!res.ok) throw new Error(data.error || 'Erreur serveur');
+
+    closeSheet();
+    S.merchants = null; // forcer le rechargement
+    await loadAll();
+  } catch (e) {
+    err.textContent = e.message; err.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = S.editId ? 'Enregistrer les modifications' : 'Créer le marchand';
+  }
+});
+
+function collectForm() {
+  const err  = document.getElementById('sheet-err');
+  const nom  = document.getElementById('f-nom').value.trim();
+  const slug = document.getElementById('f-slug').value.trim();
+  const email= document.getElementById('f-email').value.trim();
+  const pwd  = S.editId
+    ? document.getElementById('f-new-pwd').value
+    : document.getElementById('f-pwd').value;
+
+  if (!nom)   { showSheetErr('Le nom est requis'); return null; }
+  if (!slug)  { showSheetErr('Le slug est requis'); return null; }
+  if (!email) { showSheetErr('L\'email est requis'); return null; }
+  if (!S.editId && !pwd) { showSheetErr('Le mot de passe est requis'); return null; }
+
+  const fondHex  = document.getElementById('f-fond').value.trim()    || '#ffffff';
+  const texteHex = document.getElementById('f-texte-c').value.trim() || '#000000';
+  const labelHex = document.getElementById('f-label').value.trim()   || '#888888';
+
+  // Valider images_tiers JSON si renseigné
+  const tiersRaw = document.getElementById('f-tiers').value.trim();
+  let images_tiers = undefined;
+  if (tiersRaw) {
+    try { images_tiers = JSON.parse(tiersRaw); }
+    catch { showSheetErr('images_tiers : JSON invalide'); return null; }
+  }
+
+  const body = {
+    nom, slug, email_contact: email,
+    couleur_fond:  fondHex,
+    couleur_texte: texteHex,
+    couleur_label: labelHex,
+    max_value:     parseInt(document.getElementById('f-maxval').value) || 10,
+    forfait:       document.getElementById('f-forfait').value,
+    texte_landing: document.getElementById('f-texte').value.trim()  || undefined,
+    logo_url:      document.getElementById('f-logo').value.trim()   || undefined,
+    image_strip_url: document.getElementById('f-strip').value.trim() || undefined,
+    google_logo_url: document.getElementById('f-glogo').value.trim() || undefined,
+    google_hero_url: document.getElementById('f-ghero').value.trim() || undefined,
+    images_tiers,
+  };
+
+  if (!S.editId && pwd) body.password = pwd;
+  if (S.editId  && pwd) body.new_password = pwd;
+
+  return body;
+}
+
+function showSheetErr(msg) {
+  const el = document.getElementById('sheet-err');
+  el.textContent = msg; el.style.display = 'block';
+}
+
+// ════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════
+function toSlug(s) {
+  return s.toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ════════════════════════════════════
+// SERVICE WORKER
+// ════════════════════════════════════
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/admin/sw.js').catch(() => {});
+
+// ════════════════════════════════════
+// INIT
+// ════════════════════════════════════
+if (restoreToken()) showDashboard();
+</script>
+</body>
+</html>

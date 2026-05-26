@@ -53,6 +53,7 @@ const passesRoutes        = require('./routes/passes');
 const landingRoutes       = require('./routes/landing');
 const scannerRoutes       = require('./routes/scanner');
 const dashboardRoutes     = require('./routes/dashboard');
+const adminUiRoutes       = require('./routes/admin-ui');
 
 // Fichiers statiques (landing page HTML)
 app.use(express.static(path.join(__dirname, '../public')));
@@ -65,6 +66,9 @@ app.use('/scanner', scannerRoutes);
 
 // Dashboard marchand
 app.use('/dashboard', dashboardRoutes);
+
+// Espace admin (Yacine)
+app.use('/admin', adminUiRoutes);
 
 // Apple Wallet WebService — chemins standards Apple, pas de préfixe /api
 app.use('/', appleWalletRoutes);
