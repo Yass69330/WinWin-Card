@@ -4,17 +4,19 @@ const jwt = require('jsonwebtoken');
 const supabase = require('../services/supabase');
 const { authMarchand } = require('../middleware/auth');
 
-// POST /merchants/login — connexion marchand
+// POST /merchants/login — connexion marchand (email ou slug + password)
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: 'email et password requis' });
+  const { email, slug, password } = req.body;
+  const identifier = slug || email;
+  if (!identifier || !password) {
+    return res.status(400).json({ error: 'slug (ou email) et password requis' });
   }
 
+  const field = slug ? 'slug' : 'email_contact';
   const { data: marchand } = await supabase
     .from('marchands')
-    .select('id, nom, email_contact, password_hash, actif')
-    .eq('email_contact', email)
+    .select('id, nom, slug, email_contact, password_hash, actif')
+    .eq(field, identifier)
     .single();
 
   if (!marchand) return res.status(401).json({ error: 'Identifiants incorrects' });
@@ -30,7 +32,7 @@ router.post('/login', async (req, res) => {
     { expiresIn: '7d' }
   );
 
-  res.json({ token, marchand_id: marchand.id, nom: marchand.nom });
+  res.json({ token, marchand_id: marchand.id, nom: marchand.nom, slug: marchand.slug });
 });
 
 // GET /merchants/me — profil du marchand connecté
