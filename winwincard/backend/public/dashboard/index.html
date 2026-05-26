@@ -787,14 +787,34 @@ document.getElementById('notif-form').addEventListener('submit', async () => {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Erreur envoi');
-    if (data.envoyes === 0) {
-      result.innerHTML = `<div class="alert alert-info">Aucun appareil enregistré — les clients doivent installer leur pass Apple Wallet.</div>`;
+    const { apple, google } = data;
+    const totalEnvoyes = apple.envoyes + google.envoyes;
+    const totalClients = apple.total + google.total;
+
+    if (totalClients === 0) {
+      result.innerHTML = `<div class="alert alert-info">Aucun appareil enregistré. Les clients doivent installer leur pass Apple ou Google Wallet pour recevoir des notifications.</div>`;
     } else {
-      result.innerHTML = `<div class="alert alert-success">✓ ${data.envoyes} notification${data.envoyes > 1 ? 's' : ''} envoyée${data.envoyes > 1 ? 's' : ''}${data.echecs ? ` (${data.echecs} échec${data.echecs > 1 ? 's' : ''})` : ''}</div>`;
-      document.getElementById('notif-titre').value = '';
-      document.getElementById('notif-msg').value   = '';
-      document.getElementById('cc-titre').textContent = '0 / 100';
-      document.getElementById('cc-msg').textContent   = '0 / 500';
+      const lines = [];
+      if (apple.active) {
+        const s = apple.envoyes > 1 ? 's' : '';
+        lines.push(`🍎 Apple Wallet : ${apple.envoyes}/${apple.total} envoyée${s}${apple.echecs ? ` · ${apple.echecs} échec` : ''}`);
+      } else {
+        lines.push(`🍎 Apple Wallet : non configuré (APPLE_APN_KEY_ID manquant)`);
+      }
+      if (google.active) {
+        const s = google.envoyes > 1 ? 's' : '';
+        lines.push(`🤖 Google Wallet : ${google.envoyes}/${google.total} envoyée${s}${google.echecs ? ` · ${google.echecs} échec` : ''}`);
+      } else {
+        lines.push(`🤖 Google Wallet : non configuré`);
+      }
+      const cls = totalEnvoyes > 0 ? 'alert-success' : 'alert-info';
+      result.innerHTML = `<div class="alert ${cls}">${lines.join('<br>')}</div>`;
+      if (totalEnvoyes > 0) {
+        document.getElementById('notif-titre').value = '';
+        document.getElementById('notif-msg').value   = '';
+        document.getElementById('cc-titre').textContent = '0 / 100';
+        document.getElementById('cc-msg').textContent   = '0 / 500';
+      }
     }
   } catch (e) {
     result.innerHTML = `<div class="alert alert-error">${e.message}</div>`;

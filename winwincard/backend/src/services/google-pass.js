@@ -55,18 +55,23 @@ function googleHeroUrl(marchand) {
 }
 
 // ── Auth Google (OAuth2 via JWT service account) ─────────────
+// Token mis en cache 45 min — évite N appels OAuth2 lors d'un envoi groupé.
+
+let _gToken   = null;
+let _gTokenTs = 0;
 
 async function getAccessToken() {
-  const creds = getCredentials();
   const now = Math.floor(Date.now() / 1000);
+  if (_gToken && now - _gTokenTs < 2700) return _gToken; // 45 min
 
+  const creds = getCredentials();
   const assertion = jwt.sign(
     {
-      iss: creds.client_email,
+      iss:   creds.client_email,
       scope: 'https://www.googleapis.com/auth/wallet_object.issuer',
-      aud: 'https://oauth2.googleapis.com/token',
-      exp: now + 3600,
-      iat: now,
+      aud:   'https://oauth2.googleapis.com/token',
+      exp:   now + 3600,
+      iat:   now,
     },
     creds.private_key,
     { algorithm: 'RS256' }
@@ -82,7 +87,9 @@ async function getAccessToken() {
   if (!data.access_token) {
     throw new Error(`Auth Google échouée : ${JSON.stringify(data)}`);
   }
-  return data.access_token;
+  _gToken   = data.access_token;
+  _gTokenTs = now;
+  return _gToken;
 }
 
 // ── Appels REST Wallet API ───────────────────────────────────
@@ -275,9 +282,37 @@ async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, 
   );
 }
 
+// Notification marketing — ajoute un message visible dans Google Wallet
+// Appelé depuis notifications.js pour chaque porteur d'un pass Google Wallet.
+async function addMessageToLoyaltyObject(serialNumber, titre, message) {
+  if (!isConfigured()) throw new Error('Google Wallet non configuré');
+
+  const oId   = objectId(serialNumber);
+  const token = await getAccessToken();
+
+  const { status, data } = await walletRequest(
+    'POST',
+    `/loyaltyObject/${encodeURIComponent(oId)}/addMessage`,
+    {
+      message: {
+        header:      titre,
+        body:        message,
+        messageType: 'TEXT',
+      },
+    },
+    token
+  );
+
+  if (status !== 200) {
+    const detail = data?.error?.message || JSON.stringify(data);
+    throw new Error(`Google addMessage ${status}: ${detail}`);
+  }
+}
+
 module.exports = {
   isConfigured,
   createOrUpdateLoyaltyClass,
   generateGoogleWalletUrl,
   updateLoyaltyObjectPoints,
+  addMessageToLoyaltyObject,
 };
