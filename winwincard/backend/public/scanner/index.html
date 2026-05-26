@@ -526,19 +526,19 @@ function setScreen(id) {
 
 function saveSession(token, slug, nom) {
   state.token = token; state.marchandSlug = slug; state.marchandNom = nom;
-  try { sessionStorage.setItem('ww_token', token); sessionStorage.setItem('ww_slug', slug); sessionStorage.setItem('ww_nom', nom); } catch {}
+  try { localStorage.setItem('ww_token', token); localStorage.setItem('ww_slug', slug); localStorage.setItem('ww_nom', nom); } catch {}
 }
 
 function clearSession() {
   state.token = null; state.marchandSlug = null; state.marchandNom = null;
-  try { sessionStorage.removeItem('ww_token'); sessionStorage.removeItem('ww_slug'); sessionStorage.removeItem('ww_nom'); } catch {}
+  try { localStorage.removeItem('ww_token'); localStorage.removeItem('ww_slug'); localStorage.removeItem('ww_nom'); } catch {}
 }
 
 function restoreSession() {
   try {
-    const t = sessionStorage.getItem('ww_token');
-    const s = sessionStorage.getItem('ww_slug');
-    const n = sessionStorage.getItem('ww_nom');
+    const t = localStorage.getItem('ww_token');
+    const s = localStorage.getItem('ww_slug');
+    const n = localStorage.getItem('ww_nom');
     if (t && s) { state.token = t; state.marchandSlug = s; state.marchandNom = n || s; return true; }
   } catch {}
   return false;
@@ -563,7 +563,7 @@ document.getElementById('login-form').addEventListener('submit', async () => {
     const res = await fetch('/api/merchants/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slug, password })
+      body: JSON.stringify({ slug, password, remember_device: true })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Identifiants incorrects');

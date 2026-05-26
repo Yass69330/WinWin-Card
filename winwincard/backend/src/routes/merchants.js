@@ -5,8 +5,9 @@ const supabase = require('../services/supabase');
 const { authMarchand } = require('../middleware/auth');
 
 // POST /merchants/login — connexion marchand (email ou slug + password)
+// remember_device: true → JWT 1 an (scanner PWA installée), false → 7j (dashboard)
 router.post('/login', async (req, res) => {
-  const { email, slug, password } = req.body;
+  const { email, slug, password, remember_device } = req.body;
   const identifier = slug || email;
   if (!identifier || !password) {
     return res.status(400).json({ error: 'slug (ou email) et password requis' });
@@ -26,10 +27,11 @@ router.post('/login', async (req, res) => {
   const valid = await comparePassword(password, marchand.password_hash);
   if (!valid) return res.status(401).json({ error: 'Identifiants incorrects' });
 
+  const expiresIn = remember_device ? '365d' : '7d';
   const token = jwt.sign(
     { role: 'marchand', marchand_id: marchand.id, nom: marchand.nom },
     process.env.JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn }
   );
 
   res.json({ token, marchand_id: marchand.id, nom: marchand.nom, slug: marchand.slug });
