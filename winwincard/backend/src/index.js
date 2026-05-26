@@ -52,6 +52,7 @@ const adminRoutes         = require('./routes/admin');
 const passesRoutes        = require('./routes/passes');
 const landingRoutes       = require('./routes/landing');
 const scannerRoutes       = require('./routes/scanner');
+const dashboardRoutes     = require('./routes/dashboard');
 
 // Fichiers statiques (landing page HTML)
 app.use(express.static(path.join(__dirname, '../public')));
@@ -61,6 +62,9 @@ app.use('/l', landingRoutes);
 
 // PWA Scanner
 app.use('/scanner', scannerRoutes);
+
+// Dashboard marchand
+app.use('/dashboard', dashboardRoutes);
 
 // Apple Wallet WebService — chemins standards Apple, pas de préfixe /api
 app.use('/', appleWalletRoutes);

@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Dashboard">
+  <link rel="manifest" href="/dashboard/manifest.json">
+  <link rel="apple-touch-icon" href="/dashboard/icon-192.png">
+  <title>WinWin Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #0f172a;
+      --surface:    #1e293b;
+      --surface2:   #273548;
+      --border:     #334155;
+      --accent:     #6366f1;
+      --accent-dim: rgba(99,102,241,.15);
+      --text:       #f1f5f9;
+      --muted:      #94a3b8;
+      --success:    #22c55e;
+      --warning:    #f59e0b;
+      --error:      #ef4444;
+      --radius:     14px;
+      --nav-h:      64px;
+      --header-h:   56px;
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased; }
+
+    /* ── Screens ── */
+    #app { height: 100%; }
+    .screen { display: none; height: 100%; flex-direction: column; }
+    .screen.active { display: flex; }
+
+    /* ═══════════════ LOGIN ═══════════════ */
+    #screen-login { justify-content: center; align-items: center; padding: 24px; gap: 28px; overflow-y: auto; }
+    .login-brand { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .login-logo { width: 68px; height: 68px; background: var(--accent); border-radius: 18px; display: flex; align-items: center; justify-content: center; font-size: 32px; }
+    .login-title { font-size: 22px; font-weight: 700; }
+    .login-sub   { font-size: 13px; color: var(--muted); text-align: center; }
+    .login-form { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 14px; }
+
+    /* ── Form elements ── */
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .field label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .field input, .field textarea {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      color: var(--text);
+      font-size: 16px;
+      padding: 13px 15px;
+      outline: none;
+      transition: border-color .15s;
+      -webkit-appearance: none;
+      font-family: inherit;
+    }
+    .field input:focus, .field textarea:focus { border-color: var(--accent); }
+    .field textarea { resize: vertical; min-height: 100px; }
+
+    .char-count { font-size: 11px; color: var(--muted); text-align: right; margin-top: 2px; }
+    .char-count.over { color: var(--error); }
+
+    .btn {
+      padding: 14px 20px;
+      border-radius: 11px;
+      font-size: 15px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: opacity .15s, transform .1s;
+      -webkit-tap-highlight-color: transparent;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn-primary  { background: var(--accent); color: #fff; }
+    .btn-primary:disabled { opacity: .5; pointer-events: none; }
+    .btn-danger   { background: rgba(239,68,68,.1); color: var(--error); border: 1px solid rgba(239,68,68,.2); }
+    .btn-ghost    { background: transparent; color: var(--muted); }
+    .btn-outline  { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-sm       { padding: 8px 14px; font-size: 13px; border-radius: 8px; }
+
+    .alert {
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 14px;
+    }
+    .alert-error   { background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.25); color: var(--error); }
+    .alert-success { background: rgba(34,197,94,.1); border: 1px solid rgba(34,197,94,.25); color: var(--success); }
+    .alert-info    { background: var(--accent-dim); border: 1px solid rgba(99,102,241,.25); color: #a5b4fc; font-size: 13px; }
+
+    /* ═══════════════ DASHBOARD ═══════════════ */
+    #screen-dashboard { background: var(--bg); }
+
+    /* Header */
+    .dash-header {
+      height: var(--header-h);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      gap: 10px;
+    }
+    .dash-header-brand { font-size: 16px; font-weight: 700; flex: 1; }
+    .dash-header-nom   { font-size: 13px; color: var(--muted); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .btn-icon { background: none; border: none; cursor: pointer; color: var(--muted); padding: 6px; border-radius: 8px; font-size: 18px; -webkit-tap-highlight-color: transparent; }
+    .btn-icon:active { background: var(--surface2); }
+
+    /* Content area */
+    .dash-content {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: calc(var(--nav-h) + 8px);
+    }
+
+    /* Tab panels */
+    .tab-panel { display: none; padding: 16px; }
+    .tab-panel.active { display: block; }
+
+    /* Bottom nav */
+    .dash-nav {
+      height: var(--nav-h);
+      flex-shrink: 0;
+      display: flex;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .nav-btn {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 500;
+      -webkit-tap-highlight-color: transparent;
+      transition: color .15s;
+    }
+    .nav-btn .nav-icon { font-size: 20px; line-height: 1; }
+    .nav-btn.active { color: var(--accent); }
+
+    /* ═══════════════ CARDS / STATS ═══════════════ */
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin: 0 0 10px;
+    }
+
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+    .stat-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .stat-icon { font-size: 22px; margin-bottom: 4px; }
+    .stat-value { font-size: 28px; font-weight: 800; line-height: 1; }
+    .stat-label { font-size: 12px; color: var(--muted); }
+
+    /* QR section */
+    .qr-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .qr-card img { width: 180px; height: 180px; border-radius: 10px; background: #fff; }
+    .qr-url { font-size: 12px; color: var(--muted); word-break: break-all; text-align: center; }
+    .qr-actions { display: flex; gap: 8px; width: 100%; }
+    .qr-actions .btn { flex: 1; }
+
+    /* ═══════════════ CLIENTS ═══════════════ */
+    .search-wrap { position: relative; margin-bottom: 12px; }
+    .search-input {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      color: var(--text);
+      font-size: 15px;
+      padding: 11px 14px 11px 38px;
+      outline: none;
+      -webkit-appearance: none;
+    }
+    .search-input:focus { border-color: var(--accent); }
+    .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; font-size: 16px; }
+
+    .list-meta { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+
+    .client-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .client-avatar {
+      width: 42px; height: 42px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 700;
+      flex-shrink: 0;
+      color: #fff;
+    }
+    .client-info { flex: 1; min-width: 0; }
+    .client-name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .client-progress {
+      display: flex; align-items: center; gap: 6px;
+      margin-top: 4px;
+    }
+    .mini-bar-wrap { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+    .mini-bar { height: 100%; background: var(--accent); border-radius: 2px; transition: width .3s; }
+    .client-pts { font-size: 11px; color: var(--muted); white-space: nowrap; }
+    .client-full { color: var(--warning); font-weight: 600; }
+    .btn-delete { flex-shrink: 0; color: var(--error); background: none; border: none; font-size: 18px; padding: 6px; cursor: pointer; opacity: .6; border-radius: 8px; -webkit-tap-highlight-color: transparent; }
+    .btn-delete:active { opacity: 1; background: rgba(239,68,68,.1); }
+
+    /* Skeleton loaders */
+    .skeleton { background: var(--surface2); border-radius: 8px; animation: shimmer 1.4s ease-in-out infinite; }
+    @keyframes shimmer {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .4; }
+    }
+    .skeleton-card { height: 70px; border-radius: var(--radius); margin-bottom: 8px; }
+
+    /* ═══════════════ HISTORIQUE ═══════════════ */
+    .scan-entry {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .scan-avatar {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700;
+      flex-shrink: 0;
+      color: #fff;
+    }
+    .scan-info { flex: 1; min-width: 0; }
+    .scan-name { font-size: 14px; font-weight: 600; }
+    .scan-time { font-size: 11px; color: var(--muted); }
+    .scan-delta {
+      flex-shrink: 0;
+      text-align: right;
+    }
+    .scan-pts { font-size: 14px; font-weight: 700; }
+    .scan-reward { font-size: 10px; color: var(--warning); font-weight: 600; }
+
+    /* Tab header row */
+    .tab-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .tab-header h2 { font-size: 17px; font-weight: 700; }
+    .btn-refresh { background: none; border: none; color: var(--muted); font-size: 16px; cursor: pointer; padding: 4px; -webkit-tap-highlight-color: transparent; }
+
+    /* ═══════════════ NOTIFICATIONS ═══════════════ */
+    .notif-form { display: flex; flex-direction: column; gap: 14px; }
+    .send-result { margin-top: 4px; }
+
+    /* ═══════════════ EMPTY STATES ═══════════════ */
+    .empty {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--muted);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .empty-icon { font-size: 36px; }
+    .empty-title { font-size: 16px; font-weight: 600; color: var(--text); }
+    .empty-sub { font-size: 13px; }
+
+    /* ═══════════════ MODAL DELETE ═══════════════ */
+    #modal-delete {
+      display: none;
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,.65);
+      align-items: flex-end;
+    }
+    #modal-delete.open { display: flex; }
+    .modal-sheet {
+      background: var(--surface);
+      border-radius: 24px 24px 0 0;
+      padding: 20px 20px 32px;
+      padding-bottom: max(32px, env(safe-area-inset-bottom));
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .modal-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 4px; }
+    .modal-title { font-size: 17px; font-weight: 700; }
+    .modal-body  { font-size: 14px; color: var(--muted); line-height: 1.5; }
+
+    /* ── Misc ── */
+    .spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .divider { height: 1px; background: var(--border); margin: 4px 0 12px; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════════════════ LOGIN ═══════════════════════ -->
+<div id="screen-login" class="screen active">
+  <div class="login-brand">
+    <div class="login-logo">📊</div>
+    <div class="login-title">WinWin Dashboard</div>
+    <div class="login-sub">Gérez votre programme de fidélité</div>
+  </div>
+  <form class="login-form" id="login-form" onsubmit="return false">
+    <div class="field">
+      <label for="in-slug">Identifiant (slug)</label>
+      <input id="in-slug" type="text" placeholder="cafe-le-central" autocorrect="off" autocapitalize="none" autocomplete="username">
+    </div>
+    <div class="field">
+      <label for="in-pwd">Mot de passe</label>
+      <input id="in-pwd" type="password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <div id="login-err" class="alert alert-error" style="display:none"></div>
+    <button type="submit" class="btn btn-primary" id="btn-login">Se connecter</button>
+  </form>
+</div>
+
+<!-- ═══════════════════════ DASHBOARD ═══════════════════════ -->
+<div id="screen-dashboard" class="screen">
+
+  <!-- Header -->
+  <header class="dash-header">
+    <span style="font-size:20px">🎯</span>
+    <span class="dash-header-brand">WinWin</span>
+    <span class="dash-header-nom" id="header-nom">–</span>
+    <button class="btn-icon" id="btn-logout" title="Déconnexion">⏏</button>
+  </header>
+
+  <!-- Content -->
+  <div class="dash-content">
+
+    <!-- ── Aperçu ── -->
+    <div id="tab-overview" class="tab-panel active">
+      <div class="stats-grid" id="stats-grid">
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card"></div>
+      </div>
+      <p class="section-title">QR code landing page</p>
+      <div class="qr-card" id="qr-section">
+        <div class="skeleton" style="width:180px;height:180px;border-radius:10px"></div>
+        <div class="skeleton" style="width:60%;height:12px;border-radius:6px"></div>
+      </div>
+    </div>
+
+    <!-- ── Clients ── -->
+    <div id="tab-clients" class="tab-panel">
+      <div class="tab-header">
+        <h2>Clients</h2>
+        <button class="btn-refresh" id="btn-refresh-clients" title="Rafraîchir">↺</button>
+      </div>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input class="search-input" id="search-clients" type="search" placeholder="Rechercher par prénom…">
+      </div>
+      <div id="clients-meta" class="list-meta"></div>
+      <div id="clients-list"></div>
+    </div>
+
+    <!-- ── Historique ── -->
+    <div id="tab-scans" class="tab-panel">
+      <div class="tab-header">
+        <h2>Historique</h2>
+        <button class="btn-refresh" id="btn-refresh-scans" title="Rafraîchir">↺</button>
+      </div>
+      <div id="scans-list"></div>
+    </div>
+
+    <!-- ── Notifications ── -->
+    <div id="tab-notifs" class="tab-panel">
+      <div class="tab-header"><h2>Notifications push</h2></div>
+      <div class="alert alert-info" style="margin-bottom:16px">
+        📱 Envoi via Apple Wallet aux appareils enregistrés. Les clients doivent avoir installé leur pass.
+      </div>
+      <form class="notif-form" id="notif-form" onsubmit="return false">
+        <div class="field">
+          <label for="notif-titre">Titre</label>
+          <input id="notif-titre" type="text" maxlength="100" placeholder="Ex : Offre spéciale ce week-end">
+          <div class="char-count" id="cc-titre">0 / 100</div>
+        </div>
+        <div class="field">
+          <label for="notif-msg">Message</label>
+          <textarea id="notif-msg" maxlength="500" placeholder="Ex : Venez profiter de -20% sur toute la carte jusqu'à dimanche !"></textarea>
+          <div class="char-count" id="cc-msg">0 / 500</div>
+        </div>
+        <button type="submit" class="btn btn-primary" id="btn-send-notif">Envoyer la notification</button>
+        <div id="notif-result" class="send-result"></div>
+      </form>
+    </div>
+
+  </div><!-- /dash-content -->
+
+  <!-- Bottom nav -->
+  <nav class="dash-nav">
+    <button class="nav-btn active" data-tab="overview">
+      <span class="nav-icon">📊</span>Aperçu
+    </button>
+    <button class="nav-btn" data-tab="clients">
+      <span class="nav-icon">👥</span>Clients
+    </button>
+    <button class="nav-btn" data-tab="scans">
+      <span class="nav-icon">📋</span>Scans
+    </button>
+    <button class="nav-btn" data-tab="notifs">
+      <span class="nav-icon">🔔</span>Notifs
+    </button>
+  </nav>
+
+</div><!-- /screen-dashboard -->
+
+</div><!-- /app -->
+
+<!-- ═══════════════════════ MODAL DELETE ═══════════════════════ -->
+<div id="modal-delete">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Supprimer ce client ?</div>
+    <div class="modal-body" id="modal-delete-body">
+      Cette action est <strong>irréversible</strong>. Toutes les données personnelles seront effacées conformément au RGPD (le pass devient invalide).
+    </div>
+    <button class="btn btn-danger" id="btn-confirm-delete">Supprimer définitivement</button>
+    <button class="btn btn-ghost"  id="btn-cancel-delete">Annuler</button>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════
+const S = {
+  token: null, marchandId: null, marchandNom: null, marchandSlug: null, maxValue: 10,
+  tab: 'overview',
+  clients: null, scans: null, stats: null, qr: null,
+  deleteTargetId: null, deleteTargetNom: null,
+};
+
+// ════════════════════════════════════════════════
+// AUTH / SESSION
+// ════════════════════════════════════════════════
+function saveSession(d) {
+  Object.assign(S, { token: d.token, marchandId: d.marchand_id, marchandNom: d.nom, marchandSlug: d.slug });
+  try {
+    localStorage.setItem('ww_dash_token', d.token);
+    localStorage.setItem('ww_dash_id',    d.marchand_id);
+    localStorage.setItem('ww_dash_nom',   d.nom || '');
+    localStorage.setItem('ww_dash_slug',  d.slug || '');
+  } catch {}
+}
+
+function clearSession() {
+  Object.assign(S, { token: null, marchandId: null, marchandNom: null, marchandSlug: null });
+  try { ['ww_dash_token','ww_dash_id','ww_dash_nom','ww_dash_slug'].forEach(k => localStorage.removeItem(k)); } catch {}
+}
+
+function restoreSession() {
+  try {
+    const t = localStorage.getItem('ww_dash_token');
+    if (!t) return false;
+    S.token      = t;
+    S.marchandId = localStorage.getItem('ww_dash_id');
+    S.marchandNom= localStorage.getItem('ww_dash_nom') || '';
+    S.marchandSlug = localStorage.getItem('ww_dash_slug') || '';
+    return true;
+  } catch { return false; }
+}
+
+// ════════════════════════════════════════════════
+// API WRAPPER — auto-logout on 401
+// ════════════════════════════════════════════════
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${S.token}`,
+      ...(opts.headers || {}),
+    },
+  });
+  if (res.status === 401) { clearSession(); showLogin(); throw new Error('Session expirée, reconnectez-vous'); }
+  return res;
+}
+
+// ════════════════════════════════════════════════
+// SCREEN HELPERS
+// ════════════════════════════════════════════════
+function showLogin() {
+  document.getElementById('screen-dashboard').classList.remove('active');
+  document.getElementById('screen-login').classList.add('active');
+}
+
+function showDashboard() {
+  document.getElementById('screen-login').classList.remove('active');
+  document.getElementById('screen-dashboard').classList.add('active');
+  document.getElementById('header-nom').textContent = S.marchandNom || S.marchandSlug || '';
+  switchTab('overview');
+}
+
+// ════════════════════════════════════════════════
+// LOGIN
+// ════════════════════════════════════════════════
+document.getElementById('login-form').addEventListener('submit', async () => {
+  const slug = document.getElementById('in-slug').value.trim();
+  const pwd  = document.getElementById('in-pwd').value;
+  const errEl = document.getElementById('login-err');
+  const btn   = document.getElementById('btn-login');
+  errEl.style.display = 'none';
+  if (!slug || !pwd) { showErr(errEl, 'Remplissez tous les champs'); return; }
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await fetch('/api/merchants/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug, password: pwd }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Identifiants incorrects');
+    data.slug = data.slug || slug;
+    saveSession(data);
+    showDashboard();
+  } catch (e) {
+    showErr(errEl, e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Se connecter';
+  }
+});
+
+function showErr(el, msg) { el.textContent = msg; el.style.display = 'block'; }
+
+// ════════════════════════════════════════════════
+// LOGOUT
+// ════════════════════════════════════════════════
+document.getElementById('btn-logout').addEventListener('click', () => {
+  if (!confirm('Se déconnecter ?')) return;
+  clearSession();
+  S.clients = null; S.scans = null; S.stats = null; S.qr = null;
+  showLogin();
+});
+
+// ════════════════════════════════════════════════
+// TABS
+// ════════════════════════════════════════════════
+document.querySelectorAll('.nav-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
+
+function switchTab(tab) {
+  S.tab = tab;
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.getElementById('tab-' + tab).classList.add('active');
+  if (tab === 'overview') loadOverview();
+  if (tab === 'clients')  loadClients();
+  if (tab === 'scans')    loadScans();
+}
+
+// ════════════════════════════════════════════════
+// TAB: APERÇU
+// ════════════════════════════════════════════════
+async function loadOverview(force = false) {
+  if (!force) { if (S.stats && S.qr) { renderOverview(); return; } }
+  const [statsRes, qrRes, meRes] = await Promise.all([
+    api('/api/merchants/me/stats'),
+    api('/api/merchants/me/qrcode'),
+    S.maxValue === 10 ? api('/api/merchants/me') : Promise.resolve(null),
+  ]);
+  S.stats = await statsRes.json();
+  S.qr    = await qrRes.json();
+  if (meRes) { const me = await meRes.json(); S.maxValue = me.max_value || 10; }
+  renderOverview();
+}
+
+function renderOverview() {
+  const grid = document.getElementById('stats-grid');
+  grid.innerHTML = `
+    <div class="stat-card">
+      <div class="stat-icon">👥</div>
+      <div class="stat-value">${S.stats.total_clients ?? '–'}</div>
+      <div class="stat-label">clients actifs</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">✅</div>
+      <div class="stat-value">${S.stats.scans_aujourdhui ?? '–'}</div>
+      <div class="stat-label">scans aujourd'hui</div>
+    </div>`;
+
+  const qrSection = document.getElementById('qr-section');
+  qrSection.innerHTML = `
+    <img src="${S.qr.qrcode}" alt="QR code landing page">
+    <div class="qr-url">${S.qr.url}</div>
+    <div class="qr-actions">
+      <button class="btn btn-outline btn-sm" id="btn-copy-url">📋 Copier le lien</button>
+      ${navigator.share ? '<button class="btn btn-outline btn-sm" id="btn-share-url">↗ Partager</button>' : ''}
+    </div>`;
+
+  document.getElementById('btn-copy-url')?.addEventListener('click', () => {
+    navigator.clipboard.writeText(S.qr.url).then(() => {
+      const b = document.getElementById('btn-copy-url');
+      b.textContent = '✓ Copié'; setTimeout(() => b.textContent = '📋 Copier le lien', 2000);
+    });
+  });
+  document.getElementById('btn-share-url')?.addEventListener('click', () => {
+    navigator.share({ url: S.qr.url, title: 'Programme de fidélité' }).catch(() => {});
+  });
+}
+
+// ════════════════════════════════════════════════
+// TAB: CLIENTS
+// ════════════════════════════════════════════════
+async function loadClients(force = false) {
+  if (!force && S.clients) { renderClients(); return; }
+  document.getElementById('clients-list').innerHTML =
+    Array(4).fill('<div class="skeleton skeleton-card"></div>').join('');
+  document.getElementById('clients-meta').textContent = '';
+  try {
+    const res = await api('/api/clients');
+    S.clients = await res.json();
+    renderClients();
+  } catch (e) {
+    document.getElementById('clients-list').innerHTML =
+      `<div class="alert alert-error">${e.message}</div>`;
+  }
+}
+
+function renderClients(filter = '') {
+  const list = document.getElementById('clients-list');
+  const meta = document.getElementById('clients-meta');
+  if (!S.clients) return;
+  const q = filter.trim().toLowerCase();
+  const shown = q ? S.clients.filter(c => c.prenom.toLowerCase().includes(q)) : S.clients;
+
+  if (shown.length === 0) {
+    meta.textContent = '';
+    list.innerHTML = `<div class="empty">
+      <div class="empty-icon">👤</div>
+      <div class="empty-title">${q ? 'Aucun résultat' : 'Aucun client'}</div>
+      <div class="empty-sub">${q ? 'Essayez un autre prénom' : 'Les clients apparaîtront ici après inscription via la landing page'}</div>
+    </div>`;
+    return;
+  }
+
+  meta.textContent = `${shown.length} client${shown.length > 1 ? 's' : ''}${q ? ' trouvé' + (shown.length > 1 ? 's' : '') : ''}`;
+  list.innerHTML = shown.map(c => {
+    const pct = Math.min(c.stored_value / S.maxValue * 100, 100);
+    const full = c.stored_value >= S.maxValue;
+    return `<div class="client-card">
+      <div class="client-avatar" style="background:${colorFrom(c.prenom)}">${c.prenom.charAt(0).toUpperCase()}</div>
+      <div class="client-info">
+        <div class="client-name">${esc(c.prenom)}</div>
+        <div class="client-progress">
+          <div class="mini-bar-wrap"><div class="mini-bar" style="width:${pct}%"></div></div>
+          <span class="client-pts ${full ? 'client-full' : ''}">${c.stored_value}/${S.maxValue}${full ? ' 🎉' : ''}</span>
+        </div>
+      </div>
+      <button class="btn-delete" data-id="${c.id}" data-nom="${esc(c.prenom)}" title="Supprimer">🗑</button>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.btn-delete').forEach(btn => {
+    btn.addEventListener('click', () => openDeleteModal(btn.dataset.id, btn.dataset.nom));
+  });
+}
+
+document.getElementById('search-clients').addEventListener('input', e => {
+  renderClients(e.target.value);
+});
+
+document.getElementById('btn-refresh-clients').addEventListener('click', () => {
+  S.clients = null;
+  loadClients(true);
+});
+
+// ════════════════════════════════════════════════
+// TAB: HISTORIQUE
+// ════════════════════════════════════════════════
+async function loadScans(force = false) {
+  if (!force && S.scans) { renderScans(); return; }
+  document.getElementById('scans-list').innerHTML =
+    Array(5).fill('<div class="skeleton skeleton-card"></div>').join('');
+  try {
+    const res = await api('/api/scans');
+    S.scans = await res.json();
+    renderScans();
+  } catch (e) {
+    document.getElementById('scans-list').innerHTML =
+      `<div class="alert alert-error">${e.message}</div>`;
+  }
+}
+
+function renderScans() {
+  const el = document.getElementById('scans-list');
+  if (!S.scans || S.scans.length === 0) {
+    el.innerHTML = `<div class="empty">
+      <div class="empty-icon">📋</div>
+      <div class="empty-title">Aucun scan</div>
+      <div class="empty-sub">L'historique apparaîtra ici après les premiers passages en caisse</div>
+    </div>`;
+    return;
+  }
+  el.innerHTML = S.scans.map(s => {
+    const prenom = s.clients?.prenom || '?';
+    const avant  = s.stored_value_avant;
+    const apres  = s.stored_value_apres;
+    const reward = apres === 0 && avant > 0;
+    const delta  = reward
+      ? `<div class="scan-pts" style="color:var(--warning)">🎉 Récompense</div><div style="font-size:11px;color:var(--muted)">${avant} → 0</div>`
+      : `<div class="scan-pts">${avant} → ${apres}</div>`;
+    return `<div class="scan-entry">
+      <div class="scan-avatar" style="background:${colorFrom(prenom)}">${prenom.charAt(0).toUpperCase()}</div>
+      <div class="scan-info">
+        <div class="scan-name">${esc(prenom)}</div>
+        <div class="scan-time">${timeAgo(s.date_scan)}</div>
+      </div>
+      <div class="scan-delta">${delta}</div>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('btn-refresh-scans').addEventListener('click', () => {
+  S.scans = null;
+  loadScans(true);
+});
+
+// ════════════════════════════════════════════════
+// TAB: NOTIFICATIONS
+// ════════════════════════════════════════════════
+['notif-titre', 'notif-msg'].forEach(id => {
+  const el  = document.getElementById(id);
+  const cc  = document.getElementById(id === 'notif-titre' ? 'cc-titre' : 'cc-msg');
+  const max = parseInt(el.getAttribute('maxlength'));
+  el.addEventListener('input', () => {
+    const n = el.value.length;
+    cc.textContent = `${n} / ${max}`;
+    cc.classList.toggle('over', n >= max);
+  });
+});
+
+document.getElementById('notif-form').addEventListener('submit', async () => {
+  const titre  = document.getElementById('notif-titre').value.trim();
+  const msg    = document.getElementById('notif-msg').value.trim();
+  const result = document.getElementById('notif-result');
+  const btn    = document.getElementById('btn-send-notif');
+  result.innerHTML = '';
+  if (!titre || !msg) {
+    result.innerHTML = '<div class="alert alert-error">Titre et message sont requis</div>';
+    return;
+  }
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Envoi…';
+  try {
+    const res  = await api('/api/notifications', {
+      method: 'POST',
+      body: JSON.stringify({ titre, message: msg }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur envoi');
+    if (data.envoyes === 0) {
+      result.innerHTML = `<div class="alert alert-info">Aucun appareil enregistré — les clients doivent installer leur pass Apple Wallet.</div>`;
+    } else {
+      result.innerHTML = `<div class="alert alert-success">✓ ${data.envoyes} notification${data.envoyes > 1 ? 's' : ''} envoyée${data.envoyes > 1 ? 's' : ''}${data.echecs ? ` (${data.echecs} échec${data.echecs > 1 ? 's' : ''})` : ''}</div>`;
+      document.getElementById('notif-titre').value = '';
+      document.getElementById('notif-msg').value   = '';
+      document.getElementById('cc-titre').textContent = '0 / 100';
+      document.getElementById('cc-msg').textContent   = '0 / 500';
+    }
+  } catch (e) {
+    result.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Envoyer la notification';
+  }
+});
+
+// ════════════════════════════════════════════════
+// MODAL: DELETE CLIENT (RGPD)
+// ════════════════════════════════════════════════
+function openDeleteModal(id, nom) {
+  S.deleteTargetId  = id;
+  S.deleteTargetNom = nom;
+  document.getElementById('modal-delete-body').innerHTML =
+    `Supprimer <strong>${esc(nom)}</strong> ? Cette action est <strong>irréversible</strong>. Toutes les données personnelles seront effacées (RGPD) — le pass devient invalide.`;
+  document.getElementById('modal-delete').classList.add('open');
+}
+
+document.getElementById('btn-cancel-delete').addEventListener('click', () => {
+  document.getElementById('modal-delete').classList.remove('open');
+});
+
+document.getElementById('modal-delete').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-delete'))
+    document.getElementById('modal-delete').classList.remove('open');
+});
+
+document.getElementById('btn-confirm-delete').addEventListener('click', async () => {
+  const id  = S.deleteTargetId;
+  const btn = document.getElementById('btn-confirm-delete');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await api(`/api/clients/${id}`, { method: 'DELETE' });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Erreur suppression'); }
+    document.getElementById('modal-delete').classList.remove('open');
+    if (S.clients) S.clients = S.clients.filter(c => c.id !== id);
+    renderClients(document.getElementById('search-clients').value);
+    if (S.stats) { S.stats.total_clients = Math.max(0, (S.stats.total_clients || 1) - 1); renderOverview(); }
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Supprimer définitivement';
+  }
+});
+
+// ════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════
+function timeAgo(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1)  return 'à l\'instant';
+  if (m < 60) return `il y a ${m} min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `il y a ${h}h`;
+  const d = Math.floor(h / 24);
+  if (d === 1) return 'hier';
+  if (d < 7)   return `il y a ${d} j`;
+  return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+}
+
+const COLORS = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#f97316'];
+function colorFrom(name) {
+  let h = 0;
+  for (const c of (name || '?')) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
+  return COLORS[h % COLORS.length];
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ════════════════════════════════════════════════
+// SERVICE WORKER
+// ════════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/dashboard/sw.js').catch(() => {});
+}
+
+// ════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════
+if (restoreSession()) showDashboard();
+</script>
+</body>
+</html>

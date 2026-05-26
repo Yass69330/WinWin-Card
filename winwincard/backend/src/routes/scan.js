@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../services/supabase');
-const { authScanner } = require('../middleware/auth');
+const { authScanner, authMarchand } = require('../middleware/auth');
 
 // POST /scan — scan d'un pass en caisse
 // Corps : { serial_number }
@@ -92,5 +92,19 @@ async function mettreAJourGoogleWallet(serialNumber, marchandId, storedValue, ma
   const { updateLoyaltyObjectPoints } = require('../services/google-pass');
   await updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue);
 }
+
+// GET /api/scans — historique des scans du marchand (100 derniers)
+router.get('/', authMarchand, async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 100, 200);
+  const { data, error } = await supabase
+    .from('scans')
+    .select('id, date_scan, stored_value_avant, stored_value_apres, clients(id, prenom)')
+    .eq('marchand_id', req.marchandId)
+    .order('date_scan', { ascending: false })
+    .limit(limit);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
 
 module.exports = router;
