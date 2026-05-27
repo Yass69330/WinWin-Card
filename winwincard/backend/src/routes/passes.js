@@ -37,7 +37,6 @@ router.get('/:serialNumber/apple', async (req, res) => {
 
     res.set({
       'Content-Type': 'application/vnd.apple.pkpass',
-      'Content-Disposition': `attachment; filename="winwincard.pkpass"`,
       'Cache-Control': 'no-store',
     });
     res.send(buffer);
