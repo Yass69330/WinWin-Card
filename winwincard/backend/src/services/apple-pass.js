@@ -19,11 +19,18 @@ function computeAuthToken(serialNumber) {
 // ── Nettoyage PEM ────────────────────────────────────────────
 // openssl pkcs12 ajoute des "Bag Attributes" avant le bloc PEM.
 // passkit-generator ne les accepte pas — on extrait uniquement le bloc PEM.
+// IMPORTANT : regex greedy sur le contenu interne pour gérer les blocs
+// RSA multi-lignes sans risque de coupure prématurée.
 function cleanPem(buf) {
   const str = buf.toString('utf8');
-  const match = str.match(/(-----BEGIN [\w ]+-----[\s\S]+?-----END [\w ]+-----)/);
-  if (!match) throw new Error('Fichier PEM invalide — bloc BEGIN/END introuvable');
-  return Buffer.from(match[1] + '\n');
+  // Greedy sur [\s\S]+ pour capturer tout le contenu jusqu'au DERNIER END possible.
+  // On prend ensuite le premier match via le tableau de résultats globaux.
+  const matches = [...str.matchAll(/(-----BEGIN [\w ]+-----[\s\S]+?-----END [\w ]+-----)/g)];
+  if (!matches.length) throw new Error('Fichier PEM invalide — bloc BEGIN/END introuvable');
+  // On prend le PREMIER bloc (le cert/key principal, pas les intermédiaires)
+  const block = matches[0][1];
+  // S'assurer que les sauts de ligne internes sont bien des \n (pas \r\n)
+  return Buffer.from(block.replace(/\r\n/g, '\n').replace(/\r/g, '\n') + '\n');
 }
 
 // ── Chargement certificats ───────────────────────────────────
@@ -214,13 +221,15 @@ async function generateApplePass({ client, marchand, serialNumber }) {
     fs.writeFileSync(path.join(modelDir, 'strip@2x.png'), strip2Buf);
 
     // On passe tempBase (sans .pass) — passkit-generator cherche tempBase + '.pass'
-    // signerKeyPassphrase est requis si la clé privée a été exportée chiffrée depuis pkcs12.
+    // Les certs sont passés en STRING (pas Buffer) : certaines versions de passkit-generator
+    // v3 ne gèrent pas correctement les Buffer pour les champs PEM et signent silencieusement
+    // avec un résultat invalide.
     const pass = await PKPass.from({
       model: tempBase,
       certificates: {
-        wwdr:       certs.wwdr,
-        signerCert: certs.signerCert,
-        signerKey:  certs.signerKey,
+        wwdr:       certs.wwdr.toString('utf8'),
+        signerCert: certs.signerCert.toString('utf8'),
+        signerKey:  certs.signerKey.toString('utf8'),
         ...(process.env.APPLE_PASS_PHRASE ? { signerKeyPassphrase: process.env.APPLE_PASS_PHRASE } : {}),
       },
     });

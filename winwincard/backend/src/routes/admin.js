@@ -168,40 +168,71 @@ router.get('/stats', authAdmin, async (req, res) => {
 // Inspecte les certs chargés en mémoire sans exposer les clés privées.
 router.get('/debug/certs', authAdmin, (req, res) => {
   const crypto = require('crypto');
-  const { loadCerts } = require('../services/apple-pass');
+  const fs     = require('fs');
+  const path   = require('path');
+
+  function loadRaw(b64Key, fileKey, defaultPath) {
+    if (process.env[b64Key]) return { buf: Buffer.from(process.env[b64Key], 'base64'), src: 'base64' };
+    const p = process.env[fileKey] || defaultPath;
+    return { buf: fs.readFileSync(path.resolve(p)), src: p };
+  }
+
+  function extractPemInfo(raw) {
+    const str = raw.toString('utf8');
+    const hasBagAttributes = str.includes('Bag Attributes');
+    const matches = [...str.matchAll(/(-----BEGIN [\w ]+-----[\s\S]+?-----END [\w ]+-----)/g)];
+    return {
+      rawLength:         raw.length,
+      hasBagAttributes,
+      pemBlocksFound:    matches.length,
+      pemTypes:          matches.map(m => m[1].match(/-----BEGIN ([\w ]+)-----/)?.[1] ?? '?'),
+      firstBlockLength:  matches[0]?.[1].length ?? 0,
+      firstLine:         matches[0]?.[1].split('\n')[0] ?? '(aucun)',
+      sha256:            crypto.createHash('sha256').update(raw).digest('hex').slice(0, 16) + '…',
+    };
+  }
 
   try {
+    const rawSigner = loadRaw('APPLE_SIGNER_CERT_B64', 'APPLE_SIGNER_CERT', './certs/signerCert.pem');
+    const rawWwdr   = loadRaw('APPLE_WWDR_CERT_B64',   'APPLE_WWDR_CERT',   './certs/wwdr.pem');
+    const rawKey    = loadRaw('APPLE_SIGNER_KEY_B64',  'APPLE_SIGNER_KEY',  './certs/signerKey.pem');
+
+    const { loadCerts } = require('../services/apple-pass');
     const certs = loadCerts();
 
-    // crypto.X509Certificate disponible depuis Node 18
     const signerX509 = new crypto.X509Certificate(certs.signerCert);
     const wwdrX509   = new crypto.X509Certificate(certs.wwdr);
+    const now        = new Date();
 
-    const now = new Date();
+    // Vérification chaîne : issuer du signerCert doit correspondre au subject du WWDR
+    const chainValid = signerX509.issuer === wwdrX509.subject;
 
     res.json({
       env: {
         APPLE_PASS_TYPE_IDENTIFIER: process.env.APPLE_PASS_TYPE_IDENTIFIER || '(non défini)',
         APPLE_TEAM_ID:              process.env.APPLE_TEAM_ID              || '(non défini)',
         APPLE_PASS_PHRASE:          process.env.APPLE_PASS_PHRASE ? '(défini)' : '(manquant)',
-        source_signer: process.env.APPLE_SIGNER_CERT_B64 ? 'base64 env var' : (process.env.APPLE_SIGNER_CERT || './certs/signerCert.pem'),
-        source_wwdr:   process.env.APPLE_WWDR_CERT_B64   ? 'base64 env var' : (process.env.APPLE_WWDR_CERT   || './certs/wwdr.pem'),
-        source_key:    process.env.APPLE_SIGNER_KEY_B64  ? 'base64 env var' : (process.env.APPLE_SIGNER_KEY  || './certs/signerKey.pem'),
+        source_signer: rawSigner.src,
+        source_wwdr:   rawWwdr.src,
+        source_key:    rawKey.src,
       },
+      chainValid,
       signerCert: {
         subject:   signerX509.subject,
         issuer:    signerX509.issuer,
         validFrom: signerX509.validFrom,
         validTo:   signerX509.validTo,
         expired:   now > new Date(signerX509.validTo),
-        size:      certs.signerCert.length,
+        cleanedSize: certs.signerCert.length,
+        raw:       extractPemInfo(rawSigner.buf),
       },
       signerKey: {
-        size:      certs.signerKey.length,
-        hasBlock:  certs.signerKey.toString().includes('PRIVATE KEY'),
-        encrypted: certs.signerKey.toString().includes('ENCRYPTED PRIVATE KEY') ||
-                   certs.signerKey.toString().includes('Proc-Type: 4,ENCRYPTED'),
+        cleanedSize:        certs.signerKey.length,
+        hasBlock:           certs.signerKey.toString().includes('PRIVATE KEY'),
+        encrypted:          certs.signerKey.toString().includes('ENCRYPTED PRIVATE KEY') ||
+                            certs.signerKey.toString().includes('Proc-Type: 4,ENCRYPTED'),
         passphraseProvided: !!process.env.APPLE_PASS_PHRASE,
+        raw:                extractPemInfo(rawKey.buf),
       },
       wwdr: {
         subject:   wwdrX509.subject,
@@ -209,11 +240,12 @@ router.get('/debug/certs', authAdmin, (req, res) => {
         validFrom: wwdrX509.validFrom,
         validTo:   wwdrX509.validTo,
         expired:   now > new Date(wwdrX509.validTo),
-        size:      certs.wwdr.length,
+        cleanedSize: certs.wwdr.length,
+        raw:       extractPemInfo(rawWwdr.buf),
       },
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message, stack: err.stack?.split('\n').slice(0, 5) });
   }
 });
 
