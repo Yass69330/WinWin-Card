@@ -221,4 +221,4 @@ async function generateApplePass({ client, marchand, serialNumber }) {
   }
 }
 
-module.exports = { generateApplePass, computeAuthToken, createSolidPng };
+module.exports = { generateApplePass, computeAuthToken, createSolidPng, loadCerts };

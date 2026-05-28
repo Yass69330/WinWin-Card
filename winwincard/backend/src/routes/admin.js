@@ -164,4 +164,54 @@ router.get('/stats', authAdmin, async (req, res) => {
   res.json({ marchands_actifs: marchandsActifs, total_clients: totalClients, total_scans: totalScans });
 });
 
+// GET /api/admin/debug/certs — diagnostic certificats Apple Wallet (admin requis)
+// Inspecte les certs chargés en mémoire sans exposer les clés privées.
+router.get('/debug/certs', authAdmin, (req, res) => {
+  const crypto = require('crypto');
+  const { loadCerts } = require('../services/apple-pass');
+
+  try {
+    const certs = loadCerts();
+
+    // crypto.X509Certificate disponible depuis Node 18
+    const signerX509 = new crypto.X509Certificate(certs.signerCert);
+    const wwdrX509   = new crypto.X509Certificate(certs.wwdr);
+
+    const now = new Date();
+
+    res.json({
+      env: {
+        APPLE_PASS_TYPE_IDENTIFIER: process.env.APPLE_PASS_TYPE_IDENTIFIER || '(non défini)',
+        APPLE_TEAM_ID:              process.env.APPLE_TEAM_ID              || '(non défini)',
+        APPLE_PASS_PHRASE:          process.env.APPLE_PASS_PHRASE ? '(défini)' : '(manquant)',
+        source_signer: process.env.APPLE_SIGNER_CERT_B64 ? 'base64 env var' : (process.env.APPLE_SIGNER_CERT || './certs/signerCert.pem'),
+        source_wwdr:   process.env.APPLE_WWDR_CERT_B64   ? 'base64 env var' : (process.env.APPLE_WWDR_CERT   || './certs/wwdr.pem'),
+        source_key:    process.env.APPLE_SIGNER_KEY_B64  ? 'base64 env var' : (process.env.APPLE_SIGNER_KEY  || './certs/signerKey.pem'),
+      },
+      signerCert: {
+        subject:   signerX509.subject,
+        issuer:    signerX509.issuer,
+        validFrom: signerX509.validFrom,
+        validTo:   signerX509.validTo,
+        expired:   now > new Date(signerX509.validTo),
+        size:      certs.signerCert.length,
+      },
+      signerKey: {
+        size:     certs.signerKey.length,
+        hasBlock: certs.signerKey.toString().includes('PRIVATE KEY'),
+      },
+      wwdr: {
+        subject:   wwdrX509.subject,
+        issuer:    wwdrX509.issuer,
+        validFrom: wwdrX509.validFrom,
+        validTo:   wwdrX509.validTo,
+        expired:   now > new Date(wwdrX509.validTo),
+        size:      certs.wwdr.length,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
