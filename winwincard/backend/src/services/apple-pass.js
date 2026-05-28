@@ -224,16 +224,59 @@ async function generateApplePass({ client, marchand, serialNumber }) {
     // Les certs sont passés en STRING (pas Buffer) : certaines versions de passkit-generator
     // v3 ne gèrent pas correctement les Buffer pour les champs PEM et signent silencieusement
     // avec un résultat invalide.
-    const pass = await PKPass.from({
-      model: tempBase,
-      certificates: {
-        wwdr:       certs.wwdr.toString('utf8'),
-        signerCert: certs.signerCert.toString('utf8'),
-        signerKey:  certs.signerKey.toString('utf8'),
-        ...(process.env.APPLE_PASS_PHRASE ? { signerKeyPassphrase: process.env.APPLE_PASS_PHRASE } : {}),
-      },
+    const wwdrStr       = certs.wwdr.toString('utf8');
+    const signerCertStr = certs.signerCert.toString('utf8');
+    const signerKeyStr  = certs.signerKey.toString('utf8');
+
+    // Log de diagnostic — vérifie que les strings PEM sont intacts après cleanPem
+    console.log('[apple-pass] PEM diagnostic', {
+      wwdr_start:       wwdrStr.slice(0, 27),
+      wwdr_end:         wwdrStr.slice(-27).trim(),
+      wwdr_lines:       wwdrStr.split('\n').length,
+      signer_start:     signerCertStr.slice(0, 27),
+      signer_end:       signerCertStr.slice(-27).trim(),
+      signer_lines:     signerCertStr.split('\n').length,
+      key_start:        signerKeyStr.slice(0, 27),
+      key_end:          signerKeyStr.slice(-27).trim(),
+      key_lines:        signerKeyStr.split('\n').length,
+      passphrase:       process.env.APPLE_PASS_PHRASE ? '(défini)' : '(absent)',
     });
-    return pass.getAsBuffer();
+
+    let pass;
+    try {
+      pass = await PKPass.from({
+        model: tempBase,
+        certificates: {
+          wwdr:       wwdrStr,
+          signerCert: signerCertStr,
+          signerKey:  signerKeyStr,
+          ...(process.env.APPLE_PASS_PHRASE ? { signerKeyPassphrase: process.env.APPLE_PASS_PHRASE } : {}),
+        },
+      });
+    } catch (pkpassErr) {
+      console.error('[apple-pass] ERREUR PKPass.from():', {
+        message: pkpassErr.message,
+        code:    pkpassErr.code,
+        cause:   pkpassErr.cause?.message,
+        stack:   pkpassErr.stack?.split('\n').slice(0, 8).join(' | '),
+      });
+      throw pkpassErr;
+    }
+
+    let buffer;
+    try {
+      buffer = pass.getAsBuffer();
+    } catch (bufErr) {
+      console.error('[apple-pass] ERREUR getAsBuffer():', {
+        message: bufErr.message,
+        stack:   bufErr.stack?.split('\n').slice(0, 8).join(' | '),
+      });
+      throw bufErr;
+    }
+
+    const magic = buffer.slice(0, 4).toString('hex');
+    console.log('[apple-pass] Pass généré OK', { size: buffer.length, magic });
+    return buffer;
   } finally {
     fs.rmSync(modelDir, { recursive: true, force: true });
   }
