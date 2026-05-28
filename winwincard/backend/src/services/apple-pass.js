@@ -214,7 +214,16 @@ async function generateApplePass({ client, marchand, serialNumber }) {
     fs.writeFileSync(path.join(modelDir, 'strip@2x.png'), strip2Buf);
 
     // On passe tempBase (sans .pass) — passkit-generator cherche tempBase + '.pass'
-    const pass = await PKPass.from({ model: tempBase, certificates: certs });
+    // signerKeyPassphrase est requis si la clé privée a été exportée chiffrée depuis pkcs12.
+    const pass = await PKPass.from({
+      model: tempBase,
+      certificates: {
+        wwdr:       certs.wwdr,
+        signerCert: certs.signerCert,
+        signerKey:  certs.signerKey,
+        ...(process.env.APPLE_PASS_PHRASE ? { signerKeyPassphrase: process.env.APPLE_PASS_PHRASE } : {}),
+      },
+    });
     return pass.getAsBuffer();
   } finally {
     fs.rmSync(modelDir, { recursive: true, force: true });

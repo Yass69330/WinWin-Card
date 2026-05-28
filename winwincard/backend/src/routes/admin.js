@@ -197,8 +197,11 @@ router.get('/debug/certs', authAdmin, (req, res) => {
         size:      certs.signerCert.length,
       },
       signerKey: {
-        size:     certs.signerKey.length,
-        hasBlock: certs.signerKey.toString().includes('PRIVATE KEY'),
+        size:      certs.signerKey.length,
+        hasBlock:  certs.signerKey.toString().includes('PRIVATE KEY'),
+        encrypted: certs.signerKey.toString().includes('ENCRYPTED PRIVATE KEY') ||
+                   certs.signerKey.toString().includes('Proc-Type: 4,ENCRYPTED'),
+        passphraseProvided: !!process.env.APPLE_PASS_PHRASE,
       },
       wwdr: {
         subject:   wwdrX509.subject,
