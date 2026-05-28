@@ -139,6 +139,8 @@ router.get('/v1/passes/:passTypeId/:serialNumber', async (req, res) => {
 
     res.removeHeader('Cross-Origin-Resource-Policy');
     res.removeHeader('Cross-Origin-Embedder-Policy');
+    res.removeHeader('Cross-Origin-Opener-Policy');
+    res.removeHeader('X-Download-Options');
 
     res.setHeader('Content-Type', 'application/vnd.apple.pkpass');
     res.setHeader('Content-Length', pkpassBuffer.length);

@@ -41,6 +41,8 @@ router.get('/:serialNumber/apple', async (req, res) => {
     // empêchent iOS de passer le fichier au Wallet. On les retire pour ce seul endpoint.
     res.removeHeader('Cross-Origin-Resource-Policy');
     res.removeHeader('Cross-Origin-Embedder-Policy');
+    res.removeHeader('Cross-Origin-Opener-Policy');
+    res.removeHeader('X-Download-Options');
 
     // res.end() au lieu de res.send() pour éviter toute transformation Express
     // sur le Content-Type ou l'encodage du Buffer binaire.
