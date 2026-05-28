@@ -197,15 +197,15 @@ async function signManifest(manifestBuf, certs, tempDir) {
   fs.writeFileSync(wwdrPath,       certs.wwdr);
   fs.writeFileSync(manifestPath,   manifestBuf);
 
+  // Apple Wallet exige une signature CMS détachée (sans -nodetach),
+  // avec attributs signés standards (sans -noattr), et SHA256 depuis iOS 16+.
   const args = [
     'smime', '-sign',
     '-binary',
-    '-noattr',
-    '-nodetach',
     '-signer', signerCertPath,
     '-inkey',  signerKeyPath,
     '-certfile', wwdrPath,
-    '-md', 'sha1',
+    '-md', 'sha256',
     '-in', manifestPath,
     '-out', signaturePath,
     '-outform', 'DER',
