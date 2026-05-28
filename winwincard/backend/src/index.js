@@ -84,7 +84,7 @@ app.use('/api/admin', adminRoutes);
 
 // ── Santé ────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), node: process.version });
 });
 
 // ── Erreurs ──────────────────────────────────────────────────
