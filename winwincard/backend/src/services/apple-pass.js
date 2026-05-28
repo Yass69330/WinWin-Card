@@ -1,4 +1,6 @@
-const { PKPass } = require('passkit-generator');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+const execFileAsync = promisify(execFile);
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -17,19 +19,11 @@ function computeAuthToken(serialNumber) {
 }
 
 // ── Nettoyage PEM ────────────────────────────────────────────
-// openssl pkcs12 ajoute des "Bag Attributes" avant le bloc PEM.
-// passkit-generator ne les accepte pas — on extrait uniquement le bloc PEM.
-// IMPORTANT : regex greedy sur le contenu interne pour gérer les blocs
-// RSA multi-lignes sans risque de coupure prématurée.
 function cleanPem(buf) {
   const str = buf.toString('utf8');
-  // Greedy sur [\s\S]+ pour capturer tout le contenu jusqu'au DERNIER END possible.
-  // On prend ensuite le premier match via le tableau de résultats globaux.
   const matches = [...str.matchAll(/(-----BEGIN [\w ]+-----[\s\S]+?-----END [\w ]+-----)/g)];
   if (!matches.length) throw new Error('Fichier PEM invalide — bloc BEGIN/END introuvable');
-  // On prend le PREMIER bloc (le cert/key principal, pas les intermédiaires)
   const block = matches[0][1];
-  // S'assurer que les sauts de ligne internes sont bien des \n (pas \r\n)
   return Buffer.from(block.replace(/\r\n/g, '\n').replace(/\r/g, '\n') + '\n');
 }
 
@@ -109,15 +103,128 @@ function createSolidPng(width, height, r, g, b) {
   ]);
 }
 
+// ── ZIP STORE builder (pure Node.js) ────────────────────────
+// Apple Wallet requires STORE (no compression) for all files.
+function createZip(files) {
+  // files: Array<{ name: string, data: Buffer }>
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    table[i] = c;
+  }
+  function crc32(buf) {
+    let crc = 0xFFFFFFFF;
+    for (const byte of buf) crc = table[(crc ^ byte) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  const localHeaders = [];
+  const centralHeaders = [];
+  let offset = 0;
+
+  for (const { name, data } of files) {
+    const nameBytes = Buffer.from(name, 'utf8');
+    const crc = crc32(data);
+    const size = data.length;
+
+    // Local file header
+    const local = Buffer.alloc(30 + nameBytes.length);
+    local.writeUInt32LE(0x04034b50, 0);  // signature
+    local.writeUInt16LE(20, 4);           // version needed
+    local.writeUInt16LE(0, 6);            // flags
+    local.writeUInt16LE(0, 8);            // compression: STORE
+    local.writeUInt16LE(0, 10);           // mod time
+    local.writeUInt16LE(0, 12);           // mod date
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(size, 18);        // compressed size
+    local.writeUInt32LE(size, 22);        // uncompressed size
+    local.writeUInt16LE(nameBytes.length, 26);
+    local.writeUInt16LE(0, 28);           // extra field length
+    nameBytes.copy(local, 30);
+
+    localHeaders.push(Buffer.concat([local, data]));
+
+    // Central directory header
+    const central = Buffer.alloc(46 + nameBytes.length);
+    central.writeUInt32LE(0x02014b50, 0); // signature
+    central.writeUInt16LE(20, 4);          // version made by
+    central.writeUInt16LE(20, 6);          // version needed
+    central.writeUInt16LE(0, 8);           // flags
+    central.writeUInt16LE(0, 10);          // compression: STORE
+    central.writeUInt16LE(0, 12);          // mod time
+    central.writeUInt16LE(0, 14);          // mod date
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(size, 20);       // compressed size
+    central.writeUInt32LE(size, 24);       // uncompressed size
+    central.writeUInt16LE(nameBytes.length, 28);
+    central.writeUInt16LE(0, 30);          // extra field length
+    central.writeUInt16LE(0, 32);          // file comment length
+    central.writeUInt16LE(0, 34);          // disk number start
+    central.writeUInt16LE(0, 36);          // internal attributes
+    central.writeUInt32LE(0, 38);          // external attributes
+    central.writeUInt32LE(offset, 42);     // relative offset of local header
+    nameBytes.copy(central, 46);
+
+    centralHeaders.push(central);
+    offset += 30 + nameBytes.length + size;
+  }
+
+  const centralDir = Buffer.concat(centralHeaders);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);          // signature
+  eocd.writeUInt16LE(0, 4);                    // disk number
+  eocd.writeUInt16LE(0, 6);                    // disk with central dir
+  eocd.writeUInt16LE(files.length, 8);         // entries on disk
+  eocd.writeUInt16LE(files.length, 10);        // total entries
+  eocd.writeUInt32LE(centralDir.length, 12);   // central dir size
+  eocd.writeUInt32LE(offset, 16);              // central dir offset
+  eocd.writeUInt16LE(0, 20);                   // comment length
+
+  return Buffer.concat([...localHeaders, centralDir, eocd]);
+}
+
+// ── Signature PKCS#7 via OpenSSL natif ───────────────────────
+async function signManifest(manifestBuf, certs, tempDir) {
+  const signerCertPath = path.join(tempDir, 'signer.pem');
+  const signerKeyPath  = path.join(tempDir, 'key.pem');
+  const wwdrPath       = path.join(tempDir, 'wwdr.pem');
+  const manifestPath   = path.join(tempDir, 'manifest.json');
+  const signaturePath  = path.join(tempDir, 'signature');
+
+  fs.writeFileSync(signerCertPath, certs.signerCert);
+  fs.writeFileSync(signerKeyPath,  certs.signerKey);
+  fs.writeFileSync(wwdrPath,       certs.wwdr);
+  fs.writeFileSync(manifestPath,   manifestBuf);
+
+  const args = [
+    'smime', '-sign',
+    '-binary',
+    '-noattr',
+    '-nodetach',
+    '-signer', signerCertPath,
+    '-inkey',  signerKeyPath,
+    '-certfile', wwdrPath,
+    '-md', 'sha1',
+    '-in', manifestPath,
+    '-out', signaturePath,
+    '-outform', 'DER',
+  ];
+
+  if (process.env.APPLE_PASS_PHRASE) {
+    args.push('-passin', `pass:${process.env.APPLE_PASS_PHRASE}`);
+  }
+
+  await execFileAsync('openssl', args);
+  return fs.readFileSync(signaturePath);
+}
+
 // ── Helpers ──────────────────────────────────────────────────
 function hexToRgb(hex) {
   const h = (hex || '#1a1a2e').replace('#', '');
   return `rgb(${parseInt(h.slice(0,2),16)}, ${parseInt(h.slice(2,4),16)}, ${parseInt(h.slice(4,6),16)})`;
 }
 
-// Le pass devient doré à stored_value >= max_value - 1 :
-// à max_value le reset se déclenche au prochain scan, donc le client
-// ne verrait jamais l'état doré si on attendait max_value.
 function isPassDoré(client, marchand) {
   const threshold = Math.max((marchand.max_value || 1) - 1, 1);
   return client.stored_value > 0 && client.stored_value >= threshold;
@@ -183,8 +290,6 @@ function buildPassJson({ client, marchand, serialNumber }) {
 }
 
 // ── Point d'entrée principal ─────────────────────────────────
-// passkit-generator v3 exige un chemin de répertoire (string) pour model.
-// On crée un répertoire temporaire, on y écrit les fichiers, puis on nettoie.
 async function generateApplePass({ client, marchand, serialNumber }) {
   const certs = loadCerts();
   const passJson = buildPassJson({ client, marchand, serialNumber });
@@ -206,80 +311,47 @@ async function generateApplePass({ client, marchand, serialNumber }) {
     stripUrl          ? fetchImage(stripUrl).catch(() => stripPng)           : stripPng,
   ]);
 
-  // passkit-generator v3 ajoute automatiquement ".pass" au chemin fourni.
-  // On crée donc le répertoire AVEC l'extension .pass et on passe le chemin SANS.
-  const tempBase = path.join(os.tmpdir(), `winwincard-${Date.now()}`);
-  const modelDir = tempBase + '.pass';
-  fs.mkdirSync(modelDir, { recursive: true });
-  try {
-    fs.writeFileSync(path.join(modelDir, 'pass.json'),    JSON.stringify(passJson));
-    fs.writeFileSync(path.join(modelDir, 'icon.png'),     iconPng);
-    fs.writeFileSync(path.join(modelDir, 'icon@2x.png'),  icon2Png);
-    fs.writeFileSync(path.join(modelDir, 'logo.png'),     logoBuf);
-    fs.writeFileSync(path.join(modelDir, 'logo@2x.png'),  logo2Buf);
-    fs.writeFileSync(path.join(modelDir, 'strip.png'),    stripBuf);
-    fs.writeFileSync(path.join(modelDir, 'strip@2x.png'), strip2Buf);
+  const passJsonBuf = Buffer.from(JSON.stringify(passJson));
 
-    // On passe tempBase (sans .pass) — passkit-generator cherche tempBase + '.pass'
-    // Les certs sont passés en STRING (pas Buffer) : certaines versions de passkit-generator
-    // v3 ne gèrent pas correctement les Buffer pour les champs PEM et signent silencieusement
-    // avec un résultat invalide.
-    const wwdrStr       = certs.wwdr.toString('utf8');
-    const signerCertStr = certs.signerCert.toString('utf8');
-    const signerKeyStr  = certs.signerKey.toString('utf8');
+  // Fichiers du pass (hors manifest et signature)
+  const passFiles = [
+    { name: 'pass.json',    data: passJsonBuf },
+    { name: 'icon.png',     data: iconPng },
+    { name: 'icon@2x.png',  data: icon2Png },
+    { name: 'logo.png',     data: logoBuf },
+    { name: 'logo@2x.png',  data: logo2Buf },
+    { name: 'strip.png',    data: stripBuf },
+    { name: 'strip@2x.png', data: strip2Buf },
+  ];
 
-    // Log de diagnostic — vérifie que les strings PEM sont intacts après cleanPem
-    console.log('[apple-pass] PEM diagnostic', {
-      wwdr_start:       wwdrStr.slice(0, 27),
-      wwdr_end:         wwdrStr.slice(-27).trim(),
-      wwdr_lines:       wwdrStr.split('\n').length,
-      signer_start:     signerCertStr.slice(0, 27),
-      signer_end:       signerCertStr.slice(-27).trim(),
-      signer_lines:     signerCertStr.split('\n').length,
-      key_start:        signerKeyStr.slice(0, 27),
-      key_end:          signerKeyStr.slice(-27).trim(),
-      key_lines:        signerKeyStr.split('\n').length,
-      passphrase:       process.env.APPLE_PASS_PHRASE ? '(défini)' : '(absent)',
-    });
-
-    let pass;
-    try {
-      pass = await PKPass.from({
-        model: tempBase,
-        certificates: {
-          wwdr:       wwdrStr,
-          signerCert: signerCertStr,
-          signerKey:  signerKeyStr,
-          ...(process.env.APPLE_PASS_PHRASE ? { signerKeyPassphrase: process.env.APPLE_PASS_PHRASE } : {}),
-        },
-      });
-    } catch (pkpassErr) {
-      console.error('[apple-pass] ERREUR PKPass.from():', {
-        message: pkpassErr.message,
-        code:    pkpassErr.code,
-        cause:   pkpassErr.cause?.message,
-        stack:   pkpassErr.stack?.split('\n').slice(0, 8).join(' | '),
-      });
-      throw pkpassErr;
-    }
-
-    let buffer;
-    try {
-      buffer = pass.getAsBuffer();
-    } catch (bufErr) {
-      console.error('[apple-pass] ERREUR getAsBuffer():', {
-        message: bufErr.message,
-        stack:   bufErr.stack?.split('\n').slice(0, 8).join(' | '),
-      });
-      throw bufErr;
-    }
-
-    const magic = buffer.slice(0, 4).toString('hex');
-    console.log('[apple-pass] Pass généré OK', { size: buffer.length, magic });
-    return buffer;
-  } finally {
-    fs.rmSync(modelDir, { recursive: true, force: true });
+  // Manifest : SHA1 de chaque fichier
+  const manifest = {};
+  for (const { name, data } of passFiles) {
+    manifest[name] = crypto.createHash('sha1').update(data).digest('hex');
   }
+  const manifestBuf = Buffer.from(JSON.stringify(manifest));
+
+  // Signature via OpenSSL
+  const tempDir = path.join(os.tmpdir(), `winwincard-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  fs.mkdirSync(tempDir, { recursive: true });
+  let signatureBuf;
+  try {
+    signatureBuf = await signManifest(manifestBuf, certs, tempDir);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+
+  // Assemblage ZIP final
+  const allFiles = [
+    ...passFiles,
+    { name: 'manifest.json', data: manifestBuf },
+    { name: 'signature',     data: signatureBuf },
+  ];
+
+  const buffer = createZip(allFiles);
+  const magic = buffer.slice(0, 4).toString('hex');
+  console.log('[apple-pass] Pass généré OK (OpenSSL)', { size: buffer.length, magic, files: allFiles.map(f => f.name) });
+  return buffer;
 }
 
 module.exports = { generateApplePass, computeAuthToken, createSolidPng, loadCerts };
