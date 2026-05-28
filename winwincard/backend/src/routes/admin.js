@@ -218,13 +218,14 @@ router.get('/debug/certs', authAdmin, (req, res) => {
       },
       chainValid,
       signerCert: {
-        subject:   signerX509.subject,
-        issuer:    signerX509.issuer,
-        validFrom: signerX509.validFrom,
-        validTo:   signerX509.validTo,
-        expired:   now > new Date(signerX509.validTo),
-        cleanedSize: certs.signerCert.length,
-        raw:       extractPemInfo(rawSigner.buf),
+        subject:      signerX509.subject,
+        issuer:       signerX509.issuer,
+        validFrom:    signerX509.validFrom,
+        validTo:      signerX509.validTo,
+        expired:      now > new Date(signerX509.validTo),
+        fingerprint256: signerX509.fingerprint256,  // SHA256 du DER — comparaison canonique
+        cleanedSize:  certs.signerCert.length,
+        raw:          extractPemInfo(rawSigner.buf),
       },
       signerKey: {
         cleanedSize:        certs.signerKey.length,
@@ -235,13 +236,14 @@ router.get('/debug/certs', authAdmin, (req, res) => {
         raw:                extractPemInfo(rawKey.buf),
       },
       wwdr: {
-        subject:   wwdrX509.subject,
-        issuer:    wwdrX509.issuer,
-        validFrom: wwdrX509.validFrom,
-        validTo:   wwdrX509.validTo,
-        expired:   now > new Date(wwdrX509.validTo),
-        cleanedSize: certs.wwdr.length,
-        raw:       extractPemInfo(rawWwdr.buf),
+        subject:      wwdrX509.subject,
+        issuer:       wwdrX509.issuer,
+        validFrom:    wwdrX509.validFrom,
+        validTo:      wwdrX509.validTo,
+        expired:      now > new Date(wwdrX509.validTo),
+        fingerprint256: wwdrX509.fingerprint256,
+        cleanedSize:  certs.wwdr.length,
+        raw:          extractPemInfo(rawWwdr.buf),
       },
     });
   } catch (err) {
