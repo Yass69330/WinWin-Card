@@ -35,11 +35,20 @@ router.get('/:serialNumber/apple', async (req, res) => {
   try {
     const buffer = await generateApplePass({ client, marchand, serialNumber });
 
-    res.set({
-      'Content-Type': 'application/vnd.apple.pkpass',
-      'Cache-Control': 'no-store',
-    });
-    res.send(buffer);
+    // Helm 7 ajoute Cross-Origin-Resource-Policy: same-origin et
+    // Cross-Origin-Embedder-Policy: require-corp par défaut.
+    // PassKit (framework natif iOS) n'est pas une "origine web" — ces headers
+    // empêchent iOS de passer le fichier au Wallet. On les retire pour ce seul endpoint.
+    res.removeHeader('Cross-Origin-Resource-Policy');
+    res.removeHeader('Cross-Origin-Embedder-Policy');
+
+    // res.end() au lieu de res.send() pour éviter toute transformation Express
+    // sur le Content-Type ou l'encodage du Buffer binaire.
+    res.setHeader('Content-Type', 'application/vnd.apple.pkpass');
+    res.setHeader('Content-Length', buffer.length);
+    res.setHeader('Cache-Control', 'no-store');
+    res.statusCode = 200;
+    res.end(buffer);
   } catch (err) {
     console.error('[passes] Erreur génération Apple pass :', err.message);
     res.status(500).json({ error: 'Erreur génération du pass' });

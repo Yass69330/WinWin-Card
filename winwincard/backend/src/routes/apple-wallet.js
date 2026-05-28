@@ -137,11 +137,14 @@ router.get('/v1/passes/:passTypeId/:serialNumber', async (req, res) => {
   try {
     const pkpassBuffer = await generateApplePass({ client, marchand, serialNumber });
 
-    res.set({
-      'Content-Type': 'application/vnd.apple.pkpass',
-      'Last-Modified': new Date(pass.updated_at).toUTCString()
-    });
-    res.send(pkpassBuffer);
+    res.removeHeader('Cross-Origin-Resource-Policy');
+    res.removeHeader('Cross-Origin-Embedder-Policy');
+
+    res.setHeader('Content-Type', 'application/vnd.apple.pkpass');
+    res.setHeader('Content-Length', pkpassBuffer.length);
+    res.setHeader('Last-Modified', new Date(pass.updated_at).toUTCString());
+    res.statusCode = 200;
+    res.end(pkpassBuffer);
   } catch (err) {
     res.status(500).send();
   }
