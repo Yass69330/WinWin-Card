@@ -47,7 +47,7 @@ function objectId(serialNumber) {
 
 function googleLogoUrl(marchand) {
   // 660×660 px carré → cercle. Fallback : logo_url (peut être rogné)
-  return marchand.google_logo_url || marchand.logo_url || null;
+  return marchand.google_logo_url || marchand.logo_url || 'https://winwin-card-production.up.railway.app/logo.png';
 }
 
 function googleHeroUrl(marchand) {
