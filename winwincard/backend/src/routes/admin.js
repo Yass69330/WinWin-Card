@@ -251,4 +251,79 @@ router.get('/debug/certs', authAdmin, (req, res) => {
   }
 });
 
+// ── Google Wallet Admin ──────────────────────────────────────
+
+// GET /api/admin/google-wallet/diagnostic — état de toutes les LoyaltyClasses
+router.get('/google-wallet/diagnostic', authAdmin, async (req, res) => {
+  const gp = require('../services/google-pass');
+  if (!gp.isConfigured()) {
+    return res.json({
+      configured: false,
+      missing: [
+        !process.env.GOOGLE_SERVICE_ACCOUNT_JSON && 'GOOGLE_SERVICE_ACCOUNT_JSON',
+        !process.env.GOOGLE_WALLET_ISSUER_ID     && 'GOOGLE_WALLET_ISSUER_ID',
+      ].filter(Boolean),
+    });
+  }
+
+  const { data: marchands } = await supabase
+    .from('marchands').select('id, nom, slug, actif').order('created_at');
+
+  const classes = await Promise.all(
+    (marchands || []).map(async (m) => {
+      try {
+        const info = await gp.getClassInfo(m.id);
+        return { marchand_id: m.id, nom: m.nom, slug: m.slug, actif: m.actif, ...info };
+      } catch (e) {
+        return { marchand_id: m.id, nom: m.nom, slug: m.slug, actif: m.actif, exists: false, error: e.message };
+      }
+    })
+  );
+
+  res.json({
+    configured:      true,
+    issuer_id:       process.env.GOOGLE_WALLET_ISSUER_ID,
+    total:           classes.length,
+    missing_classes: classes.filter(c => !c.exists).length,
+    classes,
+  });
+});
+
+// POST /api/admin/google-wallet/class/:marchandId — créer/mettre à jour une LoyaltyClass
+router.post('/google-wallet/class/:marchandId', authAdmin, async (req, res) => {
+  const { isConfigured, createOrUpdateLoyaltyClass } = require('../services/google-pass');
+  if (!isConfigured()) return res.status(503).json({ error: 'Google Wallet non configuré' });
+
+  const { data: marchand } = await supabase.from('marchands').select('*').eq('id', req.params.marchandId).single();
+  if (!marchand) return res.status(404).json({ error: 'Marchand introuvable' });
+
+  try {
+    const result = await createOrUpdateLoyaltyClass(marchand);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/google-wallet/classes/sync — synchronise toutes les classes actives
+router.post('/google-wallet/classes/sync', authAdmin, async (req, res) => {
+  const { isConfigured, createOrUpdateLoyaltyClass } = require('../services/google-pass');
+  if (!isConfigured()) return res.status(503).json({ error: 'Google Wallet non configuré' });
+
+  const { data: marchands } = await supabase.from('marchands').select('*').eq('actif', true);
+  const results = [];
+
+  for (const m of marchands || []) {
+    try {
+      const r = await createOrUpdateLoyaltyClass(m);
+      results.push({ marchand_id: m.id, nom: m.nom, ...r });
+    } catch (e) {
+      results.push({ marchand_id: m.id, nom: m.nom, error: e.message });
+    }
+  }
+
+  const errors = results.filter(r => r.error).length;
+  res.json({ synced: results.length, errors, results });
+});
+
 module.exports = router;

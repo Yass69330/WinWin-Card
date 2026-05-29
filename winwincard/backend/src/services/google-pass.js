@@ -210,19 +210,48 @@ function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
 
 // Appelé à la création / mise à jour d'un marchand (admin)
 async function createOrUpdateLoyaltyClass(marchand) {
-  if (!isConfigured()) return;
+  if (!isConfigured()) return { action: 'skipped', reason: 'non configuré' };
 
-  const cId = classId(marchand.id);
+  const cId   = classId(marchand.id);
   const token = await getAccessToken();
-  const body = buildLoyaltyClass(cId, marchand);
+  const body  = buildLoyaltyClass(cId, marchand);
 
-  const { status } = await walletRequest('GET', `/loyaltyClass/${encodeURIComponent(cId)}`, null, token);
+  const { status: getStatus, data: existing } = await walletRequest(
+    'GET', `/loyaltyClass/${encodeURIComponent(cId)}`, null, token
+  );
 
-  if (status === 404) {
-    await walletRequest('POST', '/loyaltyClass', body, token);
-  } else if (status === 200) {
-    await walletRequest('PUT', `/loyaltyClass/${encodeURIComponent(cId)}`, body, token);
+  if (getStatus === 404) {
+    const { status, data } = await walletRequest('POST', '/loyaltyClass', body, token);
+    if (status !== 200 && status !== 201) {
+      throw new Error(`Création classe échouée (HTTP ${status}): ${data?.error?.message || JSON.stringify(data)}`);
+    }
+    return { action: 'created', classId: cId, reviewStatus: data?.reviewStatus };
+  } else if (getStatus === 200) {
+    // Préserve reviewStatus si la classe est déjà approuvée — la remettre à UNDER_REVIEW
+    // déclencherait une nouvelle revue Google.
+    if (existing?.reviewStatus === 'APPROVED') body.reviewStatus = 'APPROVED';
+    const { status, data } = await walletRequest('PUT', `/loyaltyClass/${encodeURIComponent(cId)}`, body, token);
+    if (status !== 200) {
+      throw new Error(`Mise à jour classe échouée (HTTP ${status}): ${data?.error?.message || JSON.stringify(data)}`);
+    }
+    return { action: 'updated', classId: cId, reviewStatus: data?.reviewStatus };
+  } else {
+    throw new Error(`Vérification classe échouée (HTTP ${getStatus}): ${existing?.error?.message || JSON.stringify(existing)}`);
   }
+}
+
+// Infos sur la LoyaltyClass d'un marchand — lecture seule, pour diagnostic admin
+async function getClassInfo(marchandId) {
+  const cId = classId(marchandId);
+  const token = await getAccessToken();
+  const { status, data } = await walletRequest('GET', `/loyaltyClass/${encodeURIComponent(cId)}`, null, token);
+  return {
+    classId:      cId,
+    httpStatus:   status,
+    exists:       status === 200,
+    reviewStatus: status === 200 ? (data?.reviewStatus ?? null) : null,
+    error:        status !== 200 ? (data?.error?.message || `HTTP ${status}`) : null,
+  };
 }
 
 // Génère l'URL "Ajouter à Google Wallet" — appelé à l'inscription client
@@ -234,6 +263,13 @@ async function generateGoogleWalletUrl({ client, marchand, serialNumber }) {
   const cId = classId(marchand.id);
   const oId = objectId(serialNumber);
   const token = await getAccessToken();
+
+  // Garantit que la LoyaltyClass existe — si le marchand a été créé avant que
+  // Google Wallet soit configuré, la classe peut être absente.
+  const { status: classStatus } = await walletRequest('GET', `/loyaltyClass/${encodeURIComponent(cId)}`, null, token);
+  if (classStatus === 404) {
+    await walletRequest('POST', '/loyaltyClass', buildLoyaltyClass(cId, marchand), token);
+  }
 
   // Créer l'objet loyalty si inexistant
   const { status } = await walletRequest('GET', `/loyaltyObject/${encodeURIComponent(oId)}`, null, token);
@@ -315,6 +351,7 @@ async function addMessageToLoyaltyObject(serialNumber, titre, message) {
 module.exports = {
   isConfigured,
   createOrUpdateLoyaltyClass,
+  getClassInfo,
   generateGoogleWalletUrl,
   updateLoyaltyObjectPoints,
   addMessageToLoyaltyObject,
