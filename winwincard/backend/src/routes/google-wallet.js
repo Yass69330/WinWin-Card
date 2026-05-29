@@ -16,7 +16,7 @@ router.get('/pass/:serialNumber', async (req, res) => {
 
   const [{ data: client }, { data: marchand }] = await Promise.all([
     supabase.from('clients').select('prenom, stored_value').eq('id', pass.client_id).single(),
-    supabase.from('marchands').select('id, nom, logo_url, couleur_fond, max_value').eq('id', pass.marchand_id).single()
+    supabase.from('marchands').select('id, nom, slug, logo_url, couleur_fond, max_value').eq('id', pass.marchand_id).single()
   ]);
 
   if (!client || !marchand) return res.status(404).json({ error: 'Données introuvables' });
