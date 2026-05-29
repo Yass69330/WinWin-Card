@@ -32,8 +32,9 @@ function issuerId() {
   return process.env.GOOGLE_WALLET_ISSUER_ID;
 }
 
-function classId(marchandId) {
-  return `${issuerId()}.merchant_${marchandId.replace(/-/g, '_')}`;
+function classId(marchand) {
+  // Slug : alphanumérique + underscores — seuls caractères acceptés par Google Wallet
+  return `${issuerId()}.${marchand.slug.replace(/-/g, '_')}`;
 }
 
 function objectId(serialNumber) {
@@ -212,7 +213,7 @@ function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
 async function createOrUpdateLoyaltyClass(marchand) {
   if (!isConfigured()) return { action: 'skipped', reason: 'non configuré' };
 
-  const cId   = classId(marchand.id);
+  const cId   = classId(marchand);
   const token = await getAccessToken();
   const body  = buildLoyaltyClass(cId, marchand);
 
@@ -241,8 +242,8 @@ async function createOrUpdateLoyaltyClass(marchand) {
 }
 
 // Infos sur la LoyaltyClass d'un marchand — lecture seule, pour diagnostic admin
-async function getClassInfo(marchandId) {
-  const cId = classId(marchandId);
+async function getClassInfo(marchand) {
+  const cId = classId(marchand);
   const token = await getAccessToken();
   const { status, data } = await walletRequest('GET', `/loyaltyClass/${encodeURIComponent(cId)}`, null, token);
   return {
@@ -260,7 +261,7 @@ async function generateGoogleWalletUrl({ client, marchand, serialNumber }) {
     throw new Error('Google Wallet non configuré — GOOGLE_SERVICE_ACCOUNT_JSON manquant');
   }
 
-  const cId = classId(marchand.id);
+  const cId = classId(marchand);
   const oId = objectId(serialNumber);
   const token = await getAccessToken();
 

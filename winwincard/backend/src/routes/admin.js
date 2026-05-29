@@ -272,7 +272,7 @@ router.get('/google-wallet/diagnostic', authAdmin, async (req, res) => {
   const classes = await Promise.all(
     (marchands || []).map(async (m) => {
       try {
-        const info = await gp.getClassInfo(m.id);
+        const info = await gp.getClassInfo(m);
         return { marchand_id: m.id, nom: m.nom, slug: m.slug, actif: m.actif, ...info };
       } catch (e) {
         return { marchand_id: m.id, nom: m.nom, slug: m.slug, actif: m.actif, exists: false, error: e.message };
