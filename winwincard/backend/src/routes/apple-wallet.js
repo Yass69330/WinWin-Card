@@ -60,12 +60,13 @@ router.post('/v1/devices/:deviceId/registrations/:passTypeId/:serialNumber', asy
 router.delete('/v1/devices/:deviceId/registrations/:passTypeId/:serialNumber', async (req, res) => {
   const { deviceId, serialNumber } = req.params;
 
-  await supabase
+  const { error } = await supabase
     .from('device_tokens')
     .delete()
     .eq('device_id', deviceId)
     .eq('serial_number', serialNumber);
 
+  if (error) return res.status(500).send();
   res.status(200).send();
 });
 

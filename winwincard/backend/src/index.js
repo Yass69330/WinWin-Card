@@ -8,6 +8,7 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 
 const app = express();
+app.set('trust proxy', 1); // Railway / reverse proxy — requis pour rate limiting par IP réelle
 
 // ── Sécurité & middlewares ───────────────────────────────────
 app.use(helmet({
@@ -38,6 +39,13 @@ app.use(rateLimit({
 const limiterInscription = rateLimit({
   windowMs: 60 * 60 * 1000, // 1h
   max: 20,
+  message: { error: 'Trop de tentatives, réessaie dans une heure' }
+});
+
+// Rate limiting strict sur le login admin (anti brute-force)
+const limiterAdminLogin = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1h
+  max: 10,
   message: { error: 'Trop de tentatives, réessaie dans une heure' }
 });
 
@@ -80,6 +88,7 @@ app.use('/api/scan', scanRoutes);
 app.use('/api/merchants', merchantsRoutes);
 app.use('/api/google-wallet', googleWalletRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/admin/login', limiterAdminLogin);
 app.use('/api/admin', adminRoutes);
 
 // ── Santé ────────────────────────────────────────────────────
