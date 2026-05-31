@@ -52,6 +52,12 @@ router.post('/', authMarchand, async (req, res) => {
       : Promise.resolve([]),
   ]);
 
+  // Log des échecs pour diagnostic Railway
+  appleResults.filter(r => r.status === 'rejected')
+    .forEach(r => console.error('[notifications] APNs échec:', r.reason?.message));
+  googleResults.filter(r => r.status === 'rejected')
+    .forEach(r => console.error('[notifications] Google échec:', r.reason?.message));
+
   res.json({
     apple: {
       envoyes: appleResults.filter(r => r.status === 'fulfilled').length,
