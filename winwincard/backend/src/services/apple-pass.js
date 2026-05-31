@@ -274,6 +274,14 @@ function buildPassJson({ client, marchand, serialNumber }) {
       }] : [],
       backFields: [
         {
+          // Toujours présent même vide — iOS compare old/new value et déclenche
+          // une notification visible grâce à changeMessage quand la valeur change.
+          key:           'notification_txt',
+          label:         marchand.notification_titre || '',
+          value:         marchand.notification_message || '',
+          changeMessage: '%@',
+        },
+        {
           key: 'programme',
           label: 'Comment ça marche ?',
           value: `Présentez votre pass à chaque visite.\nAprès ${displayMax} passages, votre récompense est automatiquement débloquée.`,
