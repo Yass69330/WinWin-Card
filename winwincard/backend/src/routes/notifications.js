@@ -2,7 +2,7 @@ const express  = require('express');
 const router   = express.Router();
 const supabase = require('../services/supabase');
 const { authMarchand } = require('../middleware/auth');
-const { sendPushNotification, isApnsConfigured }              = require('../services/apns');
+const { sendPushUpdate, isApnsConfigured }                    = require('../services/apns');
 const { addMessageToLoyaltyObject, isConfigured: isGoogleConfigured } = require('../services/google-pass');
 
 // POST /api/notifications — envoi push depuis le dashboard marchand
@@ -33,13 +33,24 @@ router.post('/', authMarchand, async (req, res) => {
 
   if (errT) return res.status(500).json({ error: errT.message });
 
-  // Envoi simultané sur les deux plateformes
+  // Apple Wallet : stocker la notification dans le marchand, toucher les passes,
+  // puis push silencieux. iOS re-télécharge le pass, détecte le champ modifié
+  // et génère automatiquement une notification visible dans le centre de notifications.
+  if (isApnsConfigured() && (tokens || []).length > 0) {
+    await Promise.all([
+      supabase.from('marchands')
+        .update({ notification_titre: titre, notification_message: message })
+        .eq('id', req.marchandId),
+      supabase.from('passes')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('marchand_id', req.marchandId),
+    ]);
+  }
+
   const [appleResults, googleResults] = await Promise.all([
     isApnsConfigured()
       ? Promise.allSettled(
-          (tokens || []).map(({ push_token }) =>
-            sendPushNotification(push_token, { titre, message })
-          )
+          (tokens || []).map(({ push_token }) => sendPushUpdate(push_token))
         )
       : Promise.resolve([]),
 

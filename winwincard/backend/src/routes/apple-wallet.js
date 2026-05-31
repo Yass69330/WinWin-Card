@@ -127,7 +127,7 @@ router.get('/v1/passes/:passTypeId/:serialNumber', async (req, res) => {
 
   const { data: marchand } = await supabase
     .from('marchands')
-    .select('nom, couleur_fond, couleur_texte, couleur_label, logo_url, image_strip_url, images_tiers, max_value, display_max_value')
+    .select('nom, couleur_fond, couleur_texte, couleur_label, logo_url, image_strip_url, images_tiers, max_value, display_max_value, notification_titre, notification_message')
     .eq('id', pass.marchand_id)
     .single();
 

@@ -267,7 +267,11 @@ function buildPassJson({ client, marchand, serialNumber }) {
         label: 'CLIENT',
         value: client.prenom,
       }],
-      auxiliaryFields: [],
+      auxiliaryFields: marchand.notification_titre ? [{
+        key:   'notification',
+        label: marchand.notification_titre,
+        value: marchand.notification_message || '',
+      }] : [],
       backFields: [
         {
           key: 'programme',
