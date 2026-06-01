@@ -16,10 +16,7 @@ app.use(helmet({
 }));
 app.use(cors({
   origin: [
-    'https://winwincard.fr',
-    'https://scan.winwincard.fr',
-    'https://dashboard.winwincard.fr',
-    'https://admin.winwincard.fr',
+    'https://app.winwin-card.com',
     ...(process.env.NODE_ENV === 'development' ? ['http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003'] : [])
   ],
   credentials: true
