@@ -325,10 +325,11 @@ async function generateApplePass({ client, marchand, serialNumber }) {
   const passJsonBuf = Buffer.from(JSON.stringify(passJson));
 
   // Fichiers du pass (hors manifest et signature)
+  // icon.png = icône notification iOS — utilise le logo marchand si disponible, sinon couleur unie
   const passFiles = [
     { name: 'pass.json',    data: passJsonBuf },
-    { name: 'icon.png',     data: iconPng },
-    { name: 'icon@2x.png',  data: icon2Png },
+    { name: 'icon.png',     data: logoBuf },
+    { name: 'icon@2x.png',  data: logo2Buf },
     { name: 'logo.png',     data: logoBuf },
     { name: 'logo@2x.png',  data: logo2Buf },
     { name: 'strip.png',    data: stripBuf },
