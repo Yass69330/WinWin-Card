@@ -99,10 +99,9 @@ async function notifierMiseAJourPass(serialNumber) {
 
 async function mettreAJourGoogleWallet(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, scanMessage) {
   const { updateLoyaltyObjectPoints, addMessageToLoyaltyObject } = require('../services/google-pass');
-  await Promise.all([
-    updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue, displayMaxValue),
-    addMessageToLoyaltyObject(serialNumber, null, scanMessage),
-  ]);
+  await updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue, displayMaxValue);
+  addMessageToLoyaltyObject(serialNumber, null, scanMessage)
+    .catch(e => console.error('[scan] Google addMessage:', e.message));
 }
 
 // GET /api/scans — historique des scans du marchand (100 derniers)
