@@ -57,7 +57,7 @@ router.post('/', authMarchand, async (req, res) => {
     isGoogleConfigured()
       ? Promise.allSettled(
           (passes || []).map(({ serial_number }) =>
-            addMessageToLoyaltyObject(serial_number, titre, message)
+            addMessageToLoyaltyObject(serial_number, null, message)
           )
         )
       : Promise.resolve([]),
