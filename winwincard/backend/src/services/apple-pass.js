@@ -249,7 +249,7 @@ function buildPassJson({ client, marchand, serialNumber }) {
     teamIdentifier: process.env.APPLE_TEAM_ID || 'LTW34ARCX2',
     webServiceURL: (process.env.API_BASE_URL || 'https://api.winwincard.fr') + '/',
     authenticationToken: computeAuthToken(serialNumber),
-    organizationName: 'WinWin Card',
+    organizationName: marchand.nom,
     description: `Carte de fidélité ${marchand.nom}`,
     backgroundColor: doré ? 'rgb(201, 168, 76)' : hexToRgb(marchand.couleur_fond),
     foregroundColor: doré ? 'rgb(25, 15, 0)'    : hexToRgb(marchand.couleur_texte || '#ffffff'),
@@ -307,8 +307,11 @@ async function generateApplePass({ client, marchand, serialNumber }) {
     ? [201, 168, 76]
     : hexToRgb(marchand.couleur_fond || '#1a1a2e').match(/\d+/g).map(Number);
 
-  const iconPng  = createSolidPng(29,  29,  rf, gf, bf);
-  const icon2Png = createSolidPng(58,  58,  rf, gf, bf);
+  // L'icône (notification + Wallet) utilise toujours la couleur du marchand,
+  // pas l'or du pass doré — garantit une couleur uniforme sur tous les appareils.
+  const [ri, gi, bi] = hexToRgb(marchand.couleur_fond || '#1a1a2e').match(/\d+/g).map(Number);
+  const iconPng  = createSolidPng(29,  29,  ri, gi, bi);
+  const icon2Png = createSolidPng(58,  58,  ri, gi, bi);
   const stripPng = createSolidPng(375, 123, rf, gf, bf);
 
   const stripUrl = selectStripImageUrl(marchand, client.stored_value);

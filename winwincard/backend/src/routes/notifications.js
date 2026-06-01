@@ -9,13 +9,13 @@ const { addMessageToLoyaltyObject, isConfigured: isGoogleConfigured } = require(
 // Corps : { titre, message }
 // Réponse : { apple: { envoyes, echecs, total, active }, google: { ... } }
 router.post('/', authMarchand, async (req, res) => {
-  const { titre, message } = req.body;
+  const { message } = req.body;
 
-  if (!titre || !message) {
-    return res.status(400).json({ error: 'titre et message sont requis' });
+  if (!message) {
+    return res.status(400).json({ error: 'message est requis' });
   }
-  if (titre.length > 100 || message.length > 500) {
-    return res.status(400).json({ error: 'titre max 100 chars, message max 500 chars' });
+  if (message.length > 500) {
+    return res.status(400).json({ error: 'message max 500 chars' });
   }
 
   // Récupérer tokens Apple et passes Google en parallèle
@@ -39,7 +39,7 @@ router.post('/', authMarchand, async (req, res) => {
   if (isApnsConfigured() && (tokens || []).length > 0) {
     await Promise.all([
       supabase.from('marchands')
-        .update({ notification_titre: titre, notification_message: message })
+        .update({ notification_titre: null, notification_message: message })
         .eq('id', req.marchandId),
       supabase.from('passes')
         .update({ updated_at: new Date().toISOString() })

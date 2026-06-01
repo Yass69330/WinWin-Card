@@ -409,11 +409,6 @@
       </div>
       <form class="notif-form" id="notif-form" onsubmit="return false">
         <div class="field">
-          <label for="notif-titre">Titre</label>
-          <input id="notif-titre" type="text" maxlength="100" placeholder="Ex : Offre spéciale ce week-end">
-          <div class="char-count" id="cc-titre">0 / 100</div>
-        </div>
-        <div class="field">
           <label for="notif-msg">Message</label>
           <textarea id="notif-msg" maxlength="500" placeholder="Ex : Venez profiter de -20% sur toute la carte jusqu'à dimanche !"></textarea>
           <div class="char-count" id="cc-msg">0 / 500</div>
@@ -758,9 +753,9 @@ document.getElementById('btn-refresh-scans').addEventListener('click', () => {
 // ════════════════════════════════════════════════
 // TAB: NOTIFICATIONS
 // ════════════════════════════════════════════════
-['notif-titre', 'notif-msg'].forEach(id => {
+['notif-msg'].forEach(id => {
   const el  = document.getElementById(id);
-  const cc  = document.getElementById(id === 'notif-titre' ? 'cc-titre' : 'cc-msg');
+  const cc  = document.getElementById('cc-msg');
   const max = parseInt(el.getAttribute('maxlength'));
   el.addEventListener('input', () => {
     const n = el.value.length;
@@ -770,20 +765,19 @@ document.getElementById('btn-refresh-scans').addEventListener('click', () => {
 });
 
 document.getElementById('notif-form').addEventListener('submit', async () => {
-  const titre  = document.getElementById('notif-titre').value.trim();
   const msg    = document.getElementById('notif-msg').value.trim();
   const result = document.getElementById('notif-result');
   const btn    = document.getElementById('btn-send-notif');
   result.innerHTML = '';
-  if (!titre || !msg) {
-    result.innerHTML = '<div class="alert alert-error">Titre et message sont requis</div>';
+  if (!msg) {
+    result.innerHTML = '<div class="alert alert-error">Le message est requis</div>';
     return;
   }
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Envoi…';
   try {
     const res  = await api('/api/notifications', {
       method: 'POST',
-      body: JSON.stringify({ titre, message: msg }),
+      body: JSON.stringify({ message: msg }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Erreur envoi');
@@ -810,10 +804,8 @@ document.getElementById('notif-form').addEventListener('submit', async () => {
       const cls = totalEnvoyes > 0 ? 'alert-success' : 'alert-info';
       result.innerHTML = `<div class="alert ${cls}">${lines.join('<br>')}</div>`;
       if (totalEnvoyes > 0) {
-        document.getElementById('notif-titre').value = '';
-        document.getElementById('notif-msg').value   = '';
-        document.getElementById('cc-titre').textContent = '0 / 100';
-        document.getElementById('cc-msg').textContent   = '0 / 500';
+        document.getElementById('notif-msg').value  = '';
+        document.getElementById('cc-msg').textContent = '0 / 500';
       }
     }
   } catch (e) {
