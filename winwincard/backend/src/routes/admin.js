@@ -326,4 +326,88 @@ router.post('/google-wallet/classes/sync', authAdmin, async (req, res) => {
   res.json({ synced: results.length, errors, results });
 });
 
+// ── Upload strip images par tier ────────────────────────────────
+
+const multer    = require('multer');
+const uploadMem = multer({
+  storage: multer.memoryStorage(),
+  limits:  { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      return cb(new Error('Fichier image requis (PNG, JPEG, WebP…)'));
+    }
+    cb(null, true);
+  },
+});
+
+// POST /api/admin/marchands/:id/assets — upload d'une strip image pour un tier exact
+router.post('/marchands/:id/assets', authAdmin, (req, res, next) => {
+  uploadMem.single('image')(req, res, err => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
+  const tier = parseInt(req.body.tier);
+  if (isNaN(tier) || tier < 0 || tier > 99) {
+    return res.status(400).json({ error: 'tier doit être un entier entre 0 et 99' });
+  }
+  if (!req.file) return res.status(400).json({ error: 'image requise' });
+
+  const { data: marchand, error: errM } = await supabase
+    .from('marchands').select('id, slug, images_tiers').eq('id', req.params.id).single();
+  if (errM || !marchand) return res.status(404).json({ error: 'Marchand introuvable' });
+
+  // Crée le bucket si inexistant (idempotent — échoue silencieusement si déjà présent)
+  await supabase.storage.createBucket('passes', { public: true }).catch(() => {});
+
+  const filePath = `marchands/${marchand.slug}/strip_tier_${tier}.png`;
+  const { error: upErr } = await supabase.storage
+    .from('passes')
+    .upload(filePath, req.file.buffer, { contentType: req.file.mimetype, upsert: true });
+  if (upErr) return res.status(500).json({ error: `Upload Storage: ${upErr.message}` });
+
+  const { data: { publicUrl } } = supabase.storage.from('passes').getPublicUrl(filePath);
+
+  // Upsert dans images_tiers — remplace l'entrée exacte si elle existe déjà
+  const tiers = Array.isArray(marchand.images_tiers) ? [...marchand.images_tiers] : [];
+  const idx   = tiers.findIndex(t => t.min === tier && t.max === tier);
+  const entry = { min: tier, max: tier, url: publicUrl };
+  if (idx >= 0) tiers[idx] = entry;
+  else tiers.push(entry);
+  tiers.sort((a, b) => a.min - b.min);
+
+  const { data: updated, error: errU } = await supabase
+    .from('marchands').update({ images_tiers: tiers }).eq('id', req.params.id)
+    .select('id, images_tiers').single();
+  if (errU) return res.status(500).json({ error: errU.message });
+
+  res.json({ tier, url: publicUrl, images_tiers: updated.images_tiers });
+});
+
+// DELETE /api/admin/marchands/:id/assets/:tier — supprime la strip image du tier exact
+router.delete('/marchands/:id/assets/:tier', authAdmin, async (req, res) => {
+  const tier = parseInt(req.params.tier);
+  if (isNaN(tier)) return res.status(400).json({ error: 'tier invalide' });
+
+  const { data: marchand, error: errM } = await supabase
+    .from('marchands').select('id, slug, images_tiers').eq('id', req.params.id).single();
+  if (errM || !marchand) return res.status(404).json({ error: 'Marchand introuvable' });
+
+  // Suppression fichier Storage — fire-and-forget (ne bloque pas si déjà absent)
+  supabase.storage.from('passes')
+    .remove([`marchands/${marchand.slug}/strip_tier_${tier}.png`])
+    .catch(() => {});
+
+  const tiers = Array.isArray(marchand.images_tiers)
+    ? marchand.images_tiers.filter(t => !(t.min === tier && t.max === tier))
+    : [];
+
+  const { data: updated, error: errU } = await supabase
+    .from('marchands').update({ images_tiers: tiers.length ? tiers : null })
+    .eq('id', req.params.id).select('id, images_tiers').single();
+  if (errU) return res.status(500).json({ error: errU.message });
+
+  res.json({ tier, images_tiers: updated.images_tiers });
+});
+
 module.exports = router;

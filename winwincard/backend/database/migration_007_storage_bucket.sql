@@ -1,0 +1,18 @@
+-- Migration 007 — Supabase Storage : bucket "passes"
+--
+-- À exécuter dans Supabase Dashboard → Storage → New bucket
+-- OU via SQL Editor si l'extension storage est disponible :
+--
+--   insert into storage.buckets (id, name, public)
+--   values ('passes', 'passes', true)
+--   on conflict (id) do nothing;
+--
+-- Le backend crée automatiquement le bucket via l'API Storage au premier upload
+-- (supabase.storage.createBucket('passes', { public: true })).
+-- Cette migration est fournie uniquement comme référence documentaire.
+--
+-- Structure des fichiers dans le bucket :
+--   passes/marchands/{slug}/strip_tier_{N}.png
+--
+-- Politique d'accès : public (lecture publique, écriture via service_role uniquement).
+-- Aucun changement de schéma SQL requis — images_tiers (jsonb) existe déjà sur marchands.
