@@ -273,6 +273,33 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .divider { height: 1px; background: var(--border); margin: 4px 0 12px; }
+
+    /* ═══ FICHE CLIENT ═══ */
+    .modal-sheet-client { padding:0; gap:0; max-height:88vh; overflow:hidden; }
+    .cs-header { display:flex; align-items:center; gap:12px; padding:14px 16px 12px; flex-shrink:0; border-bottom:1px solid var(--border); }
+    .cs-avatar-lg { width:48px; height:48px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:700; flex-shrink:0; color:#fff; }
+    .cs-name { font-size:17px; font-weight:700; }
+    .cs-since { font-size:12px; color:var(--muted); margin-top:2px; }
+    .cs-body { flex:1; overflow-y:auto; padding:14px 16px 8px; -webkit-overflow-scrolling:touch; display:flex; flex-direction:column; gap:12px; }
+    .cs-pts-box { background:var(--surface2); border-radius:12px; padding:14px; }
+    .cs-pts-row { display:flex; align-items:baseline; gap:6px; margin-bottom:10px; }
+    .cs-pts-val { font-size:38px; font-weight:800; line-height:1; }
+    .cs-pts-denom { font-size:16px; color:var(--muted); }
+    .cs-bar-wrap2 { height:6px; background:var(--border); border-radius:3px; margin-bottom:8px; overflow:hidden; }
+    .cs-bar2 { height:100%; background:var(--accent); border-radius:3px; transition:width .4s; }
+    .cs-dots2 { display:flex; gap:5px; flex-wrap:wrap; }
+    .cs-dot2 { width:22px; height:22px; border-radius:50%; background:var(--border); }
+    .cs-dot2.on { background:var(--accent); }
+    .cs-actions2 { display:flex; gap:8px; }
+    .cs-actions2 .btn { flex:1; }
+    .cs-section-lbl { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+    .cs-scan-row { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); }
+    .cs-scan-row:last-child { border-bottom:none; }
+    .cs-scan-icon { font-size:15px; width:26px; text-align:center; flex-shrink:0; }
+    .cs-scan-delta { font-size:14px; font-weight:600; display:block; }
+    .cs-scan-date { font-size:12px; color:var(--muted); display:block; }
+    .cs-no-scans { color:var(--muted); font-size:13px; text-align:center; padding:16px 0; }
+    .cs-footer { flex-shrink:0; padding:12px 16px; border-top:1px solid var(--border); padding-bottom:max(12px,env(safe-area-inset-bottom)); }
   </style>
 </head>
 <body>
@@ -467,6 +494,73 @@
   </div>
 </div>
 
+<!-- ── Sheet: Fiche client ── -->
+<div id="modal-client" class="modal-overlay">
+  <div class="modal-sheet modal-sheet-client">
+    <div class="modal-handle" style="margin:14px auto 0;flex-shrink:0"></div>
+    <div class="cs-header">
+      <div class="cs-avatar-lg" id="cs-avatar">?</div>
+      <div style="flex:1;min-width:0">
+        <div class="cs-name" id="cs-name">–</div>
+        <div class="cs-since" id="cs-since"></div>
+      </div>
+      <button class="btn-icon" id="cs-close">✕</button>
+    </div>
+    <div class="cs-body">
+      <div class="cs-pts-box">
+        <div class="cs-pts-row">
+          <span class="cs-pts-val" id="cs-pts">–</span>
+          <span class="cs-pts-denom" id="cs-pts-max">/ –</span>
+          <span id="cs-reward-badge" style="display:none;font-size:22px;margin-left:4px">🎉</span>
+        </div>
+        <div class="cs-bar-wrap2"><div class="cs-bar2" id="cs-prog-bar"></div></div>
+        <div class="cs-dots2" id="cs-prog-dots"></div>
+      </div>
+      <div class="cs-actions2">
+        <button class="btn btn-outline btn-sm" id="cs-btn-rename">✏️ Prénom</button>
+        <button class="btn btn-outline btn-sm" id="cs-btn-adjust">⚖️ Points</button>
+      </div>
+      <div>
+        <div class="cs-section-lbl" style="margin-bottom:8px">Scans récents</div>
+        <div id="cs-scans-list"></div>
+      </div>
+    </div>
+    <div class="cs-footer">
+      <button class="btn btn-danger btn-sm" id="cs-btn-delete" style="width:100%">🗑 Supprimer le client (RGPD)</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modal: Modifier le prénom ── -->
+<div id="modal-rename" class="modal-overlay">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Modifier le prénom</div>
+    <div class="field">
+      <label for="rename-input">Nouveau prénom</label>
+      <input id="rename-input" type="text" maxlength="50" autocomplete="off" placeholder="Prénom…">
+    </div>
+    <div id="rename-err" class="alert alert-error" style="display:none"></div>
+    <button class="btn btn-primary" id="rename-confirm">Enregistrer</button>
+    <button class="btn btn-ghost" id="rename-cancel">Annuler</button>
+  </div>
+</div>
+
+<!-- ── Modal: Ajuster les points ── -->
+<div id="modal-adjust" class="modal-overlay">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Ajuster les points</div>
+    <div class="field">
+      <label for="adjust-input">Nouveau solde (0 – <span id="adjust-max">?</span> pts)</label>
+      <input id="adjust-input" type="number" min="0" autocomplete="off" placeholder="0">
+    </div>
+    <div id="adjust-err" class="alert alert-error" style="display:none"></div>
+    <button class="btn btn-primary" id="adjust-confirm">Confirmer</button>
+    <button class="btn btn-ghost" id="adjust-cancel">Annuler</button>
+  </div>
+</div>
+
 <script>
 // ════════════════════════════════════════════════
 // STATE
@@ -476,6 +570,7 @@ const S = {
   tab: 'overview',
   clients: null, scans: null, stats: null, qr: null, notifLogs: null,
   deleteTargetId: null, deleteTargetNom: null,
+  clientId: null, clientData: null,
 };
 
 const SC = { stream: null, rafId: null, scanning: false, processing: false };
@@ -668,7 +763,7 @@ function renderClients(filter = '') {
   list.innerHTML = shown.map(c => {
     const pct = Math.min(c.stored_value / S.displayMax * 100, 100);
     const full = c.stored_value >= S.maxValue;
-    return `<div class="client-card">
+    return `<div class="client-card" data-id="${c.id}" style="cursor:pointer">
       <div class="client-avatar" style="background:${colorFrom(c.prenom)}">${c.prenom.charAt(0).toUpperCase()}</div>
       <div class="client-info">
         <div class="client-name">${esc(c.prenom)}</div>
@@ -677,11 +772,11 @@ function renderClients(filter = '') {
           <span class="client-pts ${full ? 'client-full' : ''}">${c.stored_value}/${S.displayMax}${full ? ' 🎉' : ''}</span>
         </div>
       </div>
-      <button class="btn-delete" data-id="${c.id}" data-nom="${esc(c.prenom)}" title="Supprimer">🗑</button>
+      <span style="color:var(--muted);font-size:20px;flex-shrink:0">›</span>
     </div>`;
   }).join('');
-  list.querySelectorAll('.btn-delete').forEach(btn => {
-    btn.addEventListener('click', () => openDeleteModal(btn.dataset.id, btn.dataset.nom));
+  list.querySelectorAll('.client-card').forEach(card => {
+    card.addEventListener('click', () => openClientSheet(card.dataset.id));
   });
 }
 
@@ -992,6 +1087,161 @@ function renderNotifHistory() {
     </div>`;
   }).join('');
 }
+
+// ════════════════════════════════════════════════
+// FICHE CLIENT
+// ════════════════════════════════════════════════
+function openClientSheet(id) {
+  S.clientId   = id;
+  S.clientData = null;
+  document.getElementById('modal-client').classList.add('open');
+  document.getElementById('cs-name').textContent  = '…';
+  document.getElementById('cs-since').textContent = '';
+  document.getElementById('cs-pts').textContent   = '–';
+  document.getElementById('cs-pts-max').textContent = '';
+  document.getElementById('cs-reward-badge').style.display = 'none';
+  document.getElementById('cs-prog-bar').style.width = '0%';
+  document.getElementById('cs-prog-dots').innerHTML  = '';
+  document.getElementById('cs-scans-list').innerHTML = Array(3).fill('<div class="skeleton skeleton-card"></div>').join('');
+  api(`/api/clients/${id}`).then(r => r.json()).then(data => {
+    S.clientData = data;
+    renderClientSheet(data);
+  }).catch(e => {
+    document.getElementById('cs-scans-list').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+  });
+}
+
+function closeClientSheet() {
+  document.getElementById('modal-client').classList.remove('open');
+  S.clientId = null; S.clientData = null;
+}
+
+function renderClientSheet({ client, scans }) {
+  const displayMax = S.displayMax;
+  const full       = client.stored_value >= S.maxValue;
+  const pct        = Math.min(client.stored_value / Math.max(displayMax, 1) * 100, 100);
+  const av = document.getElementById('cs-avatar');
+  av.textContent      = client.prenom.charAt(0).toUpperCase();
+  av.style.background = colorFrom(client.prenom);
+  document.getElementById('cs-name').textContent  = client.prenom;
+  document.getElementById('cs-since').textContent = 'Inscrit le ' + new Date(client.created_at).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
+  document.getElementById('cs-pts').textContent   = client.stored_value;
+  document.getElementById('cs-pts-max').textContent = `/ ${displayMax}`;
+  document.getElementById('cs-reward-badge').style.display = full ? '' : 'none';
+  document.getElementById('cs-prog-bar').style.width = pct + '%';
+  document.getElementById('cs-prog-dots').innerHTML = Array.from({ length: S.maxValue }, (_, i) =>
+    `<div class="cs-dot2${i < client.stored_value ? ' on' : ''}"></div>`
+  ).join('');
+  const sl = document.getElementById('cs-scans-list');
+  if (!scans || scans.length === 0) {
+    sl.innerHTML = '<div class="cs-no-scans">Aucun scan enregistré pour ce client.</div>';
+    return;
+  }
+  sl.innerHTML = scans.map(s => {
+    const isReset  = s.stored_value_apres === 0 && s.stored_value_avant > 0;
+    const isReward = !isReset && s.stored_value_apres >= S.maxValue;
+    const icon = isReset ? '↩️' : isReward ? '🎉' : '✅';
+    const dateStr = new Date(s.date_scan).toLocaleDateString('fr-FR', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+    return `<div class="cs-scan-row">
+      <span class="cs-scan-icon">${icon}</span>
+      <div style="flex:1">
+        <span class="cs-scan-delta">${s.stored_value_avant} → ${s.stored_value_apres} pts</span>
+        <span class="cs-scan-date">${dateStr}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('cs-close').addEventListener('click', closeClientSheet);
+document.getElementById('modal-client').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-client')) closeClientSheet();
+});
+
+// ── Supprimer depuis la fiche ──
+document.getElementById('cs-btn-delete').addEventListener('click', () => {
+  if (!S.clientData) return;
+  const id  = S.clientId;
+  const nom = S.clientData.client.prenom;
+  closeClientSheet();
+  openDeleteModal(id, nom);
+});
+
+// ── Modifier le prénom ──
+document.getElementById('cs-btn-rename').addEventListener('click', () => {
+  if (!S.clientData) return;
+  document.getElementById('rename-input').value = S.clientData.client.prenom;
+  document.getElementById('rename-err').style.display = 'none';
+  document.getElementById('modal-rename').classList.add('open');
+  setTimeout(() => document.getElementById('rename-input').focus(), 100);
+});
+document.getElementById('rename-cancel').addEventListener('click', () => {
+  document.getElementById('modal-rename').classList.remove('open');
+});
+document.getElementById('modal-rename').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-rename')) document.getElementById('modal-rename').classList.remove('open');
+});
+document.getElementById('rename-confirm').addEventListener('click', async () => {
+  const prenom = document.getElementById('rename-input').value.trim();
+  const errEl  = document.getElementById('rename-err');
+  errEl.style.display = 'none';
+  if (!prenom) { errEl.textContent = 'Prénom requis'; errEl.style.display = 'block'; return; }
+  const btn = document.getElementById('rename-confirm');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res  = await api(`/api/clients/${S.clientId}`, { method: 'PATCH', body: JSON.stringify({ prenom }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur');
+    if (S.clientData) S.clientData.client = { ...S.clientData.client, ...data };
+    if (S.clients) { const idx = S.clients.findIndex(c => c.id === S.clientId); if (idx >= 0) S.clients[idx].prenom = data.prenom; }
+    document.getElementById('modal-rename').classList.remove('open');
+    renderClientSheet(S.clientData);
+    renderClients(document.getElementById('search-clients').value);
+  } catch (e) {
+    errEl.textContent = e.message; errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Enregistrer';
+  }
+});
+
+// ── Ajuster les points ──
+document.getElementById('cs-btn-adjust').addEventListener('click', () => {
+  if (!S.clientData) return;
+  document.getElementById('adjust-input').value = S.clientData.client.stored_value;
+  document.getElementById('adjust-max').textContent = S.maxValue;
+  document.getElementById('adjust-err').style.display = 'none';
+  document.getElementById('modal-adjust').classList.add('open');
+  setTimeout(() => document.getElementById('adjust-input').focus(), 100);
+});
+document.getElementById('adjust-cancel').addEventListener('click', () => {
+  document.getElementById('modal-adjust').classList.remove('open');
+});
+document.getElementById('modal-adjust').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-adjust')) document.getElementById('modal-adjust').classList.remove('open');
+});
+document.getElementById('adjust-confirm').addEventListener('click', async () => {
+  const val   = parseInt(document.getElementById('adjust-input').value);
+  const errEl = document.getElementById('adjust-err');
+  errEl.style.display = 'none';
+  if (isNaN(val) || val < 0 || val > S.maxValue) {
+    errEl.textContent = `Valeur entre 0 et ${S.maxValue}`; errEl.style.display = 'block'; return;
+  }
+  const btn = document.getElementById('adjust-confirm');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res  = await api(`/api/clients/${S.clientId}`, { method: 'PATCH', body: JSON.stringify({ stored_value: val }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur');
+    if (S.clientData) S.clientData.client = { ...S.clientData.client, ...data };
+    if (S.clients) { const idx = S.clients.findIndex(c => c.id === S.clientId); if (idx >= 0) S.clients[idx].stored_value = data.stored_value; }
+    document.getElementById('modal-adjust').classList.remove('open');
+    renderClientSheet(S.clientData);
+    renderClients(document.getElementById('search-clients').value);
+  } catch (e) {
+    errEl.textContent = e.message; errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Confirmer';
+  }
+});
 
 // ════════════════════════════════════════════════
 // MODAL: DELETE CLIENT

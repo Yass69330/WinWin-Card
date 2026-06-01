@@ -87,6 +87,75 @@ router.delete('/:id', authMarchand, async (req, res) => {
   res.json({ success: true });
 });
 
+// GET /api/clients/:id — fiche client + derniers scans
+router.get('/:id([0-9a-f\\-]{36})', authMarchand, async (req, res) => {
+  const { id } = req.params;
+
+  const { data: client, error: errClient } = await supabase
+    .from('clients')
+    .select('id, prenom, stored_value, created_at, pass_serial_number')
+    .eq('id', id)
+    .eq('marchand_id', req.marchandId)
+    .is('deleted_at', null)
+    .single();
+
+  if (errClient || !client) return res.status(404).json({ error: 'Client introuvable' });
+
+  const { data: scans, error: errScans } = await supabase
+    .from('scans')
+    .select('id, date_scan, stored_value_avant, stored_value_apres')
+    .eq('client_id', id)
+    .order('date_scan', { ascending: false })
+    .limit(10);
+
+  if (errScans) return res.status(500).json({ error: errScans.message });
+
+  res.json({ client, scans: scans || [] });
+});
+
+// PATCH /api/clients/:id — modifier prénom et/ou points
+router.patch('/:id([0-9a-f\\-]{36})', authMarchand, async (req, res) => {
+  const { id } = req.params;
+  const { prenom, stored_value } = req.body;
+
+  const updates = {};
+  if (prenom !== undefined) {
+    const prenomPropre = String(prenom).trim().slice(0, 50);
+    if (!prenomPropre) return res.status(400).json({ error: 'Prénom invalide' });
+    updates.prenom = prenomPropre;
+  }
+  if (stored_value !== undefined) {
+    const val = parseInt(stored_value, 10);
+    if (isNaN(val) || val < 0 || val > 99) return res.status(400).json({ error: 'stored_value doit être un entier entre 0 et 99' });
+    updates.stored_value = val;
+  }
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: 'Au moins un champ requis : prenom ou stored_value' });
+  }
+
+  // Vérifier que le client appartient au marchand
+  const { data: existing, error: errCheck } = await supabase
+    .from('clients')
+    .select('id')
+    .eq('id', id)
+    .eq('marchand_id', req.marchandId)
+    .is('deleted_at', null)
+    .single();
+
+  if (errCheck || !existing) return res.status(404).json({ error: 'Client introuvable' });
+
+  const { data: updated, error: errUpdate } = await supabase
+    .from('clients')
+    .update(updates)
+    .eq('id', id)
+    .select('id, prenom, stored_value, created_at')
+    .single();
+
+  if (errUpdate) return res.status(500).json({ error: errUpdate.message });
+
+  res.json(updated);
+});
+
 // GET /api/clients/admin/all — vision globale admin
 router.get('/admin/all', authAdmin, async (req, res) => {
   const { data, error } = await supabase
