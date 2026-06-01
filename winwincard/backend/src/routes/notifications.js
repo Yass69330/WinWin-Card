@@ -41,8 +41,9 @@ router.post('/', authMarchand, async (req, res) => {
       supabase.from('marchands')
         .update({ notification_titre: null, notification_message: message })
         .eq('id', req.marchandId),
+      // Met à jour notification_message sur chaque pass pour que changeMessage détecte le changement
       supabase.from('passes')
-        .update({ updated_at: new Date().toISOString() })
+        .update({ notification_message: message })
         .eq('marchand_id', req.marchandId),
     ]);
   }

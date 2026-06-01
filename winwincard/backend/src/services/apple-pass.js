@@ -238,7 +238,7 @@ function selectStripImageUrl(marchand, storedValue) {
 }
 
 // ── Génération pass.json ─────────────────────────────────────
-function buildPassJson({ client, marchand, serialNumber }) {
+function buildPassJson({ client, marchand, serialNumber, passNotification }) {
   const doré = isPassDoré(client, marchand);
   const displayMax = marchand.display_max_value || marchand.max_value;
   return {
@@ -273,7 +273,7 @@ function buildPassJson({ client, marchand, serialNumber }) {
           // une notification visible grâce à changeMessage quand la valeur change.
           key:           'notification_txt',
           label:         marchand.notification_titre || '',
-          value:         marchand.notification_message || '',
+          value:         passNotification ?? marchand.notification_message ?? '',
           changeMessage: '%@',
         },
         {
@@ -297,9 +297,9 @@ function buildPassJson({ client, marchand, serialNumber }) {
 }
 
 // ── Point d'entrée principal ─────────────────────────────────
-async function generateApplePass({ client, marchand, serialNumber }) {
+async function generateApplePass({ client, marchand, serialNumber, passNotification = null }) {
   const certs = loadCerts();
-  const passJson = buildPassJson({ client, marchand, serialNumber });
+  const passJson = buildPassJson({ client, marchand, serialNumber, passNotification });
 
   const doré = isPassDoré(client, marchand);
   const [rf, gf, bf] = doré

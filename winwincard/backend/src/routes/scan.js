@@ -33,21 +33,30 @@ router.post('/', authScanner, async (req, res) => {
   const avantScan = client.stored_value;
   let apresScan;
   let recompense = false;
+  let isReset = false;
 
   if (avantScan >= maxValue) {
-    // Reset après récompense
     apresScan = 0;
-    recompense = false;
+    isReset = true;
   } else {
     apresScan = avantScan + 1;
     recompense = apresScan >= maxValue;
   }
 
-  // Mise à jour stored_value
-  const { error: errUpdate } = await supabase
-    .from('clients')
-    .update({ stored_value: apresScan })
-    .eq('id', client.id);
+  const scanMessage = isReset
+    ? `Carte mise à jour ${client.prenom} : 0/${displayMaxValue} points`
+    : recompense
+      ? `Félicitations ${client.prenom} ! Récompense débloquée 🎉`
+      : `+1 — ${client.prenom} : ${apresScan}/${displayMaxValue} points`;
+
+  // Mise à jour client + message de notification du pass en parallèle
+  const [{ error: errUpdate }] = await Promise.all([
+    supabase.from('clients').update({ stored_value: apresScan }).eq('id', client.id),
+    supabase.from('passes')
+      .update({ notification_message: scanMessage })
+      .eq('serial_number', serial_number)
+      .eq('marchand_id', req.marchandId),
+  ]);
 
   if (errUpdate) return res.status(500).json({ error: errUpdate.message });
 
@@ -70,9 +79,7 @@ router.post('/', authScanner, async (req, res) => {
     max_value: maxValue,
     display_max_value: displayMaxValue,
     recompense,
-    message: recompense
-      ? `Félicitations ${client.prenom} ! Récompense débloquée 🎉`
-      : `+1 point — ${client.prenom} a ${apresScan}/${displayMaxValue} points`
+    message: scanMessage,
   });
 });
 

@@ -107,7 +107,7 @@ router.get('/v1/passes/:passTypeId/:serialNumber', async (req, res) => {
 
   const { data: pass } = await supabase
     .from('passes')
-    .select('updated_at, client_id, marchand_id')
+    .select('updated_at, client_id, marchand_id, notification_message')
     .eq('serial_number', serialNumber)
     .single();
 
@@ -136,7 +136,7 @@ router.get('/v1/passes/:passTypeId/:serialNumber', async (req, res) => {
   const { generateApplePass } = require('../services/apple-pass');
 
   try {
-    const pkpassBuffer = await generateApplePass({ client, marchand, serialNumber });
+    const pkpassBuffer = await generateApplePass({ client, marchand, serialNumber, passNotification: pass.notification_message });
 
     res.removeHeader('Cross-Origin-Resource-Policy');
     res.removeHeader('Cross-Origin-Embedder-Policy');

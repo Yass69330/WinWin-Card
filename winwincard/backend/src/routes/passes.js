@@ -9,7 +9,7 @@ router.get('/:serialNumber/apple', async (req, res) => {
 
   const { data: pass } = await supabase
     .from('passes')
-    .select('client_id, marchand_id')
+    .select('client_id, marchand_id, notification_message')
     .eq('serial_number', serialNumber)
     .single();
 
@@ -33,7 +33,7 @@ router.get('/:serialNumber/apple', async (req, res) => {
   const { generateApplePass } = require('../services/apple-pass');
 
   try {
-    const buffer = await generateApplePass({ client, marchand, serialNumber });
+    const buffer = await generateApplePass({ client, marchand, serialNumber, passNotification: pass.notification_message });
 
     // Validation : un .pkpass est un ZIP — doit commencer par PK\x03\x04 (50 4B 03 04)
     const magic = buffer.slice(0, 4).toString('hex');
