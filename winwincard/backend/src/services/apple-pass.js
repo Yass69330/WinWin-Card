@@ -257,12 +257,12 @@ function buildPassJson({ client, marchand, serialNumber, passNotification }) {
     storeCard: {
       headerFields: [],
       primaryFields: [{
-        key: 'points',
-        label: 'PROGRESSION',
-        value: doré ? '🎉 Récompense !' : `${client.stored_value} / ${displayMax}`,
+        key:   'points',
+        label: doré ? '🎉 RÉCOMPENSE' : 'PROGRESSION',
+        value: `${client.stored_value} / ${displayMax}`,
       }],
       secondaryFields: [{
-        key: 'prenom',
+        key:   'prenom',
         label: 'CLIENT',
         value: client.prenom,
       }],
