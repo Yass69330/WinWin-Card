@@ -1049,7 +1049,7 @@ document.getElementById('notif-form').addEventListener('submit', async () => {
       }
     }
     S.notifLogs = null;
-    loadNotifHistory(true);
+    setTimeout(() => loadNotifHistory(true), 600);
   } catch (e) {
     result.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
   } finally {
@@ -1059,14 +1059,17 @@ document.getElementById('notif-form').addEventListener('submit', async () => {
 
 async function loadNotifHistory(force = false) {
   if (!force && S.notifLogs) { renderNotifHistory(); return; }
-  document.getElementById('notif-history-list').innerHTML =
-    Array(3).fill('<div class="skeleton skeleton-card" style="height:56px"></div>').join('');
+  const el = document.getElementById('notif-history-list');
+  el.innerHTML = Array(3).fill('<div class="skeleton skeleton-card" style="height:56px"></div>').join('');
   try {
-    const res = await api('/api/notifications');
+    const res  = await api('/api/notifications');
     const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur chargement historique');
     S.notifLogs = Array.isArray(data) ? data : [];
-  } catch {
+  } catch (e) {
     S.notifLogs = [];
+    el.innerHTML = `<div class="alert alert-error" style="font-size:12px">${e.message}</div>`;
+    return;
   }
   renderNotifHistory();
 }
