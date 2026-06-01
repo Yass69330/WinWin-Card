@@ -70,7 +70,7 @@ router.post('/', authScanner, async (req, res) => {
 
   // Mises à jour Apple + Google Wallet en parallèle, sans bloquer la réponse
   notifierMiseAJourPass(serial_number).catch(e => console.error('[scan] push Apple:', e.message));
-  mettreAJourGoogleWallet(serial_number, req.marchandId, apresScan, maxValue, displayMaxValue).catch(e => console.error('[scan] push Google:', e.message));
+  mettreAJourGoogleWallet(serial_number, req.marchandId, apresScan, maxValue, displayMaxValue, scanMessage).catch(e => console.error('[scan] push Google:', e.message));
 
   res.json({
     prenom: client.prenom,
@@ -97,9 +97,12 @@ async function notifierMiseAJourPass(serialNumber) {
   }
 }
 
-async function mettreAJourGoogleWallet(serialNumber, marchandId, storedValue, maxValue, displayMaxValue) {
-  const { updateLoyaltyObjectPoints } = require('../services/google-pass');
-  await updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue, displayMaxValue);
+async function mettreAJourGoogleWallet(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, scanMessage) {
+  const { updateLoyaltyObjectPoints, addMessageToLoyaltyObject } = require('../services/google-pass');
+  await Promise.all([
+    updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue, displayMaxValue),
+    addMessageToLoyaltyObject(serialNumber, null, scanMessage),
+  ]);
 }
 
 // GET /api/scans — historique des scans du marchand (100 derniers)
