@@ -5,6 +5,18 @@ const { authMarchand } = require('../middleware/auth');
 const { sendPushUpdate, isApnsConfigured }                    = require('../services/apns');
 const { addMessageToLoyaltyObject, isConfigured: isGoogleConfigured } = require('../services/google-pass');
 
+// GET /api/notifications — historique des 50 dernières notifications
+router.get('/', authMarchand, async (req, res) => {
+  const { data, error } = await supabase
+    .from('notification_logs')
+    .select('id, message, envoyes_apple, envoyes_google, total_apple, total_google, created_at')
+    .eq('marchand_id', req.marchandId)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+});
+
 // POST /api/notifications — envoi push depuis le dashboard marchand
 // Corps : { titre, message }
 // Réponse : { apple: { envoyes, echecs, total, active }, google: { ... } }
@@ -69,6 +81,16 @@ router.post('/', authMarchand, async (req, res) => {
     .forEach(r => console.error('[notifications] APNs échec:', r.reason?.message));
   googleResults.filter(r => r.status === 'rejected')
     .forEach(r => console.error('[notifications] Google échec:', r.reason?.message));
+
+  // Log fire-and-forget
+  supabase.from('notification_logs').insert({
+    marchand_id:    req.marchandId,
+    message,
+    envoyes_apple:  appleResults.filter(r => r.status === 'fulfilled').length,
+    envoyes_google: googleResults.filter(r => r.status === 'fulfilled').length,
+    total_apple:    (tokens || []).length,
+    total_google:   (passes || []).length,
+  }).then().catch(e => console.error('[notifications] log:', e.message));
 
   res.json({
     apple: {
