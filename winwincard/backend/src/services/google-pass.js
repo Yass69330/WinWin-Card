@@ -333,7 +333,7 @@ async function addMessageToLoyaltyObject(serialNumber, titre, message) {
     `/loyaltyObject/${encodeURIComponent(oId)}/addMessage`,
     {
       message: {
-        header:      titre,
+        ...(titre ? { header: titre } : {}),
         body:        message,
         messageType: 'TEXT',
       },
