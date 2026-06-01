@@ -165,8 +165,7 @@ function buildLoyaltyClass(cId, marchand) {
 // ── Construction LoyaltyObject ───────────────────────────────
 
 function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
-  const threshold = Math.max((marchand.max_value || 1) - 1, 1);
-  const isRecompense = client.stored_value > 0 && client.stored_value >= threshold;
+  const isRecompense = client.stored_value > 0 && client.stored_value >= (marchand.max_value || 1);
   const displayMax = marchand.display_max_value || marchand.max_value;
 
   return {
@@ -306,8 +305,7 @@ async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, 
 
   const oId = objectId(serialNumber);
   const token = await getAccessToken();
-  const threshold = Math.max((maxValue || 1) - 1, 1);
-  const isRecompense = storedValue > 0 && storedValue >= threshold;
+  const isRecompense = storedValue > 0 && storedValue >= (maxValue || 1);
 
   await walletRequest(
     'PATCH',

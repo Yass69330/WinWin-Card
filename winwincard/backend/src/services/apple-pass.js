@@ -226,8 +226,7 @@ function hexToRgb(hex) {
 }
 
 function isPassDoré(client, marchand) {
-  const threshold = Math.max((marchand.max_value || 1) - 1, 1);
-  return client.stored_value > 0 && client.stored_value >= threshold;
+  return client.stored_value > 0 && client.stored_value >= (marchand.max_value || 1);
 }
 
 function selectStripImageUrl(marchand, storedValue) {
