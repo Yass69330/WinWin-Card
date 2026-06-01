@@ -9,3 +9,7 @@ create table if not exists notification_logs (
   created_at     timestamptz not null default now()
 );
 create index if not exists idx_notif_logs_marchand on notification_logs(marchand_id, created_at desc);
+
+-- RLS requis : sans ça PostgREST refuse l'accès même avec service_role.
+-- service_role bypasse automatiquement toutes les policies RLS.
+alter table notification_logs enable row level security;
