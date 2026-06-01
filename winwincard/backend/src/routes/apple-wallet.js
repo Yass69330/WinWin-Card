@@ -105,12 +105,16 @@ router.get('/v1/passes/:passTypeId/:serialNumber', async (req, res) => {
 
   if (!verifyAppleToken(req, serialNumber)) return res.status(401).send();
 
-  const { data: pass } = await supabase
+  const { data: pass, error: errPass } = await supabase
     .from('passes')
     .select('updated_at, client_id, marchand_id, notification_message')
     .eq('serial_number', serialNumber)
     .single();
 
+  if (errPass) {
+    console.error('[apple-wallet] Erreur SELECT pass:', errPass.message);
+    return res.status(404).send();
+  }
   if (!pass) return res.status(404).send();
 
   // Si pas de changement depuis la dernière synchro

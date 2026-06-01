@@ -7,12 +7,16 @@ const supabase = require('../services/supabase');
 router.get('/:serialNumber/apple', async (req, res) => {
   const { serialNumber } = req.params;
 
-  const { data: pass } = await supabase
+  const { data: pass, error: errPass } = await supabase
     .from('passes')
     .select('client_id, marchand_id, notification_message')
     .eq('serial_number', serialNumber)
     .single();
 
+  if (errPass) {
+    console.error('[passes] Erreur SELECT pass:', errPass.message);
+    return res.status(404).json({ error: 'Pass introuvable' });
+  }
   if (!pass) return res.status(404).json({ error: 'Pass introuvable' });
 
   const [{ data: client }, { data: marchand }] = await Promise.all([
