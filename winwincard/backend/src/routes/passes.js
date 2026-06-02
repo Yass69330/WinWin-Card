@@ -26,7 +26,7 @@ router.get('/:serialNumber/apple', async (req, res) => {
       .is('deleted_at', null)
       .single(),
     supabase.from('marchands')
-      .select('nom, couleur_fond, couleur_texte, couleur_label, logo_url, image_strip_url, images_tiers, max_value, display_max_value, notification_titre, notification_message')
+      .select('nom, couleur_fond, couleur_texte, couleur_label, logo_url, icon_url, image_strip_url, images_tiers, max_value, display_max_value, notification_titre, notification_message')
       .eq('id', pass.marchand_id)
       .eq('actif', true)
       .single()

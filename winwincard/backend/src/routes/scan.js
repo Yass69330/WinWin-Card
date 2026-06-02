@@ -107,15 +107,20 @@ async function mettreAJourGoogleWallet(serialNumber, marchandId, storedValue, ma
 // GET /api/scans — historique des scans du marchand (100 derniers)
 router.get('/', authMarchand, async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 100, 200);
-  const { data, error } = await supabase
-    .from('scans')
-    .select('id, date_scan, stored_value_avant, stored_value_apres, clients(id, prenom)')
-    .eq('marchand_id', req.marchandId)
-    .order('date_scan', { ascending: false })
-    .limit(limit);
+  try {
+    const { data, error } = await supabase
+      .from('scans')
+      .select('id, date_scan, stored_value_avant, stored_value_apres, clients(id, prenom)')
+      .eq('marchand_id', req.marchandId)
+      .order('date_scan', { ascending: false })
+      .limit(limit);
 
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data ?? []);
+  } catch (e) {
+    console.error('[scan] GET error:', e.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 module.exports = router;
