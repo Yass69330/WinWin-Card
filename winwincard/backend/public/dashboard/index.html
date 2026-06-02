@@ -1039,7 +1039,7 @@ document.getElementById('notif-form').addEventListener('submit', async () => {
         lines.push(`🍎 Apple Wallet: ${apple.envoyes}/${apple.total} sent${apple.echecs ? ` · ${apple.echecs} failed` : ''}`);
       }
       if (google.active) {
-        lines.push(`🤖 Google Wallet: ${google.envoyes}/${google.total} sent${google.echecs ? ` · ${google.echecs} failed` : ''}`);
+        lines.push(`🤖 Google Wallet: ${google.envoyes}/${google.total} updated${google.echecs ? ` · ${google.echecs} failed` : ''}`);
       }
       const totalEnvoyes = apple.envoyes + google.envoyes;
       result.innerHTML = `<div class="alert ${totalEnvoyes > 0 ? 'alert-success' : 'alert-info'}">${lines.join('<br>')}</div>`;
