@@ -315,13 +315,16 @@ async function generateApplePass({ client, marchand, serialNumber, passNotificat
   const [ri, gi, bi] = hexToRgb(marchand.couleur_fond || '#1a1a2e').match(/\d+/g).map(Number);
   const iconPng  = createSolidPng(29,  29,  ri, gi, bi);
   const icon2Png = createSolidPng(58,  58,  ri, gi, bi);
+  const icon3Png = createSolidPng(87,  87,  ri, gi, bi);
   const stripPng = createSolidPng(375, 123, rf, gf, bf);
 
   const stripUrl = selectStripImageUrl(marchand, client.stored_value);
   const iconUrl  = marchand.icon_url || marchand.logo_url || null;
-  const [iconBuf, icon2Buf, logoBuf, logo2Buf, stripBuf, strip2Buf] = await Promise.all([
-    iconUrl           ? fetchImage(iconUrl).catch(() => iconPng)             : iconPng,
-    iconUrl           ? fetchImage(iconUrl).catch(() => icon2Png)            : icon2Png,
+  // icon@3x.png (87×87px) is what Apple uses on all modern iPhones (@3x screens).
+  // icon.png / icon@2x.png keep their correct pixel sizes via solid-color fallbacks
+  // so older devices render cleanly too. No image resizing library needed.
+  const [icon3Buf, logoBuf, logo2Buf, stripBuf, strip2Buf] = await Promise.all([
+    iconUrl           ? fetchImage(iconUrl).catch(() => icon3Png)            : icon3Png,
     marchand.logo_url ? fetchImage(marchand.logo_url).catch(() => iconPng)   : iconPng,
     marchand.logo_url ? fetchImage(marchand.logo_url).catch(() => icon2Png)  : icon2Png,
     stripUrl          ? fetchImage(stripUrl).catch(() => stripPng)           : stripPng,
@@ -334,8 +337,9 @@ async function generateApplePass({ client, marchand, serialNumber, passNotificat
   // icon.png = icône notification iOS — utilise le logo marchand si disponible, sinon couleur unie
   const passFiles = [
     { name: 'pass.json',    data: passJsonBuf },
-    { name: 'icon.png',     data: iconBuf },
-    { name: 'icon@2x.png',  data: icon2Buf },
+    { name: 'icon.png',     data: iconPng },    // 29×29 @1x — solid color, correct size
+    { name: 'icon@2x.png',  data: icon2Png },   // 58×58 @2x — solid color, correct size
+    { name: 'icon@3x.png',  data: icon3Buf },   // 87×87 @3x — icon_url image, used on all modern iPhones
     { name: 'logo.png',     data: logoBuf },
     { name: 'logo@2x.png',  data: logo2Buf },
     { name: 'strip.png',    data: stripBuf },
