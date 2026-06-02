@@ -10,7 +10,7 @@ router.post('/login', async (req, res) => {
   const { email, slug, password, remember_device } = req.body;
   const identifier = slug || email;
   if (!identifier || !password) {
-    return res.status(400).json({ error: 'slug (ou email) et password requis' });
+    return res.status(400).json({ error: 'slug (or email) and password required' });
   }
 
   const field = slug ? 'slug' : 'email_contact';
@@ -20,12 +20,12 @@ router.post('/login', async (req, res) => {
     .eq(field, identifier)
     .single();
 
-  if (!marchand) return res.status(401).json({ error: 'Identifiants incorrects' });
-  if (!marchand.actif) return res.status(403).json({ error: 'Compte suspendu' });
+  if (!marchand) return res.status(401).json({ error: 'Invalid credentials' });
+  if (!marchand.actif) return res.status(403).json({ error: 'Account suspended' });
 
   const { comparePassword } = require('../services/auth-utils');
   const valid = await comparePassword(password, marchand.password_hash);
-  if (!valid) return res.status(401).json({ error: 'Identifiants incorrects' });
+  if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
 
   const expiresIn = remember_device ? '365d' : '7d';
   const token = jwt.sign(
@@ -75,7 +75,7 @@ router.get('/me/qrcode', authMarchand, async (req, res) => {
     .eq('id', req.marchandId)
     .single();
 
-  if (!marchand) return res.status(404).json({ error: 'Marchand introuvable' });
+  if (!marchand) return res.status(404).json({ error: 'Merchant not found' });
 
   const QRCode = require('qrcode');
   const url = `${process.env.LANDING_BASE_URL}/${marchand.slug}`;
@@ -92,8 +92,8 @@ router.get('/:slug/public', async (req, res) => {
     .eq('slug', req.params.slug)
     .single();
 
-  if (error || !data) return res.status(404).json({ error: 'Marchand introuvable' });
-  if (!data.actif) return res.status(403).json({ error: 'Programme suspendu' });
+  if (error || !data) return res.status(404).json({ error: 'Merchant not found' });
+  if (!data.actif) return res.status(403).json({ error: 'Program suspended' });
 
   res.json(data);
 });

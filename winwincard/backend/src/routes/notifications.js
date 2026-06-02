@@ -24,7 +24,7 @@ router.post('/', authMarchand, async (req, res) => {
   const { message } = req.body;
 
   if (!message) {
-    return res.status(400).json({ error: 'message est requis' });
+    return res.status(400).json({ error: 'message is required' });
   }
   if (message.length > 500) {
     return res.status(400).json({ error: 'message max 500 chars' });

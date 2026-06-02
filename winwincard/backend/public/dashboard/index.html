@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
@@ -310,19 +310,19 @@
   <div class="login-brand">
     <div class="login-logo">📊</div>
     <div class="login-title">WinWin Dashboard</div>
-    <div class="login-sub">Gérez votre programme de fidélité</div>
+    <div class="login-sub">Manage your loyalty program</div>
   </div>
   <form class="login-form" id="login-form" onsubmit="return false">
     <div class="field">
-      <label for="in-slug">Identifiant (slug)</label>
+      <label for="in-slug">Merchant ID (slug)</label>
       <input id="in-slug" type="text" placeholder="cafe-le-central" autocorrect="off" autocapitalize="none" autocomplete="username">
     </div>
     <div class="field">
-      <label for="in-pwd">Mot de passe</label>
+      <label for="in-pwd">Password</label>
       <input id="in-pwd" type="password" placeholder="••••••••" autocomplete="current-password">
     </div>
     <div id="login-err" class="alert alert-error" style="display:none"></div>
-    <button type="submit" class="btn btn-primary" id="btn-login">Se connecter</button>
+    <button type="submit" class="btn btn-primary" id="btn-login">Sign in</button>
   </form>
 </div>
 
@@ -333,7 +333,7 @@
     <span style="font-size:20px">🎯</span>
     <span class="dash-header-brand">WinWin</span>
     <span class="dash-header-nom" id="header-nom">–</span>
-    <button class="btn-icon" id="btn-logout" title="Déconnexion">⏏</button>
+    <button class="btn-icon" id="btn-logout" title="Sign out">⏏</button>
   </header>
 
   <div class="dash-content">
@@ -355,11 +355,11 @@
     <div id="tab-clients" class="tab-panel">
       <div class="tab-header">
         <h2>Clients</h2>
-        <button class="btn-refresh" id="btn-refresh-clients" title="Rafraîchir">↺</button>
+        <button class="btn-refresh" id="btn-refresh-clients" title="Refresh">↺</button>
       </div>
       <div class="search-wrap">
         <span class="search-icon">🔍</span>
-        <input class="search-input" id="search-clients" type="search" placeholder="Rechercher par prénom…">
+        <input class="search-input" id="search-clients" type="search" placeholder="Search by first name…">
       </div>
       <div id="clients-meta" class="list-meta"></div>
       <div id="clients-list"></div>
@@ -368,8 +368,8 @@
     <!-- ── Historique scans ── -->
     <div id="tab-scans" class="tab-panel">
       <div class="tab-header">
-        <h2>Historique</h2>
-        <button class="btn-refresh" id="btn-refresh-scans" title="Rafraîchir">↺</button>
+        <h2>History</h2>
+        <button class="btn-refresh" id="btn-refresh-scans" title="Refresh">↺</button>
       </div>
       <div id="scans-list"></div>
     </div>
@@ -381,10 +381,10 @@
         <canvas id="sc-canvas" hidden></canvas>
         <div class="sc-overlay">
           <div class="sc-frame"><span></span><div class="sc-line"></div></div>
-          <div class="sc-hint">Pointez vers le QR code du pass client</div>
+          <div class="sc-hint">Point at the client's pass QR code</div>
           <div id="sc-status" class="sc-status"></div>
         </div>
-        <button class="sc-btn-manual" id="sc-btn-manual">Saisie manuelle</button>
+        <button class="sc-btn-manual" id="sc-btn-manual">Manual entry</button>
       </div>
 
       <!-- Result sheet -->
@@ -406,38 +406,38 @@
         <div id="sc-reward-banner" class="sc-reward-banner" style="display:none">
           <div style="font-size:28px">🎉</div>
           <div>
-            <div style="font-size:15px;font-weight:700">Récompense déclenchée !</div>
+            <div style="font-size:15px;font-weight:700">Reward unlocked!</div>
             <div id="sc-reward-sub" style="font-size:13px;opacity:.85"></div>
           </div>
         </div>
-        <div id="sc-reset-banner" class="sc-reset-banner" style="display:none">↩️ Compteur remis à zéro</div>
+        <div id="sc-reset-banner" class="sc-reset-banner" style="display:none">↩️ Counter reset</div>
         <div id="sc-error" class="sc-result-error" style="display:none"></div>
         <div style="display:flex;flex-direction:column;gap:8px">
-          <button class="btn btn-primary" id="sc-btn-rescan">Scanner suivant</button>
-          <button class="btn btn-ghost"   id="sc-btn-manual-after">Saisie manuelle</button>
+          <button class="btn btn-primary" id="sc-btn-rescan">Next scan</button>
+          <button class="btn btn-ghost"   id="sc-btn-manual-after">Manual entry</button>
         </div>
       </div>
     </div>
 
     <!-- ── Notifications ── -->
     <div id="tab-notifs" class="tab-panel">
-      <div class="tab-header"><h2>Notifications push</h2></div>
+      <div class="tab-header"><h2>Push notifications</h2></div>
       <div class="alert alert-info" style="margin-bottom:16px">
-        📱 Envoi via Apple &amp; Google Wallet aux appareils enregistrés.
+        📱 Sent via Apple &amp; Google Wallet to registered devices.
       </div>
       <form class="notif-form" id="notif-form" onsubmit="return false">
         <div class="field">
           <label for="notif-msg">Message</label>
-          <textarea id="notif-msg" maxlength="500" placeholder="Ex : Venez profiter de -20% sur toute la carte jusqu'à dimanche !"></textarea>
+          <textarea id="notif-msg" maxlength="500" placeholder="E.g.: Come enjoy 20% off all menu items this weekend!"></textarea>
           <div class="char-count" id="cc-msg">0 / 500</div>
         </div>
-        <button type="submit" class="btn btn-primary" id="btn-send-notif">Envoyer la notification</button>
+        <button type="submit" class="btn btn-primary" id="btn-send-notif">Send notification</button>
         <div id="notif-result" class="send-result"></div>
       </form>
 
       <div class="divider" style="margin-top:8px"></div>
       <div class="tab-header" style="margin-bottom:10px">
-        <h2 style="font-size:15px;color:var(--muted)">Historique</h2>
+        <h2 style="font-size:15px;color:var(--muted)">History</h2>
       </div>
       <div id="notif-history-list"></div>
     </div>
@@ -446,7 +446,7 @@
 
   <nav class="dash-nav">
     <button class="nav-btn active" data-tab="overview">
-      <span class="nav-icon">📊</span>Aperçu
+      <span class="nav-icon">📊</span>Overview
     </button>
     <button class="nav-btn" data-tab="clients">
       <span class="nav-icon">👥</span>Clients
@@ -470,12 +470,12 @@
 <div id="modal-delete" class="modal-overlay">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
-    <div class="modal-title">Supprimer ce client ?</div>
+    <div class="modal-title">Delete this client?</div>
     <div class="modal-body" id="modal-delete-body">
-      Cette action est <strong>irréversible</strong>. Toutes les données seront effacées (RGPD).
+      This action is <strong>irreversible</strong>. All data will be erased (GDPR).
     </div>
-    <button class="btn btn-danger" id="btn-confirm-delete">Supprimer définitivement</button>
-    <button class="btn btn-ghost"  id="btn-cancel-delete">Annuler</button>
+    <button class="btn btn-danger" id="btn-confirm-delete">Delete permanently</button>
+    <button class="btn btn-ghost"  id="btn-cancel-delete">Cancel</button>
   </div>
 </div>
 
@@ -483,14 +483,14 @@
 <div id="modal-scan-manual" class="modal-overlay">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
-    <div class="modal-title">Saisie manuelle</div>
+    <div class="modal-title">Manual entry</div>
     <div class="field">
-      <label for="sc-manual-input">Numéro de série du pass</label>
+      <label for="sc-manual-input">Pass serial number</label>
       <input id="sc-manual-input" type="text" placeholder="serial-xxxxx" autocorrect="off" autocapitalize="none">
     </div>
     <div id="sc-manual-error" class="alert alert-error" style="display:none"></div>
-    <button class="btn btn-primary" id="sc-manual-submit">Valider</button>
-    <button class="btn btn-ghost"   id="sc-manual-cancel">Annuler</button>
+    <button class="btn btn-primary" id="sc-manual-submit">Submit</button>
+    <button class="btn btn-ghost"   id="sc-manual-cancel">Cancel</button>
   </div>
 </div>
 
@@ -517,16 +517,16 @@
         <div class="cs-dots2" id="cs-prog-dots"></div>
       </div>
       <div class="cs-actions2">
-        <button class="btn btn-outline btn-sm" id="cs-btn-rename">✏️ Prénom</button>
+        <button class="btn btn-outline btn-sm" id="cs-btn-rename">✏️ Name</button>
         <button class="btn btn-outline btn-sm" id="cs-btn-adjust">⚖️ Points</button>
       </div>
       <div>
-        <div class="cs-section-lbl" style="margin-bottom:8px">Scans récents</div>
+        <div class="cs-section-lbl" style="margin-bottom:8px">Recent scans</div>
         <div id="cs-scans-list"></div>
       </div>
     </div>
     <div class="cs-footer">
-      <button class="btn btn-danger btn-sm" id="cs-btn-delete" style="width:100%">🗑 Supprimer le client (RGPD)</button>
+      <button class="btn btn-danger btn-sm" id="cs-btn-delete" style="width:100%">🗑 Delete client (GDPR)</button>
     </div>
   </div>
 </div>
@@ -535,14 +535,14 @@
 <div id="modal-rename" class="modal-overlay">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
-    <div class="modal-title">Modifier le prénom</div>
+    <div class="modal-title">Edit first name</div>
     <div class="field">
-      <label for="rename-input">Nouveau prénom</label>
-      <input id="rename-input" type="text" maxlength="50" autocomplete="off" placeholder="Prénom…">
+      <label for="rename-input">New first name</label>
+      <input id="rename-input" type="text" maxlength="50" autocomplete="off" placeholder="First name…">
     </div>
     <div id="rename-err" class="alert alert-error" style="display:none"></div>
-    <button class="btn btn-primary" id="rename-confirm">Enregistrer</button>
-    <button class="btn btn-ghost" id="rename-cancel">Annuler</button>
+    <button class="btn btn-primary" id="rename-confirm">Save</button>
+    <button class="btn btn-ghost" id="rename-cancel">Cancel</button>
   </div>
 </div>
 
@@ -550,14 +550,14 @@
 <div id="modal-adjust" class="modal-overlay">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
-    <div class="modal-title">Ajuster les points</div>
+    <div class="modal-title">Adjust points</div>
     <div class="field">
-      <label for="adjust-input">Nouveau solde (0 – <span id="adjust-max">?</span> pts)</label>
+      <label for="adjust-input">New balance (0 – <span id="adjust-max">?</span> pts)</label>
       <input id="adjust-input" type="number" min="0" autocomplete="off" placeholder="0">
     </div>
     <div id="adjust-err" class="alert alert-error" style="display:none"></div>
-    <button class="btn btn-primary" id="adjust-confirm">Confirmer</button>
-    <button class="btn btn-ghost" id="adjust-cancel">Annuler</button>
+    <button class="btn btn-primary" id="adjust-confirm">Confirm</button>
+    <button class="btn btn-ghost" id="adjust-cancel">Cancel</button>
   </div>
 </div>
 
@@ -613,7 +613,7 @@ async function api(path, opts = {}) {
     ...opts,
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.token}`, ...(opts.headers || {}) },
   });
-  if (res.status === 401) { clearSession(); showLogin(); throw new Error('Session expirée, reconnectez-vous'); }
+  if (res.status === 401) { clearSession(); showLogin(); throw new Error('Session expired, please sign in again'); }
   return res;
 }
 
@@ -642,7 +642,7 @@ document.getElementById('login-form').addEventListener('submit', async () => {
   const errEl = document.getElementById('login-err');
   const btn   = document.getElementById('btn-login');
   errEl.style.display = 'none';
-  if (!slug || !pwd) { showErr(errEl, 'Remplissez tous les champs'); return; }
+  if (!slug || !pwd) { showErr(errEl, 'Please fill in all fields'); return; }
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
   try {
     const res = await fetch('/api/merchants/login', {
@@ -650,14 +650,14 @@ document.getElementById('login-form').addEventListener('submit', async () => {
       body: JSON.stringify({ slug, password: pwd }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Identifiants incorrects');
+    if (!res.ok) throw new Error(data.error || 'Invalid credentials');
     data.slug = data.slug || slug;
     saveSession(data);
     showDashboard();
   } catch (e) {
     showErr(errEl, e.message);
   } finally {
-    btn.disabled = false; btn.textContent = 'Se connecter';
+    btn.disabled = false; btn.textContent = 'Sign in';
   }
 });
 
@@ -667,7 +667,7 @@ function showErr(el, msg) { el.textContent = msg; el.style.display = 'block'; }
 // LOGOUT
 // ════════════════════════════════════════════════
 document.getElementById('btn-logout').addEventListener('click', () => {
-  if (!confirm('Se déconnecter ?')) return;
+  if (!confirm('Sign out?')) return;
   clearSession();
   S.clients = null; S.scans = null; S.stats = null; S.qr = null; S.notifLogs = null;
   showLogin();
@@ -711,24 +711,24 @@ async function loadOverview(force = false) {
 
 function renderOverview() {
   document.getElementById('stats-grid').innerHTML = `
-    <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-value">${S.stats.total_clients ?? '–'}</div><div class="stat-label">clients actifs</div></div>
-    <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-value">${S.stats.scans_aujourdhui ?? '–'}</div><div class="stat-label">scans aujourd'hui</div></div>`;
+    <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-value">${S.stats.total_clients ?? '–'}</div><div class="stat-label">active clients</div></div>
+    <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-value">${S.stats.scans_aujourdhui ?? '–'}</div><div class="stat-label">scans today</div></div>`;
   const qrSection = document.getElementById('qr-section');
   qrSection.innerHTML = `
     <img src="${S.qr.qrcode}" alt="QR code">
     <div class="qr-url">${S.qr.url}</div>
     <div class="qr-actions">
-      <button class="btn btn-outline btn-sm" id="btn-copy-url">📋 Copier le lien</button>
-      ${navigator.share ? '<button class="btn btn-outline btn-sm" id="btn-share-url">↗ Partager</button>' : ''}
+      <button class="btn btn-outline btn-sm" id="btn-copy-url">📋 Copy link</button>
+      ${navigator.share ? '<button class="btn btn-outline btn-sm" id="btn-share-url">↗ Share</button>' : ''}
     </div>`;
   document.getElementById('btn-copy-url')?.addEventListener('click', () => {
     navigator.clipboard.writeText(S.qr.url).then(() => {
       const b = document.getElementById('btn-copy-url');
-      b.textContent = '✓ Copié'; setTimeout(() => b.textContent = '📋 Copier le lien', 2000);
+      b.textContent = '✓ Copied'; setTimeout(() => b.textContent = '📋 Copy link', 2000);
     });
   });
   document.getElementById('btn-share-url')?.addEventListener('click', () => {
-    navigator.share({ url: S.qr.url, title: 'Programme de fidélité' }).catch(() => {});
+    navigator.share({ url: S.qr.url, title: 'Loyalty program' }).catch(() => {});
   });
 }
 
@@ -756,10 +756,10 @@ function renderClients(filter = '') {
   const shown = q ? S.clients.filter(c => c.prenom.toLowerCase().includes(q)) : S.clients;
   if (shown.length === 0) {
     meta.textContent = '';
-    list.innerHTML = `<div class="empty"><div class="empty-icon">👤</div><div class="empty-title">${q ? 'Aucun résultat' : 'Aucun client'}</div><div class="empty-sub">${q ? 'Essayez un autre prénom' : 'Les clients apparaîtront ici après inscription'}</div></div>`;
+    list.innerHTML = `<div class="empty"><div class="empty-icon">👤</div><div class="empty-title">${q ? 'No results' : 'No clients'}</div><div class="empty-sub">${q ? 'Try another name' : 'Clients will appear here after sign-up'}</div></div>`;
     return;
   }
-  meta.textContent = `${shown.length} client${shown.length > 1 ? 's' : ''}${q ? ' trouvé' + (shown.length > 1 ? 's' : '') : ''}`;
+  meta.textContent = `${shown.length} client${shown.length > 1 ? 's' : ''}${q ? ' found' : ''}`;
   list.innerHTML = shown.map(c => {
     const pct = Math.min(c.stored_value / S.displayMax * 100, 100);
     const full = c.stored_value >= S.maxValue;
@@ -802,7 +802,7 @@ async function loadScans(force = false) {
 function renderScans() {
   const el = document.getElementById('scans-list');
   if (!Array.isArray(S.scans) || S.scans.length === 0) {
-    el.innerHTML = `<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">Aucun scan</div><div class="empty-sub">L'historique apparaîtra ici après les premiers passages en caisse</div></div>`;
+    el.innerHTML = `<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">No scans</div><div class="empty-sub">Scan history will appear here after the first transactions</div></div>`;
     return;
   }
   el.innerHTML = S.scans.map(s => {
@@ -812,7 +812,7 @@ function renderScans() {
     const reward = apres >= S.maxValue;
     const reset  = apres === 0 && avant > 0;
     const delta  = reward
-      ? `<div class="scan-pts" style="color:var(--warning)">🎉 Récompense</div><div style="font-size:11px;color:var(--muted)">${avant} → ${apres}</div>`
+      ? `<div class="scan-pts" style="color:var(--warning)">🎉 Reward</div><div style="font-size:11px;color:var(--muted)">${avant} → ${apres}</div>`
       : reset
         ? `<div class="scan-pts" style="color:var(--accent)">↩️ Reset</div><div style="font-size:11px;color:var(--muted)">${avant} → 0</div>`
         : `<div class="scan-pts">${avant} → ${apres}</div>`;
@@ -856,8 +856,8 @@ function startScannerTab() {
     document.getElementById('sc-reward-banner').style.display = 'none';
     document.getElementById('sc-reset-banner').style.display = 'none';
     document.getElementById('sc-error').style.display = 'block';
-    document.getElementById('sc-error').textContent = 'Impossible d\'accéder à la caméra : ' + e.message;
-    document.getElementById('sc-name').textContent = 'Erreur caméra';
+    document.getElementById('sc-error').textContent = 'Cannot access camera: ' + e.message;
+    document.getElementById('sc-name').textContent = 'Camera error';
     document.getElementById('sc-avatar').textContent = '⚠';
     document.getElementById('sc-avatar').style.background = 'var(--error)';
     document.getElementById('sc-serial').textContent = '';
@@ -901,7 +901,7 @@ async function submitScanDashboard(serial) {
   if (SC.processing) return;
   SC.processing = true;
   const statusEl = document.getElementById('sc-status');
-  statusEl.textContent = '⏳ Traitement…'; statusEl.style.display = 'block';
+  statusEl.textContent = '⏳ Processing…'; statusEl.style.display = 'block';
   try { navigator.vibrate && navigator.vibrate(50); } catch {}
   try {
     const res = await fetch('/api/scan', {
@@ -929,9 +929,9 @@ function showScanResult(data, ok, serial) {
   document.getElementById('sc-progress-section').style.display = ok ? '' : 'none';
 
   if (!ok) {
-    document.getElementById('sc-error').textContent = data.error || 'Erreur inconnue';
+    document.getElementById('sc-error').textContent = data.error || 'Unknown error';
     document.getElementById('sc-error').style.display = 'block';
-    document.getElementById('sc-name').textContent = 'Erreur';
+    document.getElementById('sc-name').textContent = 'Error';
     document.getElementById('sc-avatar').textContent = '✗';
     document.getElementById('sc-avatar').style.background = 'var(--error)';
     document.getElementById('sc-serial').textContent = serial;
@@ -966,7 +966,7 @@ function showScanResult(data, ok, serial) {
 
   if (recompense) {
     document.getElementById('sc-reward-banner').style.display = 'flex';
-    document.getElementById('sc-reward-sub').textContent = `${prenom} a atteint ${displayMax} points — offrez la récompense !`;
+    document.getElementById('sc-reward-sub').textContent = `${prenom} reached ${displayMax} points — give the reward!`;
     try { navigator.vibrate && navigator.vibrate([100, 50, 100, 50, 200]); } catch {}
   }
   if (isReset) document.getElementById('sc-reset-banner').style.display = 'block';
@@ -1002,7 +1002,7 @@ document.getElementById('modal-scan-manual').addEventListener('click', e => {
 document.getElementById('sc-manual-submit').addEventListener('click', async () => {
   const serial = document.getElementById('sc-manual-input').value.trim();
   const errEl  = document.getElementById('sc-manual-error');
-  if (!serial) { showErr(errEl, 'Entrez un numéro de série'); return; }
+  if (!serial) { showErr(errEl, 'Enter a serial number'); return; }
   closeManualScan();
   SC.processing = false;
   await submitScanDashboard(serial);
@@ -1023,23 +1023,23 @@ document.getElementById('notif-form').addEventListener('submit', async () => {
   const result = document.getElementById('notif-result');
   const btn    = document.getElementById('btn-send-notif');
   result.innerHTML = '';
-  if (!msg) { result.innerHTML = '<div class="alert alert-error">Le message est requis</div>'; return; }
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Envoi…';
+  if (!msg) { result.innerHTML = '<div class="alert alert-error">Message is required</div>'; return; }
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Sending…';
   try {
     const res  = await api('/api/notifications', { method: 'POST', body: JSON.stringify({ message: msg }) });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Erreur envoi');
+    if (!res.ok) throw new Error(data.error || 'Send error');
     const { apple, google } = data;
     const totalClients = apple.total + google.total;
     if (totalClients === 0) {
-      result.innerHTML = `<div class="alert alert-info">Aucun appareil enregistré.</div>`;
+      result.innerHTML = `<div class="alert alert-info">No registered devices.</div>`;
     } else {
       const lines = [];
       if (apple.active) {
-        lines.push(`🍎 Apple Wallet : ${apple.envoyes}/${apple.total} envoyée${apple.envoyes > 1 ? 's' : ''}${apple.echecs ? ` · ${apple.echecs} échec` : ''}`);
+        lines.push(`🍎 Apple Wallet: ${apple.envoyes}/${apple.total} sent${apple.echecs ? ` · ${apple.echecs} failed` : ''}`);
       }
       if (google.active) {
-        lines.push(`🤖 Google Wallet : ${google.envoyes}/${google.total} envoyée${google.envoyes > 1 ? 's' : ''}${google.echecs ? ` · ${google.echecs} échec` : ''}`);
+        lines.push(`🤖 Google Wallet: ${google.envoyes}/${google.total} sent${google.echecs ? ` · ${google.echecs} failed` : ''}`);
       }
       const totalEnvoyes = apple.envoyes + google.envoyes;
       result.innerHTML = `<div class="alert ${totalEnvoyes > 0 ? 'alert-success' : 'alert-info'}">${lines.join('<br>')}</div>`;
@@ -1053,7 +1053,7 @@ document.getElementById('notif-form').addEventListener('submit', async () => {
   } catch (e) {
     result.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
   } finally {
-    btn.disabled = false; btn.textContent = 'Envoyer la notification';
+    btn.disabled = false; btn.textContent = 'Send notification';
   }
 });
 
@@ -1064,7 +1064,7 @@ async function loadNotifHistory(force = false) {
   try {
     const res  = await api('/api/notifications');
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Erreur chargement historique');
+    if (!res.ok) throw new Error(data.error || 'Error loading history');
     S.notifLogs = Array.isArray(data) ? data : [];
   } catch (e) {
     S.notifLogs = [];
@@ -1077,13 +1077,13 @@ async function loadNotifHistory(force = false) {
 function renderNotifHistory() {
   const el = document.getElementById('notif-history-list');
   if (!S.notifLogs || S.notifLogs.length === 0) {
-    el.innerHTML = `<div class="empty" style="padding:20px 0"><div class="empty-icon">📭</div><div class="empty-sub">Aucune notification envoyée</div></div>`;
+    el.innerHTML = `<div class="empty" style="padding:20px 0"><div class="empty-icon">📭</div><div class="empty-sub">No notifications sent yet</div></div>`;
     return;
   }
   el.innerHTML = S.notifLogs.map(n => {
     const total   = (n.total_apple || 0) + (n.total_google || 0);
     const envoyes = (n.envoyes_apple || 0) + (n.envoyes_google || 0);
-    const dest = total > 0 ? `${envoyes}/${total} reçue${envoyes > 1 ? 's' : ''}` : 'Aucun appareil';
+    const dest = total > 0 ? `${envoyes}/${total} received` : 'No devices';
     return `<div class="notif-log-entry">
       <div class="notif-log-msg">${esc(n.message)}</div>
       <div class="notif-log-meta"><span>${timeAgo(n.created_at)}</span><span>${dest}</span></div>
@@ -1127,7 +1127,7 @@ function renderClientSheet({ client, scans }) {
   av.textContent      = client.prenom.charAt(0).toUpperCase();
   av.style.background = colorFrom(client.prenom);
   document.getElementById('cs-name').textContent  = client.prenom;
-  document.getElementById('cs-since').textContent = 'Inscrit le ' + new Date(client.created_at).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
+  document.getElementById('cs-since').textContent = 'Member since ' + new Date(client.created_at).toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' });
   document.getElementById('cs-pts').textContent   = client.stored_value;
   document.getElementById('cs-pts-max').textContent = `/ ${displayMax}`;
   document.getElementById('cs-reward-badge').style.display = full ? '' : 'none';
@@ -1137,14 +1137,14 @@ function renderClientSheet({ client, scans }) {
   ).join('');
   const sl = document.getElementById('cs-scans-list');
   if (!scans || scans.length === 0) {
-    sl.innerHTML = '<div class="cs-no-scans">Aucun scan enregistré pour ce client.</div>';
+    sl.innerHTML = '<div class="cs-no-scans">No scans recorded for this client.</div>';
     return;
   }
   sl.innerHTML = scans.map(s => {
     const isReset  = s.stored_value_apres === 0 && s.stored_value_avant > 0;
     const isReward = !isReset && s.stored_value_apres >= S.maxValue;
     const icon = isReset ? '↩️' : isReward ? '🎉' : '✅';
-    const dateStr = new Date(s.date_scan).toLocaleDateString('fr-FR', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+    const dateStr = new Date(s.date_scan).toLocaleDateString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
     return `<div class="cs-scan-row">
       <span class="cs-scan-icon">${icon}</span>
       <div style="flex:1">
@@ -1187,13 +1187,13 @@ document.getElementById('rename-confirm').addEventListener('click', async () => 
   const prenom = document.getElementById('rename-input').value.trim();
   const errEl  = document.getElementById('rename-err');
   errEl.style.display = 'none';
-  if (!prenom) { errEl.textContent = 'Prénom requis'; errEl.style.display = 'block'; return; }
+  if (!prenom) { errEl.textContent = 'First name required'; errEl.style.display = 'block'; return; }
   const btn = document.getElementById('rename-confirm');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
   try {
     const res  = await api(`/api/clients/${S.clientId}`, { method: 'PATCH', body: JSON.stringify({ prenom }) });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Erreur');
+    if (!res.ok) throw new Error(data.error || 'Error');
     if (S.clientData) S.clientData.client = { ...S.clientData.client, ...data };
     if (S.clients) { const idx = S.clients.findIndex(c => c.id === S.clientId); if (idx >= 0) S.clients[idx].prenom = data.prenom; }
     document.getElementById('modal-rename').classList.remove('open');
@@ -1202,7 +1202,7 @@ document.getElementById('rename-confirm').addEventListener('click', async () => 
   } catch (e) {
     errEl.textContent = e.message; errEl.style.display = 'block';
   } finally {
-    btn.disabled = false; btn.textContent = 'Enregistrer';
+    btn.disabled = false; btn.textContent = 'Save';
   }
 });
 
@@ -1226,14 +1226,14 @@ document.getElementById('adjust-confirm').addEventListener('click', async () => 
   const errEl = document.getElementById('adjust-err');
   errEl.style.display = 'none';
   if (isNaN(val) || val < 0 || val > S.maxValue) {
-    errEl.textContent = `Valeur entre 0 et ${S.maxValue}`; errEl.style.display = 'block'; return;
+    errEl.textContent = `Value between 0 and ${S.maxValue}`; errEl.style.display = 'block'; return;
   }
   const btn = document.getElementById('adjust-confirm');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
   try {
     const res  = await api(`/api/clients/${S.clientId}`, { method: 'PATCH', body: JSON.stringify({ stored_value: val }) });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Erreur');
+    if (!res.ok) throw new Error(data.error || 'Error');
     if (S.clientData) S.clientData.client = { ...S.clientData.client, ...data };
     if (S.clients) { const idx = S.clients.findIndex(c => c.id === S.clientId); if (idx >= 0) S.clients[idx].stored_value = data.stored_value; }
     document.getElementById('modal-adjust').classList.remove('open');
@@ -1242,7 +1242,7 @@ document.getElementById('adjust-confirm').addEventListener('click', async () => 
   } catch (e) {
     errEl.textContent = e.message; errEl.style.display = 'block';
   } finally {
-    btn.disabled = false; btn.textContent = 'Confirmer';
+    btn.disabled = false; btn.textContent = 'Confirm';
   }
 });
 
@@ -1252,7 +1252,7 @@ document.getElementById('adjust-confirm').addEventListener('click', async () => 
 function openDeleteModal(id, nom) {
   S.deleteTargetId = id; S.deleteTargetNom = nom;
   document.getElementById('modal-delete-body').innerHTML =
-    `Supprimer <strong>${esc(nom)}</strong> ? Cette action est <strong>irréversible</strong> — le pass devient invalide.`;
+    `Delete <strong>${esc(nom)}</strong>? This action is <strong>irreversible</strong> — the pass will become invalid.`;
   document.getElementById('modal-delete').classList.add('open');
 }
 
@@ -1269,7 +1269,7 @@ document.getElementById('btn-confirm-delete').addEventListener('click', async ()
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
   try {
     const res = await api(`/api/clients/${id}`, { method: 'DELETE' });
-    if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Erreur suppression'); }
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Deletion error'); }
     document.getElementById('modal-delete').classList.remove('open');
     if (S.clients) S.clients = S.clients.filter(c => c.id !== id);
     renderClients(document.getElementById('search-clients').value);
@@ -1277,7 +1277,7 @@ document.getElementById('btn-confirm-delete').addEventListener('click', async ()
   } catch (e) {
     alert(e.message);
   } finally {
-    btn.disabled = false; btn.textContent = 'Supprimer définitivement';
+    btn.disabled = false; btn.textContent = 'Delete permanently';
   }
 });
 
@@ -1287,14 +1287,14 @@ document.getElementById('btn-confirm-delete').addEventListener('click', async ()
 function timeAgo(iso) {
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);
-  if (m < 1)  return 'à l\'instant';
-  if (m < 60) return `il y a ${m} min`;
+  if (m < 1)  return 'just now';
+  if (m < 60) return `${m} min ago`;
   const h = Math.floor(m / 60);
-  if (h < 24) return `il y a ${h}h`;
+  if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24);
-  if (d === 1) return 'hier';
-  if (d < 7)  return `il y a ${d} j`;
-  return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+  if (d === 1) return 'yesterday';
+  if (d < 7)  return `${d} days ago`;
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
 const COLORS = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#f97316'];

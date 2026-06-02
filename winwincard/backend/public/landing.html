@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <meta name="theme-color" content="#1a1a2e">
-  <title>Carte de fidélité</title>
+  <title>Loyalty Card</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -91,7 +91,7 @@
     .field input {
       width: 100%;
       padding: 14px 16px;
-      font-size: 16px; /* 16px min évite le zoom sur iOS */
+      font-size: 16px; /* 16px min prevents iOS zoom */
       border: 1.5px solid #ddd;
       border-radius: 12px;
       background: #fafafa;
@@ -281,7 +281,7 @@
     <div class="header-logo" id="header-logo">
       <span id="logo-initial"></span>
     </div>
-    <div class="header-name" id="header-name">Chargement…</div>
+    <div class="header-name" id="header-name">Loading…</div>
   </header>
 
   <main class="card">
@@ -298,8 +298,8 @@
     <!-- Marchand introuvable / suspendu -->
     <div class="not-found" id="not-found">
       <div class="not-found-icon">🔒</div>
-      <h2 id="not-found-title">Programme introuvable</h2>
-      <p id="not-found-msg">Ce programme de fidélité n'est pas disponible.</p>
+      <h2 id="not-found-title">Program not found</h2>
+      <p id="not-found-msg">This loyalty program is not available.</p>
     </div>
 
     <!-- Formulaire d'inscription -->
@@ -312,9 +312,9 @@
 
         <!-- Prénom — V1 -->
         <div class="field">
-          <label for="prenom">Prénom</label>
+          <label for="prenom">First name</label>
           <input type="text" id="prenom" name="prenom"
-            placeholder="Votre prénom"
+            placeholder="Your first name"
             autocomplete="given-name"
             autocapitalize="words"
             maxlength="50"
@@ -344,14 +344,13 @@
         </div>
 
         <button type="submit" class="btn-submit" id="btn-submit">
-          <span class="btn-label">Obtenir ma carte</span>
+          <span class="btn-label">Get my card</span>
           <span class="spinner"></span>
         </button>
       </form>
 
       <p class="rgpd-note">
-        Seul votre prénom est enregistré. Conformément au RGPD,<br>
-        vous pouvez demander la suppression de vos données en magasin.
+        Only your first name is stored. You can request data deletion in-store at any time.
       </p>
     </div>
 
@@ -365,7 +364,7 @@
         </svg>
       </div>
 
-      <div class="success-title" id="success-title">Votre carte est prête !</div>
+      <div class="success-title" id="success-title">Your card is ready!</div>
       <div class="success-sub" id="success-sub"></div>
 
       <div class="wallet-buttons" id="wallet-buttons">
@@ -375,7 +374,7 @@
           <svg width="22" height="22" viewBox="0 0 22 22" fill="white">
             <path d="M15.05 1C14.1 1.87 13.5 3.17 13.7 4.5c1.2.1 2.4-.6 3.2-1.5.8-.9 1.3-2.2 1.1-3.5-1.1.1-2.2.7-2.95 1.5zM16 6.3c-1.65-.1-3.05.93-3.83.93-.78 0-2-.88-3.3-.85C7.1 6.42 5.3 7.4 4.32 9.05c-1.98 3.35-.5 8.3 1.4 11.02.96 1.36 2.1 2.88 3.6 2.83 1.42-.06 1.98-.92 3.7-.92 1.74 0 2.24.92 3.76.89 1.56-.04 2.54-1.4 3.5-2.76a12.2 12.2 0 0 0 1.56-3.12c-3.1-1.18-3.6-5.55-.53-7.3A4.73 4.73 0 0 0 16 6.3z"/>
           </svg>
-          <span>Ajouter à Apple Wallet</span>
+          <span>Add to Apple Wallet</span>
         </a>
 
         <!-- Google Wallet -->
@@ -386,7 +385,7 @@
             <path d="M4.4 11.9A6 6 0 0 1 4.08 10c0-.66.12-1.3.32-1.9V5.52H1.06A10 10 0 0 0 0 10c0 1.62.39 3.15 1.06 4.48L4.4 11.9z" fill="#FBBC05"/>
             <path d="M10 3.96c1.46 0 2.78.5 3.81 1.49l2.86-2.86C14.96.99 12.7 0 10 0A10 10 0 0 0 1.06 5.52L4.4 8.1C5.19 5.72 7.4 3.96 10 3.96z" fill="#EA4335"/>
           </svg>
-          <span>Ajouter à Google Wallet</span>
+          <span>Add to Google Wallet</span>
         </a>
 
       </div>
@@ -427,7 +426,7 @@
     // ── Slug depuis l'URL ────────────────────────────────────
     // URL : /l/:slug
     const slug = location.pathname.split('/l/')[1]?.split('/')[0];
-    if (!slug) showNotFound('Lien invalide', 'Cette URL ne correspond à aucun programme de fidélité.');
+    if (!slug) showNotFound('Invalid link', 'This URL does not match any loyalty program.');
 
     // ── Chargement des données marchand ──────────────────────
     const API = ''; // même origin que le backend
@@ -439,16 +438,16 @@
 
         if (!res.ok) {
           const msg = res.status === 403
-            ? 'Ce programme de fidélité est actuellement suspendu.'
-            : 'Programme de fidélité introuvable.';
-          return showNotFound('Non disponible', msg);
+            ? 'This loyalty program is currently suspended.'
+            : 'Loyalty program not found.';
+          return showNotFound('Unavailable', msg);
         }
 
         applyBranding(data);
         hideSkeleton();
         showForm();
       } catch {
-        showNotFound('Erreur de connexion', 'Impossible de charger la page. Vérifiez votre connexion et réessayez.');
+        showNotFound('Connection error', 'Unable to load the page. Check your connection and try again.');
       }
     }
 
@@ -461,7 +460,7 @@
       document.querySelector('meta[name=theme-color]').content = brand;
 
       // Nom
-      document.title          = `Fidélité ${m.nom}`;
+      document.title          = `${m.nom} Loyalty`;
       $('header-name').textContent = m.nom;
 
       // Logo
@@ -476,7 +475,7 @@
       }
 
       // Texte descriptif
-      $('description').textContent = m.texte_landing || `Bienvenue dans le programme de fidélité ${m.nom} !`;
+      $('description').textContent = m.texte_landing || `Welcome to ${m.nom}'s loyalty program!`;
 
       // Stocker le slug pour le submit
       window._marchandSlug = m.slug;
@@ -489,7 +488,7 @@
 
       const prenom = $('prenom').value.trim();
       if (!prenom) {
-        showError('Veuillez saisir votre prénom.');
+        showError('Please enter your first name.');
         $('prenom').focus();
         return;
       }
@@ -506,14 +505,14 @@
 
         if (!res.ok) {
           setSubmitting(false);
-          showError(data.error || 'Une erreur est survenue. Veuillez réessayer.');
+          showError(data.error || 'An error occurred. Please try again.');
           return;
         }
 
         showSuccess(prenom, data);
       } catch {
         setSubmitting(false);
-        showError('Connexion impossible. Vérifiez votre réseau et réessayez.');
+        showError('Connection failed. Check your network and try again.');
       }
     });
 
@@ -521,8 +520,8 @@
     function showSuccess(prenom, data) {
       $('form-area').classList.add('hidden');
 
-      $('success-title').textContent = `Votre carte est prête !`;
-      $('success-sub').textContent   = `Bonjour ${prenom}, ajoutez votre carte de fidélité à votre portefeuille pour l'avoir toujours avec vous.`;
+      $('success-title').textContent = `Your card is ready!`;
+      $('success-sub').textContent   = `Hi ${prenom}, add your loyalty card to your wallet to always have it with you.`;
 
       // Bouton Apple Wallet
       const btnApple  = $('btn-apple');
@@ -533,7 +532,7 @@
         if (!isIOS) {
           // Sur Android / desktop : informer que c'est pour iPhone
           btnApple.classList.add('unavailable');
-          btnApple.querySelector('span').textContent = 'Apple Wallet (iPhone uniquement)';
+          btnApple.querySelector('span').textContent = 'Apple Wallet (iPhone only)';
           btnApple.removeAttribute('href');
           btnApple.style.pointerEvents = 'none';
         }

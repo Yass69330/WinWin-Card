@@ -9,7 +9,7 @@ router.post('/', authScanner, async (req, res) => {
   const { serial_number } = req.body;
 
   if (!serial_number) {
-    return res.status(400).json({ error: 'serial_number requis' });
+    return res.status(400).json({ error: 'serial_number required' });
   }
 
   // Récupérer le client avec son marchand
@@ -22,10 +22,10 @@ router.post('/', authScanner, async (req, res) => {
     .single();
 
   if (errClient || !client) {
-    return res.status(404).json({ error: 'Pass introuvable ou non autorisé' });
+    return res.status(404).json({ error: 'Pass not found or unauthorized' });
   }
   if (!client.marchands.actif) {
-    return res.status(403).json({ error: 'Compte marchand suspendu' });
+    return res.status(403).json({ error: 'Merchant account suspended' });
   }
 
   const maxValue = client.marchands.max_value;
@@ -44,10 +44,10 @@ router.post('/', authScanner, async (req, res) => {
   }
 
   const scanMessage = isReset
-    ? `Carte mise à jour ${client.prenom} : 0/${displayMaxValue} points`
+    ? `Card updated — ${client.prenom}: 0/${displayMaxValue} pts`
     : recompense
-      ? `Félicitations ${client.prenom} ! Récompense débloquée 🎉`
-      : `+1 — ${client.prenom} : ${apresScan}/${displayMaxValue} points`;
+      ? `Congrats ${client.prenom}! Reward unlocked 🎉`
+      : `+1 — ${client.prenom}: ${apresScan}/${displayMaxValue} pts`;
 
   // Mise à jour client + message de notification du pass en parallèle
   const [{ error: errUpdate }] = await Promise.all([

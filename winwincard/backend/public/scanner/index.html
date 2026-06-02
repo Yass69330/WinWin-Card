@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -388,20 +388,20 @@
     <div class="login-logo">🎯</div>
     <div>
       <div class="login-title">WinWin Scanner</div>
-      <div class="login-sub">Connectez-vous pour scanner</div>
+      <div class="login-sub">Sign in to scan</div>
     </div>
     <form class="login-form" id="login-form" onsubmit="return false">
       <div class="field-group">
-        <label for="input-slug">Identifiant marchand (slug)</label>
+        <label for="input-slug">Merchant ID (slug)</label>
         <input id="input-slug" type="text" placeholder="cafe-le-central" autocomplete="username"
                autocorrect="off" autocapitalize="none" spellcheck="false">
       </div>
       <div class="field-group">
-        <label for="input-password">Mot de passe</label>
+        <label for="input-password">Password</label>
         <input id="input-password" type="password" placeholder="••••••••" autocomplete="current-password">
       </div>
       <div id="login-error"></div>
-      <button type="submit" class="btn btn-primary" id="btn-login">Se connecter</button>
+      <button type="submit" class="btn btn-primary" id="btn-login">Sign in</button>
     </form>
   </div>
 
@@ -415,7 +415,7 @@
           <span>Scanner</span>
           <span class="scan-merchant-badge" id="merchant-badge">–</span>
         </div>
-        <button class="btn-logout" id="btn-logout">Déconnexion</button>
+        <button class="btn-logout" id="btn-logout">Sign out</button>
       </div>
       <div class="scan-frame-wrap">
         <div class="scan-frame">
@@ -423,10 +423,10 @@
           <div class="scan-line"></div>
         </div>
       </div>
-      <div class="scan-hint">Pointez vers le QR code du pass</div>
+      <div class="scan-hint">Point at the pass QR code</div>
       <div id="scan-status" class="scan-status"></div>
       <div class="scan-footer">
-        <button class="btn-manual" id="btn-open-manual">Saisie manuelle</button>
+        <button class="btn-manual" id="btn-open-manual">Manual entry</button>
       </div>
     </div>
   </div>
@@ -462,22 +462,22 @@
       <div class="reward-banner" id="reward-banner" style="display:none">
         <div class="reward-icon">🎉</div>
         <div class="reward-text">
-          <div class="reward-title">Récompense déclenchée !</div>
-          <div class="reward-sub" id="reward-sub">Le client a atteint son objectif</div>
+          <div class="reward-title">Reward unlocked!</div>
+          <div class="reward-sub" id="reward-sub">Client reached their goal</div>
         </div>
       </div>
 
       <!-- Reset notice -->
       <div class="reset-banner" id="reset-banner" style="display:none">
-        ↩️ Compteur remis à zéro après la récompense
+        ↩️ Counter reset after reward
       </div>
 
       <!-- Error -->
       <div class="result-error" id="result-error" style="display:none"></div>
 
       <div class="result-actions">
-        <button class="btn btn-primary" id="btn-rescan">Scanner suivant</button>
-        <button class="btn btn-ghost"   id="btn-manual-after">Saisie manuelle</button>
+        <button class="btn btn-primary" id="btn-rescan">Next scan</button>
+        <button class="btn btn-ghost"   id="btn-manual-after">Manual entry</button>
       </div>
     </div>
   </div>
@@ -487,15 +487,15 @@
 <!-- ═══════════════════ MODAL SAISIE MANUELLE ═══════════════════ -->
 <div id="modal-manual">
   <div class="modal-sheet">
-    <div class="modal-title">Saisie manuelle</div>
-    <div class="modal-sub">Entrez le numéro de série du pass</div>
+    <div class="modal-title">Manual entry</div>
+    <div class="modal-sub">Enter the pass serial number</div>
     <div class="field-group">
-      <label for="input-serial">Numéro de série</label>
+      <label for="input-serial">Serial number</label>
       <input id="input-serial" type="text" placeholder="serial-xxxxx" autocorrect="off" autocapitalize="none">
     </div>
     <div id="manual-error" style="color:var(--error);font-size:13px;display:none"></div>
-    <button class="btn btn-primary" id="btn-manual-submit">Valider</button>
-    <button class="btn btn-ghost"   id="btn-manual-cancel">Annuler</button>
+    <button class="btn btn-primary" id="btn-manual-submit">Submit</button>
+    <button class="btn btn-ghost"   id="btn-manual-cancel">Cancel</button>
   </div>
 </div>
 
@@ -554,7 +554,7 @@ document.getElementById('login-form').addEventListener('submit', async () => {
   const btn = document.getElementById('btn-login');
 
   errEl.style.display = 'none';
-  if (!slug || !password) { showLoginError('Remplissez tous les champs'); return; }
+  if (!slug || !password) { showLoginError('Please fill in all fields'); return; }
 
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>';
@@ -566,14 +566,14 @@ document.getElementById('login-form').addEventListener('submit', async () => {
       body: JSON.stringify({ slug, password, remember_device: true })
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Identifiants incorrects');
+    if (!res.ok) throw new Error(data.error || 'Invalid credentials');
     saveSession(data.token, slug, data.nom || slug);
     startScanner();
   } catch (e) {
     showLoginError(e.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Se connecter';
+    btn.textContent = 'Sign in';
   }
 });
 
@@ -605,7 +605,7 @@ async function startScanner() {
       requestAnimationFrame(scanLoop);
     }, { once: true });
   } catch (e) {
-    alert('Impossible d\'accéder à la caméra : ' + e.message);
+    alert('Cannot access camera: ' + e.message);
   }
 }
 
@@ -661,7 +661,7 @@ async function submitScan(serial) {
   state.processing = true;
 
   const statusEl = document.getElementById('scan-status');
-  statusEl.textContent = '⏳ Traitement…';
+  statusEl.textContent = '⏳ Processing…';
   statusEl.style.display = 'block';
 
   // Vibrate on mobile
@@ -682,7 +682,7 @@ async function submitScan(serial) {
   } catch (e) {
     statusEl.style.display = 'none';
     state.processing = false;
-    showScanError('Erreur réseau : ' + e.message);
+    showScanError('Network error: ' + e.message);
   }
 }
 
@@ -707,9 +707,9 @@ function showResult(data, ok, serial) {
 
   if (!ok) {
     const errEl = document.getElementById('result-error');
-    errEl.textContent = data.error || 'Erreur inconnue';
+    errEl.textContent = data.error || 'Unknown error';
     errEl.style.display = 'block';
-    document.getElementById('result-name').textContent = 'Erreur';
+    document.getElementById('result-name').textContent = 'Error';
     document.getElementById('result-avatar').textContent = '✗';
     document.getElementById('result-avatar').style.background = 'var(--error)';
     document.getElementById('result-serial').textContent = serial;
@@ -748,7 +748,7 @@ function showResult(data, ok, serial) {
   if (recompense) {
     document.getElementById('reward-banner').style.display = 'flex';
     document.getElementById('reward-sub').textContent =
-      `${prenom} a atteint ${displayMax} points — offrez la récompense !`;
+      `${prenom} reached ${displayMax} points — give the reward!`;
     document.getElementById('reset-banner').style.display = 'flex';
     try { navigator.vibrate && navigator.vibrate([100, 50, 100, 50, 200]); } catch {}
   }
@@ -779,7 +779,7 @@ document.getElementById('btn-manual-cancel').addEventListener('click', closeManu
 document.getElementById('btn-manual-submit').addEventListener('click', async () => {
   const serial = document.getElementById('input-serial').value.trim();
   if (!serial) {
-    document.getElementById('manual-error').textContent = 'Entrez un numéro de série';
+    document.getElementById('manual-error').textContent = 'Enter a serial number';
     document.getElementById('manual-error').style.display = 'block';
     return;
   }

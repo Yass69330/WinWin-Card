@@ -10,10 +10,10 @@ router.post('/', async (req, res) => {
   const { prenom, marchand_slug } = req.body;
 
   if (!prenom || !marchand_slug) {
-    return res.status(400).json({ error: 'prenom et marchand_slug sont requis' });
+    return res.status(400).json({ error: 'prenom and marchand_slug are required' });
   }
   const prenomPropre = prenom.trim().slice(0, 50);
-  if (!prenomPropre) return res.status(400).json({ error: 'Prénom invalide' });
+  if (!prenomPropre) return res.status(400).json({ error: 'Invalid first name' });
 
   // Récupérer le marchand complet (nécessaire pour Google Wallet)
   const { data: marchand, error: errMarchand } = await supabase
@@ -22,8 +22,8 @@ router.post('/', async (req, res) => {
     .eq('slug', marchand_slug)
     .single();
 
-  if (errMarchand || !marchand) return res.status(404).json({ error: 'Marchand introuvable' });
-  if (!marchand.actif) return res.status(403).json({ error: 'Ce programme de fidélité est suspendu' });
+  if (errMarchand || !marchand) return res.status(404).json({ error: 'Merchant not found' });
+  if (!marchand.actif) return res.status(403).json({ error: 'This loyalty program is suspended' });
 
   const serialNumber = uuidv4();
   const clientData = { prenom: prenomPropre, stored_value: 0 };
@@ -35,7 +35,7 @@ router.post('/', async (req, res) => {
     .select()
     .single();
 
-  if (errClient) return res.status(500).json({ error: 'Erreur création client', detail: errClient.message });
+  if (errClient) return res.status(500).json({ error: 'Error creating client', detail: errClient.message });
 
   // Créer l'entrée passes
   await supabase.from('passes').insert({ client_id: client.id, marchand_id: marchand.id, serial_number: serialNumber });
@@ -121,16 +121,16 @@ router.patch('/:id([0-9a-f\\-]{36})', authMarchand, async (req, res) => {
   const updates = {};
   if (prenom !== undefined) {
     const prenomPropre = String(prenom).trim().slice(0, 50);
-    if (!prenomPropre) return res.status(400).json({ error: 'Prénom invalide' });
+    if (!prenomPropre) return res.status(400).json({ error: 'Invalid first name' });
     updates.prenom = prenomPropre;
   }
   if (stored_value !== undefined) {
     const val = parseInt(stored_value, 10);
-    if (isNaN(val) || val < 0 || val > 99) return res.status(400).json({ error: 'stored_value doit être un entier entre 0 et 99' });
+    if (isNaN(val) || val < 0 || val > 99) return res.status(400).json({ error: 'stored_value must be an integer between 0 and 99' });
     updates.stored_value = val;
   }
   if (Object.keys(updates).length === 0) {
-    return res.status(400).json({ error: 'Au moins un champ requis : prenom ou stored_value' });
+    return res.status(400).json({ error: 'At least one field required: prenom or stored_value' });
   }
 
   // Vérifier que le client appartient au marchand (on récupère aussi pass_serial_number pour le push)
@@ -142,7 +142,7 @@ router.patch('/:id([0-9a-f\\-]{36})', authMarchand, async (req, res) => {
     .is('deleted_at', null)
     .single();
 
-  if (errCheck || !existing) return res.status(404).json({ error: 'Client introuvable' });
+  if (errCheck || !existing) return res.status(404).json({ error: 'Client not found' });
 
   const { data: updated, error: errUpdate } = await supabase
     .from('clients')
@@ -173,7 +173,7 @@ async function syncPassAfterAdjustment(serialNumber, marchandId, prenom, newValu
     .single();
 
   const displayMax = marchand?.display_max_value || marchand?.max_value || '?';
-  const msg = `Points mis à jour — ${prenom} : ${newValue}/${displayMax}`;
+  const msg = `Points updated — ${prenom}: ${newValue}/${displayMax}`;
 
   await supabase.from('passes')
     .update({ notification_message: msg })

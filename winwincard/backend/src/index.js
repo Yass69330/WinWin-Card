@@ -36,14 +36,14 @@ app.use(rateLimit({
 const limiterInscription = rateLimit({
   windowMs: 60 * 60 * 1000, // 1h
   max: 20,
-  message: { error: 'Trop de tentatives, réessaie dans une heure' }
+  message: { error: 'Too many attempts, please try again in an hour' }
 });
 
 // Rate limiting strict sur le login admin (anti brute-force)
 const limiterAdminLogin = rateLimit({
   windowMs: 60 * 60 * 1000, // 1h
   max: 10,
-  message: { error: 'Trop de tentatives, réessaie dans une heure' }
+  message: { error: 'Too many attempts, please try again in an hour' }
 });
 
 // ── Routes ───────────────────────────────────────────────────
@@ -97,10 +97,10 @@ app.get('/health', (req, res) => {
 });
 
 // ── Erreurs ──────────────────────────────────────────────────
-app.use((req, res) => res.status(404).json({ error: 'Route introuvable' }));
+app.use((req, res) => res.status(404).json({ error: 'Route not found' }));
 app.use((err, req, res, next) => {
   console.error(err);
-  res.status(500).json({ error: 'Erreur serveur interne' });
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 // ── Démarrage ────────────────────────────────────────────────
