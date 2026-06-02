@@ -55,6 +55,15 @@ function googleHeroUrl(marchand) {
   return marchand.google_hero_url || marchand.image_strip_url || null;
 }
 
+// Sélectionne l'URL d'image de tier selon les points du client.
+// imagesTiers : tableau [{ min, max, url }] ou null/undefined.
+// Retourne l'URL du tier correspondant, ou null si aucun ne correspond.
+function selectTierImageUrl(imagesTiers, storedValue) {
+  if (!Array.isArray(imagesTiers) || imagesTiers.length === 0) return null;
+  const tier = imagesTiers.find(t => storedValue >= t.min && storedValue <= t.max);
+  return tier ? tier.url : null;
+}
+
 // ── Auth Google (OAuth2 via JWT service account) ─────────────
 // Token mis en cache 45 min — évite N appels OAuth2 lors d'un envoi groupé.
 
@@ -123,18 +132,18 @@ function buildLoyaltyClass(cId, marchand) {
 
     // Titre de la catégorie — affiché sous le logo en petit
     cardTitle: {
-      defaultValue: { language: 'fr', value: 'carte de fidélité' },
+      defaultValue: { language: 'en', value: 'loyalty card' },
     },
 
     hexBackgroundColor: marchand.couleur_fond || '#1a1a2e',
-    countryCode: 'FR',
+    countryCode: 'AE',
     reviewStatus: 'UNDER_REVIEW',
 
     // Label affiché à côté du solde de points
     loyaltyPoints: {
-      label: 'Progression',
+      label: 'Progress',
       localizedLabel: {
-        defaultValue: { language: 'fr', value: 'Progression' },
+        defaultValue: { language: 'en', value: 'Progress' },
       },
     },
   };
@@ -144,7 +153,7 @@ function buildLoyaltyClass(cId, marchand) {
     obj.programLogo = {
       sourceUri: { uri: logoUrl },
       contentDescription: {
-        defaultValue: { language: 'fr', value: `Logo ${marchand.nom}` },
+        defaultValue: { language: 'en', value: `${marchand.nom} logo` },
       },
     };
   }
@@ -154,7 +163,7 @@ function buildLoyaltyClass(cId, marchand) {
     obj.heroImage = {
       sourceUri: { uri: heroUrl },
       contentDescription: {
-        defaultValue: { language: 'fr', value: marchand.nom },
+        defaultValue: { language: 'en', value: marchand.nom },
       },
     };
   }
@@ -180,20 +189,20 @@ function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
     // Solde de points
     loyaltyPoints: {
       balance: { int: client.stored_value },
-      label: isRecompense ? 'Récompense !' : 'Progression',
+      label: isRecompense ? 'Reward!' : 'Progress',
     },
 
     // Infos au dos de la carte
     textModulesData: [
       {
         id: 'details',
-        header: 'Comment ça marche ?',
-        body: `Présentez votre pass à chaque visite.\nAprès ${displayMax} passages, votre récompense est débloquée automatiquement.`,
+        header: 'How it works',
+        body: `Show your pass at every visit.\nAfter ${displayMax} visits, your reward is unlocked automatically.`,
       },
       {
-        id: 'rgpd',
-        header: 'Vos données',
-        body: 'Conformément au RGPD, vous pouvez demander la suppression de vos données directement en magasin.',
+        id: 'privacy',
+        header: 'Your data',
+        body: 'You can request deletion of your data at any time directly in store.',
       },
     ],
 
@@ -300,24 +309,29 @@ async function generateGoogleWalletUrl({ client, marchand, serialNumber }) {
 }
 
 // Mise à jour des points après un scan — appelé en async depuis scan.js
-async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue, displayMaxValue) {
+async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, imagesTiers) {
   if (!isConfigured()) return;
 
   const oId = objectId(serialNumber);
   const token = await getAccessToken();
   const isRecompense = storedValue > 0 && storedValue >= (maxValue || 1);
 
-  await walletRequest(
-    'PATCH',
-    `/loyaltyObject/${encodeURIComponent(oId)}`,
-    {
-      loyaltyPoints: {
-        balance: { int: storedValue },
-        label: isRecompense ? 'Récompense !' : 'Progression',
-      },
+  const patch = {
+    loyaltyPoints: {
+      balance: { int: storedValue },
+      label: isRecompense ? 'Reward!' : 'Progress',
     },
-    token
-  );
+  };
+
+  const tierUrl = selectTierImageUrl(imagesTiers, storedValue);
+  if (tierUrl) {
+    patch.heroImage = {
+      sourceUri: { uri: tierUrl },
+      contentDescription: { defaultValue: { language: 'en', value: 'loyalty progress' } },
+    };
+  }
+
+  await walletRequest('PATCH', `/loyaltyObject/${encodeURIComponent(oId)}`, patch, token);
 }
 
 // Notification marketing — ajoute un message visible dans Google Wallet
