@@ -256,7 +256,8 @@ function buildPassJson({ client, marchand, serialNumber, passNotification }) {
     logoText: marchand.nom,
     storeCard: {
       headerFields: [],
-      primaryFields: [
+      primaryFields: [],
+      secondaryFields: [
         {
           key:   'prenom',
           label: 'CLIENT',
@@ -269,7 +270,6 @@ function buildPassJson({ client, marchand, serialNumber, passNotification }) {
           textAlignment: 'PKTextAlignmentRight',
         },
       ],
-      secondaryFields: [],
       auxiliaryFields: [],
       backFields: [
         {
