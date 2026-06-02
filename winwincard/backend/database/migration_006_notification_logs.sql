@@ -10,6 +10,10 @@ create table if not exists notification_logs (
 );
 create index if not exists idx_notif_logs_marchand on notification_logs(marchand_id, created_at desc);
 
--- RLS requis : sans ça PostgREST refuse l'accès même avec service_role.
--- service_role bypasse automatiquement toutes les policies RLS.
+-- RLS requis pour que PostgREST expose la table.
+-- service_role a BYPASSRLS mais a quand même besoin d'un grant explicite
+-- sur les tables créées via migration (contrairement au dashboard Supabase).
 alter table notification_logs enable row level security;
+
+grant select, insert, update, delete on public.notification_logs to service_role;
+grant select, insert, update, delete on public.notification_logs to authenticated;

@@ -790,7 +790,7 @@ async function loadScans(force = false) {
   if (!force && S.scans) { renderScans(); return; }
   document.getElementById('scans-list').innerHTML = Array(5).fill('<div class="skeleton skeleton-card"></div>').join('');
   try {
-    const res = await api('/api/scans');
+    const res = await api('/api/scan');
     const data = await res.json();
     S.scans = Array.isArray(data) ? data : [];
     renderScans();
