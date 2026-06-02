@@ -62,7 +62,7 @@ router.post('/marchands', authAdmin, async (req, res) => {
   const {
     nom, slug, email_contact, password, forfait,
     couleur_fond, couleur_texte, couleur_label,
-    logo_url, image_strip_url, google_logo_url, google_hero_url,
+    logo_url, icon_url, image_strip_url, google_logo_url, google_hero_url,
     texte_landing, max_value, display_max_value, images_tiers,
   } = req.body;
 
@@ -84,7 +84,7 @@ router.post('/marchands', authAdmin, async (req, res) => {
       couleur_fond:  couleur_fond  || '#ffffff',
       couleur_texte: couleur_texte || '#000000',
       couleur_label: couleur_label || '#888888',
-      logo_url, image_strip_url, google_logo_url, google_hero_url,
+      logo_url, icon_url, image_strip_url, google_logo_url, google_hero_url,
       texte_landing, images_tiers,
       max_value: max_value || 10,
       display_max_value: display_max_value || null,
@@ -106,7 +106,7 @@ router.patch('/marchands/:id', authAdmin, async (req, res) => {
   const ALLOWED = [
     'nom', 'email_contact',
     'couleur_fond', 'couleur_texte', 'couleur_label',
-    'logo_url', 'image_strip_url', 'images_tiers',
+    'logo_url', 'icon_url', 'image_strip_url', 'images_tiers',
     'google_logo_url', 'google_hero_url',
     'texte_landing', 'max_value', 'display_max_value', 'forfait',
   ];

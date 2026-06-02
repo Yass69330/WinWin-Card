@@ -318,9 +318,12 @@ async function generateApplePass({ client, marchand, serialNumber, passNotificat
   const stripPng = createSolidPng(375, 123, rf, gf, bf);
 
   const stripUrl = selectStripImageUrl(marchand, client.stored_value);
-  const [logoBuf, logo2Buf, stripBuf, strip2Buf] = await Promise.all([
-    marchand.logo_url ? fetchImage(marchand.logo_url).catch(() => iconPng)  : iconPng,
-    marchand.logo_url ? fetchImage(marchand.logo_url).catch(() => icon2Png) : icon2Png,
+  const iconUrl  = marchand.icon_url || marchand.logo_url || null;
+  const [iconBuf, icon2Buf, logoBuf, logo2Buf, stripBuf, strip2Buf] = await Promise.all([
+    iconUrl           ? fetchImage(iconUrl).catch(() => iconPng)             : iconPng,
+    iconUrl           ? fetchImage(iconUrl).catch(() => icon2Png)            : icon2Png,
+    marchand.logo_url ? fetchImage(marchand.logo_url).catch(() => iconPng)   : iconPng,
+    marchand.logo_url ? fetchImage(marchand.logo_url).catch(() => icon2Png)  : icon2Png,
     stripUrl          ? fetchImage(stripUrl).catch(() => stripPng)           : stripPng,
     stripUrl          ? fetchImage(stripUrl).catch(() => stripPng)           : stripPng,
   ]);
@@ -331,8 +334,8 @@ async function generateApplePass({ client, marchand, serialNumber, passNotificat
   // icon.png = icône notification iOS — utilise le logo marchand si disponible, sinon couleur unie
   const passFiles = [
     { name: 'pass.json',    data: passJsonBuf },
-    { name: 'icon.png',     data: iconPng },   // notification icon — solid color renders cleanly at 29px
-    { name: 'icon@2x.png',  data: icon2Png },
+    { name: 'icon.png',     data: iconBuf },
+    { name: 'icon@2x.png',  data: icon2Buf },
     { name: 'logo.png',     data: logoBuf },
     { name: 'logo@2x.png',  data: logo2Buf },
     { name: 'strip.png',    data: stripBuf },

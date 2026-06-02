@@ -340,6 +340,10 @@
           <input id="f-logo" type="url" placeholder="https://…">
         </div>
         <div class="field">
+          <label for="f-icon">Icon URL — notification Apple (87×87 px @3x)</label>
+          <input id="f-icon" type="url" placeholder="https://… (facultatif — fallback : Logo URL)">
+        </div>
+        <div class="field">
           <label for="f-strip">Strip URL (Apple : 750×246 px)</label>
           <input id="f-strip" type="url" placeholder="https://…">
         </div>
@@ -664,7 +668,7 @@ document.getElementById('sheet-backdrop').addEventListener('click', e => {
 // FORM : REMPLIR / VIDER
 // ════════════════════════════════════
 function resetForm() {
-  ['f-nom','f-slug','f-email','f-pwd','f-new-pwd','f-logo','f-strip','f-glogo','f-ghero','f-texte','f-tiers'].forEach(id => {
+  ['f-nom','f-slug','f-email','f-pwd','f-new-pwd','f-logo','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-tiers'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   setColor('cp-fond',  'f-fond',  '#ffffff');
@@ -688,6 +692,7 @@ function fillForm(m) {
   v('f-email',  m.email_contact);
   v('f-texte',  m.texte_landing);
   v('f-logo',   m.logo_url);
+  v('f-icon',   m.icon_url);
   v('f-strip',  m.image_strip_url);
   v('f-glogo',  m.google_logo_url);
   v('f-ghero',  m.google_hero_url);
@@ -803,7 +808,8 @@ function collectForm() {
     display_max_value: parseInt(document.getElementById('f-displaymax').value) || undefined,
     forfait:         document.getElementById('f-forfait').value,
     texte_landing: document.getElementById('f-texte').value.trim()  || undefined,
-    logo_url:      document.getElementById('f-logo').value.trim()   || undefined,
+    logo_url:        document.getElementById('f-logo').value.trim()  || undefined,
+    icon_url:        document.getElementById('f-icon').value.trim()  || undefined,
     image_strip_url: document.getElementById('f-strip').value.trim() || undefined,
     google_logo_url: document.getElementById('f-glogo').value.trim() || undefined,
     google_hero_url: document.getElementById('f-ghero').value.trim() || undefined,
