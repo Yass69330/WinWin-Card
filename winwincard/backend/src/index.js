@@ -63,6 +63,9 @@ const adminUiRoutes       = require('./routes/admin-ui');
 // Fichiers statiques (landing page HTML)
 app.use(express.static(path.join(__dirname, '../public')));
 
+// Raccourci démo
+app.get('/demo', (req, res) => res.redirect(301, '/l/demo'));
+
 // Landing pages marchands
 app.use('/l', landingRoutes);
 

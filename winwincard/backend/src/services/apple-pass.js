@@ -246,7 +246,7 @@ function buildPassJson({ client, marchand, serialNumber, passNotification }) {
     passTypeIdentifier: process.env.APPLE_PASS_TYPE_IDENTIFIER || 'pass.com.winwincard.loyalty',
     serialNumber,
     teamIdentifier: process.env.APPLE_TEAM_ID || 'LTW34ARCX2',
-    webServiceURL: (process.env.API_BASE_URL || 'https://api.winwincard.fr') + '/',
+    webServiceURL: (process.env.API_BASE_URL || 'https://app.winwin-card.com') + '/',
     authenticationToken: computeAuthToken(serialNumber),
     organizationName: marchand.nom,
     description: `Carte de fidélité ${marchand.nom}`,
@@ -256,16 +256,20 @@ function buildPassJson({ client, marchand, serialNumber, passNotification }) {
     logoText: marchand.nom,
     storeCard: {
       headerFields: [],
-      primaryFields: [{
-        key:   'points',
-        label: doré ? '🎉 RÉCOMPENSE' : 'PROGRESSION',
-        value: `${client.stored_value} / ${displayMax}`,
-      }],
-      secondaryFields: [{
-        key:   'prenom',
-        label: 'CLIENT',
-        value: client.prenom,
-      }],
+      primaryFields: [
+        {
+          key:   'prenom',
+          label: 'CLIENT',
+          value: client.prenom,
+        },
+        {
+          key:           'points',
+          label:         doré ? '🎉 RÉCOMPENSE' : 'PROGRESSION',
+          value:         `${client.stored_value} / ${displayMax}`,
+          textAlignment: 'PKTextAlignmentRight',
+        },
+      ],
+      secondaryFields: [],
       auxiliaryFields: [],
       backFields: [
         {

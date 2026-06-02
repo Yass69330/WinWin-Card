@@ -40,7 +40,7 @@ router.post('/', async (req, res) => {
   // Créer l'entrée passes
   await supabase.from('passes').insert({ client_id: client.id, marchand_id: marchand.id, serial_number: serialNumber });
 
-  const apiBase = process.env.API_BASE_URL || 'https://api.winwincard.fr';
+  const apiBase = process.env.API_BASE_URL || 'https://app.winwin-card.com';
   const applePassUrl = `${apiBase}/api/passes/${serialNumber}/apple`;
 
   // Générer l'URL Google Wallet directement (retourner null si non configuré ou erreur)
@@ -133,10 +133,10 @@ router.patch('/:id([0-9a-f\\-]{36})', authMarchand, async (req, res) => {
     return res.status(400).json({ error: 'Au moins un champ requis : prenom ou stored_value' });
   }
 
-  // Vérifier que le client appartient au marchand
+  // Vérifier que le client appartient au marchand (on récupère aussi pass_serial_number pour le push)
   const { data: existing, error: errCheck } = await supabase
     .from('clients')
-    .select('id')
+    .select('id, pass_serial_number')
     .eq('id', id)
     .eq('marchand_id', req.marchandId)
     .is('deleted_at', null)
@@ -153,8 +153,42 @@ router.patch('/:id([0-9a-f\\-]{36})', authMarchand, async (req, res) => {
 
   if (errUpdate) return res.status(500).json({ error: errUpdate.message });
 
+  // Si stored_value modifié : mettre à jour le pass Apple en arrière-plan
+  if (updates.stored_value !== undefined && existing.pass_serial_number) {
+    syncPassAfterAdjustment(existing.pass_serial_number, req.marchandId, updated.prenom, updates.stored_value)
+      .catch(e => console.error('[clients] sync pass:', e.message));
+  }
+
   res.json(updated);
 });
+
+async function syncPassAfterAdjustment(serialNumber, marchandId, prenom, newValue) {
+  const { isApnsConfigured, sendPushUpdate } = require('../services/apns');
+  if (!isApnsConfigured()) return;
+
+  const { data: marchand } = await supabase
+    .from('marchands')
+    .select('max_value, display_max_value')
+    .eq('id', marchandId)
+    .single();
+
+  const displayMax = marchand?.display_max_value || marchand?.max_value || '?';
+  const msg = `Points mis à jour — ${prenom} : ${newValue}/${displayMax}`;
+
+  await supabase.from('passes')
+    .update({ notification_message: msg })
+    .eq('serial_number', serialNumber)
+    .eq('marchand_id', marchandId);
+
+  const { data: tokens } = await supabase
+    .from('device_tokens')
+    .select('push_token')
+    .eq('serial_number', serialNumber);
+
+  for (const { push_token } of (tokens || [])) {
+    await sendPushUpdate(push_token).catch(() => {});
+  }
+}
 
 // GET /api/clients/admin/all — vision globale admin
 router.get('/admin/all', authAdmin, async (req, res) => {
