@@ -78,7 +78,7 @@ router.get('/me/qrcode', authMarchand, async (req, res) => {
   if (!marchand) return res.status(404).json({ error: 'Merchant not found' });
 
   const QRCode = require('qrcode');
-  const url = `${process.env.LANDING_BASE_URL}/${marchand.slug}`;
+  const url = `${process.env.API_BASE_URL || 'https://app.winwin-card.com'}/l/${marchand.slug}`;
   const qr = await QRCode.toDataURL(url, { width: 400, margin: 2 });
 
   res.json({ url, qrcode: qr });
