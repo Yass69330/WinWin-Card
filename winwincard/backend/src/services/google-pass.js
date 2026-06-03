@@ -335,8 +335,9 @@ async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, 
   await walletRequest('PATCH', `/loyaltyObject/${encodeURIComponent(oId)}`, patch, token);
 }
 
-// Notification marketing — ajoute un message visible dans Google Wallet
-// Appelé depuis notifications.js pour chaque porteur d'un pass Google Wallet.
+// Notification — ajoute un message sur le LoyaltyObject et envoie une
+// notification push sur l'écran de verrouillage Android (max 3/24h par objet).
+// messageType TEXT_AND_NOTIFY est requis pour le push ; TEXT = message passif.
 async function addMessageToLoyaltyObject(serialNumber, titre, message) {
   if (!isConfigured()) throw new Error('Google Wallet non configuré');
 
@@ -348,9 +349,10 @@ async function addMessageToLoyaltyObject(serialNumber, titre, message) {
     `/loyaltyObject/${encodeURIComponent(oId)}/addMessage`,
     {
       message: {
+        id:          `msg_${Date.now()}`,
         ...(titre ? { header: titre } : {}),
         body:        message,
-        messageType: 'TEXT',
+        messageType: 'TEXT_AND_NOTIFY',
       },
     },
     token
