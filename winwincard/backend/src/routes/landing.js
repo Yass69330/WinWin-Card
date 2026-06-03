@@ -12,6 +12,9 @@ if (!fs.existsSync(LANDING_HTML)) {
 
 // GET /l/:slug — sert la landing page
 router.get('/:slug', (req, res) => {
+  // no-cache : le HTML évolue souvent (branding, features) — on veut que le
+  // navigateur revérifie systématiquement plutôt que d'utiliser sa version ETag.
+  res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(LANDING_HTML, err => {
     if (err) {
       console.error(`[landing] sendFile échoué pour ${LANDING_HTML} :`, err.message);
