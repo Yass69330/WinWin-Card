@@ -23,15 +23,6 @@
       -webkit-font-smoothing: antialiased;
     }
 
-    /* ── Bannière strip image ── */
-    .strip-banner {
-      width: 100%;
-      height: 160px;
-      object-fit: cover;
-      display: none;
-      flex-shrink: 0;
-    }
-
     /* ── Formatage description ── */
     .description strong { font-weight: 700; color: #111; }
 
@@ -296,9 +287,6 @@
     <div class="header-name" id="header-name">Loading…</div>
   </header>
 
-  <!-- Bannière visuelle (image_strip_url du marchand, si définie) -->
-  <img class="strip-banner" id="strip-banner" alt="">
-
   <main class="card">
 
     <!-- Squelette pendant le chargement -->
@@ -478,23 +466,18 @@
       document.title          = `${m.nom} Loyalty`;
       $('header-name').textContent = m.nom;
 
-      // Logo
-      if (m.logo_url) {
+      // Logo — icon_url en priorité (87×87, mieux adapté au cercle), fallback logo_url
+      // Si l'image échoue à charger, on affiche l'initiale du nom.
+      const logoSrc = m.icon_url || m.logo_url;
+      const initial = m.nom.charAt(0).toUpperCase();
+      $('logo-initial').textContent = initial;
+      if (logoSrc) {
         const img = document.createElement('img');
-        img.src = m.logo_url;
         img.alt = m.nom;
+        img.onerror = () => { $('header-logo').innerHTML = `<span>${initial}</span>`; };
+        img.src = logoSrc;
         $('header-logo').innerHTML = '';
         $('header-logo').appendChild(img);
-      } else {
-        $('logo-initial').textContent = m.nom.charAt(0).toUpperCase();
-      }
-
-      // Bannière strip image
-      if (m.image_strip_url) {
-        const stripEl = $('strip-banner');
-        stripEl.src   = m.image_strip_url;
-        stripEl.alt   = m.nom;
-        stripEl.style.display = 'block';
       }
 
       // Texte descriptif (supporte **gras** et sauts de ligne)
