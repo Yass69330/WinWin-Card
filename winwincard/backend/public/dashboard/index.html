@@ -86,7 +86,14 @@
       background: var(--surface); border-bottom: 1px solid var(--border); gap: 10px;
     }
     .dash-header-brand { font-size: 16px; font-weight: 700; flex: 1; }
-    .dash-header-nom   { font-size: 13px; color: var(--muted); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dash-header-nom   { font-size: 13px; color: var(--muted); max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .forfait-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; letter-spacing: .05em; text-transform: uppercase; flex-shrink: 0; }
+    .forfait-badge[data-plan="basic"]    { background: rgba(148,163,184,.2); color: var(--muted); }
+    .forfait-badge[data-plan="pro"]      { background: var(--accent-dim); color: #a5b4fc; }
+    .forfait-badge[data-plan="pro_plus"] { background: rgba(251,191,36,.15); color: #fbbf24; }
+    .notif-quota-bar { font-size: 13px; color: var(--muted); margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+    .notif-quota-bar.warning { color: var(--warning); }
+    .notif-quota-bar.overlimit { color: var(--error); }
     .btn-icon { background: none; border: none; cursor: pointer; color: var(--muted); padding: 6px; border-radius: 8px; font-size: 18px; -webkit-tap-highlight-color: transparent; }
     .btn-icon:active { background: var(--surface2); }
 
@@ -333,6 +340,7 @@
     <span style="font-size:20px">🎯</span>
     <span class="dash-header-brand">WinWin</span>
     <span class="dash-header-nom" id="header-nom">–</span>
+    <span class="forfait-badge" id="forfait-badge" data-plan="pro" style="display:none"></span>
     <button class="btn-icon" id="btn-logout" title="Sign out">⏏</button>
   </header>
 
@@ -425,6 +433,9 @@
       <div class="alert alert-info" style="margin-bottom:16px">
         📱 Sent via Apple &amp; Google Wallet to registered devices.
       </div>
+      <div class="notif-quota-bar" id="notif-quota" style="display:none">
+        <span id="notif-quota-text"></span>
+      </div>
       <form class="notif-form" id="notif-form" onsubmit="return false">
         <div class="field">
           <label for="notif-msg">Message</label>
@@ -454,10 +465,10 @@
     <button class="nav-btn" data-tab="scans">
       <span class="nav-icon">📋</span>Scans
     </button>
-    <button class="nav-btn" data-tab="scanner">
+    <button class="nav-btn" data-tab="scanner" data-min-plan="pro">
       <span class="nav-icon">📷</span>Scanner
     </button>
-    <button class="nav-btn" data-tab="notifs">
+    <button class="nav-btn" data-tab="notifs" data-min-plan="pro">
       <span class="nav-icon">🔔</span>Notifs
     </button>
   </nav>
@@ -567,6 +578,7 @@
 // ════════════════════════════════════════════════
 const S = {
   token: null, marchandId: null, marchandNom: null, marchandSlug: null, maxValue: 10, displayMax: 10,
+  forfait: null,
   tab: 'overview',
   clients: null, scans: null, stats: null, qr: null, notifLogs: null,
   deleteTargetId: null, deleteTargetNom: null,
@@ -581,16 +593,16 @@ const SC = { stream: null, rafId: null, scanning: false, processing: false };
 function saveSession(d) {
   Object.assign(S, { token: d.token, marchandId: d.marchand_id, marchandNom: d.nom, marchandSlug: d.slug });
   try {
-    localStorage.setItem('ww_dash_token', d.token);
-    localStorage.setItem('ww_dash_id',    d.marchand_id);
-    localStorage.setItem('ww_dash_nom',   d.nom || '');
-    localStorage.setItem('ww_dash_slug',  d.slug || '');
+    localStorage.setItem('ww_dash_token',   d.token);
+    localStorage.setItem('ww_dash_id',      d.marchand_id);
+    localStorage.setItem('ww_dash_nom',     d.nom || '');
+    localStorage.setItem('ww_dash_slug',    d.slug || '');
   } catch {}
 }
 
 function clearSession() {
-  Object.assign(S, { token: null, marchandId: null, marchandNom: null, marchandSlug: null });
-  try { ['ww_dash_token','ww_dash_id','ww_dash_nom','ww_dash_slug'].forEach(k => localStorage.removeItem(k)); } catch {}
+  Object.assign(S, { token: null, marchandId: null, marchandNom: null, marchandSlug: null, forfait: null });
+  try { ['ww_dash_token','ww_dash_id','ww_dash_nom','ww_dash_slug','ww_dash_forfait'].forEach(k => localStorage.removeItem(k)); } catch {}
 }
 
 function restoreSession() {
@@ -601,8 +613,31 @@ function restoreSession() {
     S.marchandId  = localStorage.getItem('ww_dash_id');
     S.marchandNom = localStorage.getItem('ww_dash_nom') || '';
     S.marchandSlug= localStorage.getItem('ww_dash_slug') || '';
+    S.forfait     = localStorage.getItem('ww_dash_forfait') || null;
     return true;
   } catch { return false; }
+}
+
+// ── Gating forfait ───────────────────────────────────────────
+function applyForfaitGating() {
+  const f    = S.forfait || 'pro';
+  const rank = { basic: 0, pro: 1, pro_plus: 2 }[f] ?? 1;
+
+  const badge = document.getElementById('forfait-badge');
+  if (badge) {
+    badge.textContent  = f === 'pro_plus' ? 'Pro+' : f.charAt(0).toUpperCase() + f.slice(1);
+    badge.dataset.plan = f;
+    badge.style.display = '';
+  }
+
+  document.querySelectorAll('.nav-btn[data-min-plan]').forEach(btn => {
+    const req = { basic: 0, pro: 1, pro_plus: 2 }[btn.dataset.minPlan] ?? 1;
+    btn.style.display = rank >= req ? '' : 'none';
+  });
+
+  // Si l'onglet actif est masqué, revenir à overview
+  const cur = document.querySelector(`.nav-btn[data-tab="${S.tab}"]`);
+  if (cur && cur.style.display === 'none') switchTab('overview');
 }
 
 // ════════════════════════════════════════════════
@@ -630,6 +665,7 @@ function showDashboard() {
   document.getElementById('screen-login').classList.remove('active');
   document.getElementById('screen-dashboard').classList.add('active');
   document.getElementById('header-nom').textContent = S.marchandNom || S.marchandSlug || '';
+  applyForfaitGating();
   switchTab('overview');
 }
 
@@ -698,14 +734,22 @@ function switchTab(tab) {
 // ════════════════════════════════════════════════
 async function loadOverview(force = false) {
   if (!force && S.stats && S.qr) { renderOverview(); return; }
+  const needMe = !S.forfait || S.maxValue === 10;
   const [statsRes, qrRes, meRes] = await Promise.all([
     api('/api/merchants/me/stats'),
     api('/api/merchants/me/qrcode'),
-    (S.maxValue === 10 && S.displayMax === 10) ? api('/api/merchants/me') : Promise.resolve(null),
+    needMe ? api('/api/merchants/me') : Promise.resolve(null),
   ]);
   S.stats = await statsRes.json();
   S.qr    = await qrRes.json();
-  if (meRes) { const me = await meRes.json(); S.maxValue = me.max_value || 10; S.displayMax = me.display_max_value || S.maxValue; }
+  if (meRes) {
+    const me = await meRes.json();
+    S.maxValue  = me.max_value || 10;
+    S.displayMax = me.display_max_value || S.maxValue;
+    S.forfait   = me.forfait || 'pro';
+    try { localStorage.setItem('ww_dash_forfait', S.forfait); } catch {}
+    applyForfaitGating();
+  }
   renderOverview();
 }
 
@@ -1028,7 +1072,11 @@ document.getElementById('notif-form').addEventListener('submit', async () => {
   try {
     const res  = await api('/api/notifications', { method: 'POST', body: JSON.stringify({ message: msg }) });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Send error');
+    if (!res.ok) {
+      result.innerHTML = `<div class="alert alert-error">${data.error || 'Send error'}</div>`;
+      S.notifLogs = null; setTimeout(() => loadNotifHistory(true), 400);
+      return;
+    }
     const { apple, google } = data;
     const totalClients = apple.total + google.total;
     if (totalClients === 0) {
@@ -1065,7 +1113,18 @@ async function loadNotifHistory(force = false) {
     const res  = await api('/api/notifications');
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Error loading history');
-    S.notifLogs = Array.isArray(data) ? data : [];
+    // Response: { logs: [...], quota: { used, limit, forfait } }
+    S.notifLogs = Array.isArray(data.logs) ? data.logs : (Array.isArray(data) ? data : []);
+
+    const quotaEl   = document.getElementById('notif-quota');
+    const quotaText = document.getElementById('notif-quota-text');
+    const quota     = data.quota;
+    if (quota && quotaEl && quotaText) {
+      const pct = quota.limit > 0 ? quota.used / quota.limit : 0;
+      quotaText.textContent   = `${quota.used} / ${quota.limit} notifications this month`;
+      quotaEl.style.display   = '';
+      quotaEl.className = 'notif-quota-bar' + (pct >= 1 ? ' overlimit' : pct >= 0.8 ? ' warning' : '');
+    }
   } catch (e) {
     S.notifLogs = [];
     el.innerHTML = `<div class="alert alert-error" style="font-size:12px">${e.message}</div>`;

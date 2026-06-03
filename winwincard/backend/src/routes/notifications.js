@@ -5,16 +5,37 @@ const { authMarchand } = require('../middleware/auth');
 const { sendPushUpdate, isApnsConfigured }                    = require('../services/apns');
 const { addMessageToLoyaltyObject, isConfigured: isGoogleConfigured } = require('../services/google-pass');
 
-// GET /api/notifications — historique des 50 dernières notifications
+const NOTIF_LIMITS = { basic: 0, pro: 10, pro_plus: 50 };
+
+function startOfMonth() {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString();
+}
+
+// GET /api/notifications — historique + quota du mois
 router.get('/', authMarchand, async (req, res) => {
-  const { data, error } = await supabase
-    .from('notification_logs')
-    .select('id, message, envoyes_apple, envoyes_google, total_apple, total_google, created_at')
-    .eq('marchand_id', req.marchandId)
-    .order('created_at', { ascending: false })
-    .limit(50);
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data || []);
+  const [logsResult, meResult, countResult] = await Promise.all([
+    supabase
+      .from('notification_logs')
+      .select('id, message, envoyes_apple, envoyes_google, total_apple, total_google, created_at')
+      .eq('marchand_id', req.marchandId)
+      .order('created_at', { ascending: false })
+      .limit(50),
+    supabase.from('marchands').select('forfait').eq('id', req.marchandId).single(),
+    supabase.from('notification_logs')
+      .select('*', { count: 'exact', head: true })
+      .eq('marchand_id', req.marchandId)
+      .gte('created_at', startOfMonth()),
+  ]);
+
+  if (logsResult.error) return res.status(500).json({ error: logsResult.error.message });
+
+  const forfait = meResult.data?.forfait || 'pro';
+  const limit   = NOTIF_LIMITS[forfait] ?? 10;
+  res.json({
+    logs:  logsResult.data || [],
+    quota: { used: countResult.count || 0, limit, forfait },
+  });
 });
 
 // POST /api/notifications — envoi push depuis le dashboard marchand
@@ -28,6 +49,28 @@ router.post('/', authMarchand, async (req, res) => {
   }
   if (message.length > 500) {
     return res.status(400).json({ error: 'message max 500 chars' });
+  }
+
+  // Vérification quota selon forfait
+  const { data: me } = await supabase.from('marchands').select('forfait').eq('id', req.marchandId).single();
+  const forfait = me?.forfait || 'pro';
+  const limit   = NOTIF_LIMITS[forfait] ?? 10;
+
+  if (limit === 0) {
+    return res.status(403).json({ error: 'Push notifications are not available on the Basic plan.', upgrade: true });
+  }
+
+  const { count: usedThisMonth } = await supabase
+    .from('notification_logs')
+    .select('*', { count: 'exact', head: true })
+    .eq('marchand_id', req.marchandId)
+    .gte('created_at', startOfMonth());
+
+  if (usedThisMonth >= limit) {
+    return res.status(429).json({
+      error: `Monthly limit reached — ${usedThisMonth}/${limit} notifications used this month.`,
+      used: usedThisMonth, limit, upgrade: true,
+    });
   }
 
   // Récupérer tokens Apple et passes Google en parallèle
