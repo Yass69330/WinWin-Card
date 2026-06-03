@@ -53,6 +53,10 @@ router.post('/v1/devices/:deviceId/registrations/:passTypeId/:serialNumber', asy
   if (error) return res.status(500).send();
 
   res.status(201).send();
+
+  // Welcome push — fire and forget après la réponse 201
+  sendWelcomePush(serialNumber, pushToken, pass.marchand_id)
+    .catch(e => console.error('[apple-wallet] Welcome push:', e.message));
 });
 
 // DELETE /v1/devices/:deviceId/registrations/:passTypeId/:serialNumber
@@ -156,6 +160,31 @@ router.get('/v1/passes/:passTypeId/:serialNumber', async (req, res) => {
     res.status(500).send();
   }
 });
+
+// ── Welcome push ─────────────────────────────────────────────
+// Envoyé à l'installation du pass — met à jour notification_message,
+// puis envoie un push silencieux pour que iOS affiche le changeMessage.
+async function sendWelcomePush(serialNumber, pushToken, marchandId) {
+  const { data: marchand } = await supabase
+    .from('marchands')
+    .select('nom')
+    .eq('id', marchandId)
+    .single();
+
+  if (!marchand) return;
+
+  const msg = `Welcome to ${marchand.nom}! Collect points with every visit.`;
+
+  await supabase.from('passes')
+    .update({ notification_message: msg })
+    .eq('serial_number', serialNumber);
+
+  const { isApnsConfigured, sendPushUpdate } = require('../services/apns');
+  if (isApnsConfigured()) {
+    await sendPushUpdate(pushToken);
+    console.log(`[apple-wallet] Welcome push OK — serial=${serialNumber}`);
+  }
+}
 
 // GET /v1/log — Apple envoie des logs d'erreur ici
 router.post('/v1/log', (req, res) => {
