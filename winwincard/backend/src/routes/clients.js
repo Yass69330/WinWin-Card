@@ -163,30 +163,42 @@ router.patch('/:id([0-9a-f\\-]{36})', authMarchand, async (req, res) => {
 });
 
 async function syncPassAfterAdjustment(serialNumber, marchandId, prenom, newValue) {
-  const { isApnsConfigured, sendPushUpdate } = require('../services/apns');
-  if (!isApnsConfigured()) return;
-
   const { data: marchand } = await supabase
     .from('marchands')
-    .select('max_value, display_max_value')
+    .select('max_value, display_max_value, images_tiers')
     .eq('id', marchandId)
     .single();
 
-  const displayMax = marchand?.display_max_value || marchand?.max_value || '?';
+  if (!marchand) return;
+
+  const displayMax = marchand.display_max_value || marchand.max_value || '?';
   const msg = `Points updated — ${prenom}: ${newValue}/${displayMax}`;
 
-  await supabase.from('passes')
-    .update({ notification_message: msg })
-    .eq('serial_number', serialNumber)
-    .eq('marchand_id', marchandId);
+  // Apple Wallet — update notification field + silent APNs push
+  const { isApnsConfigured, sendPushUpdate } = require('../services/apns');
+  if (isApnsConfigured()) {
+    await supabase.from('passes')
+      .update({ notification_message: msg })
+      .eq('serial_number', serialNumber)
+      .eq('marchand_id', marchandId);
 
-  const { data: tokens } = await supabase
-    .from('device_tokens')
-    .select('push_token')
-    .eq('serial_number', serialNumber);
+    const { data: tokens } = await supabase
+      .from('device_tokens')
+      .select('push_token')
+      .eq('serial_number', serialNumber);
 
-  for (const { push_token } of (tokens || [])) {
-    await sendPushUpdate(push_token).catch(() => {});
+    for (const { push_token } of (tokens || [])) {
+      await sendPushUpdate(push_token).catch(() => {});
+    }
+  }
+
+  // Google Wallet — update points, tier hero image, and push notification
+  const { updateLoyaltyObjectPoints, addMessageToLoyaltyObject, isConfigured: isGoogleConfigured } = require('../services/google-pass');
+  if (isGoogleConfigured()) {
+    await updateLoyaltyObjectPoints(serialNumber, marchandId, newValue, marchand.max_value, marchand.display_max_value || marchand.max_value, marchand.images_tiers, prenom)
+      .catch(e => console.error('[clients] Google update:', e.message));
+    addMessageToLoyaltyObject(serialNumber, null, msg)
+      .catch(e => console.error('[clients] Google notify:', e.message));
   }
 }
 
