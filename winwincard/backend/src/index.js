@@ -59,6 +59,7 @@ const landingRoutes       = require('./routes/landing');
 const scannerRoutes       = require('./routes/scanner');
 const dashboardRoutes     = require('./routes/dashboard');
 const adminUiRoutes       = require('./routes/admin-ui');
+const workflowsRoutes     = require('./routes/workflows');
 
 // Fichiers statiques (landing page HTML)
 app.use(express.static(path.join(__dirname, '../public')));
@@ -89,6 +90,7 @@ app.use('/api/merchants', merchantsRoutes);
 app.use('/api/google-wallet', googleWalletRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/admin/login', limiterAdminLogin);
+app.use('/api/admin/workflows', workflowsRoutes);
 app.use('/api/admin', adminRoutes);
 
 // ── Santé ────────────────────────────────────────────────────
@@ -102,6 +104,9 @@ app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({ error: 'Internal server error' });
 });
+
+// ── Cron workers (workflows automatisés Pro+) ────────────────
+require('./workers/cron');
 
 // ── Démarrage ────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;

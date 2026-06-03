@@ -49,22 +49,33 @@ router.get('/me', authMarchand, async (req, res) => {
   res.json(data);
 });
 
-// GET /merchants/me/stats — stats du dashboard
+// GET /merchants/me/stats — stats du dashboard + analytics 30j
 router.get('/me/stats', authMarchand, async (req, res) => {
-  const [{ count: totalClients }, { count: scansAujourdhui }] = await Promise.all([
-    supabase
-      .from('clients')
-      .select('*', { count: 'exact', head: true })
-      .eq('marchand_id', req.marchandId)
-      .is('deleted_at', null),
-    supabase
-      .from('scans')
-      .select('*', { count: 'exact', head: true })
-      .eq('marchand_id', req.marchandId)
-      .gte('date_scan', new Date().toISOString().split('T')[0])
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  const [{ count: totalClients }, { count: scansAujourdhui }, { data: scansRecent }] = await Promise.all([
+    supabase.from('clients').select('*', { count: 'exact', head: true }).eq('marchand_id', req.marchandId).is('deleted_at', null),
+    supabase.from('scans').select('*', { count: 'exact', head: true }).eq('marchand_id', req.marchandId).gte('date_scan', new Date().toISOString().split('T')[0]),
+    supabase.from('scans').select('client_id').eq('marchand_id', req.marchandId).gte('date_scan', thirtyDaysAgo),
   ]);
 
-  res.json({ total_clients: totalClients, scans_aujourdhui: scansAujourdhui });
+  const ids = (scansRecent || []).map(s => s.client_id);
+  const activeClients = new Set(ids).size;
+
+  const countByClient = {};
+  ids.forEach(id => { countByClient[id] = (countByClient[id] || 0) + 1; });
+  const retained = Object.values(countByClient).filter(c => c >= 2).length;
+
+  const retentionRate = totalClients > 0 ? Math.round(retained / totalClients * 100) : 0;
+  const avgFrequency  = activeClients > 0 ? parseFloat((ids.length / activeClients).toFixed(1)) : 0;
+
+  res.json({
+    total_clients:       totalClients,
+    scans_aujourdhui:    scansAujourdhui,
+    active_clients_30d:  activeClients,
+    retention_rate:      retentionRate,
+    avg_frequency:       avgFrequency,
+  });
 });
 
 // GET /merchants/qrcode — QR code de la landing page du marchand

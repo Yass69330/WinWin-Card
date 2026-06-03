@@ -109,6 +109,8 @@ router.patch('/marchands/:id', authAdmin, async (req, res) => {
     'logo_url', 'icon_url', 'image_strip_url', 'images_tiers',
     'google_logo_url', 'google_hero_url',
     'texte_landing', 'pass_display_name', 'max_value', 'display_max_value', 'forfait',
+    'workflow_inactive_enabled', 'workflow_inactive_days',
+    'workflow_near_reward_enabled', 'workflow_near_reward_threshold',
   ];
 
   const updates = {};

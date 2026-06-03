@@ -5,9 +5,9 @@ const supabase = require('../services/supabase');
 const { authMarchand, authAdmin } = require('../middleware/auth');
 
 // POST /api/clients — inscription client depuis la landing page
-// Corps : { prenom, marchand_slug }
+// Corps : { prenom, marchand_slug, email?, telephone?, date_anniversaire? }
 router.post('/', async (req, res) => {
-  const { prenom, marchand_slug } = req.body;
+  const { prenom, marchand_slug, email, telephone, date_anniversaire } = req.body;
 
   if (!prenom || !marchand_slug) {
     return res.status(400).json({ error: 'prenom and marchand_slug are required' });
@@ -15,10 +15,10 @@ router.post('/', async (req, res) => {
   const prenomPropre = prenom.trim().slice(0, 50);
   if (!prenomPropre) return res.status(400).json({ error: 'Invalid first name' });
 
-  // Récupérer le marchand complet (nécessaire pour Google Wallet)
+  // Récupérer le marchand complet (nécessaire pour Google Wallet + forfait)
   const { data: marchand, error: errMarchand } = await supabase
     .from('marchands')
-    .select('id, nom, slug, max_value, display_max_value, actif, couleur_fond, couleur_texte, couleur_label, logo_url, image_strip_url, google_logo_url, google_hero_url, images_tiers')
+    .select('id, nom, slug, forfait, max_value, display_max_value, actif, couleur_fond, couleur_texte, couleur_label, logo_url, image_strip_url, google_logo_url, google_hero_url, images_tiers')
     .eq('slug', marchand_slug)
     .single();
 
@@ -28,10 +28,18 @@ router.post('/', async (req, res) => {
   const serialNumber = uuidv4();
   const clientData = { prenom: prenomPropre, stored_value: 0 };
 
+  // Champs premium (Pro+ uniquement)
+  const extraFields = {};
+  if (marchand.forfait === 'pro_plus') {
+    if (email)             extraFields.email             = String(email).trim().slice(0, 200) || null;
+    if (telephone)         extraFields.telephone         = String(telephone).trim().slice(0, 30) || null;
+    if (date_anniversaire) extraFields.date_anniversaire = date_anniversaire;
+  }
+
   // Créer le client
   const { data: client, error: errClient } = await supabase
     .from('clients')
-    .insert({ marchand_id: marchand.id, prenom: prenomPropre, pass_serial_number: serialNumber, stored_value: 0 })
+    .insert({ marchand_id: marchand.id, prenom: prenomPropre, pass_serial_number: serialNumber, stored_value: 0, ...extraFields })
     .select()
     .single();
 

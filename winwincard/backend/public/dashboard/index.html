@@ -351,6 +351,9 @@
       <div class="stats-grid" id="stats-grid">
         <div class="skeleton skeleton-card"></div>
         <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card" style="grid-column:1/-1"></div>
       </div>
       <p class="section-title">QR code landing page</p>
       <div class="qr-card" id="qr-section">
@@ -754,9 +757,13 @@ async function loadOverview(force = false) {
 }
 
 function renderOverview() {
+  const st = S.stats;
   document.getElementById('stats-grid').innerHTML = `
-    <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-value">${S.stats.total_clients ?? '–'}</div><div class="stat-label">active clients</div></div>
-    <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-value">${S.stats.scans_aujourdhui ?? '–'}</div><div class="stat-label">scans today</div></div>`;
+    <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-value">${st.total_clients ?? '–'}</div><div class="stat-label">Total clients</div></div>
+    <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-value">${st.scans_aujourdhui ?? '–'}</div><div class="stat-label">Scans today</div></div>
+    <div class="stat-card"><div class="stat-icon">🔥</div><div class="stat-value">${st.active_clients_30d ?? '–'}</div><div class="stat-label">Active (30 days)</div></div>
+    <div class="stat-card"><div class="stat-icon">🔄</div><div class="stat-value">${st.retention_rate != null ? st.retention_rate + '%' : '–'}</div><div class="stat-label">Retention rate</div></div>
+    <div class="stat-card" style="grid-column:1/-1;flex-direction:row;align-items:center;gap:14px"><div class="stat-icon" style="margin:0">📈</div><div><div class="stat-value" style="font-size:22px">${st.avg_frequency ?? '–'}x</div><div class="stat-label">Avg visits / active client (30d)</div></div></div>`;
   const qrSection = document.getElementById('qr-section');
   qrSection.innerHTML = `
     <img src="${S.qr.qrcode}" alt="QR code">

@@ -352,7 +352,7 @@
         </button>
       </form>
 
-      <p class="rgpd-note">
+      <p class="rgpd-note" id="rgpd-note">
         Only your first name is stored. You can request data deletion in-store at any time.
       </p>
     </div>
@@ -483,8 +483,15 @@
       // Texte descriptif (supporte **gras** et sauts de ligne)
       $('description').innerHTML = renderText(m.texte_landing || `Welcome to **${m.nom}**'s loyalty program!`);
 
-      // Stocker le slug pour le submit
+      // Stocker le slug et le forfait pour le submit
       window._marchandSlug = m.slug;
+      window._forfait      = m.forfait;
+
+      // Champs Pro+ — visibles seulement pour les marchands Pro+
+      if (m.forfait === 'pro_plus') {
+        document.querySelectorAll('.field-v2').forEach(el => el.style.display = '');
+        $('rgpd-note').textContent = 'Optional fields are used only to personalise your loyalty experience. You may request deletion in-store at any time.';
+      }
     }
 
     // ── Soumission du formulaire ─────────────────────────────
@@ -502,10 +509,19 @@
       setSubmitting(true);
 
       try {
+        const body = { prenom, marchand_slug: window._marchandSlug };
+        if (window._forfait === 'pro_plus') {
+          const email = $('email').value.trim();
+          const telephone = $('telephone').value.trim();
+          const date_anniversaire = $('date_anniversaire').value;
+          if (email)             body.email             = email;
+          if (telephone)         body.telephone         = telephone;
+          if (date_anniversaire) body.date_anniversaire = date_anniversaire;
+        }
         const res  = await fetch(`${API}/api/clients`, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ prenom, marchand_slug: window._marchandSlug }),
+          body:    JSON.stringify(body),
         });
         const data = await res.json();
 
