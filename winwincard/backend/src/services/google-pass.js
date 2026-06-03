@@ -125,15 +125,10 @@ function buildLoyaltyClass(cId, marchand) {
 
   const obj = {
     id: cId,
-    issuerName: 'WinWin Card',
+    issuerName: marchand.nom,
 
     // Nom du programme — affiché en grand sur la carte
     programName: marchand.nom,
-
-    // Titre de la catégorie — affiché sous le logo en petit
-    cardTitle: {
-      defaultValue: { language: 'en', value: 'loyalty card' },
-    },
 
     hexBackgroundColor: marchand.couleur_fond || '#1a1a2e',
     countryCode: 'AE',
@@ -184,7 +179,6 @@ function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
 
     // Prénom affiché sur la carte
     accountName: client.prenom,
-    accountId: serialNumber,
 
     // Solde de points
     loyaltyPoints: {
@@ -192,8 +186,13 @@ function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
       label: isRecompense ? 'Reward!' : 'Progress',
     },
 
-    // Infos au dos de la carte
+    // Infos visibles sur la carte + au dos
     textModulesData: [
+      {
+        id: 'client_name',
+        header: 'CLIENT',
+        body: client.prenom,
+      },
       {
         id: 'details',
         header: 'How it works',
@@ -309,7 +308,7 @@ async function generateGoogleWalletUrl({ client, marchand, serialNumber }) {
 }
 
 // Mise à jour des points après un scan — appelé en async depuis scan.js
-async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, imagesTiers) {
+async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, imagesTiers, prenom) {
   if (!isConfigured()) return;
 
   const oId = objectId(serialNumber);
@@ -322,6 +321,8 @@ async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, 
       label: isRecompense ? 'Reward!' : 'Progress',
     },
   };
+
+  if (prenom) patch.accountName = prenom;
 
   const tierUrl = selectTierImageUrl(imagesTiers, storedValue);
   if (tierUrl) {
