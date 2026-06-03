@@ -23,6 +23,18 @@
       -webkit-font-smoothing: antialiased;
     }
 
+    /* ── Bannière strip image ── */
+    .strip-banner {
+      width: 100%;
+      height: 160px;
+      object-fit: cover;
+      display: none;
+      flex-shrink: 0;
+    }
+
+    /* ── Formatage description ── */
+    .description strong { font-weight: 700; color: #111; }
+
     /* ── Header marchand ── */
     .header {
       background: var(--brand);
@@ -284,6 +296,9 @@
     <div class="header-name" id="header-name">Loading…</div>
   </header>
 
+  <!-- Bannière visuelle (image_strip_url du marchand, si définie) -->
+  <img class="strip-banner" id="strip-banner" alt="">
+
   <main class="card">
 
     <!-- Squelette pendant le chargement -->
@@ -474,8 +489,16 @@
         $('logo-initial').textContent = m.nom.charAt(0).toUpperCase();
       }
 
-      // Texte descriptif
-      $('description').textContent = m.texte_landing || `Welcome to ${m.nom}'s loyalty program!`;
+      // Bannière strip image
+      if (m.image_strip_url) {
+        const stripEl = $('strip-banner');
+        stripEl.src   = m.image_strip_url;
+        stripEl.alt   = m.nom;
+        stripEl.style.display = 'block';
+      }
+
+      // Texte descriptif (supporte **gras** et sauts de ligne)
+      $('description').innerHTML = renderText(m.texte_landing || `Welcome to **${m.nom}**'s loyalty program!`);
 
       // Stocker le slug pour le submit
       window._marchandSlug = m.slug;
@@ -551,6 +574,18 @@
       }
 
       $('success-screen').classList.add('show');
+    }
+
+    // ── Formatage texte (markdown minimal) ──────────────────
+    // Supporte **gras** et sauts de ligne. Échappe le HTML pour éviter l'injection.
+    function renderText(raw) {
+      const safe = raw
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      return safe
+        .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n/g, '<br>');
     }
 
     // ── Init ─────────────────────────────────────────────────
