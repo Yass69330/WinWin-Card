@@ -164,6 +164,50 @@ router.get('/stats', authAdmin, async (req, res) => {
   res.json({ marchands_actifs: marchandsActifs, total_clients: totalClients, total_scans: totalScans });
 });
 
+// GET /api/admin/debug/pass/:serialNumber — état complet d'un pass (device tokens, passes row, APNs)
+router.get('/debug/pass/:serialNumber', authAdmin, async (req, res) => {
+  const { serialNumber } = req.params;
+  const { isApnsConfigured } = require('../services/apns');
+
+  const [
+    { data: pass,   error: errPass },
+    { data: tokens, error: errTokens },
+    { data: client, error: errClient },
+  ] = await Promise.all([
+    supabase.from('passes')
+      .select('id, client_id, marchand_id, serial_number, notification_message, updated_at, created_at')
+      .eq('serial_number', serialNumber)
+      .single(),
+    supabase.from('device_tokens')
+      .select('id, device_id, push_token, created_at')
+      .eq('serial_number', serialNumber),
+    supabase.from('clients')
+      .select('id, prenom, stored_value, pass_serial_number, deleted_at')
+      .eq('pass_serial_number', serialNumber)
+      .single(),
+  ]);
+
+  res.json({
+    apns: {
+      configured:  isApnsConfigured(),
+      key_id_set:  !!process.env.APPLE_APN_KEY_ID,
+      key_set:     !!(process.env.APPLE_APN_KEY_B64 || process.env.APPLE_APN_KEY),
+      node_env:    process.env.NODE_ENV || '(non défini)',
+      endpoint:    process.env.NODE_ENV === 'production' ? 'api.push.apple.com' : 'api.sandbox.push.apple.com',
+    },
+    pass: errPass ? { error: errPass.message } : pass,
+    client: errClient ? { error: errClient.message } : client,
+    device_tokens: {
+      count: (tokens || []).length,
+      error: errTokens?.message || null,
+      tokens: (tokens || []).map(t => ({
+        ...t,
+        push_token: `…${t.push_token.slice(-12)}`,  // tronqué pour sécurité
+      })),
+    },
+  });
+});
+
 // GET /api/admin/debug/certs — diagnostic certificats Apple Wallet (admin requis)
 // Inspecte les certs chargés en mémoire sans exposer les clés privées.
 router.get('/debug/certs', authAdmin, (req, res) => {

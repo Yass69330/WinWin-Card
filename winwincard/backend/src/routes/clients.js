@@ -163,32 +163,48 @@ router.patch('/:id([0-9a-f\\-]{36})', authMarchand, async (req, res) => {
 });
 
 async function syncPassAfterAdjustment(serialNumber, marchandId, prenom, newValue) {
+  console.log(`[clients] syncPass START serial=${serialNumber} prenom=${prenom} newValue=${newValue}`);
+
   const { data: marchand } = await supabase
     .from('marchands')
     .select('max_value, display_max_value, images_tiers')
     .eq('id', marchandId)
     .single();
 
-  if (!marchand) return;
+  if (!marchand) {
+    console.warn('[clients] syncPass: marchand introuvable, abandon');
+    return;
+  }
 
   const displayMax = marchand.display_max_value || marchand.max_value || '?';
   const msg = `Points updated — ${prenom}: ${newValue}/${displayMax}`;
 
-  // Apple Wallet — update notification field + silent APNs push
-  const { isApnsConfigured, sendPushUpdate } = require('../services/apns');
-  if (isApnsConfigured()) {
-    await supabase.from('passes')
-      .update({ notification_message: msg })
-      .eq('serial_number', serialNumber)
-      .eq('marchand_id', marchandId);
+  // Toujours mettre à jour passes.notification_message (et updated_at via trigger).
+  // Cela permet à Apple Wallet de récupérer le pass lors de son prochain check
+  // périodique, même sans push APNs.
+  const { error: passErr } = await supabase.from('passes')
+    .update({ notification_message: msg })
+    .eq('serial_number', serialNumber)
+    .eq('marchand_id', marchandId);
+  if (passErr) console.error('[clients] syncPass: passes update error:', passErr.message);
+  else console.log('[clients] syncPass: passes.notification_message + updated_at mis à jour');
 
+  // Apple Wallet — silent APNs push si configuré
+  const { isApnsConfigured, sendPushUpdate } = require('../services/apns');
+  if (!isApnsConfigured()) {
+    console.warn('[clients] syncPass: APNs non configuré (APPLE_APN_KEY_ID ou clé manquante) — push ignoré');
+  } else {
     const { data: tokens } = await supabase
       .from('device_tokens')
       .select('push_token')
       .eq('serial_number', serialNumber);
 
+    console.log(`[clients] syncPass: ${(tokens || []).length} device token(s) trouvé(s) pour serial=${serialNumber}`);
+
     for (const { push_token } of (tokens || [])) {
-      await sendPushUpdate(push_token).catch(() => {});
+      await sendPushUpdate(push_token)
+        .then(() => console.log(`[clients] syncPass: push OK token=…${push_token.slice(-8)}`))
+        .catch(e => console.error(`[clients] syncPass: push FAILED token=…${push_token.slice(-8)}:`, e.message));
     }
   }
 
