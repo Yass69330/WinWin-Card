@@ -108,6 +108,7 @@
 
     /* Champs V2 — présents en DOM mais invisibles en V1 */
     .field-v2 { display: none; }
+    .field-hint-v2 { font-size: 12px; color: #aaa; margin-top: 5px; line-height: 1.4; }
 
     .btn-submit {
       width: 100%;
@@ -330,6 +331,7 @@
           <input type="email" id="email" name="email"
             placeholder="votre@email.fr"
             autocomplete="email">
+          <p class="field-hint-v2">So you never lose your points 🔒</p>
         </div>
 
         <!-- Téléphone — V2 (masqué en V1) -->
@@ -338,12 +340,14 @@
           <input type="tel" id="telephone" name="telephone"
             placeholder="06 00 00 00 00"
             autocomplete="tel">
+          <p class="field-hint-v2">To receive exclusive flash offers 📱</p>
         </div>
 
         <!-- Date anniversaire — V2 (masqué en V1) -->
         <div class="field field-v2" id="field-anniversaire">
           <label for="date_anniversaire">Date de naissance</label>
           <input type="date" id="date_anniversaire" name="date_anniversaire">
+          <p class="field-hint-v2">For a special surprise on your big day 🎂</p>
         </div>
 
         <button type="submit" class="btn-submit" id="btn-submit">

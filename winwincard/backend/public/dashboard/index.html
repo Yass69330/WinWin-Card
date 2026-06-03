@@ -307,6 +307,11 @@
     .cs-scan-date { font-size:12px; color:var(--muted); display:block; }
     .cs-no-scans { color:var(--muted); font-size:13px; text-align:center; padding:16px 0; }
     .cs-footer { flex-shrink:0; padding:12px 16px; border-top:1px solid var(--border); padding-bottom:max(12px,env(safe-area-inset-bottom)); }
+    .cs-contact-box { background:var(--surface2); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
+    .cs-contact-row { display:flex; align-items:center; gap:10px; font-size:14px; }
+    .cs-contact-icon { font-size:16px; width:22px; flex-shrink:0; }
+    .cs-contact-link { color:var(--accent); text-decoration:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .cs-contact-link:hover { text-decoration:underline; }
   </style>
 </head>
 <body>
@@ -366,7 +371,10 @@
     <div id="tab-clients" class="tab-panel">
       <div class="tab-header">
         <h2>Clients</h2>
-        <button class="btn-refresh" id="btn-refresh-clients" title="Refresh">↺</button>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn btn-outline btn-sm" id="btn-export-csv" style="display:none" title="Export CSV">⬇ CSV</button>
+          <button class="btn-refresh" id="btn-refresh-clients" title="Refresh">↺</button>
+        </div>
       </div>
       <div class="search-wrap">
         <span class="search-icon">🔍</span>
@@ -534,6 +542,7 @@
         <button class="btn btn-outline btn-sm" id="cs-btn-rename">✏️ Name</button>
         <button class="btn btn-outline btn-sm" id="cs-btn-adjust">⚖️ Points</button>
       </div>
+      <div id="cs-contact"></div>
       <div>
         <div class="cs-section-lbl" style="margin-bottom:8px">Recent scans</div>
         <div id="cs-scans-list"></div>
@@ -637,6 +646,9 @@ function applyForfaitGating() {
     const req = { basic: 0, pro: 1, pro_plus: 2 }[btn.dataset.minPlan] ?? 1;
     btn.style.display = rank >= req ? '' : 'none';
   });
+
+  const exportBtn = document.getElementById('btn-export-csv');
+  if (exportBtn) exportBtn.style.display = f === 'pro_plus' ? '' : 'none';
 
   // Si l'onglet actif est masqué, revenir à overview
   const cur = document.querySelector(`.nav-btn[data-tab="${S.tab}"]`);
@@ -833,6 +845,31 @@ function renderClients(filter = '') {
 
 document.getElementById('search-clients').addEventListener('input', e => renderClients(e.target.value));
 document.getElementById('btn-refresh-clients').addEventListener('click', () => { S.clients = null; loadClients(true); });
+
+document.getElementById('btn-export-csv').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-export-csv');
+  btn.disabled = true; btn.textContent = '⏳';
+  try {
+    const res = await api('/api/clients/export');
+    if (!res.ok) {
+      const d = await res.json();
+      alert(d.error || 'Export failed');
+      return;
+    }
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = `clients-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('Export error: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '⬇ CSV';
+  }
+});
 
 // ════════════════════════════════════════════════
 // TAB: HISTORIQUE SCANS
@@ -1201,6 +1238,22 @@ function renderClientSheet({ client, scans }) {
   document.getElementById('cs-prog-dots').innerHTML = Array.from({ length: S.maxValue }, (_, i) =>
     `<div class="cs-dot2${i < client.stored_value ? ' on' : ''}"></div>`
   ).join('');
+
+  // Données contact — Pro+ uniquement
+  const contactEl = document.getElementById('cs-contact');
+  if (contactEl) {
+    const hasContact = S.forfait === 'pro_plus' && (client.email || client.telephone || client.date_anniversaire);
+    if (hasContact) {
+      const rows = [];
+      if (client.email)             rows.push(`<div class="cs-contact-row"><span class="cs-contact-icon">✉️</span><a class="cs-contact-link" href="mailto:${esc(client.email)}">${esc(client.email)}</a></div>`);
+      if (client.telephone)         rows.push(`<div class="cs-contact-row"><span class="cs-contact-icon">📞</span><a class="cs-contact-link" href="tel:${esc(client.telephone)}">${esc(client.telephone)}</a></div>`);
+      if (client.date_anniversaire) rows.push(`<div class="cs-contact-row"><span class="cs-contact-icon">🎂</span><span>${new Date(client.date_anniversaire + 'T00:00:00').toLocaleDateString('fr-FR', { day:'numeric', month:'long' })}</span></div>`);
+      contactEl.innerHTML = `<div class="cs-contact-box">${rows.join('')}</div>`;
+    } else {
+      contactEl.innerHTML = '';
+    }
+  }
+
   const sl = document.getElementById('cs-scans-list');
   if (!scans || scans.length === 0) {
     sl.innerHTML = '<div class="cs-no-scans">No scans recorded for this client.</div>';

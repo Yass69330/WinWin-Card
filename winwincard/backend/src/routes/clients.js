@@ -76,13 +76,60 @@ router.post('/', async (req, res) => {
 router.get('/', authMarchand, async (req, res) => {
   const { data, error } = await supabase
     .from('clients')
-    .select('id, prenom, stored_value, created_at, pass_serial_number')
+    .select('id, prenom, stored_value, created_at, pass_serial_number, email, telephone, date_anniversaire')
     .eq('marchand_id', req.marchandId)
     .is('deleted_at', null)
     .order('stored_value', { ascending: false });
 
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
+});
+
+// GET /api/clients/export — export CSV (Pro+ uniquement)
+router.get('/export', authMarchand, async (req, res) => {
+  const { data: marchand } = await supabase
+    .from('marchands')
+    .select('nom, forfait')
+    .eq('id', req.marchandId)
+    .single();
+
+  if (marchand?.forfait !== 'pro_plus') {
+    return res.status(403).json({ error: 'CSV export is available on the Pro+ plan only.' });
+  }
+
+  const { data: clients, error } = await supabase
+    .from('clients')
+    .select('prenom, stored_value, email, telephone, date_anniversaire, created_at')
+    .eq('marchand_id', req.marchandId)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  function cell(v) {
+    if (v == null || v === '') return '';
+    const s = String(v);
+    return (s.includes(',') || s.includes('"') || s.includes('\n'))
+      ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+
+  const header = 'Prénom,Points,Email,Téléphone,Date anniversaire,Inscrit le';
+  const rows = (clients || []).map(c => [
+    cell(c.prenom),
+    cell(c.stored_value),
+    cell(c.email),
+    cell(c.telephone),
+    cell(c.date_anniversaire),
+    cell(new Date(c.created_at).toLocaleDateString('fr-FR')),
+  ].join(','));
+
+  const csv  = '﻿' + [header, ...rows].join('\r\n'); // BOM pour Excel
+  const slug = (marchand.nom || 'clients').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const date = new Date().toISOString().split('T')[0];
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="clients-${slug}-${date}.csv"`);
+  res.send(csv);
 });
 
 // DELETE /api/clients/:id — droit à l'effacement RGPD
@@ -101,7 +148,7 @@ router.get('/:id([0-9a-f\\-]{36})', authMarchand, async (req, res) => {
 
   const { data: client, error: errClient } = await supabase
     .from('clients')
-    .select('id, prenom, stored_value, created_at, pass_serial_number')
+    .select('id, prenom, stored_value, created_at, pass_serial_number, email, telephone, date_anniversaire')
     .eq('id', id)
     .eq('marchand_id', req.marchandId)
     .is('deleted_at', null)
