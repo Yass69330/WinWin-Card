@@ -253,7 +253,7 @@ function buildPassJson({ client, marchand, serialNumber, passNotification }) {
     backgroundColor: doré ? 'rgb(201, 168, 76)' : hexToRgb(marchand.couleur_fond),
     foregroundColor: doré ? 'rgb(25, 15, 0)'    : hexToRgb(marchand.couleur_texte || '#ffffff'),
     labelColor:      doré ? 'rgb(90, 65, 10)'   : hexToRgb(marchand.couleur_label || '#a0a0b0'),
-    logoText: marchand.nom,
+    logoText: marchand.pass_display_name || marchand.nom,
     storeCard: {
       headerFields: [],
       primaryFields: [],

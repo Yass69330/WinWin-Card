@@ -259,6 +259,11 @@
           <input id="f-nom" type="text" placeholder="Café Le Central">
         </div>
         <div class="field">
+          <label for="f-pass-name">Nom court Apple Wallet <span style="color:var(--muted)">(logoText — max 20 caractères)</span></label>
+          <input id="f-pass-name" type="text" placeholder="Café Central" maxlength="20">
+          <div class="field-hint">Affiché à côté du logo sur le pass Apple. Si vide, utilise le nom complet du commerce.</div>
+        </div>
+        <div class="field">
           <label for="f-slug">Slug (URL) *</label>
           <input id="f-slug" type="text" placeholder="cafe-le-central" autocorrect="off" autocapitalize="none">
           <div class="field-hint">Utilisé dans l'URL de la landing page : winwincard.fr/l/<strong id="slug-preview">…</strong></div>
@@ -668,7 +673,7 @@ document.getElementById('sheet-backdrop').addEventListener('click', e => {
 // FORM : REMPLIR / VIDER
 // ════════════════════════════════════
 function resetForm() {
-  ['f-nom','f-slug','f-email','f-pwd','f-new-pwd','f-logo','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-tiers'].forEach(id => {
+  ['f-nom','f-pass-name','f-slug','f-email','f-pwd','f-new-pwd','f-logo','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-tiers'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   setColor('cp-fond',  'f-fond',  '#ffffff');
@@ -687,8 +692,9 @@ function resetForm() {
 }
 
 function fillForm(m) {
-  v('f-nom',    m.nom);
-  v('f-slug',   m.slug);
+  v('f-nom',       m.nom);
+  v('f-pass-name', m.pass_display_name);
+  v('f-slug',      m.slug);
   v('f-email',  m.email_contact);
   v('f-texte',  m.texte_landing);
   v('f-logo',   m.logo_url);
@@ -807,8 +813,9 @@ function collectForm() {
     max_value:       parseInt(document.getElementById('f-maxval').value) || 10,
     display_max_value: parseInt(document.getElementById('f-displaymax').value) || undefined,
     forfait:         document.getElementById('f-forfait').value,
-    texte_landing: document.getElementById('f-texte').value.trim()  || undefined,
-    logo_url:        document.getElementById('f-logo').value.trim()  || undefined,
+    texte_landing:    document.getElementById('f-texte').value.trim()     || undefined,
+    pass_display_name: document.getElementById('f-pass-name').value.trim() || undefined,
+    logo_url:         document.getElementById('f-logo').value.trim()  || undefined,
     icon_url:        document.getElementById('f-icon').value.trim()  || undefined,
     image_strip_url: document.getElementById('f-strip').value.trim() || undefined,
     google_logo_url: document.getElementById('f-glogo').value.trim() || undefined,
