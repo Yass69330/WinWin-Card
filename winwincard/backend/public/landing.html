@@ -489,7 +489,7 @@
 
       // Champs Pro+ — visibles seulement pour les marchands Pro+
       if (m.forfait === 'pro_plus') {
-        document.querySelectorAll('.field-v2').forEach(el => el.style.display = '');
+        document.querySelectorAll('.field-v2').forEach(el => el.style.display = 'block');
         $('rgpd-note').textContent = 'Optional fields are used only to personalise your loyalty experience. You may request deletion in-store at any time.';
       }
     }
