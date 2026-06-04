@@ -112,7 +112,7 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
     'texte_landing', 'pass_display_name', 'max_value', 'display_max_value', 'forfait',
     'workflow_inactive_enabled', 'workflow_inactive_days',
     'workflow_near_reward_enabled', 'workflow_near_reward_threshold',
-    'landing_show_email', 'landing_show_phone', 'landing_show_birthday',
+    'landing_premium',
   ];
 
   const updates = {};

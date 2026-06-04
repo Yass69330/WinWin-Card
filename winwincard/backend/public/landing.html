@@ -487,20 +487,16 @@
       // Texte descriptif (supporte **gras** et sauts de ligne)
       $('description').innerHTML = renderText(m.texte_landing || `Welcome to **${m.nom}**'s loyalty program!`);
 
-      // Stocker le slug et les champs actifs pour le submit
-      window._marchandSlug  = m.slug;
-      window._forfait       = m.forfait;
-      window._landingFields = { email: false, phone: false, birthday: false };
+      // Stocker le slug et le flag premium pour le submit
+      window._marchandSlug    = m.slug;
+      window._premiumLanding  = m.forfait === 'pro_plus' && !!m.landing_premium;
 
-      // Champs Pro+ — affichés selon les toggles configurés par le marchand
-      // landing_show_* absent (migration non exécutée) → traité comme true (rétrocompat)
-      if (m.forfait === 'pro_plus') {
-        if (m.landing_show_email    !== false) { $('field-email').style.display       = 'block'; window._landingFields.email    = true; }
-        if (m.landing_show_phone    !== false) { $('field-telephone').style.display   = 'block'; window._landingFields.phone    = true; }
-        if (m.landing_show_birthday !== false) { $('field-anniversaire').style.display = 'block'; window._landingFields.birthday = true; }
-        if (window._landingFields.email || window._landingFields.phone || window._landingFields.birthday) {
-          $('rgpd-note').textContent = 'Optional fields are used only to personalise your loyalty experience. You may request deletion in-store at any time.';
-        }
+      // Champs Pro+ premium — affichés en bloc si landing_premium activé
+      if (window._premiumLanding) {
+        $('field-email').style.display        = 'block';
+        $('field-telephone').style.display    = 'block';
+        $('field-anniversaire').style.display = 'block';
+        $('rgpd-note').textContent = 'Optional fields are used only to personalise your loyalty experience. You may request deletion in-store at any time.';
       }
     }
 
@@ -520,10 +516,14 @@
 
       try {
         const body = { prenom, marchand_slug: window._marchandSlug };
-        const lf = window._landingFields || {};
-        if (lf.email)    { const v = $('email').value.trim();           if (v) body.email             = v; }
-        if (lf.phone)    { const v = $('telephone').value.trim();       if (v) body.telephone         = v; }
-        if (lf.birthday) { const v = $('date_anniversaire').value;      if (v) body.date_anniversaire = v; }
+        if (window._premiumLanding) {
+          const emailVal = $('email').value.trim();
+          const phoneVal = $('telephone').value.trim();
+          const bdayVal  = $('date_anniversaire').value;
+          if (emailVal) body.email             = emailVal;
+          if (phoneVal) body.telephone         = phoneVal;
+          if (bdayVal)  body.date_anniversaire = bdayVal;
+        }
         const res  = await fetch(`${API}/api/clients`, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },

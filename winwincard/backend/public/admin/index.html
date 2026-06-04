@@ -434,32 +434,15 @@
         <div class="field-hint">⏱ Déduplication : un même client ne reçoit pas le même workflow plus d'une fois par 7 jours.</div>
       </div>
 
-      <!-- Section : Champs landing page (Pro+ uniquement, visible en mode édition) -->
+      <!-- Section : Landing page premium (Pro+ uniquement, visible en mode édition) -->
       <div class="form-section" id="section-landing-fields" style="display:none">
-        <div class="form-section-title">Champs landing page <span style="color:var(--warning);font-size:10px">Pro+</span></div>
-        <div class="field-hint" style="margin-bottom:8px">Choisissez quels champs optionnels afficher sur le formulaire d'inscription.</div>
-        <div style="background:var(--surface2);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:12px">
+        <div class="form-section-title">Landing page <span style="color:var(--warning);font-size:10px">Pro+</span></div>
+        <div style="background:var(--surface2);border-radius:10px;padding:14px">
           <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px">
-            <input type="checkbox" id="f-landing-email" style="width:18px;height:18px;accent-color:var(--accent)">
+            <input type="checkbox" id="f-landing-premium" style="width:18px;height:18px;accent-color:var(--accent)">
             <div>
-              <div style="font-weight:600">Email</div>
-              <div style="font-size:12px;color:var(--muted)">So you never lose your points 🔒</div>
-            </div>
-          </label>
-          <div style="height:1px;background:var(--border)"></div>
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px">
-            <input type="checkbox" id="f-landing-phone" style="width:18px;height:18px;accent-color:var(--accent)">
-            <div>
-              <div style="font-weight:600">Téléphone</div>
-              <div style="font-size:12px;color:var(--muted)">To receive exclusive flash offers 📱</div>
-            </div>
-          </label>
-          <div style="height:1px;background:var(--border)"></div>
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px">
-            <input type="checkbox" id="f-landing-birthday" style="width:18px;height:18px;accent-color:var(--accent)">
-            <div>
-              <div style="font-weight:600">Date d'anniversaire</div>
-              <div style="font-size:12px;color:var(--muted)">For a special surprise on your big day 🎂</div>
+              <div style="font-weight:600">Landing page premium</div>
+              <div style="font-size:12px;color:var(--muted)">Affiche les champs email, téléphone et anniversaire sur le formulaire d'inscription.</div>
             </div>
           </label>
         </div>
@@ -766,9 +749,7 @@ function resetForm() {
   document.getElementById('f-wf-inactive-days').value       = '30';
   document.getElementById('f-wf-near-enabled').checked      = false;
   document.getElementById('f-wf-near-threshold').value      = '2';
-  document.getElementById('f-landing-email').checked    = false;
-  document.getElementById('f-landing-phone').checked    = false;
-  document.getElementById('f-landing-birthday').checked = false;
+  document.getElementById('f-landing-premium').checked = false;
 }
 
 function fillForm(m) {
@@ -801,10 +782,7 @@ function fillForm(m) {
     document.getElementById('f-wf-inactive-days').value       = m.workflow_inactive_days || 30;
     document.getElementById('f-wf-near-enabled').checked      = !!m.workflow_near_reward_enabled;
     document.getElementById('f-wf-near-threshold').value      = m.workflow_near_reward_threshold || 2;
-    // landing_show_* : absent avant migration → traité comme true (rétrocompat)
-    document.getElementById('f-landing-email').checked    = m.landing_show_email    !== false;
-    document.getElementById('f-landing-phone').checked    = m.landing_show_phone    !== false;
-    document.getElementById('f-landing-birthday').checked = m.landing_show_birthday !== false;
+    document.getElementById('f-landing-premium').checked = !!m.landing_premium;
   }
 }
 
@@ -933,9 +911,7 @@ function collectForm() {
     body.workflow_inactive_days         = parseInt(document.getElementById('f-wf-inactive-days').value) || 30;
     body.workflow_near_reward_enabled   = document.getElementById('f-wf-near-enabled').checked;
     body.workflow_near_reward_threshold = parseInt(document.getElementById('f-wf-near-threshold').value) || 2;
-    body.landing_show_email    = document.getElementById('f-landing-email').checked;
-    body.landing_show_phone    = document.getElementById('f-landing-phone').checked;
-    body.landing_show_birthday = document.getElementById('f-landing-birthday').checked;
+    body.landing_premium = document.getElementById('f-landing-premium').checked;
   }
 
   return body;

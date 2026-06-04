@@ -51,6 +51,19 @@ router.post('/', limiterInscription, asyncHandler(async (req, res) => {
   // Créer l'entrée passes
   await supabase.from('passes').insert({ client_id: client.id, marchand_id: marchand.id, serial_number: serialNumber });
 
+  // RGPD : enregistrer la preuve de consentement horodatée pour chaque champ Pro+ fourni
+  if (marchand.forfait === 'pro_plus') {
+    const consentements = [];
+    if (extraFields.email)             consentements.push({ client_id: client.id, marchand_id: marchand.id, type: 'email',             valeur: true });
+    if (extraFields.telephone)         consentements.push({ client_id: client.id, marchand_id: marchand.id, type: 'telephone',         valeur: true });
+    if (extraFields.date_anniversaire) consentements.push({ client_id: client.id, marchand_id: marchand.id, type: 'date_anniversaire', valeur: true });
+    if (consentements.length > 0) {
+      supabase.from('consentements').insert(consentements)
+        .then()
+        .catch(e => console.error('[clients] consentements insert:', e.message));
+    }
+  }
+
   const apiBase = process.env.API_BASE_URL || 'https://app.winwin-card.com';
   const applePassUrl = `${apiBase}/api/passes/${serialNumber}/apple`;
 

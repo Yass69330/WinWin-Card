@@ -2,7 +2,7 @@ require('dotenv').config();
 
 // Vérification des secrets critiques au boot — crash immédiat avec message explicite
 // si absents, plutôt que démarrer en mode non sécurisé.
-const REQUIRED_ENV = ['JWT_SECRET', 'ADMIN_PASSWORD'];
+const REQUIRED_ENV = ['JWT_SECRET', 'ADMIN_PASSWORD', 'SUPABASE_URL', 'SUPABASE_SERVICE_KEY'];
 const missingEnv   = REQUIRED_ENV.filter(k => !process.env[k]);
 if (missingEnv.length > 0) {
   console.error(`[boot] Variables d'environnement obligatoires manquantes : ${missingEnv.join(', ')}`);
