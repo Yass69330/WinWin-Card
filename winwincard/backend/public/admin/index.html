@@ -434,6 +434,37 @@
         <div class="field-hint">⏱ Déduplication : un même client ne reçoit pas le même workflow plus d'une fois par 7 jours.</div>
       </div>
 
+      <!-- Section : Champs landing page (Pro+ uniquement, visible en mode édition) -->
+      <div class="form-section" id="section-landing-fields" style="display:none">
+        <div class="form-section-title">Champs landing page <span style="color:var(--warning);font-size:10px">Pro+</span></div>
+        <div class="field-hint" style="margin-bottom:8px">Choisissez quels champs optionnels afficher sur le formulaire d'inscription.</div>
+        <div style="background:var(--surface2);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:12px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px">
+            <input type="checkbox" id="f-landing-email" style="width:18px;height:18px;accent-color:var(--accent)">
+            <div>
+              <div style="font-weight:600">Email</div>
+              <div style="font-size:12px;color:var(--muted)">So you never lose your points 🔒</div>
+            </div>
+          </label>
+          <div style="height:1px;background:var(--border)"></div>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px">
+            <input type="checkbox" id="f-landing-phone" style="width:18px;height:18px;accent-color:var(--accent)">
+            <div>
+              <div style="font-weight:600">Téléphone</div>
+              <div style="font-size:12px;color:var(--muted)">To receive exclusive flash offers 📱</div>
+            </div>
+          </label>
+          <div style="height:1px;background:var(--border)"></div>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px">
+            <input type="checkbox" id="f-landing-birthday" style="width:18px;height:18px;accent-color:var(--accent)">
+            <div>
+              <div style="font-weight:600">Date d'anniversaire</div>
+              <div style="font-size:12px;color:var(--muted)">For a special surprise on your big day 🎂</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
       <div id="sheet-err" class="alert alert-error" style="display:none"></div>
 
     </div><!-- /sheet-body -->
@@ -725,7 +756,8 @@ function resetForm() {
   document.getElementById('slug-preview').textContent = '…';
   document.getElementById('sheet-err').style.display = 'none';
   document.getElementById('section-strip-tiers').style.display = 'none';
-  document.getElementById('section-workflows').style.display   = 'none';
+  document.getElementById('section-workflows').style.display     = 'none';
+  document.getElementById('section-landing-fields').style.display = 'none';
   document.getElementById('strip-tiers-list').innerHTML = '';
   document.getElementById('tier-upload-status').style.display = 'none';
   document.getElementById('f-tier-num').value = '0';
@@ -734,6 +766,9 @@ function resetForm() {
   document.getElementById('f-wf-inactive-days').value       = '30';
   document.getElementById('f-wf-near-enabled').checked      = false;
   document.getElementById('f-wf-near-threshold').value      = '2';
+  document.getElementById('f-landing-email').checked    = false;
+  document.getElementById('f-landing-phone').checked    = false;
+  document.getElementById('f-landing-birthday').checked = false;
 }
 
 function fillForm(m) {
@@ -758,13 +793,18 @@ function fillForm(m) {
   // Section strip tiers — visible en mode édition uniquement
   document.getElementById('section-strip-tiers').style.display = '';
   renderStripTiers(m.images_tiers);
-  // Workflows — visibles en édition pour les Pro+
+  // Sections Pro+ — visibles en édition pour les Pro+
   if (m.forfait === 'pro_plus') {
-    document.getElementById('section-workflows').style.display = '';
+    document.getElementById('section-workflows').style.display     = 'flex';
+    document.getElementById('section-landing-fields').style.display = 'flex';
     document.getElementById('f-wf-inactive-enabled').checked = !!m.workflow_inactive_enabled;
     document.getElementById('f-wf-inactive-days').value       = m.workflow_inactive_days || 30;
     document.getElementById('f-wf-near-enabled').checked      = !!m.workflow_near_reward_enabled;
     document.getElementById('f-wf-near-threshold').value      = m.workflow_near_reward_threshold || 2;
+    // landing_show_* : absent avant migration → traité comme true (rétrocompat)
+    document.getElementById('f-landing-email').checked    = m.landing_show_email    !== false;
+    document.getElementById('f-landing-phone').checked    = m.landing_show_phone    !== false;
+    document.getElementById('f-landing-birthday').checked = m.landing_show_birthday !== false;
   }
 }
 
@@ -787,6 +827,14 @@ function isHex(s) { return /^#[0-9a-fA-F]{6}$/.test(s); }
   document.getElementById(txtId).addEventListener('input', e => {
     if (isHex(e.target.value)) document.getElementById(cpId).value = e.target.value;
   });
+});
+
+// Toggle sections Pro+ quand le forfait change en mode édition
+document.getElementById('f-forfait').addEventListener('change', function() {
+  if (!S.editId) return;
+  const isProPlus = this.value === 'pro_plus';
+  document.getElementById('section-workflows').style.display     = isProPlus ? 'flex' : 'none';
+  document.getElementById('section-landing-fields').style.display = isProPlus ? 'flex' : 'none';
 });
 
 // Auto-génération slug depuis le nom (création uniquement)
@@ -879,12 +927,15 @@ function collectForm() {
   if (!S.editId && pwd) body.password = pwd;
   if (S.editId  && pwd) body.new_password = pwd;
 
-  // Workflows (édition Pro+ uniquement)
-  if (S.editId && document.getElementById('section-workflows').style.display !== 'none') {
+  // Champs Pro+ (édition Pro+ uniquement)
+  if (S.editId && document.getElementById('section-workflows').style.display === 'flex') {
     body.workflow_inactive_enabled      = document.getElementById('f-wf-inactive-enabled').checked;
     body.workflow_inactive_days         = parseInt(document.getElementById('f-wf-inactive-days').value) || 30;
     body.workflow_near_reward_enabled   = document.getElementById('f-wf-near-enabled').checked;
     body.workflow_near_reward_threshold = parseInt(document.getElementById('f-wf-near-threshold').value) || 2;
+    body.landing_show_email    = document.getElementById('f-landing-email').checked;
+    body.landing_show_phone    = document.getElementById('f-landing-phone').checked;
+    body.landing_show_birthday = document.getElementById('f-landing-birthday').checked;
   }
 
   return body;

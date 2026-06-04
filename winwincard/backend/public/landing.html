@@ -487,14 +487,20 @@
       // Texte descriptif (supporte **gras** et sauts de ligne)
       $('description').innerHTML = renderText(m.texte_landing || `Welcome to **${m.nom}**'s loyalty program!`);
 
-      // Stocker le slug et le forfait pour le submit
-      window._marchandSlug = m.slug;
-      window._forfait      = m.forfait;
+      // Stocker le slug et les champs actifs pour le submit
+      window._marchandSlug  = m.slug;
+      window._forfait       = m.forfait;
+      window._landingFields = { email: false, phone: false, birthday: false };
 
-      // Champs Pro+ — visibles seulement pour les marchands Pro+
+      // Champs Pro+ — affichés selon les toggles configurés par le marchand
+      // landing_show_* absent (migration non exécutée) → traité comme true (rétrocompat)
       if (m.forfait === 'pro_plus') {
-        document.querySelectorAll('.field-v2').forEach(el => el.style.display = 'block');
-        $('rgpd-note').textContent = 'Optional fields are used only to personalise your loyalty experience. You may request deletion in-store at any time.';
+        if (m.landing_show_email    !== false) { $('field-email').style.display       = 'block'; window._landingFields.email    = true; }
+        if (m.landing_show_phone    !== false) { $('field-telephone').style.display   = 'block'; window._landingFields.phone    = true; }
+        if (m.landing_show_birthday !== false) { $('field-anniversaire').style.display = 'block'; window._landingFields.birthday = true; }
+        if (window._landingFields.email || window._landingFields.phone || window._landingFields.birthday) {
+          $('rgpd-note').textContent = 'Optional fields are used only to personalise your loyalty experience. You may request deletion in-store at any time.';
+        }
       }
     }
 
@@ -514,14 +520,10 @@
 
       try {
         const body = { prenom, marchand_slug: window._marchandSlug };
-        if (window._forfait === 'pro_plus') {
-          const email = $('email').value.trim();
-          const telephone = $('telephone').value.trim();
-          const date_anniversaire = $('date_anniversaire').value;
-          if (email)             body.email             = email;
-          if (telephone)         body.telephone         = telephone;
-          if (date_anniversaire) body.date_anniversaire = date_anniversaire;
-        }
+        const lf = window._landingFields || {};
+        if (lf.email)    { const v = $('email').value.trim();           if (v) body.email             = v; }
+        if (lf.phone)    { const v = $('telephone').value.trim();       if (v) body.telephone         = v; }
+        if (lf.birthday) { const v = $('date_anniversaire').value;      if (v) body.date_anniversaire = v; }
         const res  = await fetch(`${API}/api/clients`, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
