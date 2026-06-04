@@ -14,17 +14,25 @@ cron.schedule('0 8 * * *', async () => {
 });
 
 // ── Workflow : clients inactifs ───────────────────────────────────
-async function runInactiveWorkflow() {
-  const { data: merchants } = await supabase
+// opts.marchandId : limiter à un seul marchand (test)
+// opts.force      : ignorer workflow_inactive_enabled (test)
+async function runInactiveWorkflow(opts = {}) {
+  const { marchandId, force } = opts;
+
+  let query = supabase
     .from('marchands')
     .select('id, nom, workflow_inactive_days')
-    .eq('forfait',                  'pro_plus')
-    .eq('workflow_inactive_enabled', true)
-    .eq('actif',                     true);
+    .eq('forfait', 'pro_plus')
+    .eq('actif',   true);
 
-  if (!merchants?.length) return;
+  if (!force) query = query.eq('workflow_inactive_enabled', true);
+  if (marchandId) query = query.eq('id', marchandId);
+
+  const { data: merchants } = await query;
+  if (!merchants?.length) return [];
 
   const dedupSince = new Date(Date.now() - DEDUP_DAYS * 864e5).toISOString();
+  const results    = [];
 
   for (const merchant of merchants) {
     const days  = merchant.workflow_inactive_days || 30;
@@ -38,9 +46,7 @@ async function runInactiveWorkflow() {
 
     const activeSet = new Set((activeScans || []).map(s => s.client_id));
     const dedupSet  = new Set((recentExec  || []).map(e => e.client_id));
-
-    const toNotify = (clients || []).filter(c => !activeSet.has(c.id) && !dedupSet.has(c.id));
-    if (!toNotify.length) continue;
+    const toNotify  = (clients || []).filter(c => !activeSet.has(c.id) && !dedupSet.has(c.id));
 
     for (const client of toNotify) {
       const msg = `Bonjour ${client.prenom} ! Vous nous manquez chez ${merchant.nom}. Venez nous rendre visite bientôt ! 🎯`;
@@ -49,21 +55,37 @@ async function runInactiveWorkflow() {
     }
 
     console.log(`[cron] inactive: ${toNotify.length} client(s) notifié(s) — ${merchant.nom}`);
+    results.push({
+      marchand:        merchant.nom,
+      inactifs_total:  (clients || []).length - activeSet.size,
+      notifies:        toNotify.length,
+      skipped_dedup:   toNotify.length === 0 && (clients || []).filter(c => !activeSet.has(c.id)).length > 0,
+    });
   }
+
+  return results;
 }
 
 // ── Workflow : clients proches de la récompense ───────────────────
-async function runNearRewardWorkflow() {
-  const { data: merchants } = await supabase
+// opts.marchandId : limiter à un seul marchand (test)
+// opts.force      : ignorer workflow_near_reward_enabled (test)
+async function runNearRewardWorkflow(opts = {}) {
+  const { marchandId, force } = opts;
+
+  let query = supabase
     .from('marchands')
     .select('id, nom, max_value, workflow_near_reward_threshold')
-    .eq('forfait',                       'pro_plus')
-    .eq('workflow_near_reward_enabled',   true)
-    .eq('actif',                          true);
+    .eq('forfait', 'pro_plus')
+    .eq('actif',   true);
 
-  if (!merchants?.length) return;
+  if (!force) query = query.eq('workflow_near_reward_enabled', true);
+  if (marchandId) query = query.eq('id', marchandId);
+
+  const { data: merchants } = await query;
+  if (!merchants?.length) return [];
 
   const dedupSince = new Date(Date.now() - DEDUP_DAYS * 864e5).toISOString();
+  const results    = [];
 
   for (const merchant of merchants) {
     const threshold = merchant.workflow_near_reward_threshold || 2;
@@ -83,11 +105,8 @@ async function runNearRewardWorkflow() {
         .gte('executed_at', dedupSince),
     ]);
 
-    if (!clients?.length) continue;
-
-    const dedupSet  = new Set((recentExec || []).map(e => e.client_id));
-    const toNotify  = clients.filter(c => !dedupSet.has(c.id));
-    if (!toNotify.length) continue;
+    const dedupSet = new Set((recentExec || []).map(e => e.client_id));
+    const toNotify = (clients || []).filter(c => !dedupSet.has(c.id));
 
     for (const client of toNotify) {
       const remaining = maxVal - client.stored_value;
@@ -97,14 +116,21 @@ async function runNearRewardWorkflow() {
     }
 
     console.log(`[cron] near_reward: ${toNotify.length} client(s) notifié(s) — ${merchant.nom}`);
+    results.push({
+      marchand:      merchant.nom,
+      eligibles:     (clients || []).length,
+      notifies:      toNotify.length,
+      skipped_dedup: toNotify.length === 0 && (clients || []).length > 0,
+    });
   }
+
+  return results;
 }
 
 // ── Envoi de notification à un client ────────────────────────────
 async function notifyClient(client, marchandId, msg) {
   if (!client.pass_serial_number) return;
 
-  // Mettre à jour notification_message pour déclencher updated_at (Apple periodic refresh)
   await supabase.from('passes')
     .update({ notification_message: msg })
     .eq('serial_number', client.pass_serial_number)
@@ -135,4 +161,4 @@ async function purgeOldExecutions() {
   if (count > 0) console.log(`[cron] purge: ${count} workflow_executions supprimée(s)`);
 }
 
-module.exports = {};
+module.exports = { runInactiveWorkflow, runNearRewardWorkflow };

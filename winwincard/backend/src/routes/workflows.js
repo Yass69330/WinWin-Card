@@ -43,4 +43,24 @@ router.patch('/:marchandId', authAdmin, async (req, res) => {
   res.json(data);
 });
 
+// POST /api/admin/workflows/trigger — déclencher manuellement les workflows
+// Body (optionnel) : { marchand_id, force }
+//   marchand_id : limiter à un seul marchand
+//   force       : ignorer les flags workflow_*_enabled
+router.post('/trigger', authAdmin, async (req, res) => {
+  const { marchand_id, force } = req.body || {};
+  const opts = {};
+  if (marchand_id) opts.marchandId = marchand_id;
+  if (force)       opts.force      = true;
+
+  const { runInactiveWorkflow, runNearRewardWorkflow } = require('../workers/cron');
+
+  const [inactive, near_reward] = await Promise.all([
+    runInactiveWorkflow(opts).catch(e => ({ error: e.message })),
+    runNearRewardWorkflow(opts).catch(e => ({ error: e.message })),
+  ]);
+
+  res.json({ triggered_at: new Date().toISOString(), inactive, near_reward });
+});
+
 module.exports = router;
