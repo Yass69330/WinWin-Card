@@ -49,17 +49,18 @@ async function runInactiveWorkflow(opts = {}) {
     const toNotify  = (clients || []).filter(c => !activeSet.has(c.id) && !dedupSet.has(c.id));
 
     for (const client of toNotify) {
-      const msg = `Bonjour ${client.prenom} ! Vous nous manquez chez ${merchant.nom}. Venez nous rendre visite bientôt ! 🎯`;
+      const msg = `Hi ${client.prenom}! We miss you at ${merchant.nom}. Come visit us soon! 🎯`;
       await notifyClient(client, merchant.id, msg);
       await supabase.from('workflow_executions').insert({ workflow_type: 'inactive', client_id: client.id, marchand_id: merchant.id });
     }
 
     console.log(`[cron] inactive: ${toNotify.length} client(s) notifié(s) — ${merchant.nom}`);
+    const inactiveClients = (clients || []).filter(c => !activeSet.has(c.id));
     results.push({
       marchand:        merchant.nom,
-      inactifs_total:  (clients || []).length - activeSet.size,
+      inactifs_total:  inactiveClients.length,
       notifies:        toNotify.length,
-      skipped_dedup:   toNotify.length === 0 && (clients || []).filter(c => !activeSet.has(c.id)).length > 0,
+      skipped_dedup:   toNotify.length === 0 && inactiveClients.length > 0,
     });
   }
 
@@ -110,7 +111,7 @@ async function runNearRewardWorkflow(opts = {}) {
 
     for (const client of toNotify) {
       const remaining = maxVal - client.stored_value;
-      const msg = `Bonjour ${client.prenom} ! Plus que ${remaining} point${remaining > 1 ? 's' : ''} pour débloquer votre récompense chez ${merchant.nom}. Venez vite ! 🎁`;
+      const msg = `Hi ${client.prenom}! Only ${remaining} more point${remaining > 1 ? 's' : ''} to unlock your reward at ${merchant.nom}. Come visit us! 🎁`;
       await notifyClient(client, merchant.id, msg);
       await supabase.from('workflow_executions').insert({ workflow_type: 'near_reward', client_id: client.id, marchand_id: merchant.id });
     }
