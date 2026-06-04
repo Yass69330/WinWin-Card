@@ -106,12 +106,19 @@ app.use((err, req, res, next) => {
 });
 
 // ── Cron workers (workflows automatisés Pro+) ────────────────
-require('./workers/cron');
+// NB: chargé APRÈS app.listen pour ne pas bloquer le bind de port.
+// Un échec du cron ne doit jamais empêcher le serveur de démarrer.
 
 // ── Démarrage ────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`WinWin Card API démarré sur le port ${PORT}`);
+  try {
+    require('./workers/cron');
+    console.log('[cron] Workflows planifiés (08:00 UTC quotidien)');
+  } catch (e) {
+    console.error('[cron] Échec initialisation — workflows désactivés:', e.message);
+  }
 });
 
 module.exports = app;
