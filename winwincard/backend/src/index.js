@@ -1,5 +1,14 @@
 require('dotenv').config();
 
+// Vérification des secrets critiques au boot — crash immédiat avec message explicite
+// si absents, plutôt que démarrer en mode non sécurisé.
+const REQUIRED_ENV = ['JWT_SECRET', 'ADMIN_PASSWORD'];
+const missingEnv   = REQUIRED_ENV.filter(k => !process.env[k]);
+if (missingEnv.length > 0) {
+  console.error(`[boot] Variables d'environnement obligatoires manquantes : ${missingEnv.join(', ')}`);
+  process.exit(1);
+}
+
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');

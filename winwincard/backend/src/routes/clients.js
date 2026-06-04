@@ -111,7 +111,10 @@ router.get('/export', authMarchand, asyncHandler(async (req, res) => {
 
   function cell(v) {
     if (v == null || v === '') return '';
-    const s = String(v);
+    let s = String(v);
+    // Neutralise les préfixes de formule CSV (=, +, -, @) pour prévenir l'injection
+    // dans Excel / LibreOffice — préfixe l'apostrophe qui force le type texte.
+    if (/^[=+\-@]/.test(s)) s = "'" + s;
     return (s.includes(',') || s.includes('"') || s.includes('\n'))
       ? '"' + s.replace(/"/g, '""') + '"' : s;
   }

@@ -14,7 +14,7 @@ const crypto = require('crypto');
 // ── Auth token ───────────────────────────────────────────────
 function computeAuthToken(serialNumber) {
   return crypto
-    .createHmac('sha256', process.env.JWT_SECRET || 'dev-secret')
+    .createHmac('sha256', process.env.JWT_SECRET)
     .update(serialNumber)
     .digest('hex')
     .slice(0, 32);
