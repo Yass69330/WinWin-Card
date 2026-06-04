@@ -312,6 +312,59 @@
         </div>
       </div>
 
+      <!-- Section : Workflows (Pro+ uniquement, visible en mode édition) -->
+      <div class="form-section" id="section-workflows" style="display:none">
+        <div class="form-section-title">Workflows automatiques <span style="color:var(--warning);font-size:10px">Pro+</span></div>
+        <div class="field-hint" style="margin-bottom:8px">Envois push automatiques — déclenchés chaque nuit à 12h (heure du Golfe).</div>
+
+        <div style="background:var(--surface2);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:12px">
+          <!-- Inactifs -->
+          <div>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;font-weight:600">
+              <input type="checkbox" id="f-wf-inactive-enabled" style="width:18px;height:18px;accent-color:var(--accent)">
+              Relance clients inactifs
+            </label>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-left:28px">
+              <span style="font-size:13px;color:var(--muted)">Notifier après</span>
+              <input id="f-wf-inactive-days" type="number" min="7" max="365" value="30"
+                style="width:64px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:6px 10px;outline:none">
+              <span style="font-size:13px;color:var(--muted)">jours sans visite</span>
+            </div>
+          </div>
+
+          <div style="height:1px;background:var(--border)"></div>
+
+          <!-- Proche récompense -->
+          <div>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;font-weight:600">
+              <input type="checkbox" id="f-wf-near-enabled" style="width:18px;height:18px;accent-color:var(--accent)">
+              Motivation récompense imminente
+            </label>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-left:28px">
+              <span style="font-size:13px;color:var(--muted)">Notifier à</span>
+              <input id="f-wf-near-threshold" type="number" min="1" max="10" value="2"
+                style="width:52px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:6px 10px;outline:none">
+              <span style="font-size:13px;color:var(--muted)">points de la récompense</span>
+            </div>
+          </div>
+        </div>
+        <div class="field-hint">⏱ Déduplication : un même client ne reçoit pas le même workflow plus d'une fois par 7 jours.</div>
+      </div>
+
+      <!-- Section : Landing page premium (Pro+ uniquement, visible en mode édition) -->
+      <div class="form-section" id="section-landing-fields" style="display:none">
+        <div class="form-section-title">Landing page <span style="color:var(--warning);font-size:10px">Pro+</span></div>
+        <div style="background:var(--surface2);border-radius:10px;padding:14px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px">
+            <input type="checkbox" id="f-landing-premium" style="width:18px;height:18px;accent-color:var(--accent)">
+            <div>
+              <div style="font-weight:600">Landing page premium</div>
+              <div style="font-size:12px;color:var(--muted)">Affiche les champs email, téléphone et anniversaire sur le formulaire d'inscription.</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
       <!-- Section : Couleurs -->
       <div class="form-section">
         <div class="form-section-title">Couleurs du pass</div>
@@ -392,59 +445,6 @@
           <label for="f-tiers">Images tier (JSON brut)</label>
           <textarea id="f-tiers" style="font-family:monospace;font-size:12px" placeholder='[{"min":0,"max":4,"url":"…"},{"min":5,"max":9,"url":"…"}]'></textarea>
           <div class="field-hint">Mis à jour automatiquement via la section ci-dessus. Édition directe possible pour les plages (min ≠ max).</div>
-        </div>
-      </div>
-
-      <!-- Section : Workflows (Pro+ uniquement, visible en mode édition) -->
-      <div class="form-section" id="section-workflows" style="display:none">
-        <div class="form-section-title">Workflows automatiques <span style="color:var(--warning);font-size:10px">Pro+</span></div>
-        <div class="field-hint" style="margin-bottom:8px">Envois push automatiques — déclenchés chaque nuit à 12h (heure du Golfe).</div>
-
-        <div style="background:var(--surface2);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:12px">
-          <!-- Inactifs -->
-          <div>
-            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;font-weight:600">
-              <input type="checkbox" id="f-wf-inactive-enabled" style="width:18px;height:18px;accent-color:var(--accent)">
-              Relance clients inactifs
-            </label>
-            <div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-left:28px">
-              <span style="font-size:13px;color:var(--muted)">Notifier après</span>
-              <input id="f-wf-inactive-days" type="number" min="7" max="365" value="30"
-                style="width:64px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:6px 10px;outline:none">
-              <span style="font-size:13px;color:var(--muted)">jours sans visite</span>
-            </div>
-          </div>
-
-          <div style="height:1px;background:var(--border)"></div>
-
-          <!-- Proche récompense -->
-          <div>
-            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;font-weight:600">
-              <input type="checkbox" id="f-wf-near-enabled" style="width:18px;height:18px;accent-color:var(--accent)">
-              Motivation récompense imminente
-            </label>
-            <div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-left:28px">
-              <span style="font-size:13px;color:var(--muted)">Notifier à</span>
-              <input id="f-wf-near-threshold" type="number" min="1" max="10" value="2"
-                style="width:52px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:6px 10px;outline:none">
-              <span style="font-size:13px;color:var(--muted)">points de la récompense</span>
-            </div>
-          </div>
-        </div>
-        <div class="field-hint">⏱ Déduplication : un même client ne reçoit pas le même workflow plus d'une fois par 7 jours.</div>
-      </div>
-
-      <!-- Section : Landing page premium (Pro+ uniquement, visible en mode édition) -->
-      <div class="form-section" id="section-landing-fields" style="display:none">
-        <div class="form-section-title">Landing page <span style="color:var(--warning);font-size:10px">Pro+</span></div>
-        <div style="background:var(--surface2);border-radius:10px;padding:14px">
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px">
-            <input type="checkbox" id="f-landing-premium" style="width:18px;height:18px;accent-color:var(--accent)">
-            <div>
-              <div style="font-weight:600">Landing page premium</div>
-              <div style="font-size:12px;color:var(--muted)">Affiche les champs email, téléphone et anniversaire sur le formulaire d'inscription.</div>
-            </div>
-          </label>
         </div>
       </div>
 
@@ -703,9 +703,10 @@ async function openEditSheet(id) {
 
   // Charger les données complètes du marchand
   try {
-    const res = await api(`/api/admin/marchands/${id}`);
-    const m   = await res.json();
-    fillForm(m);
+    const res  = await api(`/api/admin/marchands/${id}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
+    fillForm(data);
   } catch (e) {
     alert('Impossible de charger le marchand : ' + e.message);
     return;
