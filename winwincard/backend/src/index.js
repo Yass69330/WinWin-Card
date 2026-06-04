@@ -1,7 +1,12 @@
 require('dotenv').config();
 
+// Sentry — initialisé en tout premier (avant express) pour l'auto-instrumentation.
+// SENTRY_DSN est optionnel : absent → Sentry désactivé, le serveur tourne sans.
+const { Sentry, sentryEnabled } = require('./instrument');
+
 // Vérification des secrets critiques au boot — crash immédiat avec message explicite
 // si absents, plutôt que démarrer en mode non sécurisé.
+// SENTRY_DSN est volontairement hors de cette liste : c'est une variable optionnelle.
 const REQUIRED_ENV = ['JWT_SECRET', 'ADMIN_PASSWORD', 'SUPABASE_URL', 'SUPABASE_SERVICE_KEY'];
 const missingEnv   = REQUIRED_ENV.filter(k => !process.env[k]);
 if (missingEnv.length > 0) {
@@ -101,6 +106,13 @@ app.get('/health', (req, res) => {
 
 // ── Erreurs ──────────────────────────────────────────────────
 app.use((req, res) => res.status(404).json({ error: 'Route not found' }));
+
+// Capture Sentry — doit être enregistré APRÈS les routes et AVANT le handler
+// d'erreurs custom. No-op si SENTRY_DSN absent (Sentry non initialisé).
+if (sentryEnabled) {
+  Sentry.setupExpressErrorHandler(app);
+}
+
 // Gestionnaire d'erreurs global — reçoit les rejets transmis par asyncHandler.
 app.use((err, req, res, next) => {
   console.error(err);
