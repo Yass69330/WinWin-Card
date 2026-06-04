@@ -32,19 +32,10 @@ app.use(rateLimit({
   legacyHeaders: false
 }));
 
-// Rate limiting strict sur l'inscription (anti-spam)
-const limiterInscription = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1h
-  max: 20,
-  message: { error: 'Too many attempts, please try again in an hour' }
-});
-
-// Rate limiting strict sur le login admin (anti brute-force)
-const limiterAdminLogin = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1h
-  max: 10,
-  message: { error: 'Too many attempts, please try again in an hour' }
-});
+// Rate limiters dédiés (anti brute-force logins).
+// limiterInscription est appliqué directement sur POST /api/clients (dans clients.js),
+// pas au niveau du routeur, pour ne pas pénaliser les lectures du dashboard.
+const { limiterAdminLogin, limiterMarchandLogin } = require('./middleware/rateLimiters');
 
 // ── Routes ───────────────────────────────────────────────────
 const appleWalletRoutes   = require('./routes/apple-wallet');
@@ -84,8 +75,9 @@ app.use('/', appleWalletRoutes);
 
 // API REST
 app.use('/api/passes', passesRoutes);
-app.use('/api/clients', limiterInscription, clientsRoutes);
+app.use('/api/clients', clientsRoutes);
 app.use('/api/scan', scanRoutes);
+app.use('/api/merchants/login', limiterMarchandLogin);
 app.use('/api/merchants', merchantsRoutes);
 app.use('/api/google-wallet', googleWalletRoutes);
 app.use('/api/notifications', notificationsRoutes);
@@ -100,8 +92,10 @@ app.get('/health', (req, res) => {
 
 // ── Erreurs ──────────────────────────────────────────────────
 app.use((req, res) => res.status(404).json({ error: 'Route not found' }));
+// Gestionnaire d'erreurs global — reçoit les rejets transmis par asyncHandler.
 app.use((err, req, res, next) => {
   console.error(err);
+  if (res.headersSent) return next(err); // délègue au handler par défaut d'Express
   res.status(500).json({ error: 'Internal server error' });
 });
 

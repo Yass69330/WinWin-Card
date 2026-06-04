@@ -1,6 +1,7 @@
 const express  = require('express');
 const router   = express.Router();
 const supabase = require('../services/supabase');
+const asyncHandler = require('../utils/asyncHandler');
 const { authMarchand } = require('../middleware/auth');
 const { sendPushUpdate, isApnsConfigured }                    = require('../services/apns');
 const { addMessageToLoyaltyObject, isConfigured: isGoogleConfigured } = require('../services/google-pass');
@@ -13,7 +14,7 @@ function startOfMonth() {
 }
 
 // GET /api/notifications — historique + quota du mois
-router.get('/', authMarchand, async (req, res) => {
+router.get('/', authMarchand, asyncHandler(async (req, res) => {
   const [logsResult, meResult, countResult] = await Promise.all([
     supabase
       .from('notification_logs')
@@ -36,12 +37,12 @@ router.get('/', authMarchand, async (req, res) => {
     logs:  logsResult.data || [],
     quota: { used: countResult.count || 0, limit, forfait },
   });
-});
+}));
 
 // POST /api/notifications — envoi push depuis le dashboard marchand
 // Corps : { titre, message }
 // Réponse : { apple: { envoyes, echecs, total, active }, google: { ... } }
-router.post('/', authMarchand, async (req, res) => {
+router.post('/', authMarchand, asyncHandler(async (req, res) => {
   const { message } = req.body;
 
   if (!message) {
@@ -149,6 +150,6 @@ router.post('/', authMarchand, async (req, res) => {
       active:  isGoogleConfigured(),
     },
   });
-});
+}));
 
 module.exports = router;

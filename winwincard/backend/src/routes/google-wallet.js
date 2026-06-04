@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../services/supabase');
+const asyncHandler = require('../utils/asyncHandler');
 
 // GET /google-wallet/pass/:serialNumber — génère le lien "Add to Google Wallet"
-router.get('/pass/:serialNumber', async (req, res) => {
+router.get('/pass/:serialNumber', asyncHandler(async (req, res) => {
   const { serialNumber } = req.params;
 
   const { data: pass } = await supabase
@@ -36,6 +37,6 @@ router.get('/pass/:serialNumber', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: 'Erreur génération Google Wallet', detail: err.message });
   }
-});
+}));
 
 module.exports = router;

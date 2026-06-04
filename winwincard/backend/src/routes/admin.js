@@ -2,10 +2,11 @@ const express = require('express');
 const router  = express.Router();
 const jwt     = require('jsonwebtoken');
 const supabase = require('../services/supabase');
+const asyncHandler = require('../utils/asyncHandler');
 const { authAdmin } = require('../middleware/auth');
 
 // POST /api/admin/login — authentification admin par mot de passe global
-router.post('/login', async (req, res) => {
+router.post('/login', asyncHandler(async (req, res) => {
   const { password } = req.body;
   if (!process.env.ADMIN_PASSWORD) {
     return res.status(500).json({ error: 'ADMIN_PASSWORD non configuré côté serveur' });
@@ -15,10 +16,10 @@ router.post('/login', async (req, res) => {
   }
   const token = jwt.sign({ role: 'admin' }, process.env.JWT_SECRET, { expiresIn: '24h' });
   res.json({ token });
-});
+}));
 
 // GET /api/admin/marchands — liste complète avec stats par marchand
-router.get('/marchands', authAdmin, async (req, res) => {
+router.get('/marchands', authAdmin, asyncHandler(async (req, res) => {
   const [
     { data: marchands, error },
     { data: clientRows },
@@ -44,10 +45,10 @@ router.get('/marchands', authAdmin, async (req, res) => {
     total_clients:    clientsParMarchand[m.id] || 0,
     scans_aujourdhui: scansParMarchand[m.id]   || 0,
   })));
-});
+}));
 
 // GET /api/admin/marchands/:id — détail complet d'un marchand
-router.get('/marchands/:id', authAdmin, async (req, res) => {
+router.get('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
   const { data, error } = await supabase
     .from('marchands')
     .select('*')
@@ -55,10 +56,10 @@ router.get('/marchands/:id', authAdmin, async (req, res) => {
     .single();
   if (error || !data) return res.status(404).json({ error: 'Marchand introuvable' });
   res.json(data);
-});
+}));
 
 // POST /api/admin/marchands — créer un marchand
-router.post('/marchands', authAdmin, async (req, res) => {
+router.post('/marchands', authAdmin, asyncHandler(async (req, res) => {
   const {
     nom, slug, email_contact, password, forfait,
     couleur_fond, couleur_texte, couleur_label,
@@ -99,10 +100,10 @@ router.post('/marchands', authAdmin, async (req, res) => {
   createOrUpdateLoyaltyClass(data).catch(e => console.error('[Google Wallet] classe:', e.message));
 
   res.status(201).json(data);
-});
+}));
 
 // PATCH /api/admin/marchands/:id — modifier un marchand
-router.patch('/marchands/:id', authAdmin, async (req, res) => {
+router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
   const ALLOWED = [
     'nom', 'email_contact',
     'couleur_fond', 'couleur_texte', 'couleur_label',
@@ -138,10 +139,10 @@ router.patch('/marchands/:id', authAdmin, async (req, res) => {
   createOrUpdateLoyaltyClass(data).catch(e => console.error('[Google Wallet] classe:', e.message));
 
   res.json(data);
-});
+}));
 
 // PATCH /api/admin/marchands/:id/suspension — bloquer ou débloquer
-router.patch('/marchands/:id/suspension', authAdmin, async (req, res) => {
+router.patch('/marchands/:id/suspension', authAdmin, asyncHandler(async (req, res) => {
   const { actif } = req.body;
   if (typeof actif !== 'boolean') return res.status(400).json({ error: 'actif (boolean) requis' });
 
@@ -150,10 +151,10 @@ router.patch('/marchands/:id/suspension', authAdmin, async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
-});
+}));
 
 // GET /api/admin/stats — statistiques globales
-router.get('/stats', authAdmin, async (req, res) => {
+router.get('/stats', authAdmin, asyncHandler(async (req, res) => {
   const [
     { count: marchandsActifs },
     { count: totalClients },
@@ -165,10 +166,10 @@ router.get('/stats', authAdmin, async (req, res) => {
   ]);
 
   res.json({ marchands_actifs: marchandsActifs, total_clients: totalClients, total_scans: totalScans });
-});
+}));
 
 // GET /api/admin/debug/pass/:serialNumber — état complet d'un pass (device tokens, passes row, APNs)
-router.get('/debug/pass/:serialNumber', authAdmin, async (req, res) => {
+router.get('/debug/pass/:serialNumber', authAdmin, asyncHandler(async (req, res) => {
   const { serialNumber } = req.params;
   const { isApnsConfigured } = require('../services/apns');
 
@@ -209,7 +210,7 @@ router.get('/debug/pass/:serialNumber', authAdmin, async (req, res) => {
       })),
     },
   });
-});
+}));
 
 // GET /api/admin/debug/certs — diagnostic certificats Apple Wallet (admin requis)
 // Inspecte les certs chargés en mémoire sans exposer les clés privées.
@@ -301,7 +302,7 @@ router.get('/debug/certs', authAdmin, (req, res) => {
 // ── Google Wallet Admin ──────────────────────────────────────
 
 // GET /api/admin/google-wallet/diagnostic — état de toutes les LoyaltyClasses
-router.get('/google-wallet/diagnostic', authAdmin, async (req, res) => {
+router.get('/google-wallet/diagnostic', authAdmin, asyncHandler(async (req, res) => {
   const gp = require('../services/google-pass');
   if (!gp.isConfigured()) {
     return res.json({
@@ -334,10 +335,10 @@ router.get('/google-wallet/diagnostic', authAdmin, async (req, res) => {
     missing_classes: classes.filter(c => !c.exists).length,
     classes,
   });
-});
+}));
 
 // POST /api/admin/google-wallet/class/:marchandId — créer/mettre à jour une LoyaltyClass
-router.post('/google-wallet/class/:marchandId', authAdmin, async (req, res) => {
+router.post('/google-wallet/class/:marchandId', authAdmin, asyncHandler(async (req, res) => {
   const { isConfigured, createOrUpdateLoyaltyClass } = require('../services/google-pass');
   if (!isConfigured()) return res.status(503).json({ error: 'Google Wallet non configuré' });
 
@@ -350,10 +351,10 @@ router.post('/google-wallet/class/:marchandId', authAdmin, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
+}));
 
 // POST /api/admin/google-wallet/classes/sync — synchronise toutes les classes actives
-router.post('/google-wallet/classes/sync', authAdmin, async (req, res) => {
+router.post('/google-wallet/classes/sync', authAdmin, asyncHandler(async (req, res) => {
   const { isConfigured, createOrUpdateLoyaltyClass } = require('../services/google-pass');
   if (!isConfigured()) return res.status(503).json({ error: 'Google Wallet non configuré' });
 
@@ -371,7 +372,7 @@ router.post('/google-wallet/classes/sync', authAdmin, async (req, res) => {
 
   const errors = results.filter(r => r.error).length;
   res.json({ synced: results.length, errors, results });
-});
+}));
 
 // ── Upload strip images par tier ────────────────────────────────
 
@@ -393,7 +394,7 @@ router.post('/marchands/:id/assets', authAdmin, (req, res, next) => {
     if (err) return res.status(400).json({ error: err.message });
     next();
   });
-}, async (req, res) => {
+}, asyncHandler(async (req, res) => {
   const tier = parseInt(req.body.tier);
   if (isNaN(tier) || tier < 0 || tier > 99) {
     return res.status(400).json({ error: 'tier doit être un entier entre 0 et 99' });
@@ -429,10 +430,10 @@ router.post('/marchands/:id/assets', authAdmin, (req, res, next) => {
   if (errU) return res.status(500).json({ error: errU.message });
 
   res.json({ tier, url: publicUrl, images_tiers: updated.images_tiers });
-});
+}));
 
 // DELETE /api/admin/marchands/:id/assets/:tier — supprime la strip image du tier exact
-router.delete('/marchands/:id/assets/:tier', authAdmin, async (req, res) => {
+router.delete('/marchands/:id/assets/:tier', authAdmin, asyncHandler(async (req, res) => {
   const tier = parseInt(req.params.tier);
   if (isNaN(tier)) return res.status(400).json({ error: 'tier invalide' });
 
@@ -455,6 +456,6 @@ router.delete('/marchands/:id/assets/:tier', authAdmin, async (req, res) => {
   if (errU) return res.status(500).json({ error: errU.message });
 
   res.json({ tier, images_tiers: updated.images_tiers });
-});
+}));
 
 module.exports = router;

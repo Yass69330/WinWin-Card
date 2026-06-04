@@ -6,6 +6,8 @@ const os = require('os');
 const path = require('path');
 const https = require('https');
 const http = require('http');
+const dns = require('dns').promises;
+const net = require('net');
 const zlib = require('zlib');
 const crypto = require('crypto');
 
@@ -44,19 +46,80 @@ function loadCerts() {
   };
 }
 
-// ── Fetch image distante → Buffer ────────────────────────────
-function fetchImage(url) {
+// ── Fetch image distante → Buffer (sécurisé) ─────────────────
+// Protections : timeout 5s, taille max 5 MB, anti-SSRF (refus des hôtes locaux
+// et des IP privées/internes — y compris l'endpoint metadata 169.254.169.254).
+const FETCH_TIMEOUT_MS = 5000;
+const MAX_IMAGE_BYTES  = 5 * 1024 * 1024;
+
+function isPrivateIp(ip) {
+  if (net.isIPv4(ip)) {
+    const [a, b] = ip.split('.').map(Number);
+    if (a === 0 || a === 127) return true;                 // "this host" / loopback
+    if (a === 10) return true;                             // privé
+    if (a === 172 && b >= 16 && b <= 31) return true;      // privé
+    if (a === 192 && b === 168) return true;               // privé
+    if (a === 169 && b === 254) return true;               // link-local + metadata cloud
+    return false;
+  }
+  if (net.isIPv6(ip)) {
+    const lower = ip.toLowerCase();
+    if (lower === '::1' || lower === '::') return true;     // loopback / unspecified
+    if (lower.startsWith('fe80')) return true;             // link-local
+    if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // ULA
+    if (lower.startsWith('::ffff:')) return isPrivateIp(lower.replace('::ffff:', '')); // IPv4-mapped
+    return false;
+  }
+  return false;
+}
+
+async function fetchImage(url) {
+  let parsed;
+  try { parsed = new URL(url); } catch { throw new Error(`URL invalide: ${url}`); }
+
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new Error(`Protocole non autorisé: ${parsed.protocol}`);
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  if (host === 'localhost' || host.endsWith('.localhost') || host === '0.0.0.0') {
+    throw new Error(`Hôte non autorisé: ${host}`);
+  }
+
+  // Anti-SSRF : résoudre le DNS et refuser toute IP interne
+  let addresses;
+  try {
+    addresses = await dns.lookup(host, { all: true });
+  } catch {
+    throw new Error(`Résolution DNS échouée: ${host}`);
+  }
+  for (const { address } of addresses) {
+    if (isPrivateIp(address)) throw new Error(`IP interne bloquée (${address}) pour ${host}`);
+  }
+
   return new Promise((resolve, reject) => {
-    const client = url.startsWith('https') ? https : http;
-    client.get(url, (res) => {
+    const client = parsed.protocol === 'https:' ? https : http;
+    const request = client.get(url, { timeout: FETCH_TIMEOUT_MS }, (res) => {
       if (res.statusCode !== 200) {
+        res.resume(); // vider le flux pour libérer le socket
         return reject(new Error(`HTTP ${res.statusCode} pour ${url}`));
       }
       const chunks = [];
-      res.on('data', c => chunks.push(c));
+      let total = 0;
+      res.on('data', c => {
+        total += c.length;
+        if (total > MAX_IMAGE_BYTES) {
+          request.destroy();
+          reject(new Error(`Image trop volumineuse (> ${MAX_IMAGE_BYTES} octets): ${url}`));
+          return;
+        }
+        chunks.push(c);
+      });
       res.on('end', () => resolve(Buffer.concat(chunks)));
       res.on('error', reject);
-    }).on('error', reject);
+    });
+    request.on('timeout', () => request.destroy(new Error(`Timeout ${FETCH_TIMEOUT_MS}ms pour ${url}`)));
+    request.on('error', reject);
   });
 }
 

@@ -2,11 +2,12 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const supabase = require('../services/supabase');
+const asyncHandler = require('../utils/asyncHandler');
 const { authMarchand } = require('../middleware/auth');
 
 // POST /merchants/login — connexion marchand (email ou slug + password)
 // remember_device: true → JWT 1 an (scanner PWA installée), false → 7j (dashboard)
-router.post('/login', async (req, res) => {
+router.post('/login', asyncHandler(async (req, res) => {
   const { email, slug, password, remember_device } = req.body;
   const identifier = slug || email;
   if (!identifier || !password) {
@@ -35,10 +36,10 @@ router.post('/login', async (req, res) => {
   );
 
   res.json({ token, marchand_id: marchand.id, nom: marchand.nom, slug: marchand.slug });
-});
+}));
 
 // GET /merchants/me — profil du marchand connecté
-router.get('/me', authMarchand, async (req, res) => {
+router.get('/me', authMarchand, asyncHandler(async (req, res) => {
   const { data, error } = await supabase
     .from('marchands')
     .select('id, nom, slug, logo_url, couleur_fond, couleur_texte, couleur_label, image_strip_url, texte_landing, max_value, display_max_value, forfait, email_contact')
@@ -47,10 +48,10 @@ router.get('/me', authMarchand, async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
-});
+}));
 
 // GET /merchants/me/stats — stats du dashboard + analytics 30j
-router.get('/me/stats', authMarchand, async (req, res) => {
+router.get('/me/stats', authMarchand, asyncHandler(async (req, res) => {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
   const [{ count: totalClients }, { count: scansAujourdhui }, { data: scansRecent }] = await Promise.all([
@@ -76,10 +77,10 @@ router.get('/me/stats', authMarchand, async (req, res) => {
     retention_rate:      retentionRate,
     avg_frequency:       avgFrequency,
   });
-});
+}));
 
 // GET /merchants/qrcode — QR code de la landing page du marchand
-router.get('/me/qrcode', authMarchand, async (req, res) => {
+router.get('/me/qrcode', authMarchand, asyncHandler(async (req, res) => {
   const { data: marchand } = await supabase
     .from('marchands')
     .select('slug')
@@ -93,10 +94,10 @@ router.get('/me/qrcode', authMarchand, async (req, res) => {
   const qr = await QRCode.toDataURL(url, { width: 400, margin: 2 });
 
   res.json({ url, qrcode: qr });
-});
+}));
 
 // GET /merchants/:slug/public — infos publiques pour la landing page
-router.get('/:slug/public', async (req, res) => {
+router.get('/:slug/public', asyncHandler(async (req, res) => {
   const { data, error } = await supabase
     .from('marchands')
     .select('id, nom, slug, logo_url, icon_url, image_strip_url, texte_landing, couleur_fond, couleur_texte, max_value, actif, forfait, landing_show_email, landing_show_phone, landing_show_birthday')
@@ -107,6 +108,6 @@ router.get('/:slug/public', async (req, res) => {
   if (!data.actif) return res.status(403).json({ error: 'Program suspended' });
 
   res.json(data);
-});
+}));
 
 module.exports = router;

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const supabase = require('../services/supabase');
+const asyncHandler = require('../utils/asyncHandler');
 
 // Vérifie le token ApplePass envoyé par Apple sur le webservice
 function verifyAppleToken(req, serialNumber) {
@@ -22,7 +23,7 @@ function verifyAppleToken(req, serialNumber) {
 
 // POST /v1/devices/:deviceId/registrations/:passTypeId/:serialNumber
 // Apple envoie ce token quand le client installe son pass
-router.post('/v1/devices/:deviceId/registrations/:passTypeId/:serialNumber', async (req, res) => {
+router.post('/v1/devices/:deviceId/registrations/:passTypeId/:serialNumber', asyncHandler(async (req, res) => {
   const { deviceId, serialNumber } = req.params;
   const { pushToken } = req.body;
 
@@ -57,11 +58,11 @@ router.post('/v1/devices/:deviceId/registrations/:passTypeId/:serialNumber', asy
   // Welcome push — fire and forget après la réponse 201
   sendWelcomePush(serialNumber, pushToken, pass.marchand_id)
     .catch(e => console.error('[apple-wallet] Welcome push:', e.message));
-});
+}));
 
 // DELETE /v1/devices/:deviceId/registrations/:passTypeId/:serialNumber
 // Apple envoie ce DELETE quand le client supprime son pass
-router.delete('/v1/devices/:deviceId/registrations/:passTypeId/:serialNumber', async (req, res) => {
+router.delete('/v1/devices/:deviceId/registrations/:passTypeId/:serialNumber', asyncHandler(async (req, res) => {
   const { deviceId, serialNumber } = req.params;
 
   const { error } = await supabase
@@ -72,11 +73,11 @@ router.delete('/v1/devices/:deviceId/registrations/:passTypeId/:serialNumber', a
 
   if (error) return res.status(500).send();
   res.status(200).send();
-});
+}));
 
 // GET /v1/devices/:deviceId/registrations/:passTypeId
 // Apple demande la liste des serials mis à jour depuis lastUpdated
-router.get('/v1/devices/:deviceId/registrations/:passTypeId', async (req, res) => {
+router.get('/v1/devices/:deviceId/registrations/:passTypeId', asyncHandler(async (req, res) => {
   const { deviceId } = req.params;
   const { passesUpdatedSince } = req.query;
 
@@ -99,11 +100,11 @@ router.get('/v1/devices/:deviceId/registrations/:passTypeId', async (req, res) =
   const lastUpdated = new Date().toISOString();
 
   res.json({ serialNumbers, lastUpdated });
-});
+}));
 
 // GET /v1/passes/:passTypeId/:serialNumber
 // Apple télécharge le pass mis à jour (appelé après push APNs)
-router.get('/v1/passes/:passTypeId/:serialNumber', async (req, res) => {
+router.get('/v1/passes/:passTypeId/:serialNumber', asyncHandler(async (req, res) => {
   const { serialNumber } = req.params;
   const ifModifiedSince = req.headers['if-modified-since'];
 
@@ -159,7 +160,7 @@ router.get('/v1/passes/:passTypeId/:serialNumber', async (req, res) => {
   } catch (err) {
     res.status(500).send();
   }
-});
+}));
 
 // ── Welcome push ─────────────────────────────────────────────
 // Envoyé à l'installation du pass — met à jour notification_message,

@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../services/supabase');
+const asyncHandler = require('../utils/asyncHandler');
 
 // GET /api/passes/:serialNumber/apple
 // Route publique — premier téléchargement du pass (bouton "Ajouter à Apple Wallet")
-router.get('/:serialNumber/apple', async (req, res) => {
+router.get('/:serialNumber/apple', asyncHandler(async (req, res) => {
   const { serialNumber } = req.params;
 
   const { data: pass, error: errPass } = await supabase
@@ -63,6 +64,6 @@ router.get('/:serialNumber/apple', async (req, res) => {
     console.error('[passes] Erreur génération Apple pass :', err.message, err.stack);
     res.status(500).json({ error: 'Erreur génération du pass' });
   }
-});
+}));
 
 module.exports = router;

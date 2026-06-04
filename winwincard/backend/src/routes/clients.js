@@ -2,11 +2,14 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const supabase = require('../services/supabase');
+const asyncHandler = require('../utils/asyncHandler');
 const { authMarchand, authAdmin } = require('../middleware/auth');
+const { limiterInscription } = require('../middleware/rateLimiters');
 
 // POST /api/clients — inscription client depuis la landing page
 // Corps : { prenom, marchand_slug, email?, telephone?, date_anniversaire? }
-router.post('/', async (req, res) => {
+// Rate limit appliqué ici uniquement (anti-spam inscription), pas sur tout le routeur.
+router.post('/', limiterInscription, asyncHandler(async (req, res) => {
   const { prenom, marchand_slug, email, telephone, date_anniversaire } = req.body;
 
   if (!prenom || !marchand_slug) {
@@ -70,10 +73,10 @@ router.post('/', async (req, res) => {
     apple_pass_url:   applePassUrl,
     google_wallet_url: googleWalletUrl,
   });
-});
+}));
 
 // GET /api/clients — liste des clients du marchand connecté
-router.get('/', authMarchand, async (req, res) => {
+router.get('/', authMarchand, asyncHandler(async (req, res) => {
   const { data, error } = await supabase
     .from('clients')
     .select('id, prenom, stored_value, created_at, pass_serial_number, email, telephone, date_anniversaire')
@@ -83,10 +86,10 @@ router.get('/', authMarchand, async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
-});
+}));
 
 // GET /api/clients/export — export CSV (Pro+ uniquement)
-router.get('/export', authMarchand, async (req, res) => {
+router.get('/export', authMarchand, asyncHandler(async (req, res) => {
   const { data: marchand } = await supabase
     .from('marchands')
     .select('nom, forfait')
@@ -130,20 +133,20 @@ router.get('/export', authMarchand, async (req, res) => {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="clients-${slug}-${date}.csv"`);
   res.send(csv);
-});
+}));
 
 // DELETE /api/clients/:id — droit à l'effacement RGPD
-router.delete('/:id', authMarchand, async (req, res) => {
+router.delete('/:id', authMarchand, asyncHandler(async (req, res) => {
   const { error } = await supabase.rpc('effacer_client', {
     p_client_id: req.params.id,
     p_marchand_id: req.marchandId
   });
   if (error) return res.status(400).json({ error: error.message });
   res.json({ success: true });
-});
+}));
 
 // GET /api/clients/:id — fiche client + derniers scans
-router.get('/:id([0-9a-f\\-]{36})', authMarchand, async (req, res) => {
+router.get('/:id([0-9a-f\\-]{36})', authMarchand, asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const { data: client, error: errClient } = await supabase
@@ -166,10 +169,10 @@ router.get('/:id([0-9a-f\\-]{36})', authMarchand, async (req, res) => {
   if (errScans) return res.status(500).json({ error: errScans.message });
 
   res.json({ client, scans: scans || [] });
-});
+}));
 
 // PATCH /api/clients/:id — modifier prénom et/ou points
-router.patch('/:id([0-9a-f\\-]{36})', authMarchand, async (req, res) => {
+router.patch('/:id([0-9a-f\\-]{36})', authMarchand, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { prenom, stored_value } = req.body;
 
@@ -188,34 +191,27 @@ router.patch('/:id([0-9a-f\\-]{36})', authMarchand, async (req, res) => {
     return res.status(400).json({ error: 'At least one field required: prenom or stored_value' });
   }
 
-  // Vérifier que le client appartient au marchand (on récupère aussi pass_serial_number pour le push)
-  const { data: existing, error: errCheck } = await supabase
-    .from('clients')
-    .select('id, pass_serial_number')
-    .eq('id', id)
-    .eq('marchand_id', req.marchandId)
-    .is('deleted_at', null)
-    .single();
-
-  if (errCheck || !existing) return res.status(404).json({ error: 'Client not found' });
-
+  // UPDATE atomique : la vérification d'appartenance est dans le WHERE (id +
+  // marchand_id + deleted_at). Plus de read-then-write : une seule requête.
   const { data: updated, error: errUpdate } = await supabase
     .from('clients')
     .update(updates)
     .eq('id', id)
-    .select('id, prenom, stored_value, created_at')
+    .eq('marchand_id', req.marchandId)
+    .is('deleted_at', null)
+    .select('id, prenom, stored_value, created_at, pass_serial_number')
     .single();
 
-  if (errUpdate) return res.status(500).json({ error: errUpdate.message });
+  if (errUpdate || !updated) return res.status(404).json({ error: 'Client not found' });
 
   // Si stored_value modifié : mettre à jour le pass Apple en arrière-plan
-  if (updates.stored_value !== undefined && existing.pass_serial_number) {
-    syncPassAfterAdjustment(existing.pass_serial_number, req.marchandId, updated.prenom, updates.stored_value)
+  if (updates.stored_value !== undefined && updated.pass_serial_number) {
+    syncPassAfterAdjustment(updated.pass_serial_number, req.marchandId, updated.prenom, updates.stored_value)
       .catch(e => console.error('[clients] sync pass:', e.message));
   }
 
-  res.json(updated);
-});
+  res.json({ id: updated.id, prenom: updated.prenom, stored_value: updated.stored_value, created_at: updated.created_at });
+}));
 
 async function syncPassAfterAdjustment(serialNumber, marchandId, prenom, newValue) {
   console.log(`[clients] syncPass START serial=${serialNumber} prenom=${prenom} newValue=${newValue}`);
@@ -274,7 +270,7 @@ async function syncPassAfterAdjustment(serialNumber, marchandId, prenom, newValu
 }
 
 // GET /api/clients/admin/all — vision globale admin
-router.get('/admin/all', authAdmin, async (req, res) => {
+router.get('/admin/all', authAdmin, asyncHandler(async (req, res) => {
   const { data, error } = await supabase
     .from('clients')
     .select('id, prenom, stored_value, created_at, marchand_id, marchands(nom)')
@@ -283,6 +279,6 @@ router.get('/admin/all', authAdmin, async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
-});
+}));
 
 module.exports = router;
