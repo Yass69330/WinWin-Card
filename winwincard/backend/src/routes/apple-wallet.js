@@ -177,7 +177,7 @@ async function sendWelcomePush(serialNumber, pushToken, marchandId) {
   const msg = `Welcome to ${marchand.nom}! Collect points with every visit.`;
 
   await supabase.from('passes')
-    .update({ notification_message: msg })
+    .update({ notification_message: msg, updated_at: new Date().toISOString() })
     .eq('serial_number', serialNumber);
 
   const { isApnsConfigured, sendPushUpdate } = require('../services/apns');

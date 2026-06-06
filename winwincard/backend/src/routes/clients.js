@@ -250,7 +250,7 @@ async function syncPassAfterAdjustment(serialNumber, marchandId, prenom, newValu
   // Cela permet à Apple Wallet de récupérer le pass lors de son prochain check
   // périodique, même sans push APNs.
   const { error: passErr } = await supabase.from('passes')
-    .update({ notification_message: msg })
+    .update({ notification_message: msg, updated_at: new Date().toISOString() })
     .eq('serial_number', serialNumber)
     .eq('marchand_id', marchandId);
   if (passErr) console.error('[clients] syncPass: passes update error:', passErr.message);

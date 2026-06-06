@@ -58,7 +58,7 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   // Message de notification du pass + log du scan en parallèle
   await Promise.all([
     supabase.from('passes')
-      .update({ notification_message: scanMessage })
+      .update({ notification_message: scanMessage, updated_at: new Date().toISOString() })
       .eq('serial_number', serial_number)
       .eq('marchand_id', req.marchandId),
     supabase.from('scans').insert({
