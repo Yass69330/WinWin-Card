@@ -397,6 +397,14 @@
 
       </div>
 
+      <!-- Parrainage — affiché uniquement si referral_enabled -->
+      <div id="referral-share" style="display:none;margin-top:24px;padding:16px;background:rgba(255,255,255,0.12);border-radius:12px;text-align:center">
+        <div style="font-weight:600;margin-bottom:6px">🎁 Parrainez vos amis</div>
+        <div style="font-size:13px;opacity:0.85;margin-bottom:12px">Gagnez <span id="referral-bonus-pts">1</span> point quand ils passent en caisse pour la première fois</div>
+        <div style="background:rgba(0,0,0,0.2);border-radius:8px;padding:10px;font-size:11px;font-family:monospace;word-break:break-all;margin-bottom:12px;user-select:all" id="referral-link-text"></div>
+        <button onclick="shareReferral()" style="background:rgba(255,255,255,0.9);color:#1a1a2e;border:none;border-radius:8px;padding:10px 20px;font-weight:600;cursor:pointer;width:100%;font-size:14px">Partager mon lien</button>
+      </div>
+
     </div>
 
   </main>
@@ -434,6 +442,7 @@
     // URL : /l/:slug
     const slug = location.pathname.split('/l/')[1]?.split('/')[0];
     if (!slug) showNotFound('Invalid link', 'This URL does not match any loyalty program.');
+    window._refSerial = new URLSearchParams(location.search).get('ref') || null;
 
     // ── Chargement des données marchand ──────────────────────
     const API = ''; // même origin que le backend
@@ -490,6 +499,8 @@
       // Stocker le slug et le flag premium pour le submit
       window._marchandSlug    = m.slug;
       window._premiumLanding  = m.forfait === 'pro_plus' && !!m.landing_premium;
+      window._referralEnabled = !!m.referral_enabled;
+      window._referralBonus   = m.referral_bonus_points || 1;
 
       // Champs Pro+ premium — affichés en bloc si landing_premium activé
       if (window._premiumLanding) {
@@ -516,6 +527,7 @@
 
       try {
         const body = { prenom, marchand_slug: window._marchandSlug };
+        if (window._refSerial) body.ref = window._refSerial;
         if (window._premiumLanding) {
           const emailVal = $('email').value.trim();
           const phoneVal = $('telephone').value.trim();
@@ -578,7 +590,28 @@
         btnGoogle.style.display = 'none';
       }
 
+      // Lien de parrainage — uniquement si activé pour ce marchand
+      if (window._referralEnabled && data.serial_number) {
+        const referralUrl = `${location.origin}/l/${window._marchandSlug}?ref=${data.serial_number}`;
+        $('referral-link-text').textContent = referralUrl;
+        $('referral-bonus-pts').textContent = window._referralBonus;
+        $('referral-share').style.display   = 'block';
+        window._referralUrl = referralUrl;
+      }
+
       $('success-screen').classList.add('show');
+    }
+
+    function shareReferral() {
+      const url = window._referralUrl;
+      if (!url) return;
+      if (navigator.share) {
+        navigator.share({ title: 'Rejoins mon programme fidélité !', url }).catch(() => {});
+      } else {
+        navigator.clipboard.writeText(url)
+          .then(() => alert('Lien copié !'))
+          .catch(() => { prompt('Copiez ce lien :', url); });
+      }
     }
 
     // ── Formatage texte (markdown minimal) ──────────────────

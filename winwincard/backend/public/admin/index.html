@@ -424,6 +424,24 @@
         </div>
       </div>
 
+      <!-- Section : Parrainage -->
+      <div class="form-section" id="section-referral">
+        <div class="form-section-title">Parrainage</div>
+        <div style="background:var(--surface2);border-radius:10px;padding:14px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px">
+            <input type="checkbox" id="f-referral-enabled" style="width:18px;height:18px;accent-color:var(--accent)">
+            <div>
+              <div style="font-weight:600">Activer le parrainage</div>
+              <div style="font-size:12px;color:var(--muted)">Lien unique par client. Quand un filleul passe en caisse pour la première fois, le parrain gagne des points bonus.</div>
+            </div>
+          </label>
+          <div class="field" style="margin-top:12px;margin-bottom:0">
+            <label for="f-referral-bonus">Points bonus par parrainage</label>
+            <input id="f-referral-bonus" type="number" min="1" max="10" value="1" style="width:100px">
+          </div>
+        </div>
+      </div>
+
       <!-- Section : Strip images par tier (visible en mode édition uniquement) -->
       <div class="form-section" id="section-strip-tiers" style="display:none">
         <div class="form-section-title">Strip images par tier</div>
@@ -758,7 +776,9 @@ function resetForm() {
   document.getElementById('f-wf-inactive-days').value       = '30';
   document.getElementById('f-wf-near-enabled').checked      = false;
   document.getElementById('f-wf-near-threshold').value      = '2';
-  document.getElementById('f-landing-premium').checked = false;
+  document.getElementById('f-landing-premium').checked  = false;
+  document.getElementById('f-referral-enabled').checked = false;
+  document.getElementById('f-referral-bonus').value     = '1';
 }
 
 function fillForm(m) {
@@ -795,6 +815,8 @@ function fillForm(m) {
     document.getElementById('f-wf-near-threshold').value      = m.workflow_near_reward_threshold || 2;
     document.getElementById('f-landing-premium').checked = !!m.landing_premium;
   }
+  document.getElementById('f-referral-enabled').checked = !!m.referral_enabled;
+  document.getElementById('f-referral-bonus').value     = m.referral_bonus_points || 1;
 }
 
 function v(id, val) { const el = document.getElementById(id); if (el && val != null) el.value = val; }
@@ -926,6 +948,9 @@ function collectForm() {
     body.workflow_near_reward_threshold = parseInt(document.getElementById('f-wf-near-threshold').value) || 2;
     body.landing_premium = document.getElementById('f-landing-premium').checked;
   }
+
+  body.referral_enabled      = document.getElementById('f-referral-enabled').checked;
+  body.referral_bonus_points = parseInt(document.getElementById('f-referral-bonus').value) || 1;
 
   return body;
 }

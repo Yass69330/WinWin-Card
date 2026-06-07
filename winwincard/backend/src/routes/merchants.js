@@ -100,7 +100,7 @@ router.get('/me/qrcode', authMarchand, asyncHandler(async (req, res) => {
 router.get('/:slug/public', asyncHandler(async (req, res) => {
   const { data, error } = await supabase
     .from('marchands')
-    .select('id, nom, slug, logo_url, icon_url, image_strip_url, texte_landing, couleur_fond, couleur_texte, max_value, actif, forfait, landing_premium')
+    .select('id, nom, slug, logo_url, icon_url, image_strip_url, texte_landing, couleur_fond, couleur_texte, max_value, actif, forfait, landing_premium, referral_enabled, referral_bonus_points')
     .eq('slug', req.params.slug)
     .single();
 

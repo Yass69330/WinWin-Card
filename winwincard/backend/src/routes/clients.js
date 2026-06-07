@@ -10,7 +10,7 @@ const { limiterInscription } = require('../middleware/rateLimiters');
 // Corps : { prenom, marchand_slug, email?, telephone?, date_anniversaire? }
 // Rate limit appliqué ici uniquement (anti-spam inscription), pas sur tout le routeur.
 router.post('/', limiterInscription, asyncHandler(async (req, res) => {
-  const { prenom, marchand_slug, email, telephone, date_anniversaire } = req.body;
+  const { prenom, marchand_slug, email, telephone, date_anniversaire, ref } = req.body;
 
   if (!prenom || !marchand_slug) {
     return res.status(400).json({ error: 'prenom and marchand_slug are required' });
@@ -62,6 +62,12 @@ router.post('/', limiterInscription, asyncHandler(async (req, res) => {
         .then()
         .catch(e => console.error('[clients] consentements insert:', e.message));
     }
+  }
+
+  // Parrainage — lier le filleul au parrain si le ref est valide (fire-and-forget)
+  if (ref && typeof ref === 'string' && ref.length === 36) {
+    linkReferral(client.id, marchand.id, ref)
+      .catch(e => console.error('[clients] referral link:', e.message));
   }
 
   const apiBase = process.env.API_BASE_URL || 'https://app.winwin-card.com';
@@ -283,6 +289,25 @@ async function syncPassAfterAdjustment(serialNumber, marchandId, prenom, newValu
     addMessageToLoyaltyObject(serialNumber, null, msg)
       .catch(e => console.error('[clients] Google notify:', e.message));
   }
+}
+
+async function linkReferral(filleulId, marchandId, refSerial) {
+  const { data: parrain } = await supabase
+    .from('clients')
+    .select('id')
+    .eq('pass_serial_number', refSerial)
+    .eq('marchand_id', marchandId)
+    .is('deleted_at', null)
+    .single();
+
+  if (!parrain || parrain.id === filleulId) return; // serial invalide ou auto-parrainage
+
+  await supabase
+    .from('clients')
+    .update({ referred_by_client_id: parrain.id })
+    .eq('id', filleulId);
+
+  console.log(`[clients] referral linked: filleul=${filleulId} parrain=${parrain.id}`);
 }
 
 // GET /api/clients/admin/all — vision globale admin

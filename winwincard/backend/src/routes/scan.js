@@ -16,7 +16,7 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   // Récupérer le client avec son marchand
   const { data: client, error: errClient } = await supabase
     .from('clients')
-    .select('id, prenom, stored_value, marchand_id, marchands(max_value, display_max_value, actif, nom, images_tiers)')
+    .select('id, prenom, stored_value, marchand_id, marchands(max_value, display_max_value, actif, nom, images_tiers, referral_enabled, referral_bonus_points)')
     .eq('pass_serial_number', serial_number)
     .eq('marchand_id', req.marchandId)
     .is('deleted_at', null)
@@ -73,6 +73,12 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   notifierMiseAJourPass(serial_number).catch(e => console.error('[scan] push Apple:', e.message));
   mettreAJourGoogleWallet(serial_number, req.marchandId, apresScan, maxValue, displayMaxValue, scanMessage, client.marchands.images_tiers, client.prenom).catch(e => console.error('[scan] push Google:', e.message));
 
+  // Parrainage — premier tampon du filleul = +1 au parrain, fire-and-forget
+  if (apresScan === 1 && client.marchands.referral_enabled) {
+    creditReferrerIfApplicable(client.id, req.marchandId, client.marchands.referral_bonus_points || 1)
+      .catch(e => console.error('[scan] referral credit:', e.message));
+  }
+
   res.json({
     prenom: client.prenom,
     stored_value_avant: avantScan,
@@ -103,6 +109,66 @@ async function mettreAJourGoogleWallet(serialNumber, marchandId, storedValue, ma
   await updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, imagesTiers, prenom);
   addMessageToLoyaltyObject(serialNumber, null, scanMessage)
     .catch(e => console.error('[scan] Google addMessage:', e.message));
+}
+
+async function creditReferrerIfApplicable(filleulClientId, marchandId, bonusPoints) {
+  // Récupérer le lien de parrainage du filleul
+  const { data: filleul } = await supabase
+    .from('clients')
+    .select('referred_by_client_id')
+    .eq('id', filleulClientId)
+    .single();
+
+  if (!filleul?.referred_by_client_id) return;
+  const parrainClientId = filleul.referred_by_client_id;
+
+  // Récupérer pass + infos du parrain (même marchand)
+  const { data: parrain } = await supabase
+    .from('clients')
+    .select('prenom, pass_serial_number, marchands(max_value, display_max_value, images_tiers)')
+    .eq('id', parrainClientId)
+    .eq('marchand_id', marchandId)
+    .single();
+
+  if (!parrain?.pass_serial_number) return;
+
+  // Crédit atomique — cap à max_value, jamais de reset
+  const { data: credit, error } = await supabase.rpc('credit_referral', {
+    p_parrain_client_id: parrainClientId,
+    p_bonus_points:      bonusPoints,
+  });
+
+  if (error) throw new Error(`credit_referral: ${error.message}`);
+
+  const row        = Array.isArray(credit) ? credit[0] : credit;
+  const newValue   = row.stored_value_apres;
+  const maxValue   = parrain.marchands.max_value;
+  const displayMax = parrain.marchands.display_max_value || maxValue;
+  const msg        = `+${bonusPoints} parrainage — ${parrain.prenom}: ${newValue}/${displayMax} pts`;
+
+  // Audit referral_credits
+  supabase.from('referral_credits').insert({
+    marchand_id:       marchandId,
+    parrain_client_id: parrainClientId,
+    filleul_client_id: filleulClientId,
+    points_credited:   bonusPoints,
+  }).then().catch(e => console.error('[scan] referral_credits insert:', e.message));
+
+  // Mise à jour du pass parrain (notification + updated_at pour Apple)
+  await supabase.from('passes')
+    .update({ notification_message: msg, updated_at: new Date().toISOString() })
+    .eq('serial_number', parrain.pass_serial_number)
+    .eq('marchand_id', marchandId);
+
+  // Push Apple + Google au parrain
+  notifierMiseAJourPass(parrain.pass_serial_number)
+    .catch(e => console.error('[scan] referral push Apple:', e.message));
+  mettreAJourGoogleWallet(
+    parrain.pass_serial_number, marchandId, newValue, maxValue, displayMax,
+    msg, parrain.marchands.images_tiers, parrain.prenom
+  ).catch(e => console.error('[scan] referral push Google:', e.message));
+
+  console.log(`[scan] referral credit OK parrain=${parrainClientId} +${bonusPoints}pts → ${newValue}/${maxValue}`);
 }
 
 // GET /api/scans — historique des scans du marchand (100 derniers)
