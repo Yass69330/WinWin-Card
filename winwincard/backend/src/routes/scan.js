@@ -144,7 +144,7 @@ async function creditReferrerIfApplicable(filleulClientId, marchandId, bonusPoin
   const newValue   = row.stored_value_apres;
   const maxValue   = parrain.marchands.max_value;
   const displayMax = parrain.marchands.display_max_value || maxValue;
-  const msg        = `+${bonusPoints} parrainage — ${parrain.prenom}: ${newValue}/${displayMax} pts`;
+  const msg        = `+${bonusPoints} referral bonus — ${parrain.prenom}: ${newValue}/${displayMax} pts`;
 
   // Audit referral_credits
   supabase.from('referral_credits').insert({
