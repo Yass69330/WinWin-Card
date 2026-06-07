@@ -21,7 +21,7 @@ async function runInactiveWorkflow(opts = {}) {
 
   let query = supabase
     .from('marchands')
-    .select('id, nom, workflow_inactive_days')
+    .select('id, nom, workflow_inactive_days, workflow_inactive_message')
     .eq('forfait', 'pro_plus')
     .eq('actif',   true);
 
@@ -49,7 +49,9 @@ async function runInactiveWorkflow(opts = {}) {
     const toNotify  = (clients || []).filter(c => !activeSet.has(c.id) && !dedupSet.has(c.id));
 
     for (const client of toNotify) {
-      const msg = `Hi ${client.prenom}! We miss you at ${merchant.nom}. Come visit us soon! 🎯`;
+      const msg = merchant.workflow_inactive_message
+        ? merchant.workflow_inactive_message.replace('{prenom}', client.prenom).replace('{nom}', merchant.nom)
+        : `Hi ${client.prenom}! We miss you at ${merchant.nom}. Come visit us soon! 🎯`;
       await notifyClient(client, merchant.id, msg);
       await supabase.from('workflow_executions').insert({ workflow_type: 'inactive', client_id: client.id, marchand_id: merchant.id });
     }

@@ -196,7 +196,7 @@ function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
       {
         id: 'details',
         header: 'How it works',
-        body: `Show your pass at every visit.\nAfter ${displayMax} visits, your reward is unlocked automatically.`,
+        body: marchand.how_it_works || `Show your pass at every visit.\nAfter ${displayMax} visits, your reward is unlocked automatically.`,
       },
       ...(marchand.referral_enabled ? [{
         id: 'referral',

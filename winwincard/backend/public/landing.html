@@ -397,12 +397,12 @@
 
       </div>
 
-      <!-- Parrainage — affiché uniquement si referral_enabled -->
+      <!-- Referral share — shown only when referral_enabled -->
       <div id="referral-share" style="display:none;margin-top:24px;padding:16px;background:rgba(255,255,255,0.12);border-radius:12px;text-align:center">
-        <div style="font-weight:600;margin-bottom:6px">🎁 Parrainez vos amis</div>
-        <div style="font-size:13px;opacity:0.85;margin-bottom:12px">Gagnez <span id="referral-bonus-pts">1</span> point quand ils passent en caisse pour la première fois</div>
+        <div style="font-weight:600;margin-bottom:6px">🎁 Refer a Friend</div>
+        <div style="font-size:13px;opacity:0.85;margin-bottom:12px">Earn <span id="referral-bonus-pts">1</span> point when they make their first visit</div>
         <div style="background:rgba(0,0,0,0.2);border-radius:8px;padding:10px;font-size:11px;font-family:monospace;word-break:break-all;margin-bottom:12px;user-select:all" id="referral-link-text"></div>
-        <button onclick="shareReferral()" style="background:rgba(255,255,255,0.9);color:#1a1a2e;border:none;border-radius:8px;padding:10px 20px;font-weight:600;cursor:pointer;width:100%;font-size:14px">Partager mon lien</button>
+        <button onclick="shareReferral()" style="background:rgba(255,255,255,0.9);color:#1a1a2e;border:none;border-radius:8px;padding:10px 20px;font-weight:600;cursor:pointer;width:100%;font-size:14px">Share my link</button>
       </div>
 
     </div>
@@ -606,11 +606,11 @@
       const url = window._referralUrl;
       if (!url) return;
       if (navigator.share) {
-        navigator.share({ title: 'Rejoins mon programme fidélité !', url }).catch(() => {});
+        navigator.share({ title: 'Join my loyalty program!', url }).catch(() => {});
       } else {
         navigator.clipboard.writeText(url)
-          .then(() => alert('Lien copié !'))
-          .catch(() => { prompt('Copiez ce lien :', url); });
+          .then(() => alert('Link copied!'))
+          .catch(() => { prompt('Copy this link:', url); });
       }
     }
 

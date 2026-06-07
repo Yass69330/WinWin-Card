@@ -7,6 +7,7 @@ const { authAdmin } = require('../middleware/auth');
 const WORKFLOW_FIELDS = [
   'workflow_inactive_enabled',
   'workflow_inactive_days',
+  'workflow_inactive_message',
   'workflow_near_reward_enabled',
   'workflow_near_reward_threshold',
 ];

@@ -21,7 +21,7 @@ router.post('/', limiterInscription, asyncHandler(async (req, res) => {
   // Récupérer le marchand complet (nécessaire pour Google Wallet + forfait)
   const { data: marchand, error: errMarchand } = await supabase
     .from('marchands')
-    .select('id, nom, slug, forfait, max_value, display_max_value, actif, couleur_fond, couleur_texte, couleur_label, logo_url, image_strip_url, google_logo_url, google_hero_url, images_tiers, referral_enabled, referral_bonus_points, telephone, adresse')
+    .select('id, nom, slug, forfait, max_value, display_max_value, actif, couleur_fond, couleur_texte, couleur_label, logo_url, image_strip_url, google_logo_url, google_hero_url, images_tiers, how_it_works, referral_enabled, referral_bonus_points, telephone, adresse')
     .eq('slug', marchand_slug)
     .single();
 

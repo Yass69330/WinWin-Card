@@ -318,6 +318,11 @@
           <textarea id="f-texte" placeholder="Collectez vos points à chaque visite…&#10;Après **10 visites**, votre récompense est débloquée !"></textarea>
           <div class="field-hint">Formatage : <code>**texte**</code> pour mettre en gras. Les sauts de ligne sont respectés.</div>
         </div>
+        <div class="field">
+          <label for="f-how-it-works">Texte "How it works" (dos du pass)</label>
+          <textarea id="f-how-it-works" placeholder="Show your pass at every visit.&#10;After X visits, your reward is automatically unlocked." rows="3"></textarea>
+          <div class="field-hint">Affiché au dos du pass Apple et Google Wallet. Laissez vide pour le texte générique automatique.</div>
+        </div>
       </div>
 
       <!-- Section : Workflows (Pro+ uniquement, visible en mode édition) -->
@@ -338,6 +343,14 @@
                 style="width:64px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:6px 10px;outline:none">
               <span style="font-size:13px;color:var(--muted)">jours sans visite</span>
             </div>
+          </div>
+
+          <div style="padding-left:28px;margin-top:8px">
+            <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Message personnalisé (optionnel)</label>
+            <textarea id="f-wf-inactive-message" rows="2"
+              style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;resize:vertical;box-sizing:border-box"
+              placeholder="Hi {prenom}! Special offer this week — come visit us at {nom}!"></textarea>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">Variables : <code>{prenom}</code> et <code>{nom}</code>. Vide = message standard.</div>
           </div>
 
           <div style="height:1px;background:var(--border)"></div>
@@ -754,7 +767,7 @@ document.getElementById('sheet-backdrop').addEventListener('click', e => {
 // FORM : REMPLIR / VIDER
 // ════════════════════════════════════
 function resetForm() {
-  ['f-nom','f-pass-name','f-slug','f-email','f-telephone','f-adresse','f-pwd','f-new-pwd','f-logo','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-tiers'].forEach(id => {
+  ['f-nom','f-pass-name','f-slug','f-email','f-telephone','f-adresse','f-pwd','f-new-pwd','f-logo','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-how-it-works','f-tiers','f-wf-inactive-message'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   setColor('cp-fond',  'f-fond',  '#ffffff');
@@ -811,12 +824,14 @@ function fillForm(m) {
     document.getElementById('section-landing-fields').style.display = 'flex';
     document.getElementById('f-wf-inactive-enabled').checked = !!m.workflow_inactive_enabled;
     document.getElementById('f-wf-inactive-days').value       = m.workflow_inactive_days || 30;
+    v('f-wf-inactive-message', m.workflow_inactive_message);
     document.getElementById('f-wf-near-enabled').checked      = !!m.workflow_near_reward_enabled;
     document.getElementById('f-wf-near-threshold').value      = m.workflow_near_reward_threshold || 2;
     document.getElementById('f-landing-premium').checked = !!m.landing_premium;
   }
   document.getElementById('f-referral-enabled').checked = !!m.referral_enabled;
   document.getElementById('f-referral-bonus').value     = m.referral_bonus_points || 1;
+  v('f-how-it-works', m.how_it_works);
 }
 
 function v(id, val) { const el = document.getElementById(id); if (el && val != null) el.value = val; }
@@ -925,8 +940,9 @@ function collectForm() {
     max_value:       parseInt(document.getElementById('f-maxval').value) || 10,
     display_max_value: parseInt(document.getElementById('f-displaymax').value) || undefined,
     forfait:         document.getElementById('f-forfait').value,
-    texte_landing:    document.getElementById('f-texte').value.trim()     || undefined,
-    pass_display_name: document.getElementById('f-pass-name').value.trim() || undefined,
+    texte_landing:    document.getElementById('f-texte').value.trim()          || undefined,
+    pass_display_name: document.getElementById('f-pass-name').value.trim()    || undefined,
+    how_it_works:     document.getElementById('f-how-it-works').value.trim()  || null,
     logo_url:         document.getElementById('f-logo').value.trim()      || undefined,
     icon_url:         document.getElementById('f-icon').value.trim()      || undefined,
     image_strip_url:  document.getElementById('f-strip').value.trim()     || undefined,
@@ -944,6 +960,7 @@ function collectForm() {
   if (S.editId && document.getElementById('section-workflows').style.display === 'flex') {
     body.workflow_inactive_enabled      = document.getElementById('f-wf-inactive-enabled').checked;
     body.workflow_inactive_days         = parseInt(document.getElementById('f-wf-inactive-days').value) || 30;
+    body.workflow_inactive_message      = document.getElementById('f-wf-inactive-message').value.trim() || null;
     body.workflow_near_reward_enabled   = document.getElementById('f-wf-near-enabled').checked;
     body.workflow_near_reward_threshold = parseInt(document.getElementById('f-wf-near-threshold').value) || 2;
     body.landing_premium = document.getElementById('f-landing-premium').checked;

@@ -351,7 +351,7 @@ function buildPassJson({ client, marchand, serialNumber, passNotification }) {
         {
           key: 'programme',
           label: 'How it works',
-          value: `Show your pass at every visit.\nAfter ${displayMax} visits, your reward is automatically unlocked.`,
+          value: marchand.how_it_works || `Show your pass at every visit.\nAfter ${displayMax} visits, your reward is automatically unlocked.`,
         },
         ...(marchand.referral_enabled ? [{
           key:   'referral',
