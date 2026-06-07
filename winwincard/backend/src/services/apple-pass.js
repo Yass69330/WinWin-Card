@@ -353,6 +353,11 @@ function buildPassJson({ client, marchand, serialNumber, passNotification }) {
           label: 'How it works',
           value: `Show your pass at every visit.\nAfter ${displayMax} visits, your reward is automatically unlocked.`,
         },
+        ...(marchand.referral_enabled ? [{
+          key:   'referral',
+          label: 'Parrainez vos amis',
+          value: `Partagez ce lien, gagnez ${marchand.referral_bonus_points || 1} point(s) quand ils passent en caisse.\n\n${process.env.API_BASE_URL || 'https://app.winwin-card.com'}/l/${marchand.slug}?ref=${serialNumber}`,
+        }] : []),
         {
           key: 'rgpd',
           label: 'Your data',

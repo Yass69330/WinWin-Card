@@ -198,6 +198,11 @@ function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
         header: 'How it works',
         body: `Show your pass at every visit.\nAfter ${displayMax} visits, your reward is unlocked automatically.`,
       },
+      ...(marchand.referral_enabled ? [{
+        id: 'referral',
+        header: 'Parrainez vos amis',
+        body: `Partagez ce lien, gagnez ${marchand.referral_bonus_points || 1} point(s) quand ils passent en caisse.\n\nhttps://app.winwin-card.com/l/${marchand.slug}?ref=${serialNumber}`,
+      }] : []),
       {
         id: 'privacy',
         header: 'Your data',
