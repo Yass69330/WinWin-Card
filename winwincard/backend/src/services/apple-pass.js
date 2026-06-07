@@ -358,6 +358,11 @@ function buildPassJson({ client, marchand, serialNumber, passNotification }) {
           label: 'Parrainez vos amis',
           value: `Partagez ce lien, gagnez ${marchand.referral_bonus_points || 1} point(s) quand ils passent en caisse.\n\n${process.env.API_BASE_URL || 'https://app.winwin-card.com'}/l/${marchand.slug}?ref=${serialNumber}`,
         }] : []),
+        ...(marchand.telephone || marchand.adresse ? [{
+          key:   'contact',
+          label: 'Infos pratiques',
+          value: [marchand.telephone, marchand.adresse].filter(Boolean).join('\n'),
+        }] : []),
         {
           key: 'rgpd',
           label: 'Your data',

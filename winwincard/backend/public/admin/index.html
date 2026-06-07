@@ -272,6 +272,14 @@
           <label for="f-email">Email de contact *</label>
           <input id="f-email" type="email" placeholder="contact@moncommerce.fr">
         </div>
+        <div class="field">
+          <label for="f-telephone">Téléphone <span style="color:var(--muted)">(affiché au dos du pass)</span></label>
+          <input id="f-telephone" type="tel" placeholder="+33 1 23 45 67 89">
+        </div>
+        <div class="field">
+          <label for="f-adresse">Adresse <span style="color:var(--muted)">(affichée au dos du pass)</span></label>
+          <input id="f-adresse" type="text" placeholder="12 rue de la Paix, Paris 75001">
+        </div>
         <div class="field" id="field-password">
           <label for="f-pwd">Mot de passe *</label>
           <input id="f-pwd" type="password" placeholder="Mot de passe du marchand" autocomplete="new-password">
@@ -728,7 +736,7 @@ document.getElementById('sheet-backdrop').addEventListener('click', e => {
 // FORM : REMPLIR / VIDER
 // ════════════════════════════════════
 function resetForm() {
-  ['f-nom','f-pass-name','f-slug','f-email','f-pwd','f-new-pwd','f-logo','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-tiers'].forEach(id => {
+  ['f-nom','f-pass-name','f-slug','f-email','f-telephone','f-adresse','f-pwd','f-new-pwd','f-logo','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-tiers'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   setColor('cp-fond',  'f-fond',  '#ffffff');
@@ -757,7 +765,9 @@ function fillForm(m) {
   v('f-nom',       m.nom);
   v('f-pass-name', m.pass_display_name);
   v('f-slug',      m.slug);
-  v('f-email',  m.email_contact);
+  v('f-email',     m.email_contact);
+  v('f-telephone', m.telephone);
+  v('f-adresse',   m.adresse);
   v('f-texte',  m.texte_landing);
   v('f-logo',   m.logo_url);
   v('f-icon',   m.icon_url);
@@ -895,11 +905,13 @@ function collectForm() {
     forfait:         document.getElementById('f-forfait').value,
     texte_landing:    document.getElementById('f-texte').value.trim()     || undefined,
     pass_display_name: document.getElementById('f-pass-name').value.trim() || undefined,
-    logo_url:         document.getElementById('f-logo').value.trim()  || undefined,
-    icon_url:        document.getElementById('f-icon').value.trim()  || undefined,
-    image_strip_url: document.getElementById('f-strip').value.trim() || undefined,
-    google_logo_url: document.getElementById('f-glogo').value.trim() || undefined,
-    google_hero_url: document.getElementById('f-ghero').value.trim() || undefined,
+    logo_url:         document.getElementById('f-logo').value.trim()      || undefined,
+    icon_url:         document.getElementById('f-icon').value.trim()      || undefined,
+    image_strip_url:  document.getElementById('f-strip').value.trim()     || undefined,
+    google_logo_url:  document.getElementById('f-glogo').value.trim()     || undefined,
+    google_hero_url:  document.getElementById('f-ghero').value.trim()     || undefined,
+    telephone:        document.getElementById('f-telephone').value.trim() || undefined,
+    adresse:          document.getElementById('f-adresse').value.trim()   || undefined,
     images_tiers,
   };
 

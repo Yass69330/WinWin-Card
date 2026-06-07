@@ -203,6 +203,11 @@ function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
         header: 'Parrainez vos amis',
         body: `Partagez ce lien, gagnez ${marchand.referral_bonus_points || 1} point(s) quand ils passent en caisse.\n\nhttps://app.winwin-card.com/l/${marchand.slug}?ref=${serialNumber}`,
       }] : []),
+      ...(marchand.telephone || marchand.adresse ? [{
+        id:     'contact',
+        header: 'Infos pratiques',
+        body:   [marchand.telephone, marchand.adresse].filter(Boolean).join('\n'),
+      }] : []),
       {
         id: 'privacy',
         header: 'Your data',

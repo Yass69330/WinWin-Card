@@ -113,6 +113,8 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
     'workflow_inactive_enabled', 'workflow_inactive_days',
     'workflow_near_reward_enabled', 'workflow_near_reward_threshold',
     'landing_premium',
+    'telephone', 'adresse',
+    'referral_enabled', 'referral_bonus_points',
   ];
 
   const updates = {};
