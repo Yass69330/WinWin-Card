@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WinWin Card · Fidélité digitale pour commerces</title>
+  <title>WinWin Card · Digital Loyalty for Businesses</title>
+  <meta name="description" content="The loyalty card that lives in your customers' phones. One scan saves it to Apple Wallet or Google Wallet. No app to download.">
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
   <style>
@@ -906,6 +907,13 @@
     if (btn) btn.classList.add('active');
     localStorage.setItem('winwin-lang', lang);
     document.documentElement.lang = lang;
+    if (lang === 'fr') {
+      document.title = 'WinWin Card · Fidélité digitale pour commerces';
+      document.querySelector('meta[name="description"]').setAttribute('content', 'La carte de fidélité qui vit dans le téléphone de vos clients. Un scan suffit pour l\'enregistrer dans Apple ou Google Wallet.');
+    } else {
+      document.title = 'WinWin Card · Digital Loyalty for Businesses';
+      document.querySelector('meta[name="description"]').setAttribute('content', 'The loyalty card that lives in your customers\' phones. One scan saves it to Apple Wallet or Google Wallet. No app to download.');
+    }
   }
 
   /* ── AUTO-DETECT ───────────────────────────────────────── */
