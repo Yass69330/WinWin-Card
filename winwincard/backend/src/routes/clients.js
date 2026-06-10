@@ -21,7 +21,7 @@ router.post('/', limiterInscription, asyncHandler(async (req, res) => {
   // Récupérer le marchand complet (nécessaire pour Google Wallet + forfait)
   const { data: marchand, error: errMarchand } = await supabase
     .from('marchands')
-    .select('id, nom, slug, forfait, max_value, display_max_value, actif, couleur_fond, couleur_texte, couleur_label, logo_url, image_strip_url, google_logo_url, google_hero_url, images_tiers, how_it_works, referral_enabled, referral_bonus_points, telephone, adresse')
+    .select('id, nom, slug, forfait, max_value, display_max_value, actif, couleur_fond, couleur_fond_reward, couleur_texte, couleur_label, logo_url, image_strip_url, google_logo_url, google_hero_url, images_tiers, how_it_works, referral_enabled, referral_bonus_points, telephone, adresse')
     .eq('slug', marchand_slug)
     .single();
 
@@ -240,7 +240,7 @@ async function syncPassAfterAdjustment(serialNumber, marchandId, prenom, newValu
 
   const { data: marchand } = await supabase
     .from('marchands')
-    .select('max_value, display_max_value, images_tiers')
+    .select('max_value, display_max_value, images_tiers, couleur_fond, couleur_fond_reward')
     .eq('id', marchandId)
     .single();
 
@@ -284,7 +284,7 @@ async function syncPassAfterAdjustment(serialNumber, marchandId, prenom, newValu
   // Google Wallet — update points, tier hero image, and push notification
   const { updateLoyaltyObjectPoints, addMessageToLoyaltyObject, isConfigured: isGoogleConfigured } = require('../services/google-pass');
   if (isGoogleConfigured()) {
-    await updateLoyaltyObjectPoints(serialNumber, marchandId, newValue, marchand.max_value, marchand.display_max_value || marchand.max_value, marchand.images_tiers, prenom)
+    await updateLoyaltyObjectPoints(serialNumber, marchandId, newValue, marchand.max_value, marchand.display_max_value || marchand.max_value, marchand.images_tiers, prenom, marchand.couleur_fond, marchand.couleur_fond_reward)
       .catch(e => console.error('[clients] Google update:', e.message));
     addMessageToLoyaltyObject(serialNumber, null, msg)
       .catch(e => console.error('[clients] Google notify:', e.message));

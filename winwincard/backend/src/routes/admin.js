@@ -116,6 +116,7 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
     'telephone', 'adresse',
     'referral_enabled', 'referral_bonus_points',
     'how_it_works', 'workflow_inactive_message',
+    'couleur_fond_reward',
   ];
 
   const updates = {};

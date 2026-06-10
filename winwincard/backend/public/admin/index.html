@@ -410,6 +410,13 @@
             <input type="text"  id="f-label" placeholder="#888888" maxlength="7">
           </div>
         </div>
+        <div class="field">
+          <label>Fond récompense (optionnel — couleur du pass quand reward atteint)</label>
+          <div class="color-row">
+            <input type="color" id="cp-reward" value="#c9a84c">
+            <input type="text"  id="f-reward-color" placeholder="laisser vide = or par défaut" maxlength="7">
+          </div>
+        </div>
       </div>
 
       <!-- Section : Images -->
@@ -770,9 +777,11 @@ function resetForm() {
   ['f-nom','f-pass-name','f-slug','f-email','f-telephone','f-adresse','f-pwd','f-new-pwd','f-logo','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-how-it-works','f-tiers','f-wf-inactive-message'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
-  setColor('cp-fond',  'f-fond',  '#ffffff');
-  setColor('cp-texte', 'f-texte-c', '#000000');
-  setColor('cp-label', 'f-label', '#888888');
+  setColor('cp-fond',   'f-fond',         '#ffffff');
+  setColor('cp-texte',  'f-texte-c',      '#000000');
+  setColor('cp-label',  'f-label',        '#888888');
+  document.getElementById('cp-reward').value = '#c9a84c';
+  document.getElementById('f-reward-color').value = '';
   document.getElementById('f-maxval').value     = '10';
   document.getElementById('f-displaymax').value = '';
   document.getElementById('f-forfait').value    = 'pro';
@@ -810,9 +819,11 @@ function fillForm(m) {
   v('f-maxval', m.max_value);
   v('f-displaymax', m.display_max_value);
   if (['basic','pro','pro_plus'].includes(m.forfait)) document.getElementById('f-forfait').value = m.forfait;
-  if (m.couleur_fond)  setColor('cp-fond',  'f-fond',    m.couleur_fond);
-  if (m.couleur_texte) setColor('cp-texte', 'f-texte-c', m.couleur_texte);
-  if (m.couleur_label) setColor('cp-label', 'f-label',   m.couleur_label);
+  if (m.couleur_fond)         setColor('cp-fond',   'f-fond',         m.couleur_fond);
+  if (m.couleur_texte)        setColor('cp-texte',  'f-texte-c',      m.couleur_texte);
+  if (m.couleur_label)        setColor('cp-label',  'f-label',        m.couleur_label);
+  if (m.couleur_fond_reward)  setColor('cp-reward', 'f-reward-color', m.couleur_fond_reward);
+  else { document.getElementById('cp-reward').value = '#c9a84c'; document.getElementById('f-reward-color').value = ''; }
   if (m.images_tiers)  document.getElementById('f-tiers').value = JSON.stringify(m.images_tiers, null, 2);
   document.getElementById('slug-preview').textContent = m.slug || '…';
   // Section strip tiers — visible en mode édition uniquement
@@ -846,7 +857,7 @@ function setColor(cpId, txtId, hex) {
 function isHex(s) { return /^#[0-9a-fA-F]{6}$/.test(s); }
 
 // Synchronisation color picker ↔ champ texte
-[['cp-fond','f-fond'],['cp-texte','f-texte-c'],['cp-label','f-label']].forEach(([cpId, txtId]) => {
+[['cp-fond','f-fond'],['cp-texte','f-texte-c'],['cp-label','f-label'],['cp-reward','f-reward-color']].forEach(([cpId, txtId]) => {
   document.getElementById(cpId).addEventListener('input', e => {
     document.getElementById(txtId).value = e.target.value;
   });
@@ -920,9 +931,10 @@ function collectForm() {
   if (!email) { showSheetErr('L\'email est requis'); return null; }
   if (!S.editId && !pwd) { showSheetErr('Le mot de passe est requis'); return null; }
 
-  const fondHex  = document.getElementById('f-fond').value.trim()    || '#ffffff';
-  const texteHex = document.getElementById('f-texte-c').value.trim() || '#000000';
-  const labelHex = document.getElementById('f-label').value.trim()   || '#888888';
+  const fondHex   = document.getElementById('f-fond').value.trim()         || '#ffffff';
+  const texteHex  = document.getElementById('f-texte-c').value.trim()      || '#000000';
+  const labelHex  = document.getElementById('f-label').value.trim()        || '#888888';
+  const rewardHex = document.getElementById('f-reward-color').value.trim() || null;
 
   // Valider images_tiers JSON si renseigné
   const tiersRaw = document.getElementById('f-tiers').value.trim();
@@ -934,9 +946,10 @@ function collectForm() {
 
   const body = {
     nom, slug, email_contact: email,
-    couleur_fond:  fondHex,
-    couleur_texte: texteHex,
-    couleur_label: labelHex,
+    couleur_fond:         fondHex,
+    couleur_texte:        texteHex,
+    couleur_label:        labelHex,
+    couleur_fond_reward:  rewardHex,
     max_value:       parseInt(document.getElementById('f-maxval').value) || 10,
     display_max_value: parseInt(document.getElementById('f-displaymax').value) || undefined,
     forfait:         document.getElementById('f-forfait').value,

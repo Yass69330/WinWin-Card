@@ -172,7 +172,7 @@ function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
   const isRecompense = client.stored_value > 0 && client.stored_value >= (marchand.max_value || 1);
   const displayMax = marchand.display_max_value || marchand.max_value;
 
-  return {
+  const obj = {
     id: oId,
     classId: cId,
     state: 'ACTIVE',
@@ -222,6 +222,15 @@ function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
       alternateText: '',
     },
   };
+
+  // Couleur de fond reward — appliquée sur l'objet pour override la class
+  if (marchand.couleur_fond_reward && isRecompense) {
+    obj.hexBackgroundColor = marchand.couleur_fond_reward;
+  } else if (marchand.couleur_fond_reward) {
+    obj.hexBackgroundColor = marchand.couleur_fond || '#1a1a2e';
+  }
+
+  return obj;
 }
 
 // ── API publique ─────────────────────────────────────────────
@@ -318,7 +327,7 @@ async function generateGoogleWalletUrl({ client, marchand, serialNumber }) {
 }
 
 // Mise à jour des points après un scan — appelé en async depuis scan.js
-async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, imagesTiers, prenom) {
+async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, imagesTiers, prenom, couleurFond, couleurFondReward) {
   if (!isConfigured()) return;
 
   const oId = objectId(serialNumber);
@@ -340,6 +349,10 @@ async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, 
       sourceUri: { uri: tierUrl },
       contentDescription: { defaultValue: { language: 'en', value: 'loyalty progress' } },
     };
+  }
+
+  if (couleurFondReward) {
+    patch.hexBackgroundColor = isRecompense ? couleurFondReward : (couleurFond || '#1a1a2e');
   }
 
   await walletRequest('PATCH', `/loyaltyObject/${encodeURIComponent(oId)}`, patch, token);
