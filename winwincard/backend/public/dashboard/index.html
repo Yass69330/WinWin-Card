@@ -1432,6 +1432,10 @@ function esc(s) {
 // ════════════════════════════════════════════════
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/dashboard/sw.js').catch(() => {});
+  // Rechargement automatique quand un nouveau SW prend la main
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data?.type === 'SW_UPDATED') window.location.reload();
+  });
 }
 
 if (restoreSession()) showDashboard();

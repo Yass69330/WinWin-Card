@@ -1,6 +1,4 @@
-// Stratégie dev : HTML toujours depuis le réseau, assets statiques en cache.
-// En production, remplacer par cache-first sur tout + versioning du CACHE.
-const CACHE = 'winwin-dashboard-v2';
+const CACHE = 'winwin-dashboard-v3';
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -9,6 +7,8 @@ self.addEventListener('activate', e => {
     caches.keys()
       .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
+      .then(() => self.clients.matchAll({ type: 'window' }))
+      .then(clients => clients.forEach(c => c.postMessage({ type: 'SW_UPDATED' })))
   );
 });
 
@@ -18,10 +18,10 @@ self.addEventListener('fetch', e => {
   // Appels API : jamais mis en cache
   if (url.includes('/api/')) return;
 
-  // HTML : network-first — toujours la version fraîche, fallback cache si offline
-  if (e.request.destination === 'document' || url.endsWith('/dashboard/') || url.endsWith('/dashboard/index.html')) {
+  // HTML : network-first, cache HTTP bypassé pour toujours avoir la version fraîche
+  if (e.request.destination === 'document' || url.includes('/dashboard')) {
     e.respondWith(
-      fetch(e.request)
+      fetch(e.request, { cache: 'no-cache' })
         .then(res => {
           const copy = res.clone();
           caches.open(CACHE).then(c => c.put(e.request, copy));

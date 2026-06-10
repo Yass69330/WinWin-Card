@@ -66,8 +66,15 @@ const dashboardRoutes     = require('./routes/dashboard');
 const adminUiRoutes       = require('./routes/admin-ui');
 const workflowsRoutes     = require('./routes/workflows');
 
-// Fichiers statiques (landing page HTML)
-app.use(express.static(path.join(__dirname, '../public')));
+// Fichiers statiques — HTML servi avec no-cache pour garantir la fraîcheur PWA
+app.use(express.static(path.join(__dirname, '../public'), {
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+    }
+  },
+}));
 
 // Raccourci démo
 app.get('/demo', (req, res) => res.redirect(301, '/l/demo'));
