@@ -155,11 +155,11 @@ const VARIANTS = {
 // affichés → marge horizontale de 60px. Le décor de fond, lui, couvre les 750px.
 function computeLayout(n, { showLabel = true } = {}) {
   const marginX = 60, availW = 750 - marginX * 2;
-  const stampAreaTop = showLabel ? 66 : 20;
   const stampAreaBot = 226;
 
-  // Une seule rangée jusqu'à 8 tampons inclus, deux rangées au-delà (n >= 9).
+  // Rangée unique : centrage vertical ajusté pour laisser la place au label
   if (n <= 8) {
+    const stampAreaTop = showLabel ? 66 : 20;
     const spacing = availW / n;
     const r = Math.max(16, Math.min(30, spacing / 2 - 5));
     const cy = (stampAreaTop + stampAreaBot) / 2;
@@ -170,7 +170,11 @@ function computeLayout(n, { showLabel = true } = {}) {
     }));
   }
 
-  // Deux rangées : row1 ≥ row2, row2 centrée sous row1
+  // Deux rangées : toujours calculer depuis stampAreaTop=20 (espace plein),
+  // indépendamment du label. Le label (baseline y≈46) et le bord haut des
+  // tampons (cy1≈82 - r) laissent ≥8px de jeu. L'écart vertical entre rangées
+  // est ainsi identique avec ou sans label.
+  const stampAreaTop = 20;
   const row1 = Math.ceil(n / 2);
   const row2 = n - row1;
   const spacing = availW / row1;
@@ -261,11 +265,25 @@ function lighten(hex, f) {
   return `#${[r, g, b].map(c => Math.min(255, Math.round(c + (255 - c) * f)).toString(16).padStart(2, '0')).join('')}`;
 }
 
-// ── Label optionnel, centré en haut (pas de nom marchand ni compteur :
-// déjà affichés ailleurs sur le pass) ───────────────────────────────────────
-function labelSvg({ w, h }) {
+// Luminance relative WCAG 2.1 d'une couleur hex
+function relativeLuminance(hex) {
+  const h = (hex || '#1a1a2e').replace('#', '');
+  return [0, 2, 4].reduce((lum, i, j) => {
+    const c = parseInt(h.slice(i, i + 2), 16) / 255;
+    const lin = c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    return lum + lin * [0.2126, 0.7152, 0.0722][j];
+  }, 0);
+}
+
+// ── Label optionnel, centré en haut — couleur adaptative à la luminosité du fond
+function labelSvg({ w, h, couleurFond }) {
+  const lum = relativeLuminance(couleurFond || '#1a1a2e');
+  // Fond sombre (lum < 0.18) → texte blanc semi-transparent
+  // Fond clair  (lum ≥ 0.18) → texte foncé dérivé du fond (toujours lisible)
+  const fill    = lum < 0.18 ? 'white'                    : darken(couleurFond, 0.62);
+  const opacity = lum < 0.18 ? '0.5'                      : '0.80';
   return `<text x="${w / 2}" y="${(46 / 246) * h}" font-family="DM Sans, sans-serif" font-weight="700"
-    font-size="${(14 / 246) * h}" letter-spacing="${(3 / 246) * h}" fill="white" opacity="0.5"
+    font-size="${(14 / 246) * h}" letter-spacing="${(3 / 246) * h}" fill="${fill}" opacity="${opacity}"
     text-anchor="middle">LOYALTY CARD</text>`;
 }
 
@@ -306,7 +324,7 @@ function buildSvg({ marchand, filledCount, logoB64, customBgB64, w = 750, h = 24
 
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${w}" height="${h}">
   ${bgSvg({ w, h, couleurFond: bgColor, customBgB64 })}
-  ${showLabel ? labelSvg({ w, h }) : ''}
+  ${showLabel ? labelSvg({ w, h, couleurFond: bgColor }) : ''}
   ${stampsHtml}
 </svg>`;
 }
