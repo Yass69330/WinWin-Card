@@ -1,31 +1,89 @@
-// Strip & hero image generator — SVG templates + sharp rasterisation.
-// Polices : DM Sans (labels, compteur) + Syne (nom marchand), OFL, embarquées en WOFF.
+// Strip & hero image generator — SVG templates + resvg rasterisation.
+// Polices : DM Sans (labels, compteur) + Syne (nom marchand), OFL, WOFF via @fontsource.
+// Rendu : @resvg/resvg-js (Rust/fontdb) — indépendant des polices système.
 // Sorties : strip@2x 750×246, strip@3x 1125×369, hero Google 1032×336.
 'use strict';
 
 const fs    = require('fs');
+const os    = require('os');
 const path  = require('path');
+const zlib  = require('zlib');
 const sharp = require('sharp');
+const { Resvg } = require('@resvg/resvg-js');
 
-// ── Polices (chargées une seule fois au démarrage du module) ───────────────
-let FONT_CSS = '';
-(function loadFonts() {
-  try {
-    const b64woff = (pkg, file) => {
-      const p = require.resolve(`@fontsource/${pkg}/files/${file}`);
-      return fs.readFileSync(p).toString('base64');
-    };
-    const face = (fam, w, b64) =>
-      `@font-face{font-family:'${fam}';font-weight:${w};font-style:normal;` +
-      `src:url('data:font/woff;base64,${b64}') format('woff')}`;
-    FONT_CSS = [
-      face('DM Sans', 400, b64woff('dm-sans', 'dm-sans-latin-400-normal.woff')),
-      face('DM Sans', 700, b64woff('dm-sans', 'dm-sans-latin-700-normal.woff')),
-      face('Syne',    700, b64woff('syne',    'syne-latin-700-normal.woff')),
-    ].join('');
-  } catch (e) {
-    console.warn('[strip-generator] Font loading failed, using system fallback:', e.message);
+// ── WOFF → TTF (in-memory) ────────────────────────────────────────────────
+// fontdb/ttf-parser ne lit pas les WOFF nativement. On décompresse les tables
+// zlib et on reconstruit un TTF standard, écrit dans /tmp au démarrage.
+// Sans cette conversion, le texte ne s'affiche pas sur Railway (pas de polices système).
+function woffToTtf(woffBuf) {
+  const numTables = woffBuf.readUInt16BE(12);
+  const flavor    = woffBuf.readUInt32BE(4);
+  const tables    = [];
+  for (let i = 0; i < numTables; i++) {
+    const base     = 44 + i * 20;
+    const tag      = woffBuf.slice(base, base + 4).toString('latin1');
+    const offset   = woffBuf.readUInt32BE(base + 4);
+    const compLen  = woffBuf.readUInt32BE(base + 8);
+    const origLen  = woffBuf.readUInt32BE(base + 12);
+    const checksum = woffBuf.readUInt32BE(base + 16);
+    const raw      = woffBuf.slice(offset, offset + compLen);
+    const data     = Buffer.from(compLen < origLen ? zlib.inflateSync(raw) : raw);
+    tables.push({ tag, data, checksum });
   }
+  tables.sort((a, b) => (a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0));
+
+  const log2n = Math.floor(Math.log2(numTables));
+  let pos = 12 + numTables * 16;
+  for (const t of tables) {
+    if (pos % 4) pos += 4 - pos % 4;
+    t.off = pos;
+    pos += t.data.length;
+  }
+  if (pos % 4) pos += 4 - pos % 4;
+
+  const out = Buffer.alloc(pos);
+  out.writeUInt32BE(flavor, 0);
+  out.writeUInt16BE(numTables, 4);
+  out.writeUInt16BE((1 << log2n) * 16, 6);
+  out.writeUInt16BE(log2n, 8);
+  out.writeUInt16BE(numTables * 16 - (1 << log2n) * 16, 10);
+
+  let dirPos = 12;
+  for (const t of tables) {
+    out.write(t.tag, dirPos, 4, 'latin1');
+    out.writeUInt32BE(t.checksum, dirPos + 4);
+    out.writeUInt32BE(t.off, dirPos + 8);
+    out.writeUInt32BE(t.data.length, dirPos + 12);
+    dirPos += 16;
+    t.data.copy(out, t.off);
+  }
+  return out;
+}
+
+// ── Polices : WOFF → TTF une fois au démarrage, écrits dans /tmp ─────────
+const FONT_PATHS = (() => {
+  const tmpDir = path.join(os.tmpdir(), 'winwincard-fonts');
+  try { fs.mkdirSync(tmpDir, { recursive: true }); } catch {}
+  const paths = [];
+  const fonts = [
+    ['dm-sans', 'dm-sans-latin-400-normal.woff', 'dm-sans-400.ttf'],
+    ['dm-sans', 'dm-sans-latin-700-normal.woff', 'dm-sans-700.ttf'],
+    ['syne',    'syne-latin-700-normal.woff',    'syne-700.ttf'],
+  ];
+  for (const [pkg, woff, out] of fonts) {
+    try {
+      const woffPath = require.resolve(`@fontsource/${pkg}/files/${woff}`);
+      const ttfPath  = path.join(tmpDir, out);
+      if (!fs.existsSync(ttfPath)) {
+        fs.writeFileSync(ttfPath, woffToTtf(fs.readFileSync(woffPath)));
+      }
+      paths.push(ttfPath);
+    } catch (e) {
+      console.warn(`[strip-generator] Font setup failed (${woff}):`, e.message);
+    }
+  }
+  if (paths.length === 0) console.warn('[strip-generator] No fonts — text uses system fallback');
+  return paths;
 })();
 
 // ── Icônes (coordonnées ±20 unités, centrées sur 0,0) ─────────────────────
@@ -254,7 +312,6 @@ function buildSvg({ marchand, filledCount, logoB64, customBgB64, w = 750, h = 24
     : '';
 
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${w}" height="${h}">
-  <style>${FONT_CSS}</style>
   ${bgSvg({ w, h, couleurFond: bgColor, customBgB64 })}
   ${headerTextSvg({ marchand, h, filledCount })}
   ${decorLine}
@@ -275,8 +332,24 @@ async function normalizeLogoForStamp(logoBuffer, diameter) {
   return buf.toString('base64');
 }
 
-// ── Rendu sharp → Buffer PNG (3 variantes) ─────────────────────────────────
-// Retourne { strip2x, strip3x, hero } — Buffers PNG optimisés.
+// ── Rastériseur SVG → Buffer PNG via @resvg/resvg-js ──────────────────────
+// Utilise les TTF convertis en mémoire depuis WOFF (fontdb ne lit pas WOFF nativement).
+// Aucune dépendance fontconfig/pango : fonctionne sur Railway nixpacks sans polices système.
+function rasterize(svgStr, fitTo = { mode: 'original' }) {
+  const inst = new Resvg(svgStr, {
+    fitTo,
+    font: {
+      loadSystemFonts: false,
+      fontFiles:        FONT_PATHS,
+      defaultFontFamily: 'DM Sans',
+      sansSerifFamily:   'DM Sans',
+    },
+  });
+  return Buffer.from(inst.render().asPng());
+}
+
+// ── Rendu → Buffer PNG (3 variantes) ───────────────────────────────────────
+// Retourne { strip2x, strip3x, hero } — Buffers PNG.
 // logoBuffer: null si logo_stamp inapplicable ou logo absent.
 // customBgBuffer: null si pas de fond custom ou mode pas premium.
 async function render({ marchand, filledCount, logoBuffer, customBgBuffer }) {
@@ -301,14 +374,15 @@ async function render({ marchand, filledCount, logoBuffer, customBgBuffer }) {
     customBgB64 = customBgBuffer.toString('base64');
   }
 
-  // Génère le SVG en base 750×246 — sharp redimensionne ensuite
-  const svgBase = buildSvg({ marchand, filledCount, logoB64, customBgB64, w: 750, h: 246 });
-  const svgBuf  = Buffer.from(svgBase);
+  // strip2x et strip3x partagent le même SVG 750×246 (strip3x = zoom ×1.5)
+  // hero est regénéré aux dimensions exactes 1032×336 (rapport légèrement différent)
+  const svgStrip = buildSvg({ marchand, filledCount, logoB64, customBgB64, w: 750,  h: 246 });
+  const svgHero  = buildSvg({ marchand, filledCount, logoB64, customBgB64, w: 1032, h: 336 });
 
   const [strip2x, strip3x, hero] = await Promise.all([
-    sharp(svgBuf).resize(750,  246, { fit: 'fill' }).png({ compressionLevel: 9 }).toBuffer(),
-    sharp(svgBuf).resize(1125, 369, { fit: 'fill' }).png({ compressionLevel: 6 }).toBuffer(),
-    sharp(svgBuf).resize(1032, 336, { fit: 'fill' }).png({ compressionLevel: 6 }).toBuffer(),
+    Promise.resolve(rasterize(svgStrip, { mode: 'original' })),
+    Promise.resolve(rasterize(svgStrip, { mode: 'zoom', value: 1.5 })),
+    Promise.resolve(rasterize(svgHero,  { mode: 'original' })),
   ]);
 
   return { strip2x, strip3x, hero };

@@ -10,6 +10,7 @@
   "dependencies": {
     "@fontsource/dm-sans": "^5.0.0",
     "@fontsource/syne": "^5.0.0",
+    "@resvg/resvg-js": "^2.6.2",
     "@sentry/node": "^10.56.0",
     "@supabase/supabase-js": "^2.39.0",
     "cors": "^2.8.5",
