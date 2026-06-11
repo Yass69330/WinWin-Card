@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Strip Preview — WinWin Card</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #0f0f0f; color: #e0e0e0; min-height: 100vh; }
+
+  /* Login */
+  #login-screen {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 24px;
+  }
+  .login-card {
+    background: #1a1a1a; border: 1px solid #333; border-radius: 12px;
+    padding: 32px; width: 100%; max-width: 380px;
+  }
+  .login-card h1 { font-size: 20px; font-weight: 700; margin-bottom: 24px; }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 12px; color: #999; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .05em; }
+  .field input {
+    width: 100%; padding: 10px 12px; background: #111; border: 1px solid #333;
+    border-radius: 8px; color: #e0e0e0; font-size: 14px; outline: none;
+  }
+  .field input:focus { border-color: #555; }
+  .btn {
+    width: 100%; padding: 11px; background: #2563eb; color: #fff; border: none;
+    border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  .btn:hover { background: #1d4ed8; }
+  .btn:disabled { background: #444; cursor: not-allowed; }
+  .err { color: #f87171; font-size: 13px; margin-top: 10px; }
+
+  /* Main */
+  #main-screen { display: none; padding: 24px; }
+  .top-bar {
+    display: flex; align-items: center; gap: 16px; margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .top-bar h1 { font-size: 22px; font-weight: 700; flex: 1; }
+  .slug-input {
+    padding: 8px 12px; background: #1a1a1a; border: 1px solid #333;
+    border-radius: 8px; color: #e0e0e0; font-size: 14px; width: 180px;
+  }
+  .btn-sm {
+    padding: 8px 16px; background: #2563eb; color: #fff; border: none;
+    border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .btn-sm:hover { background: #1d4ed8; }
+  .btn-sm:disabled { background: #444; cursor: not-allowed; }
+
+  .section-title {
+    font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+    color: #888; margin: 28px 0 12px;
+    border-bottom: 1px solid #222; padding-bottom: 8px;
+  }
+
+  .grid {
+    display: flex; flex-wrap: wrap; gap: 16px;
+  }
+  .tile {
+    background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 10px;
+    overflow: hidden; width: 375px; flex-shrink: 0;
+  }
+  .tile-head {
+    padding: 10px 14px; display: flex; align-items: center;
+    justify-content: space-between; gap: 8px;
+    background: #161616; border-bottom: 1px solid #222;
+  }
+  .tile-label { font-size: 12px; font-weight: 600; color: #aaa; }
+  .tile-sub   { font-size: 11px; color: #666; }
+  .tile-dl {
+    padding: 4px 10px; background: #333; color: #ccc; border: none;
+    border-radius: 5px; font-size: 11px; cursor: pointer;
+  }
+  .tile-dl:hover { background: #444; }
+  .tile-dl:disabled { background: #222; color: #555; cursor: default; }
+  .tile img {
+    display: block; width: 100%; height: auto;
+    background: repeating-linear-gradient(45deg,#1d1d1d 0,#1d1d1d 8px,#242424 8px,#242424 16px);
+  }
+  .tile .loading {
+    display: flex; align-items: center; justify-content: center;
+    height: 123px; font-size: 12px; color: #555;
+  }
+  .tile .failed {
+    display: flex; align-items: center; justify-content: center;
+    height: 123px; font-size: 12px; color: #f87171;
+  }
+
+  .status-bar {
+    margin-bottom: 16px; padding: 10px 14px; background: #1a1a1a;
+    border: 1px solid #2a2a2a; border-radius: 8px; font-size: 13px; color: #aaa;
+  }
+  .status-bar b { color: #e0e0e0; }
+</style>
+</head>
+<body>
+
+<!-- ─────────────── LOGIN ─────────────── -->
+<div id="login-screen">
+  <div class="login-card">
+    <h1>Strip Preview Tool</h1>
+    <div class="field">
+      <label>Serveur (URL)</label>
+      <input id="server-url" type="text" value="" placeholder="https://app.winwin-card.com">
+    </div>
+    <div class="field">
+      <label>Mot de passe admin</label>
+      <input id="password" type="password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn" id="login-btn" onclick="doLogin()">Connexion</button>
+    <div class="err" id="login-err"></div>
+  </div>
+</div>
+
+<!-- ─────────────── MAIN ─────────────── -->
+<div id="main-screen">
+  <div class="top-bar">
+    <h1>Strip Preview</h1>
+    <input class="slug-input" id="slug-input" type="text" placeholder="Slug marchand" value="kasa-grill">
+    <button class="btn-sm" id="load-btn" onclick="loadMarchand()">Charger</button>
+  </div>
+
+  <div class="status-bar" id="status-bar">En attente…</div>
+
+  <div id="previews"></div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let TOKEN = null;
+let BASE  = '';
+let MARCHAND_ID = null;
+let MARCHAND_SLUG = '';
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function api(path, opts = {}) {
+  return fetch(BASE + path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', ...opts.headers },
+  });
+}
+
+function authApi(path, opts = {}) {
+  return fetch(BASE + path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN, ...opts.headers },
+  });
+}
+
+async function fetchImageBlob(url) {
+  const r = await fetch(url, { headers: { Authorization: 'Bearer ' + TOKEN } });
+  if (!r.ok) throw new Error(r.status);
+  return r.blob();
+}
+
+// ── Login ──────────────────────────────────────────────────────────────────
+document.getElementById('password').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+async function doLogin() {
+  const serverInput = document.getElementById('server-url').value.trim();
+  const password    = document.getElementById('password').value;
+  const errEl       = document.getElementById('login-err');
+  const btn         = document.getElementById('login-btn');
+
+  BASE = serverInput || (location.origin);
+  BASE = BASE.replace(/\/$/, '');
+
+  errEl.textContent = '';
+  btn.disabled = true;
+  btn.textContent = 'Connexion…';
+
+  try {
+    const r = await api('/api/admin/login', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Erreur ' + r.status);
+    TOKEN = data.token;
+
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('main-screen').style.display  = 'block';
+
+    // Auto-load default slug
+    loadMarchand();
+  } catch (e) {
+    errEl.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Connexion';
+  }
+}
+
+// ── Load Marchand ──────────────────────────────────────────────────────────
+async function loadMarchand() {
+  const slug = document.getElementById('slug-input').value.trim() || 'kasa-grill';
+  const statusEl = document.getElementById('status-bar');
+  const btn = document.getElementById('load-btn');
+  btn.disabled = true;
+  btn.textContent = 'Chargement…';
+  statusEl.innerHTML = `Recherche du marchand <b>${slug}</b>…`;
+
+  try {
+    const r = await authApi('/api/admin/marchands');
+    if (!r.ok) throw new Error('Impossible de charger les marchands');
+    const list = await r.json();
+    const m = list.find(x => x.slug === slug);
+    if (!m) throw new Error(`Marchand "${slug}" introuvable`);
+
+    MARCHAND_ID   = m.id;
+    MARCHAND_SLUG = m.slug;
+    statusEl.innerHTML = `<b>${m.nom}</b> — slug: ${m.slug} — forfait: ${m.forfait} — max_value: ${m.max_value} — ID: ${m.id}`;
+
+    renderAllPreviews(m);
+  } catch (e) {
+    statusEl.innerHTML = `<span style="color:#f87171">${e.message}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Charger';
+  }
+}
+
+// ── Preview builder ────────────────────────────────────────────────────────
+function previewUrl(id, params) {
+  const q = new URLSearchParams(params).toString();
+  return `${BASE}/api/admin/marchands/${id}/strip-preview?${q}`;
+}
+
+function renderAllPreviews(m) {
+  const container = document.getElementById('previews');
+  container.innerHTML = '';
+
+  const sections = [
+    {
+      label: '🖼 Static (mode=static)',
+      note: 'Fond coloré uni sans tampons',
+      cases: [
+        { filled: 0 },
+        { filled: 5 },
+      ].map(c => ({
+        label: `filled=${c.filled}`,
+        params: { mode: 'static', filled: c.filled, variant: 'strip2x' },
+      })),
+    },
+    {
+      label: '☕ Icon Métier (mode=stamps, theme=icon_metier)',
+      note: `max_value réel = ${m.max_value}`,
+      cases: [0, 5, 9].map(filled => ({
+        label: `filled=${filled}`,
+        params: { mode: 'stamps', theme: 'icon_metier', filled, variant: 'strip2x' },
+      })),
+    },
+    {
+      label: '🏷 Logo Stamp (mode=stamps, theme=logo_stamp)',
+      note: `max_value réel = ${m.max_value}`,
+      cases: [0, 5, 9].map(filled => ({
+        label: `filled=${filled}`,
+        params: { mode: 'stamps', theme: 'logo_stamp', filled, variant: 'strip2x' },
+      })),
+    },
+    {
+      label: '✨ Premium (mode=stamps, theme=premium)',
+      note: `max_value réel = ${m.max_value}`,
+      cases: [0, 5, 9].map(filled => ({
+        label: `filled=${filled}`,
+        params: { mode: 'stamps', theme: 'premium', filled, variant: 'strip2x' },
+      })),
+    },
+    {
+      label: '📐 Test double rangée (max_value=16)',
+      note: 'Vérifie le layout multi-row (n > 14)',
+      cases: [0, 8, 14, 16].map(filled => ({
+        label: `filled=${filled}/16`,
+        params: { mode: 'stamps', theme: 'icon_metier', filled, max_value: 16, variant: 'strip2x' },
+      })),
+    },
+    {
+      label: '🎯 Hero image (Google Wallet)',
+      note: 'Format 1032×336 — tous thèmes',
+      cases: [
+        { label: 'static / filled=0',       params: { mode: 'static',  filled: 0, variant: 'hero' } },
+        { label: 'icon_metier / filled=5',   params: { mode: 'stamps',  theme: 'icon_metier', filled: 5, variant: 'hero' } },
+        { label: 'logo_stamp / filled=5',    params: { mode: 'stamps',  theme: 'logo_stamp',  filled: 5, variant: 'hero' } },
+        { label: 'premium / filled=5',       params: { mode: 'stamps',  theme: 'premium',     filled: 5, variant: 'hero' } },
+      ],
+    },
+  ];
+
+  for (const section of sections) {
+    const titleEl = document.createElement('div');
+    titleEl.className = 'section-title';
+    titleEl.textContent = `${section.label}${section.note ? '  —  ' + section.note : ''}`;
+    container.appendChild(titleEl);
+
+    const grid = document.createElement('div');
+    grid.className = 'grid';
+
+    for (const c of section.cases) {
+      const tile = buildTile(m.id, m.slug, c.label, c.params);
+      grid.appendChild(tile);
+    }
+
+    container.appendChild(grid);
+  }
+}
+
+function buildTile(marchandId, slug, label, params) {
+  const tile = document.createElement('div');
+  tile.className = 'tile';
+
+  const head = document.createElement('div');
+  head.className = 'tile-head';
+
+  const info = document.createElement('div');
+  const labelEl = document.createElement('div');
+  labelEl.className = 'tile-label';
+  labelEl.textContent = label;
+  const subEl = document.createElement('div');
+  subEl.className = 'tile-sub';
+  subEl.textContent = params.variant || 'strip2x';
+  info.appendChild(labelEl);
+  info.appendChild(subEl);
+
+  const dlBtn = document.createElement('button');
+  dlBtn.className = 'tile-dl';
+  dlBtn.textContent = '⬇ PNG';
+  dlBtn.disabled = true;
+
+  head.appendChild(info);
+  head.appendChild(dlBtn);
+  tile.appendChild(head);
+
+  const body = document.createElement('div');
+  body.className = 'loading';
+  body.textContent = 'Chargement…';
+  tile.appendChild(body);
+
+  const url = previewUrl(marchandId, params);
+
+  fetchImageBlob(url).then(blob => {
+    const objUrl = URL.createObjectURL(blob);
+    body.innerHTML = '';
+    const img = document.createElement('img');
+    img.src = objUrl;
+    img.alt = label;
+    body.appendChild(img);
+    body.className = '';
+
+    dlBtn.disabled = false;
+    dlBtn.onclick = () => {
+      const a = document.createElement('a');
+      a.href = objUrl;
+      const variant = params.variant || 'strip2x';
+      const filled  = params.filled ?? 0;
+      const theme   = params.theme || params.mode || 'static';
+      a.download = `${slug}_${theme}_f${filled}_${variant}.png`;
+      a.click();
+    };
+  }).catch(err => {
+    body.className = 'failed';
+    body.textContent = `Erreur : ${err.message}`;
+  });
+
+  return tile;
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+// Pre-fill server URL from current origin if same-origin deployment
+document.getElementById('server-url').value = location.origin;
+</script>
+</body>
+</html>
