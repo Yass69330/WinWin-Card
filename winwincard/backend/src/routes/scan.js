@@ -16,7 +16,7 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   // Récupérer le client avec son marchand
   const { data: client, error: errClient } = await supabase
     .from('clients')
-    .select('id, prenom, stored_value, marchand_id, marchands(max_value, display_max_value, actif, nom, images_tiers, couleur_fond, couleur_fond_reward, referral_enabled, referral_bonus_points)')
+    .select('id, prenom, stored_value, marchand_id, marchands(id, max_value, display_max_value, actif, nom, slug, forfait, images_tiers, couleur_fond, couleur_fond_reward, logo_url, strip_mode, strip_theme, stamp_icon, strip_custom_background_url, strip_config_version, referral_enabled, referral_bonus_points)')
     .eq('pass_serial_number', serial_number)
     .eq('marchand_id', req.marchandId)
     .is('deleted_at', null)
@@ -71,7 +71,7 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
 
   // Mises à jour Apple + Google Wallet en parallèle, sans bloquer la réponse
   notifierMiseAJourPass(serial_number).catch(e => console.error('[scan] push Apple:', e.message));
-  mettreAJourGoogleWallet(serial_number, req.marchandId, apresScan, maxValue, displayMaxValue, scanMessage, client.marchands.images_tiers, client.prenom, client.marchands.couleur_fond, client.marchands.couleur_fond_reward).catch(e => console.error('[scan] push Google:', e.message));
+  mettreAJourGoogleWallet(serial_number, req.marchandId, apresScan, maxValue, displayMaxValue, scanMessage, client.marchands.images_tiers, client.prenom, client.marchands.couleur_fond, client.marchands.couleur_fond_reward, client.marchands).catch(e => console.error('[scan] push Google:', e.message));
 
   // Parrainage — premier tampon du filleul = +1 au parrain, fire-and-forget
   if (apresScan === 1 && client.marchands.referral_enabled) {
@@ -104,9 +104,9 @@ async function notifierMiseAJourPass(serialNumber) {
   }
 }
 
-async function mettreAJourGoogleWallet(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, scanMessage, imagesTiers, prenom, couleurFond, couleurFondReward) {
+async function mettreAJourGoogleWallet(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, scanMessage, imagesTiers, prenom, couleurFond, couleurFondReward, marchand) {
   const { updateLoyaltyObjectPoints, addMessageToLoyaltyObject } = require('../services/google-pass');
-  await updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, imagesTiers, prenom, couleurFond, couleurFondReward);
+  await updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, imagesTiers, prenom, couleurFond, couleurFondReward, marchand);
   addMessageToLoyaltyObject(serialNumber, null, scanMessage)
     .catch(e => console.error('[scan] Google addMessage:', e.message));
 }
@@ -125,7 +125,7 @@ async function creditReferrerIfApplicable(filleulClientId, marchandId, bonusPoin
   // Récupérer pass + infos du parrain (même marchand)
   const { data: parrain } = await supabase
     .from('clients')
-    .select('prenom, pass_serial_number, marchands(max_value, display_max_value, images_tiers, couleur_fond, couleur_fond_reward)')
+    .select('prenom, pass_serial_number, marchands(id, max_value, display_max_value, images_tiers, couleur_fond, couleur_fond_reward, slug, forfait, logo_url, strip_mode, strip_theme, stamp_icon, strip_custom_background_url, strip_config_version)')
     .eq('id', parrainClientId)
     .eq('marchand_id', marchandId)
     .single();
@@ -166,7 +166,7 @@ async function creditReferrerIfApplicable(filleulClientId, marchandId, bonusPoin
   mettreAJourGoogleWallet(
     parrain.pass_serial_number, marchandId, newValue, maxValue, displayMax,
     msg, parrain.marchands.images_tiers, parrain.prenom,
-    parrain.marchands.couleur_fond, parrain.marchands.couleur_fond_reward
+    parrain.marchands.couleur_fond, parrain.marchands.couleur_fond_reward, parrain.marchands
   ).catch(e => console.error('[scan] referral push Google:', e.message));
 
   console.log(`[scan] referral credit OK parrain=${parrainClientId} +${bonusPoints}pts → ${newValue}/${maxValue}`);

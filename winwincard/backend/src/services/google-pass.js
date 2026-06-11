@@ -243,6 +243,18 @@ async function createOrUpdateLoyaltyClass(marchand) {
   const token = await getAccessToken();
   const body  = buildLoyaltyClass(cId, marchand);
 
+  // Si le marchand a un strip généré, utiliser l'URL hero Storage dans la classe
+  if (marchand.strip_mode && !body.heroImage) {
+    const { getPublicUrl } = require('./strip-cache');
+    const heroUrl = await getPublicUrl({ marchand, filledCount: 0, variant: 'hero' }).catch(() => null);
+    if (heroUrl) {
+      body.heroImage = {
+        sourceUri: { uri: heroUrl },
+        contentDescription: { defaultValue: { language: 'en', value: marchand.nom } },
+      };
+    }
+  }
+
   const { status: getStatus, data: existing } = await walletRequest(
     'GET', `/loyaltyClass/${encodeURIComponent(cId)}`, null, token
   );
@@ -327,7 +339,7 @@ async function generateGoogleWalletUrl({ client, marchand, serialNumber }) {
 }
 
 // Mise à jour des points après un scan — appelé en async depuis scan.js
-async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, imagesTiers, prenom, couleurFond, couleurFondReward) {
+async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, imagesTiers, prenom, couleurFond, couleurFondReward, marchand) {
   if (!isConfigured()) return;
 
   const oId = objectId(serialNumber);
@@ -343,12 +355,23 @@ async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, 
 
   if (prenom) patch.accountName = prenom;
 
+  // Priorité hero image : images_tiers manuel → strip généré → rien
   const tierUrl = selectTierImageUrl(imagesTiers, storedValue);
   if (tierUrl) {
     patch.heroImage = {
       sourceUri: { uri: tierUrl },
       contentDescription: { defaultValue: { language: 'en', value: 'loyalty progress' } },
     };
+  } else if (marchand?.strip_mode) {
+    const { getPublicUrl } = require('./strip-cache');
+    const heroUrl = await getPublicUrl({ marchand, filledCount: storedValue, variant: 'hero' })
+      .catch(e => { console.error('[google-pass] hero gen:', e.message); return null; });
+    if (heroUrl) {
+      patch.heroImage = {
+        sourceUri: { uri: heroUrl },
+        contentDescription: { defaultValue: { language: 'en', value: 'loyalty progress' } },
+      };
+    }
   }
 
   if (couleurFondReward) {

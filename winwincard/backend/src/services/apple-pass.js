@@ -401,18 +401,43 @@ async function generateApplePass({ client, marchand, serialNumber, passNotificat
   const icon3Png = createSolidPng(87,  87,  ri, gi, bi);
   const stripPng = createSolidPng(375, 123, rf, gf, bf);
 
-  const stripUrl = selectStripImageUrl(marchand, client.stored_value);
-  const iconUrl  = marchand.icon_url || marchand.logo_url || null;
+  const iconUrl = marchand.icon_url || marchand.logo_url || null;
   // icon@3x.png (87×87px) is what Apple uses on all modern iPhones (@3x screens).
-  // icon.png / icon@2x.png keep their correct pixel sizes via solid-color fallbacks
-  // so older devices render cleanly too. No image resizing library needed.
-  const [icon3Buf, logoBuf, logo2Buf, stripBuf, strip2Buf] = await Promise.all([
-    iconUrl           ? fetchImage(iconUrl).catch(() => icon3Png)            : icon3Png,
-    marchand.logo_url ? fetchImage(marchand.logo_url).catch(() => iconPng)   : iconPng,
-    marchand.logo_url ? fetchImage(marchand.logo_url).catch(() => icon2Png)  : icon2Png,
-    stripUrl          ? fetchImage(stripUrl).catch(() => stripPng)           : stripPng,
-    stripUrl          ? fetchImage(stripUrl).catch(() => stripPng)           : stripPng,
+  const [icon3Buf, logoBuf, logo2Buf] = await Promise.all([
+    iconUrl           ? fetchImage(iconUrl).catch(() => icon3Png)           : icon3Png,
+    marchand.logo_url ? fetchImage(marchand.logo_url).catch(() => iconPng)  : iconPng,
+    marchand.logo_url ? fetchImage(marchand.logo_url).catch(() => icon2Png) : icon2Png,
   ]);
+
+  // Précédence strip : images_tiers manuel → strip généré → image_strip_url (si strip_mode null) → solid
+  const manualStripUrl = (() => {
+    if (Array.isArray(marchand.images_tiers)) {
+      const tier = marchand.images_tiers.find(
+        t => client.stored_value >= t.min && client.stored_value <= t.max
+      );
+      if (tier?.url) return tier.url;
+    }
+    if (!marchand.strip_mode) return marchand.image_strip_url || null;
+    return null;
+  })();
+
+  let strip2xBuf, strip3xBuf;
+  if (manualStripUrl) {
+    const buf = await fetchImage(manualStripUrl).catch(() => null);
+    strip2xBuf = strip3xBuf = buf || stripPng;
+  } else if (marchand.strip_mode) {
+    const { getOrGenerate } = require('./strip-cache');
+    [strip2xBuf, strip3xBuf] = await Promise.all([
+      getOrGenerate({ marchand, filledCount: client.stored_value, variant: 'strip2x' })
+        .catch(e => { console.error('[apple-pass] strip gen 2x:', e.message); return null; }),
+      getOrGenerate({ marchand, filledCount: client.stored_value, variant: 'strip3x' })
+        .catch(e => null),
+    ]);
+    strip2xBuf = strip2xBuf || stripPng;
+    strip3xBuf = strip3xBuf || strip2xBuf;
+  } else {
+    strip2xBuf = strip3xBuf = stripPng;
+  }
 
   const passJsonBuf = Buffer.from(JSON.stringify(passJson));
 
@@ -425,8 +450,9 @@ async function generateApplePass({ client, marchand, serialNumber, passNotificat
     { name: 'icon@3x.png',  data: icon3Buf },   // 87×87 @3x — icon_url image, used on all modern iPhones
     { name: 'logo.png',     data: logoBuf },
     { name: 'logo@2x.png',  data: logo2Buf },
-    { name: 'strip.png',    data: stripBuf },
-    { name: 'strip@2x.png', data: strip2Buf },
+    { name: 'strip.png',    data: stripPng  },  // @1x placeholder (modern iPhones use @2x/@3x)
+    { name: 'strip@2x.png', data: strip2xBuf },
+    { name: 'strip@3x.png', data: strip3xBuf },
   ];
 
   // Manifest : SHA1 de chaque fichier

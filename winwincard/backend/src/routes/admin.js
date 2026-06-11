@@ -104,6 +104,12 @@ router.post('/marchands', authAdmin, asyncHandler(async (req, res) => {
 
 // PATCH /api/admin/marchands/:id — modifier un marchand
 router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
+  // Champs visuels qui déclenchent un bump de strip_config_version
+  const VISUAL_FIELDS = new Set([
+    'couleur_fond', 'couleur_fond_reward', 'logo_url', 'nom', 'pass_display_name',
+    'strip_mode', 'strip_theme', 'stamp_icon', 'strip_custom_background_url', 'max_value',
+  ]);
+
   const ALLOWED = [
     'nom', 'email_contact',
     'couleur_fond', 'couleur_texte', 'couleur_label',
@@ -117,11 +123,31 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
     'referral_enabled', 'referral_bonus_points',
     'how_it_works', 'workflow_inactive_message',
     'couleur_fond_reward',
+    // Champs générateur de strip
+    'strip_mode', 'strip_theme', 'stamp_icon', 'strip_custom_background_url',
   ];
 
   const updates = {};
   for (const field of ALLOWED) {
     if (req.body[field] !== undefined) updates[field] = req.body[field];
+  }
+
+  // Gating forfait pour les fonctionnalités strip avancées
+  if (updates.strip_mode === 'stamps' || updates.strip_theme === 'premium' || updates.strip_custom_background_url) {
+    const { data: m } = await supabase.from('marchands').select('forfait').eq('id', req.params.id).single();
+    if (updates.strip_mode === 'stamps' && !['pro', 'pro_plus'].includes(m?.forfait)) {
+      return res.status(403).json({ error: 'strip_mode stamps requires Pro or Pro+ plan' });
+    }
+    if ((updates.strip_theme === 'premium' || updates.strip_custom_background_url) && m?.forfait !== 'pro_plus') {
+      return res.status(403).json({ error: 'strip_theme premium and custom background require Pro+ plan' });
+    }
+  }
+
+  // Bump strip_config_version si un champ visuel a changé
+  const hasVisualChange = Object.keys(updates).some(f => VISUAL_FIELDS.has(f));
+  if (hasVisualChange) {
+    const { data: cur } = await supabase.from('marchands').select('strip_config_version').eq('id', req.params.id).single();
+    updates.strip_config_version = (cur?.strip_config_version || 1) + 1;
   }
 
   // Réinitialisation du mot de passe (optionnel)
@@ -155,6 +181,48 @@ router.patch('/marchands/:id/suspension', authAdmin, asyncHandler(async (req, re
 
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
+}));
+
+// GET /api/admin/marchands/:id/strip-preview — rendu PNG du strip sans cache Storage
+// Query: filled (0..max_value), theme (override), icon (override), variant (strip2x|strip3x|hero)
+router.get('/marchands/:id/strip-preview', authAdmin, asyncHandler(async (req, res) => {
+  const { data: marchand, error } = await supabase
+    .from('marchands')
+    .select('*')
+    .eq('id', req.params.id)
+    .single();
+  if (error || !marchand) return res.status(404).json({ error: 'Marchand introuvable' });
+
+  // Overrides depuis la query string (pour tester les thèmes sans persister)
+  const maxValue  = parseInt(req.query.max_value) || marchand.max_value || 10;
+  const filled    = Math.min(Math.max(parseInt(req.query.filled  ?? 0), 0), maxValue);
+  const variant   = ['strip2x', 'strip3x', 'hero'].includes(req.query.variant) ? req.query.variant : 'strip2x';
+
+  const previewMarchand = {
+    ...marchand,
+    max_value:   maxValue,
+    strip_mode:  req.query.mode   || marchand.strip_mode  || 'stamps',
+    strip_theme: req.query.theme  || marchand.strip_theme || 'icon_metier',
+    stamp_icon:  req.query.icon   || marchand.stamp_icon  || 'coffee',
+  };
+
+  const { render } = require('../services/strip-generator');
+  const { fetchImage } = require('../services/apple-pass');
+
+  const logoBuffer = previewMarchand.logo_url
+    ? await fetchImage(previewMarchand.logo_url).catch(() => null)
+    : null;
+  const customBgBuffer = previewMarchand.strip_custom_background_url && previewMarchand.forfait === 'pro_plus'
+    ? await fetchImage(previewMarchand.strip_custom_background_url).catch(() => null)
+    : null;
+
+  const buffers = await render({ marchand: previewMarchand, filledCount: filled, logoBuffer, customBgBuffer });
+  const buf = buffers[variant];
+
+  res.setHeader('Content-Type', 'image/png');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Content-Disposition', `inline; filename="preview-${marchand.slug}-${filled}.png"`);
+  res.end(buf);
 }));
 
 // GET /api/admin/stats — statistiques globales
