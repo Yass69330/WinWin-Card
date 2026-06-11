@@ -204,6 +204,8 @@ router.get('/marchands/:id/strip-preview', authAdmin, asyncHandler(async (req, r
     strip_mode:  req.query.mode   || marchand.strip_mode  || 'stamps',
     strip_theme: req.query.theme  || marchand.strip_theme || 'icon_metier',
     stamp_icon:  req.query.icon   || marchand.stamp_icon  || 'coffee',
+    strip_decor: req.query.decor  || marchand.strip_decor || 'gradient',
+    strip_label: req.query.label  || 'on',
   };
 
   const { render } = require('../services/strip-generator');

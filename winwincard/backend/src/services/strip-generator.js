@@ -151,9 +151,14 @@ const VARIANTS = {
 
 // ── Layout des tampons ─────────────────────────────────────────────────────
 // Retourne un tableau de { x, y, r } (coordonnées dans l'espace 750×246).
-function computeLayout(n) {
-  const marginX = 36, availW = 750 - marginX * 2;
-  const stampAreaTop = 80, stampAreaBot = 230; // zone verticale réservée aux tampons
+// Zone sûre Apple Wallet : seuls les 630px centraux du strip sont garantis
+// affichés → marge horizontale de 60px. Le décor de fond, lui, couvre les 750px.
+function computeLayout(n, { showLabel = true } = {}) {
+  const marginX = 60, availW = 750 - marginX * 2;
+  // Sans nom marchand ni compteur, les tampons sont l'élément central :
+  // la zone verticale dépend uniquement de la présence du label.
+  const stampAreaTop = showLabel ? 66 : 20;
+  const stampAreaBot = 226;
 
   // Seuil de passage à deux rangées : > 14 (plus lisible à r≥18)
   if (n <= 14) {
@@ -173,8 +178,8 @@ function computeLayout(n) {
   const row2 = n - row1;
   const spacing = availW / Math.max(row1, row2);
   const r = Math.max(13, Math.min(22, spacing / 2 - 4));
-  const cy1 = stampAreaTop + (stampAreaBot - stampAreaTop) * 0.33;
-  const cy2 = stampAreaTop + (stampAreaBot - stampAreaTop) * 0.73;
+  const cy1 = stampAreaTop + (stampAreaBot - stampAreaTop) * 0.30;
+  const cy2 = stampAreaTop + (stampAreaBot - stampAreaTop) * 0.72;
   const stamps = [];
   for (let i = 0; i < row1; i++)
     stamps.push({ x: marginX + spacing / 2 + i * spacing, y: cy1, r });
@@ -200,9 +205,10 @@ function stampSvg({ x, y, r, filled, iconName, color, isLast, premium }) {
       <circle cx="${x}" cy="${y}" r="${r}" fill="white"/>
       <g transform="translate(${x},${y}) scale(${scale})" color="${color}">${iconPath}</g>`;
   }
+  // Tampon vide : contour clair + voile léger pour rester lisible sur fond sombre
   return `
-    <circle cx="${x}" cy="${y}" r="${r}" fill="none" stroke="rgba(255,255,255,0.32)" stroke-width="2"/>
-    <g transform="translate(${x},${y}) scale(${scale})" style="opacity:0.22" color="white">${iconPath}</g>`;
+    <circle cx="${x}" cy="${y}" r="${r}" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.58)" stroke-width="2.5"/>
+    <g transform="translate(${x},${y}) scale(${scale})" style="opacity:0.3" color="white">${iconPath}</g>`;
 }
 
 // ── Génère le SVG d'un tampon logo_stamp ──────────────────────────────────
@@ -210,7 +216,7 @@ function stampSvg({ x, y, r, filled, iconName, color, isLast, premium }) {
 function logoStampSvg({ x, y, r, filled, logoB64, iconName, color, idx }) {
   if (!filled) {
     return `
-      <circle cx="${x}" cy="${y}" r="${r}" fill="none" stroke="rgba(255,255,255,0.32)" stroke-width="2"/>`;
+      <circle cx="${x}" cy="${y}" r="${r}" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.58)" stroke-width="2.5"/>`;
   }
   if (!logoB64) {
     return stampSvg({ x, y, r, filled: true, iconName, color, isLast: false, premium: false });
@@ -227,19 +233,48 @@ function logoStampSvg({ x, y, r, filled, logoB64, iconName, color, idx }) {
       clip-path="url(#${clipId})" preserveAspectRatio="xMidYMid meet"/>`;
 }
 
-// ── Bloc compteur + arrière-plan du strip ─────────────────────────────────
-function bgSvg({ w, h, couleurFond, customBgB64 }) {
-  const bg = customBgB64
-    ? `<image href="data:image/jpeg;base64,${customBgB64}" x="0" y="0" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice"/>
-       <rect width="${w}" height="${h}" fill="${couleurFond}" opacity="0.55"/>`
-    : `<defs>
-         <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-           <stop offset="0%"   stop-color="${couleurFond}" stop-opacity="1"/>
-           <stop offset="100%" stop-color="${darken(couleurFond, 0.25)}" stop-opacity="1"/>
-         </linearGradient>
-       </defs>
-       <rect width="${w}" height="${h}" fill="url(#bg)"/>`;
-  return bg;
+// ── Arrière-plan du strip : décor dérivé de couleur_fond ───────────────────
+// Trois directions, toutes calculées depuis la couleur du marchand (jamais
+// codées en dur) : gradient profond, halo radial derrière les tampons,
+// arcs géométriques en écho aux cercles des tampons.
+// Le décor couvre les 750px pleins (y compris les 60px de bord hors zone sûre).
+function bgSvg({ w, h, couleurFond, customBgB64, decor }) {
+  if (customBgB64) {
+    return `<image href="data:image/jpeg;base64,${customBgB64}" x="0" y="0" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice"/>
+       <rect width="${w}" height="${h}" fill="${couleurFond}" opacity="0.55"/>`;
+  }
+
+  const base = `<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%"   stop-color="${lighten(couleurFond, 0.06)}"/>
+        <stop offset="100%" stop-color="${darken(couleurFond, 0.42)}"/>
+      </linearGradient>`;
+
+  if (decor === 'halo') {
+    // Lueur radiale centrée sur la rangée de tampons — donne de la profondeur
+    return `<defs>${base}
+        <radialGradient id="halo" cx="0.5" cy="0.55" r="0.72">
+          <stop offset="0%"   stop-color="${lighten(couleurFond, 0.30)}" stop-opacity="0.55"/>
+          <stop offset="60%"  stop-color="${lighten(couleurFond, 0.18)}" stop-opacity="0.18"/>
+          <stop offset="100%" stop-color="${couleurFond}" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <rect width="${w}" height="${h}" fill="url(#bg)"/>
+      <rect width="${w}" height="${h}" fill="url(#halo)"/>`;
+  }
+
+  if (decor === 'arcs') {
+    // Grands arcs décoratifs dans les bords — écho aux cercles des tampons
+    const c = lighten(couleurFond, 0.38);
+    return `<defs>${base}</defs>
+      <rect width="${w}" height="${h}" fill="url(#bg)"/>
+      <circle cx="${(40 / 750) * w}" cy="${h}" r="${0.62 * h}" fill="none" stroke="${c}" stroke-opacity="0.10" stroke-width="${0.16 * h}"/>
+      <circle cx="${w - (30 / 750) * w}" cy="0" r="${0.55 * h}" fill="none" stroke="${c}" stroke-opacity="0.08" stroke-width="${0.12 * h}"/>
+      <circle cx="${w * 0.72}" cy="${h * 1.05}" r="${0.30 * h}" fill="none" stroke="${c}" stroke-opacity="0.06" stroke-width="${0.06 * h}"/>`;
+  }
+
+  // 'gradient' (défaut) : dégradé diagonal profond, plus marqué qu'avant
+  return `<defs>${base}</defs>
+    <rect width="${w}" height="${h}" fill="url(#bg)"/>`;
 }
 
 // Assombrit une couleur hex d'un facteur [0,1]
@@ -249,40 +284,35 @@ function darken(hex, f) {
   return `#${[r, g, b].map(c => Math.max(0, Math.round(c * (1 - f))).toString(16).padStart(2, '0')).join('')}`;
 }
 
-// ── Bloc texte marchand (titre + sous-titre) ───────────────────────────────
-function headerTextSvg({ marchand, h, filledCount }) {
-  const displayMax = marchand.display_max_value || marchand.max_value;
-  return `
-    <text x="36" y="${h === 246 ? 52 : 78}" font-family="Syne, sans-serif" font-weight="700"
-      font-size="${h === 246 ? 28 : 42}" fill="white" opacity="0.95">${esc(marchand.pass_display_name || marchand.nom)}</text>
-    <text x="36" y="${h === 246 ? 72 : 108}" font-family="DM Sans, sans-serif" font-weight="400"
-      font-size="${h === 246 ? 13 : 20}" fill="white" opacity="0.5">Loyalty Card</text>`;
+// Éclaircit une couleur hex vers le blanc d'un facteur [0,1]
+function lighten(hex, f) {
+  const h = (hex || '#1a1a2e').replace('#', '');
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
+  return `#${[r, g, b].map(c => Math.min(255, Math.round(c + (255 - c) * f)).toString(16).padStart(2, '0')).join('')}`;
 }
 
-// Compteur N/M en bas à droite
-function counterSvg({ filledCount, maxValue, w, h, stampsVisible }) {
-  if (!stampsVisible) return '';
-  const displayMax = maxValue;
-  const fs = h === 246 ? 22 : 34;
-  return `<text x="${w - 36}" y="${h === 246 ? 228 : 342}"
-    font-family="DM Sans, sans-serif" font-weight="700" font-size="${fs}"
-    fill="white" opacity="0.75" text-anchor="end">${filledCount} / ${displayMax}</text>`;
-}
-
-// Encode les entités HTML dans les textes marchands
-function esc(s) {
-  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// ── Label optionnel, centré en haut (pas de nom marchand ni compteur :
+// déjà affichés ailleurs sur le pass) ───────────────────────────────────────
+function labelSvg({ w, h }) {
+  return `<text x="${w / 2}" y="${(46 / 246) * h}" font-family="DM Sans, sans-serif" font-weight="700"
+    font-size="${(14 / 246) * h}" letter-spacing="${(3 / 246) * h}" fill="white" opacity="0.5"
+    text-anchor="middle">LOYALTY CARD</text>`;
 }
 
 // ── Constructeur SVG principal ─────────────────────────────────────────────
+// Contenu (tampons, label) dans la zone sûre Apple (630px centraux en espace
+// 750) ; le décor de fond couvre toute la largeur. Pas de nom marchand, pas
+// de compteur, aucune signature WinWin : le strip est 100% au marchand.
 function buildSvg({ marchand, filledCount, logoB64, customBgB64, w = 750, h = 246 }) {
-  const iStamps  = marchand.strip_mode === 'stamps';
-  const theme    = marchand.strip_theme || 'icon_metier';
-  const iconName = marchand.stamp_icon || 'coffee';
-  const maxValue = marchand.max_value || 10;
-  const bgColor  = marchand.couleur_fond || '#1a1a2e';
-  const iColor   = iconColor(marchand);
-  const premium  = theme === 'premium';
+  const iStamps   = marchand.strip_mode === 'stamps';
+  const theme     = marchand.strip_theme || 'icon_metier';
+  const iconName  = marchand.stamp_icon || 'coffee';
+  const maxValue  = marchand.max_value || 10;
+  const bgColor   = marchand.couleur_fond || '#1a1a2e';
+  const iColor    = iconColor(marchand);
+  const premium   = theme === 'premium';
+  const decor     = marchand.strip_decor || 'gradient';
+  const showLabel = marchand.strip_label !== 'off';
 
   // Mise à l'échelle des positions si h != 246 (même SVG, juste viewBox changé)
   const scaleY = h / 246;
@@ -291,7 +321,7 @@ function buildSvg({ marchand, filledCount, logoB64, customBgB64, w = 750, h = 24
   let stampsHtml = '';
   if (iStamps && maxValue > 0) {
     // Calcul du layout dans l'espace 750×246, puis scale
-    const positions = computeLayout(maxValue);
+    const positions = computeLayout(maxValue, { showLabel });
     stampsHtml = positions.map((pos, i) => {
       const filled = i < filledCount;
       const sx = +(pos.x * scaleX).toFixed(1);
@@ -305,18 +335,10 @@ function buildSvg({ marchand, filledCount, logoB64, customBgB64, w = 750, h = 24
     }).join('');
   }
 
-  // Ligne décorative sous le titre (mode static uniquement)
-  const decorLine = !iStamps
-    ? `<line x1="36" y1="${h === 246 ? 82 : 124}" x2="${w - 36}" y2="${h === 246 ? 82 : 124}"
-          stroke="white" stroke-opacity="0.12" stroke-width="1"/>`
-    : '';
-
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${w}" height="${h}">
-  ${bgSvg({ w, h, couleurFond: bgColor, customBgB64 })}
-  ${headerTextSvg({ marchand, h, filledCount })}
-  ${decorLine}
+  ${bgSvg({ w, h, couleurFond: bgColor, customBgB64, decor })}
+  ${showLabel ? labelSvg({ w, h }) : ''}
   ${stampsHtml}
-  ${counterSvg({ filledCount, maxValue, w, h, stampsVisible: iStamps })}
 </svg>`;
 }
 
