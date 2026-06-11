@@ -355,11 +355,12 @@ async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, 
 
   if (prenom) patch.accountName = prenom;
 
-  // Priorité hero image : images_tiers manuel → strip généré → rien
+  // Priorité hero image : images_tiers → image_strip_url (override universel) → strip généré
   const tierUrl = selectTierImageUrl(imagesTiers, storedValue);
-  if (tierUrl) {
+  const staticUrl = marchand?.image_strip_url || null;
+  if (tierUrl || staticUrl) {
     patch.heroImage = {
-      sourceUri: { uri: tierUrl },
+      sourceUri: { uri: tierUrl || staticUrl },
       contentDescription: { defaultValue: { language: 'en', value: 'loyalty progress' } },
     };
   } else if (marchand?.strip_mode) {

@@ -155,15 +155,12 @@ const VARIANTS = {
 // affichés → marge horizontale de 60px. Le décor de fond, lui, couvre les 750px.
 function computeLayout(n, { showLabel = true } = {}) {
   const marginX = 60, availW = 750 - marginX * 2;
-  // Sans nom marchand ni compteur, les tampons sont l'élément central :
-  // la zone verticale dépend uniquement de la présence du label.
   const stampAreaTop = showLabel ? 66 : 20;
   const stampAreaBot = 226;
 
-  // Seuil de passage à deux rangées : > 14 (plus lisible à r≥18)
-  if (n <= 14) {
+  // Une seule rangée jusqu'à 8 tampons inclus, deux rangées au-delà (n >= 9).
+  if (n <= 8) {
     const spacing = availW / n;
-    // rayon en fonction de la densité : ≥16px, ≤30px
     const r = Math.max(16, Math.min(30, spacing / 2 - 5));
     const cy = (stampAreaTop + stampAreaBot) / 2;
     return Array.from({ length: n }, (_, i) => ({
@@ -173,18 +170,19 @@ function computeLayout(n, { showLabel = true } = {}) {
     }));
   }
 
-  // Deux rangées
+  // Deux rangées : row1 ≥ row2, row2 centrée sous row1
   const row1 = Math.ceil(n / 2);
   const row2 = n - row1;
-  const spacing = availW / Math.max(row1, row2);
-  const r = Math.max(13, Math.min(22, spacing / 2 - 4));
+  const spacing = availW / row1;
+  const r = Math.max(13, Math.min(28, spacing / 2 - 4));
   const cy1 = stampAreaTop + (stampAreaBot - stampAreaTop) * 0.30;
   const cy2 = stampAreaTop + (stampAreaBot - stampAreaTop) * 0.72;
+  const row2Shift = (row1 - row2) * spacing / 2;
   const stamps = [];
   for (let i = 0; i < row1; i++)
     stamps.push({ x: marginX + spacing / 2 + i * spacing, y: cy1, r });
   for (let i = 0; i < row2; i++)
-    stamps.push({ x: marginX + spacing / 2 + i * spacing, y: cy2, r });
+    stamps.push({ x: marginX + row2Shift + spacing / 2 + i * spacing, y: cy2, r });
   return stamps;
 }
 
@@ -233,47 +231,19 @@ function logoStampSvg({ x, y, r, filled, logoB64, iconName, color, idx }) {
       clip-path="url(#${clipId})" preserveAspectRatio="xMidYMid meet"/>`;
 }
 
-// ── Arrière-plan du strip : décor dérivé de couleur_fond ───────────────────
-// Trois directions, toutes calculées depuis la couleur du marchand (jamais
-// codées en dur) : gradient profond, halo radial derrière les tampons,
-// arcs géométriques en écho aux cercles des tampons.
-// Le décor couvre les 750px pleins (y compris les 60px de bord hors zone sûre).
-function bgSvg({ w, h, couleurFond, customBgB64, decor }) {
+// ── Arrière-plan du strip : dégradé diagonal dérivé de couleur_fond ──────────
+// Couvre les 750px pleins (y compris les 60px de bord hors zone sûre Apple).
+function bgSvg({ w, h, couleurFond, customBgB64 }) {
   if (customBgB64) {
     return `<image href="data:image/jpeg;base64,${customBgB64}" x="0" y="0" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice"/>
        <rect width="${w}" height="${h}" fill="${couleurFond}" opacity="0.55"/>`;
   }
-
-  const base = `<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+  return `<defs>
+      <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
         <stop offset="0%"   stop-color="${lighten(couleurFond, 0.06)}"/>
         <stop offset="100%" stop-color="${darken(couleurFond, 0.42)}"/>
-      </linearGradient>`;
-
-  if (decor === 'halo') {
-    // Lueur radiale centrée sur la rangée de tampons — donne de la profondeur
-    return `<defs>${base}
-        <radialGradient id="halo" cx="0.5" cy="0.55" r="0.72">
-          <stop offset="0%"   stop-color="${lighten(couleurFond, 0.30)}" stop-opacity="0.55"/>
-          <stop offset="60%"  stop-color="${lighten(couleurFond, 0.18)}" stop-opacity="0.18"/>
-          <stop offset="100%" stop-color="${couleurFond}" stop-opacity="0"/>
-        </radialGradient>
-      </defs>
-      <rect width="${w}" height="${h}" fill="url(#bg)"/>
-      <rect width="${w}" height="${h}" fill="url(#halo)"/>`;
-  }
-
-  if (decor === 'arcs') {
-    // Grands arcs décoratifs dans les bords — écho aux cercles des tampons
-    const c = lighten(couleurFond, 0.38);
-    return `<defs>${base}</defs>
-      <rect width="${w}" height="${h}" fill="url(#bg)"/>
-      <circle cx="${(40 / 750) * w}" cy="${h}" r="${0.62 * h}" fill="none" stroke="${c}" stroke-opacity="0.10" stroke-width="${0.16 * h}"/>
-      <circle cx="${w - (30 / 750) * w}" cy="0" r="${0.55 * h}" fill="none" stroke="${c}" stroke-opacity="0.08" stroke-width="${0.12 * h}"/>
-      <circle cx="${w * 0.72}" cy="${h * 1.05}" r="${0.30 * h}" fill="none" stroke="${c}" stroke-opacity="0.06" stroke-width="${0.06 * h}"/>`;
-  }
-
-  // 'gradient' (défaut) : dégradé diagonal profond, plus marqué qu'avant
-  return `<defs>${base}</defs>
+      </linearGradient>
+    </defs>
     <rect width="${w}" height="${h}" fill="url(#bg)"/>`;
 }
 
@@ -311,7 +281,6 @@ function buildSvg({ marchand, filledCount, logoB64, customBgB64, w = 750, h = 24
   const bgColor   = marchand.couleur_fond || '#1a1a2e';
   const iColor    = iconColor(marchand);
   const premium   = theme === 'premium';
-  const decor     = marchand.strip_decor || 'gradient';
   const showLabel = marchand.strip_label !== 'off';
 
   // Mise à l'échelle des positions si h != 246 (même SVG, juste viewBox changé)
@@ -336,7 +305,7 @@ function buildSvg({ marchand, filledCount, logoB64, customBgB64, w = 750, h = 24
   }
 
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${w}" height="${h}">
-  ${bgSvg({ w, h, couleurFond: bgColor, customBgB64, decor })}
+  ${bgSvg({ w, h, couleurFond: bgColor, customBgB64 })}
   ${showLabel ? labelSvg({ w, h }) : ''}
   ${stampsHtml}
 </svg>`;
@@ -372,17 +341,27 @@ function rasterize(svgStr, fitTo = { mode: 'original' }) {
 
 // ── Rendu → Buffer PNG (3 variantes) ───────────────────────────────────────
 // Retourne { strip2x, strip3x, hero } — Buffers PNG.
+// staticImageBuffer: si fourni, l'image uploadée remplace entièrement le strip
+//   (redimensionné aux bonnes dimensions par sharp, aucun SVG généré).
 // logoBuffer: null si logo_stamp inapplicable ou logo absent.
 // customBgBuffer: null si pas de fond custom ou mode pas premium.
-async function render({ marchand, filledCount, logoBuffer, customBgBuffer }) {
-  const theme     = marchand.strip_theme || 'icon_metier';
-  const maxValue  = marchand.max_value || 10;
-  const isPremium = marchand.forfait === 'pro_plus';
+async function render({ marchand, filledCount, logoBuffer, customBgBuffer, staticImageBuffer }) {
+  // Mode image statique uploadée — override total, toutes variantes
+  if (staticImageBuffer) {
+    const [strip2x, strip3x, hero] = await Promise.all([
+      sharp(staticImageBuffer).resize(VARIANTS.strip2x.w, VARIANTS.strip2x.h, { fit: 'cover', position: 'centre' }).png().toBuffer(),
+      sharp(staticImageBuffer).resize(VARIANTS.strip3x.w, VARIANTS.strip3x.h, { fit: 'cover', position: 'centre' }).png().toBuffer(),
+      sharp(staticImageBuffer).resize(VARIANTS.hero.w,    VARIANTS.hero.h,    { fit: 'cover', position: 'centre' }).png().toBuffer(),
+    ]);
+    return { strip2x, strip3x, hero };
+  }
+
+  const theme    = marchand.strip_theme || 'icon_metier';
+  const maxValue = marchand.max_value || 10;
 
   // Normalisation du logo pour logo_stamp (une fois, réutilisée pour toutes les variantes)
   let logoB64 = null;
   if (theme === 'logo_stamp' && logoBuffer) {
-    // Utilise le rayon max possible (r≈28 pour 10 tampons) — downscalé au rendu
     const refRadius = Math.max(16, Math.min(30, (750 - 72) / maxValue / 2 - 5));
     logoB64 = await normalizeLogoForStamp(logoBuffer, refRadius).catch(e => {
       console.warn('[strip-generator] Logo normalisation échouée:', e.message);
@@ -390,9 +369,9 @@ async function render({ marchand, filledCount, logoBuffer, customBgBuffer }) {
     });
   }
 
-  // Background custom (Pro+ uniquement, non bloquant si absent)
+  // Background custom (si fourni)
   let customBgB64 = null;
-  if (isPremium && customBgBuffer) {
+  if (customBgBuffer) {
     customBgB64 = customBgBuffer.toString('base64');
   }
 

@@ -123,24 +123,13 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
     'referral_enabled', 'referral_bonus_points',
     'how_it_works', 'workflow_inactive_message',
     'couleur_fond_reward',
-    // Champs générateur de strip
-    'strip_mode', 'strip_theme', 'stamp_icon', 'strip_custom_background_url',
+    // Champs générateur de strip (aucun gating forfait côté admin)
+    'strip_mode', 'strip_theme', 'stamp_icon', 'strip_custom_background_url', 'strip_label',
   ];
 
   const updates = {};
   for (const field of ALLOWED) {
     if (req.body[field] !== undefined) updates[field] = req.body[field];
-  }
-
-  // Gating forfait pour les fonctionnalités strip avancées
-  if (updates.strip_mode === 'stamps' || updates.strip_theme === 'premium' || updates.strip_custom_background_url) {
-    const { data: m } = await supabase.from('marchands').select('forfait').eq('id', req.params.id).single();
-    if (updates.strip_mode === 'stamps' && !['pro', 'pro_plus'].includes(m?.forfait)) {
-      return res.status(403).json({ error: 'strip_mode stamps requires Pro or Pro+ plan' });
-    }
-    if ((updates.strip_theme === 'premium' || updates.strip_custom_background_url) && m?.forfait !== 'pro_plus') {
-      return res.status(403).json({ error: 'strip_theme premium and custom background require Pro+ plan' });
-    }
   }
 
   // Bump strip_config_version si un champ visuel a changé
@@ -204,7 +193,6 @@ router.get('/marchands/:id/strip-preview', authAdmin, asyncHandler(async (req, r
     strip_mode:  req.query.mode   || marchand.strip_mode  || 'stamps',
     strip_theme: req.query.theme  || marchand.strip_theme || 'icon_metier',
     stamp_icon:  req.query.icon   || marchand.stamp_icon  || 'coffee',
-    strip_decor: req.query.decor  || marchand.strip_decor || 'gradient',
     strip_label: req.query.label  || 'on',
   };
 
@@ -530,6 +518,53 @@ router.delete('/marchands/:id/assets/:tier', authAdmin, asyncHandler(async (req,
   if (errU) return res.status(500).json({ error: errU.message });
 
   res.json({ tier, images_tiers: updated.images_tiers });
+}));
+
+// POST /api/admin/marchands/:id/strip-static — upload image statique universelle
+router.post('/marchands/:id/strip-static', authAdmin, (req, res, next) => {
+  uploadMem.single('image')(req, res, err => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'image requise' });
+
+  const { data: marchand, error: errM } = await supabase
+    .from('marchands').select('id, slug').eq('id', req.params.id).single();
+  if (errM || !marchand) return res.status(404).json({ error: 'Marchand introuvable' });
+
+  await supabase.storage.createBucket('passes', { public: true }).catch(() => {});
+
+  const filePath = `marchands/${marchand.slug}/strip_static.png`;
+  const { error: upErr } = await supabase.storage
+    .from('passes')
+    .upload(filePath, req.file.buffer, { contentType: req.file.mimetype, upsert: true });
+  if (upErr) return res.status(500).json({ error: `Upload Storage: ${upErr.message}` });
+
+  const { data: { publicUrl } } = supabase.storage.from('passes').getPublicUrl(filePath);
+
+  const { error: errU } = await supabase
+    .from('marchands').update({ image_strip_url: publicUrl }).eq('id', req.params.id);
+  if (errU) return res.status(500).json({ error: errU.message });
+
+  res.json({ url: publicUrl });
+}));
+
+// DELETE /api/admin/marchands/:id/strip-static — supprime l'image statique universelle
+router.delete('/marchands/:id/strip-static', authAdmin, asyncHandler(async (req, res) => {
+  const { data: marchand, error: errM } = await supabase
+    .from('marchands').select('id, slug').eq('id', req.params.id).single();
+  if (errM || !marchand) return res.status(404).json({ error: 'Marchand introuvable' });
+
+  supabase.storage.from('passes')
+    .remove([`marchands/${marchand.slug}/strip_static.png`])
+    .catch(() => {});
+
+  const { error: errU } = await supabase
+    .from('marchands').update({ image_strip_url: null }).eq('id', req.params.id);
+  if (errU) return res.status(500).json({ error: errU.message });
+
+  res.json({ ok: true });
 }));
 
 module.exports = router;

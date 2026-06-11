@@ -444,6 +444,71 @@
         </div>
       </div>
 
+      <!-- Section : Design du pass -->
+      <div class="form-section">
+        <div class="form-section-title">Design du pass</div>
+
+        <div class="field">
+          <label for="f-strip-mode">Mode strip</label>
+          <select id="f-strip-mode">
+            <option value="stamps">Tampons générés</option>
+            <option value="">Aucun (couleur unie)</option>
+          </select>
+          <div class="field-hint">En mode tampons, le strip est généré dynamiquement selon l'avancement du client.</div>
+        </div>
+
+        <div id="section-stamp-options">
+          <div class="field" style="margin-bottom:12px">
+            <label for="f-strip-theme">Thème des tampons</label>
+            <select id="f-strip-theme">
+              <option value="icon_metier">Icône métier</option>
+              <option value="logo_stamp">Logo du marchand</option>
+              <option value="premium">Premium (cadeau sur le dernier tampon)</option>
+            </select>
+          </div>
+          <div class="field" id="section-stamp-icon" style="margin-bottom:12px">
+            <label>Icône</label>
+            <div id="icon-picker" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px"></div>
+            <input type="hidden" id="f-stamp-icon" value="coffee">
+          </div>
+        </div>
+
+        <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:12px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px">
+            <input type="checkbox" id="f-strip-label" checked style="width:18px;height:18px;accent-color:var(--accent)">
+            <div>
+              <div style="font-weight:600">Afficher « LOYALTY CARD » en haut du strip</div>
+              <div style="font-size:12px;color:var(--muted)">Texte centré, semi-transparent.</div>
+            </div>
+          </label>
+        </div>
+
+        <div class="field">
+          <label>Image statique (override universel)</label>
+          <div class="field-hint">Si une image est uploadée, elle remplace le strip généré sur tous les passes — quel que soit le mode. 750×246 px recommandé.</div>
+          <div id="strip-static-preview" style="display:none;margin:8px 0">
+            <img id="strip-static-img" style="display:block;width:100%;height:auto;border-radius:8px" alt="Strip statique actuel">
+            <button type="button" class="btn btn-danger btn-sm" id="btn-delete-strip-static" style="margin-top:8px">✕ Supprimer l'image statique</button>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px">
+            <div class="field" style="flex:1;margin:0">
+              <label style="font-size:10px" for="f-strip-static-file">PNG / JPEG / WebP</label>
+              <input id="f-strip-static-file" type="file" accept="image/png,image/jpeg,image/webp" style="font-size:13px;padding:10px">
+            </div>
+            <button class="btn btn-outline btn-sm" id="btn-upload-strip-static" type="button" style="white-space:nowrap;align-self:flex-end">⬆ Upload</button>
+          </div>
+          <div id="strip-static-status" class="field-hint" style="margin-top:6px;display:none"></div>
+        </div>
+
+        <div class="field" id="section-strip-live-preview" style="display:none">
+          <label>Aperçu en temps réel</label>
+          <div style="border-radius:8px;overflow:hidden;background:repeating-linear-gradient(45deg,#1a1a2e 0,#1a1a2e 8px,#202035 8px,#202035 16px)">
+            <img id="strip-preview-img" style="display:block;width:100%;height:auto" alt="Aperçu strip">
+          </div>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-refresh-preview" style="margin-top:6px">↺ Rafraîchir l'aperçu</button>
+        </div>
+      </div>
+
       <!-- Section : Parrainage -->
       <div class="form-section" id="section-referral">
         <div class="form-section-title">Parrainage</div>
@@ -777,6 +842,15 @@ function resetForm() {
   ['f-nom','f-pass-name','f-slug','f-email','f-telephone','f-adresse','f-pwd','f-new-pwd','f-logo','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-how-it-works','f-tiers','f-wf-inactive-message'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
+  document.getElementById('f-strip-mode').value  = 'stamps';
+  document.getElementById('f-strip-theme').value = 'icon_metier';
+  document.getElementById('f-stamp-icon').value  = 'coffee';
+  document.getElementById('f-strip-label').checked = true;
+  document.getElementById('strip-static-preview').style.display = 'none';
+  document.getElementById('strip-static-status').style.display  = 'none';
+  document.getElementById('f-strip-static-file').value = '';
+  document.getElementById('section-strip-live-preview').style.display = 'none';
+  renderIconPicker('coffee');
   setColor('cp-fond',   'f-fond',         '#ffffff');
   setColor('cp-texte',  'f-texte-c',      '#000000');
   setColor('cp-label',  'f-label',        '#888888');
@@ -843,6 +917,28 @@ function fillForm(m) {
   document.getElementById('f-referral-enabled').checked = !!m.referral_enabled;
   document.getElementById('f-referral-bonus').value     = m.referral_bonus_points || 1;
   v('f-how-it-works', m.how_it_works);
+
+  // Design du pass
+  document.getElementById('f-strip-mode').value  = m.strip_mode || '';
+  document.getElementById('f-strip-theme').value = m.strip_theme || 'icon_metier';
+  const savedIcon = m.stamp_icon || 'coffee';
+  document.getElementById('f-stamp-icon').value  = savedIcon;
+  renderIconPicker(savedIcon);
+  document.getElementById('f-strip-label').checked = m.strip_label !== 'off';
+  toggleStampOptions(m.strip_mode);
+
+  // Image statique (si image_strip_url est un upload Storage, afficher la miniature)
+  const stripUrl = m.image_strip_url || '';
+  const staticPreview = document.getElementById('strip-static-preview');
+  if (stripUrl) {
+    document.getElementById('strip-static-img').src = stripUrl + '?t=' + Date.now();
+    staticPreview.style.display = '';
+  } else {
+    staticPreview.style.display = 'none';
+  }
+
+  // Aperçu inline (visible uniquement en édition)
+  loadStripPreview(m.id, m.strip_mode, m.strip_theme, m.stamp_icon, m.strip_label, m.max_value);
 }
 
 function v(id, val) { const el = document.getElementById(id); if (el && val != null) el.value = val; }
@@ -982,6 +1078,12 @@ function collectForm() {
   body.referral_enabled      = document.getElementById('f-referral-enabled').checked;
   body.referral_bonus_points = parseInt(document.getElementById('f-referral-bonus').value) || 1;
 
+  // Design du pass
+  body.strip_mode  = document.getElementById('f-strip-mode').value  || null;
+  body.strip_theme = document.getElementById('f-strip-theme').value || 'icon_metier';
+  body.stamp_icon  = document.getElementById('f-stamp-icon').value  || 'coffee';
+  body.strip_label = document.getElementById('f-strip-label').checked ? 'on' : 'off';
+
   return body;
 }
 
@@ -1102,6 +1204,157 @@ async function deleteStripTier(tier) {
 }
 
 // ════════════════════════════════════
+// DESIGN DU PASS
+// ════════════════════════════════════
+const ICON_NAMES = ['coffee','scissors','pizza','bag','heart','star','gift','nails','music','dumbbell'];
+const ICON_LABELS = { coffee:'Café', scissors:'Coiffure', pizza:'Pizza', bag:'Shopping', heart:'Bien-être', star:'Étoile', gift:'Cadeau', nails:'Beauté', music:'Musique', dumbbell:'Sport' };
+
+function renderIconPicker(selected) {
+  const container = document.getElementById('icon-picker');
+  if (!container) return;
+  container.innerHTML = ICON_NAMES.map(name => {
+    const active = name === selected;
+    return `<button type="button" onclick="selectIcon('${name}')" title="${ICON_LABELS[name]}"
+      style="width:44px;height:44px;border-radius:10px;border:2px solid ${active ? 'var(--accent)' : 'var(--border)'};
+             background:${active ? 'var(--accent-d)' : 'var(--surface)'};cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;transition:.15s"
+      id="icon-btn-${name}">${iconEmoji(name)}</button>`;
+  }).join('');
+  toggleIconPickerVisibility();
+}
+
+function iconEmoji(name) {
+  const map = { coffee:'☕', scissors:'✂️', pizza:'🍕', bag:'🛍️', heart:'❤️', star:'⭐', gift:'🎁', nails:'💅', music:'🎵', dumbbell:'🏋️' };
+  return map[name] || '●';
+}
+
+function selectIcon(name) {
+  document.getElementById('f-stamp-icon').value = name;
+  renderIconPicker(name);
+}
+
+function toggleIconPickerVisibility() {
+  const theme = document.getElementById('f-strip-theme').value;
+  const el = document.getElementById('section-stamp-icon');
+  if (el) el.style.display = (theme === 'logo_stamp') ? 'none' : '';
+}
+
+function toggleStampOptions(mode) {
+  const el = document.getElementById('section-stamp-options');
+  if (el) el.style.display = mode === 'stamps' ? '' : 'none';
+}
+
+document.getElementById('f-strip-mode').addEventListener('change', function() {
+  toggleStampOptions(this.value);
+});
+
+document.getElementById('f-strip-theme').addEventListener('change', function() {
+  toggleIconPickerVisibility();
+});
+
+// Upload image statique
+document.getElementById('btn-upload-strip-static').addEventListener('click', async () => {
+  if (!S.editId) return;
+  const file   = document.getElementById('f-strip-static-file').files[0];
+  const status = document.getElementById('strip-static-status');
+  const btn    = document.getElementById('btn-upload-strip-static');
+  status.style.display = 'none';
+  if (!file) {
+    status.textContent = 'Sélectionnez un fichier image.';
+    status.style.color = 'var(--error)'; status.style.display = 'block'; return;
+  }
+  btn.disabled = true; btn.textContent = '⏳…';
+  try {
+    const fd = new FormData();
+    fd.append('image', file);
+    const res  = await apiUpload(`/api/admin/marchands/${S.editId}/strip-static`, fd);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur upload');
+
+    document.getElementById('f-strip').value = data.url;
+    document.getElementById('strip-static-img').src = data.url + '?t=' + Date.now();
+    document.getElementById('strip-static-preview').style.display = '';
+    document.getElementById('f-strip-static-file').value = '';
+    const m = S.merchants?.find(m => m.id === S.editId);
+    if (m) m.image_strip_url = data.url;
+    status.textContent = '✓ Image uploadée. Elle remplace le strip généré sur tous les passes.';
+    status.style.color = 'var(--success)'; status.style.display = 'block';
+  } catch (e) {
+    status.textContent = e.message;
+    status.style.color = 'var(--error)'; status.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = '⬆ Upload';
+  }
+});
+
+// Supprimer image statique
+document.getElementById('btn-delete-strip-static').addEventListener('click', async () => {
+  if (!S.editId || !confirm('Supprimer l\'image statique ? Le strip généré reprendra.')) return;
+  try {
+    const res  = await api(`/api/admin/marchands/${S.editId}/strip-static`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur');
+    document.getElementById('strip-static-preview').style.display = 'none';
+    document.getElementById('f-strip').value = '';
+    const m = S.merchants?.find(m => m.id === S.editId);
+    if (m) m.image_strip_url = null;
+    const status = document.getElementById('strip-static-status');
+    status.textContent = '✓ Image supprimée.';
+    status.style.color = 'var(--success)'; status.style.display = 'block';
+  } catch (e) {
+    alert('Erreur : ' + e.message);
+  }
+});
+
+// Aperçu live
+function loadStripPreview(id, mode, theme, icon, label, maxVal) {
+  if (!id) return;
+  const section = document.getElementById('section-strip-live-preview');
+  const img     = document.getElementById('strip-preview-img');
+  section.style.display = '';
+  const params = new URLSearchParams({
+    mode:      mode || 'stamps',
+    theme:     theme || 'icon_metier',
+    icon:      icon || 'coffee',
+    label:     label !== 'off' ? 'on' : 'off',
+    filled:    Math.ceil((maxVal || 10) / 2),
+    variant:   'strip2x',
+  });
+  img.src = `/api/admin/marchands/${id}/strip-preview?${params}&_t=${Date.now()}`;
+  img.style.display = 'block';
+}
+
+document.getElementById('btn-refresh-preview').addEventListener('click', () => {
+  if (!S.editId) return;
+  const m = S.merchants?.find(m => m.id === S.editId);
+  loadStripPreview(
+    S.editId,
+    document.getElementById('f-strip-mode').value,
+    document.getElementById('f-strip-theme').value,
+    document.getElementById('f-stamp-icon').value,
+    document.getElementById('f-strip-label').checked ? 'on' : 'off',
+    m?.max_value || parseInt(document.getElementById('f-maxval').value) || 10,
+  );
+});
+
+// Rafraîchir l'aperçu après sauvegarde réussie
+const _origSaveBtn = document.getElementById('btn-save-merchant');
+_origSaveBtn.addEventListener('click', () => {
+  setTimeout(() => {
+    if (S.editId && document.getElementById('section-strip-live-preview').style.display !== 'none') {
+      const m = S.merchants?.find(m => m.id === S.editId);
+      loadStripPreview(
+        S.editId,
+        document.getElementById('f-strip-mode').value,
+        document.getElementById('f-strip-theme').value,
+        document.getElementById('f-stamp-icon').value,
+        document.getElementById('f-strip-label').checked ? 'on' : 'off',
+        m?.max_value || parseInt(document.getElementById('f-maxval').value) || 10,
+      );
+    }
+  }, 1500);
+});
+
+// ════════════════════════════════════
 // SERVICE WORKER
 // ════════════════════════════════════
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/admin/sw.js').catch(() => {});
@@ -1109,6 +1362,8 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/admin/sw.js
 // ════════════════════════════════════
 // INIT
 // ════════════════════════════════════
+renderIconPicker('coffee');
+toggleStampOptions('stamps');
 if (restoreToken()) showDashboard();
 </script>
 </body>

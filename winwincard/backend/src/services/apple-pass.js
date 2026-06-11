@@ -409,7 +409,7 @@ async function generateApplePass({ client, marchand, serialNumber, passNotificat
     marchand.logo_url ? fetchImage(marchand.logo_url).catch(() => icon2Png) : icon2Png,
   ]);
 
-  // Précédence strip : images_tiers manuel → strip généré → image_strip_url (si strip_mode null) → solid
+  // Précédence strip : images_tiers → image_strip_url (override universel) → strip généré → solid
   const manualStripUrl = (() => {
     if (Array.isArray(marchand.images_tiers)) {
       const tier = marchand.images_tiers.find(
@@ -417,7 +417,7 @@ async function generateApplePass({ client, marchand, serialNumber, passNotificat
       );
       if (tier?.url) return tier.url;
     }
-    if (!marchand.strip_mode) return marchand.image_strip_url || null;
+    if (marchand.image_strip_url) return marchand.image_strip_url;
     return null;
   })();
 

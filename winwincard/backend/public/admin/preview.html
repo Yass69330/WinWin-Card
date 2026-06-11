@@ -146,8 +146,6 @@
 // ── State ──────────────────────────────────────────────────────────────────
 let TOKEN = null;
 let BASE  = '';
-let MARCHAND_ID = null;
-let MARCHAND_SLUG = '';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function api(path, opts = {}) {
@@ -181,7 +179,7 @@ async function doLogin() {
   const errEl       = document.getElementById('login-err');
   const btn         = document.getElementById('login-btn');
 
-  BASE = serverInput || (location.origin);
+  BASE = serverInput || location.origin;
   BASE = BASE.replace(/\/$/, '');
 
   errEl.textContent = '';
@@ -199,8 +197,6 @@ async function doLogin() {
 
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('main-screen').style.display  = 'block';
-
-    // Auto-load default slug
     loadMarchand();
   } catch (e) {
     errEl.textContent = e.message;
@@ -226,10 +222,7 @@ async function loadMarchand() {
     const m = list.find(x => x.slug === slug);
     if (!m) throw new Error(`Marchand "${slug}" introuvable`);
 
-    MARCHAND_ID   = m.id;
-    MARCHAND_SLUG = m.slug;
     statusEl.innerHTML = `<b>${m.nom}</b> — slug: ${m.slug} — forfait: ${m.forfait} — max_value: ${m.max_value} — ID: ${m.id}`;
-
     renderAllPreviews(m);
   } catch (e) {
     statusEl.innerHTML = `<span style="color:#f87171">${e.message}</span>`;
@@ -249,54 +242,55 @@ function renderAllPreviews(m) {
   const container = document.getElementById('previews');
   container.innerHTML = '';
 
-  const DECORS = [
-    ['gradient', 'A · Dégradé profond'],
-    ['halo',     'B · Halo radial'],
-    ['arcs',     'C · Arcs géométriques'],
-  ];
-
   const sections = [
-    ...DECORS.map(([decor, decorLabel]) => ({
-      label: `🎨 Décor ${decorLabel}`,
-      note: 'icon_metier, label affiché — fills 0 / 5 / 9',
-      cases: [0, 5, 9].map(filled => ({
-        label: `filled=${filled}`,
-        params: { mode: 'stamps', theme: 'icon_metier', filled, decor, variant: 'strip2x' },
-      })),
-    })),
     {
-      label: '🔤 Label « LOYALTY CARD » : AVEC vs SANS',
-      note: 'À trancher visuellement — un duo par décor, filled=5',
-      cases: DECORS.flatMap(([decor, decorLabel]) => [
-        { label: `${decorLabel} — AVEC`, params: { mode: 'stamps', theme: 'icon_metier', filled: 5, decor, label: 'on',  variant: 'strip2x' } },
-        { label: `${decorLabel} — SANS`, params: { mode: 'stamps', theme: 'icon_metier', filled: 5, decor, label: 'off', variant: 'strip2x' } },
-      ]),
+      label: 'Tampons — fills 0 / 4 / max',
+      note: 'icon_metier, label activé',
+      cases: [0, Math.floor((m.max_value || 10) / 2), m.max_value || 10].map(filled => ({
+        label: `filled=${filled}`,
+        params: { mode: 'stamps', theme: 'icon_metier', filled, variant: 'strip2x' },
+      })),
     },
     {
-      label: '🏷 Autres thèmes (décor gradient)',
-      note: 'logo_stamp + premium (cadeau sur le dernier tampon) + static',
+      label: 'Label « LOYALTY CARD » — AVEC vs SANS',
+      note: 'filled=5',
       cases: [
-        { label: 'logo_stamp / filled=5', params: { mode: 'stamps', theme: 'logo_stamp', filled: 5, decor: 'gradient', variant: 'strip2x' } },
-        { label: 'premium / filled=9',    params: { mode: 'stamps', theme: 'premium',    filled: 9, decor: 'gradient', variant: 'strip2x' } },
-        { label: 'premium / filled=10',   params: { mode: 'stamps', theme: 'premium',    filled: 10, decor: 'gradient', variant: 'strip2x' } },
-        { label: 'static (décor seul)',   params: { mode: 'static', filled: 0, decor: 'gradient', variant: 'strip2x' } },
+        { label: 'Avec label',  params: { mode: 'stamps', theme: 'icon_metier', filled: 5, label: 'on',  variant: 'strip2x' } },
+        { label: 'Sans label',  params: { mode: 'stamps', theme: 'icon_metier', filled: 5, label: 'off', variant: 'strip2x' } },
       ],
     },
     {
-      label: '📐 Double rangée (max_value=16)',
-      note: 'Layout multi-row (n > 14), décor halo',
-      cases: [0, 8, 16].map(filled => ({
-        label: `filled=${filled}/16`,
-        params: { mode: 'stamps', theme: 'icon_metier', filled, max_value: 16, decor: 'halo', variant: 'strip2x' },
+      label: 'Thèmes : logo_stamp et premium',
+      note: 'logo_stamp filled=5 / premium filled=max−1 / premium complet (cadeau)',
+      cases: [
+        { label: 'logo_stamp / filled=5',    params: { mode: 'stamps', theme: 'logo_stamp', filled: 5, variant: 'strip2x' } },
+        { label: `premium / filled=${(m.max_value||10)-1}`,  params: { mode: 'stamps', theme: 'premium', filled: (m.max_value||10)-1, variant: 'strip2x' } },
+        { label: `premium / filled=${m.max_value||10} (cadeau)`, params: { mode: 'stamps', theme: 'premium', filled: m.max_value||10, variant: 'strip2x' } },
+      ],
+    },
+    {
+      label: 'Deux rangées — n=9, 10, 12, 16',
+      note: 'Seuil ≥9 tampons, row2 centrée, filled=mi-chemin',
+      cases: [9, 10, 12, 16].map(n => ({
+        label: `n=${n} / filled=${Math.ceil(n/2)}`,
+        params: { mode: 'stamps', theme: 'icon_metier', max_value: n, filled: Math.ceil(n/2), variant: 'strip2x' },
       })),
     },
     {
-      label: '🎯 Hero image (Google Wallet, 1032×336 — pas de rognage)',
-      note: 'Un par décor, filled=5',
-      cases: DECORS.map(([decor, decorLabel]) => ({
-        label: `${decorLabel}`,
-        params: { mode: 'stamps', theme: 'icon_metier', filled: 5, decor, variant: 'hero' },
-      })),
+      label: 'Hero image (Google Wallet, 1032×336)',
+      note: 'Pas de rognage latéral — filled=5',
+      cases: [
+        { label: 'icon_metier',  params: { mode: 'stamps', theme: 'icon_metier', filled: 5, variant: 'hero' } },
+        { label: 'logo_stamp',   params: { mode: 'stamps', theme: 'logo_stamp',  filled: 5, variant: 'hero' } },
+        { label: 'premium',      params: { mode: 'stamps', theme: 'premium',     filled: 5, variant: 'hero' } },
+      ],
+    },
+    {
+      label: 'strip@3x (1125×369)',
+      note: 'Même SVG que 2x, zoom ×1.5 via resvg',
+      cases: [
+        { label: 'filled=5 / strip3x', params: { mode: 'stamps', theme: 'icon_metier', filled: 5, variant: 'strip3x' } },
+      ],
     },
   ];
 
@@ -310,10 +304,8 @@ function renderAllPreviews(m) {
     grid.className = 'grid';
 
     for (const c of section.cases) {
-      const tile = buildTile(m.id, m.slug, c.label, c.params);
-      grid.appendChild(tile);
+      grid.appendChild(buildTile(m.id, m.slug, c.label, c.params));
     }
-
     container.appendChild(grid);
   }
 }
@@ -360,10 +352,10 @@ function buildTile(marchandId, slug, label, params) {
     img.src = objUrl;
     img.alt = label;
     wrap.appendChild(img);
-    // Guides de zone sûre Apple (8% de chaque côté), activés par le toggle global
     const szL = document.createElement('div'); szL.className = 'sz l';
     const szR = document.createElement('div'); szR.className = 'sz r';
-    wrap.appendChild(szL); wrap.appendChild(szR);
+    wrap.appendChild(szL);
+    wrap.appendChild(szR);
     body.appendChild(wrap);
     body.className = '';
 
@@ -371,11 +363,11 @@ function buildTile(marchandId, slug, label, params) {
     dlBtn.onclick = () => {
       const a = document.createElement('a');
       a.href = objUrl;
-      const variant = params.variant || 'strip2x';
-      const filled  = params.filled ?? 0;
-      const theme   = params.theme || params.mode || 'static';
-      const decor   = params.decor || 'gradient';
-      a.download = `${slug}_${theme}_${decor}${params.label === 'off' ? '_nolabel' : ''}_f${filled}_${variant}.png`;
+      const variant  = params.variant || 'strip2x';
+      const filled   = params.filled ?? 0;
+      const theme    = params.theme || params.mode || 'static';
+      const noLabel  = params.label === 'off' ? '_nolabel' : '';
+      a.download = `${slug}_${theme}${noLabel}_f${filled}_${variant}.png`;
       a.click();
     };
   }).catch(err => {
@@ -387,7 +379,6 @@ function buildTile(marchandId, slug, label, params) {
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
-// Pre-fill server URL from current origin if same-origin deployment
 document.getElementById('server-url').value = location.origin;
 </script>
 </body>
