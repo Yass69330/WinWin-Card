@@ -306,8 +306,13 @@ function buildSvg({ marchand, filledCount, logoB64, customBgB64, w = 750, h = 24
   const theme     = marchand.strip_theme || 'icon_metier';
   const iconName  = marchand.stamp_icon || 'coffee';
   const maxValue  = marchand.max_value || 10;
-  const bgColor   = marchand.couleur_fond || '#1a1a2e';
-  const iColor    = iconColor(marchand);
+  // Récompense atteinte : utiliser couleur_fond_reward comme base du dégradé
+  // (label adaptatif + icône icones suivent automatiquement cette couleur)
+  const isReward  = filledCount >= maxValue;
+  const bgColor   = (isReward && marchand.couleur_fond_reward)
+    ? marchand.couleur_fond_reward
+    : (marchand.couleur_fond || '#1a1a2e');
+  const iColor    = bgColor; // icône dans les tampons remplis = couleur du fond (adaptatif)
   const premium   = theme === 'premium';
   const showLabel = marchand.strip_label !== 'off';
 

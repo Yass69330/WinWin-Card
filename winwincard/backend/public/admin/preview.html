@@ -242,30 +242,33 @@ function renderAllPreviews(m) {
   const container = document.getElementById('previews');
   container.innerHTML = '';
 
+  const max = m.max_value || 10;
+  const mid = Math.floor(max / 2);
+
   const sections = [
     {
-      label: 'Tampons — fills 0 / 4 / max',
-      note: 'icon_metier, label activé',
-      cases: [0, Math.floor((m.max_value || 10) / 2), m.max_value || 10].map(filled => ({
-        label: `filled=${filled}`,
+      label: 'Tampons — en cours / récompense atteinte',
+      note: `filled=0 / ${mid} / ${max} — récompense utilise couleur_fond_reward`,
+      cases: [0, mid, max].map(filled => ({
+        label: `filled=${filled}${filled === max ? ' 🏆 récompense' : ''}`,
         params: { mode: 'stamps', theme: 'icon_metier', filled, variant: 'strip2x' },
       })),
     },
     {
       label: 'Label « LOYALTY CARD » — AVEC vs SANS',
-      note: 'filled=5',
+      note: `filled=${mid}`,
       cases: [
-        { label: 'Avec label',  params: { mode: 'stamps', theme: 'icon_metier', filled: 5, label: 'on',  variant: 'strip2x' } },
-        { label: 'Sans label',  params: { mode: 'stamps', theme: 'icon_metier', filled: 5, label: 'off', variant: 'strip2x' } },
+        { label: 'Avec label',  params: { mode: 'stamps', theme: 'icon_metier', filled: mid, label: 'on',  variant: 'strip2x' } },
+        { label: 'Sans label',  params: { mode: 'stamps', theme: 'icon_metier', filled: mid, label: 'off', variant: 'strip2x' } },
       ],
     },
     {
       label: 'Thèmes : logo_stamp et premium',
-      note: 'logo_stamp filled=5 / premium filled=max−1 / premium complet (cadeau)',
+      note: `logo_stamp filled=${mid} / premium filled=max−1 / premium complet (cadeau)`,
       cases: [
-        { label: 'logo_stamp / filled=5',    params: { mode: 'stamps', theme: 'logo_stamp', filled: 5, variant: 'strip2x' } },
-        { label: `premium / filled=${(m.max_value||10)-1}`,  params: { mode: 'stamps', theme: 'premium', filled: (m.max_value||10)-1, variant: 'strip2x' } },
-        { label: `premium / filled=${m.max_value||10} (cadeau)`, params: { mode: 'stamps', theme: 'premium', filled: m.max_value||10, variant: 'strip2x' } },
+        { label: `logo_stamp / filled=${mid}`, params: { mode: 'stamps', theme: 'logo_stamp', filled: mid, variant: 'strip2x' } },
+        { label: `premium / filled=${max-1}`,  params: { mode: 'stamps', theme: 'premium', filled: max-1, variant: 'strip2x' } },
+        { label: `premium / filled=${max} (cadeau)`, params: { mode: 'stamps', theme: 'premium', filled: max, variant: 'strip2x' } },
       ],
     },
     {
