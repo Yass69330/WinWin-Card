@@ -170,17 +170,27 @@ function computeLayout(n, { showLabel = true } = {}) {
     }));
   }
 
-  // Deux rangées : toujours calculer depuis stampAreaTop=20 (espace plein),
-  // indépendamment du label. Le label (baseline y≈46) et le bord haut des
-  // tampons (cy1≈82 - r) laissent ≥8px de jeu. L'écart vertical entre rangées
-  // est ainsi identique avec ou sans label.
-  const stampAreaTop = 20;
+  // Deux rangées : row1 ≥ row2, row2 centrée sous row1.
+  // Avec label : équi-répartition de l'espace — autant d'air entre la baseline du
+  //   label (y=46) et le haut de rangée 1, qu'entre les bords des deux rangées.
+  //   W = (stampAreaBot − 46 − 4r) / 2  →  cy1 = 46+r+W, cy2 = 46+3r+2W.
+  // Sans label : rangées centrées dans toute la zone disponible (positions inchangées).
   const row1 = Math.ceil(n / 2);
   const row2 = n - row1;
   const spacing = availW / row1;
   const r = Math.max(13, Math.min(28, spacing / 2 - 4));
-  const cy1 = stampAreaTop + (stampAreaBot - stampAreaTop) * 0.30;
-  const cy2 = stampAreaTop + (stampAreaBot - stampAreaTop) * 0.72;
+
+  let cy1, cy2;
+  if (showLabel) {
+    const labelBottom = 46;
+    const W = (stampAreaBot - labelBottom - 4 * r) / 2;
+    cy1 = labelBottom + r + W;
+    cy2 = labelBottom + 3 * r + 2 * W;
+  } else {
+    const stampAreaTop = 20;
+    cy1 = stampAreaTop + (stampAreaBot - stampAreaTop) * 0.30;
+    cy2 = stampAreaTop + (stampAreaBot - stampAreaTop) * 0.72;
+  }
   const row2Shift = (row1 - row2) * spacing / 2;
   const stamps = [];
   for (let i = 0; i < row1; i++)
