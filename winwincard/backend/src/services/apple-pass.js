@@ -485,4 +485,4 @@ async function generateApplePass({ client, marchand, serialNumber, passNotificat
   return buffer;
 }
 
-module.exports = { generateApplePass, computeAuthToken, createSolidPng, loadCerts };
+module.exports = { generateApplePass, computeAuthToken, createSolidPng, loadCerts, fetchImage };
