@@ -1311,16 +1311,34 @@ function loadStripPreview(id, mode, theme, icon, label, maxVal) {
   const section = document.getElementById('section-strip-live-preview');
   const img     = document.getElementById('strip-preview-img');
   section.style.display = '';
+  img.style.opacity = '0.4';
+
   const params = new URLSearchParams({
-    mode:      mode || 'stamps',
-    theme:     theme || 'icon_metier',
-    icon:      icon || 'coffee',
-    label:     label !== 'off' ? 'on' : 'off',
-    filled:    Math.ceil((maxVal || 10) / 2),
-    variant:   'strip2x',
+    mode:    mode  || 'stamps',
+    theme:   theme || 'icon_metier',
+    icon:    icon  || 'coffee',
+    label:   label !== 'off' ? 'on' : 'off',
+    filled:  Math.ceil((maxVal || 10) / 2),
+    variant: 'strip2x',
   });
-  img.src = `/api/admin/marchands/${id}/strip-preview?${params}&_t=${Date.now()}`;
-  img.style.display = 'block';
+
+  // <img src> ne transmet pas le header Authorization → fetch authentifié + blob URL
+  fetch(`/api/admin/marchands/${id}/strip-preview?${params}`, {
+    headers: { Authorization: 'Bearer ' + S.token },
+  }).then(r => {
+    if (!r.ok) throw new Error(r.status);
+    return r.blob();
+  }).then(blob => {
+    const prev = img.dataset.blobUrl;
+    if (prev) URL.revokeObjectURL(prev);
+    const url = URL.createObjectURL(blob);
+    img.dataset.blobUrl = url;
+    img.src = url;
+    img.style.display  = 'block';
+    img.style.opacity  = '1';
+  }).catch(() => {
+    img.style.opacity = '1';
+  });
 }
 
 document.getElementById('btn-refresh-preview').addEventListener('click', () => {
