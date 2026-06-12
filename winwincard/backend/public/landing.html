@@ -11,126 +11,217 @@
     :root {
       --brand:      #1a1a2e;
       --brand-text: #ffffff;
-      --radius:     16px;
-      --shadow:     0 4px 24px rgba(0,0,0,.10);
+      --bg1:        #1a1a2e;
+      --bg2:        #0a0a14;
     }
 
     html, body {
       min-height: 100dvh;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #f4f4f6;
-      color: #111;
+      background: linear-gradient(160deg, var(--bg1) 0%, var(--bg2) 100%);
+      background-attachment: fixed;
+      color: #fff;
       -webkit-font-smoothing: antialiased;
     }
 
-    /* ── Formatage description ── */
-    .description strong { font-weight: 700; color: #111; }
+    /* ── Page wrapper ── */
+    .page {
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 20px 60px;
+      gap: 28px;
+    }
 
-    /* ── Header marchand ── */
-    .header {
-      background: var(--brand);
-      color: var(--brand-text);
-      padding: 36px 24px 28px;
+    /* ── Hero (logo + nom) ── */
+    .hero {
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 14px;
-      min-height: 160px;
+      width: 100%;
+      max-width: 420px;
     }
-    .header-logo {
-      width: 72px;
-      height: 72px;
+    .hero-logo {
+      width: 80px;
+      height: 80px;
       border-radius: 50%;
-      object-fit: cover;
       background: rgba(255,255,255,.15);
+      border: 2px solid rgba(255,255,255,.25);
       display: flex;
       align-items: center;
       justify-content: center;
+      font-size: 32px;
+      font-weight: 800;
+      color: #fff;
+      overflow: hidden;
+      flex-shrink: 0;
+      box-shadow: 0 0 0 8px rgba(255,255,255,.06), 0 8px 32px rgba(0,0,0,.35);
+    }
+    .hero-logo img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+    .hero-name {
       font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -.3px;
+      text-align: center;
+      color: #fff;
+    }
+
+    /* ── Mockup carte Wallet ── */
+    .card-mockup {
+      width: 100%;
+      max-width: 420px;
+      aspect-ratio: 375 / 140;
+      background: var(--brand);
+      border-radius: 18px;
+      padding: 16px 20px 14px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.45), 0 2px 8px rgba(0,0,0,.3);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+      transform: perspective(900px) rotateX(2.5deg);
+    }
+    /* Reflet vitré */
+    .card-mockup::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,.14) 0%, transparent 55%);
+      border-radius: inherit;
+      pointer-events: none;
+    }
+    .mockup-top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .mockup-logo-wrap {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
       font-weight: 700;
-      color: var(--brand-text);
+      color: #fff;
       overflow: hidden;
       flex-shrink: 0;
     }
-    .header-logo img { width: 100%; height: 100%; object-fit: cover; }
-    .header-name {
-      font-size: 22px;
-      font-weight: 700;
-      text-align: center;
-      line-height: 1.2;
+    .mockup-logo-wrap img { width: 100%; height: 100%; object-fit: cover; }
+    .mockup-name-wrap {
+      display: flex;
+      flex-direction: column;
+    }
+    .mockup-merchant { font-size: 13px; font-weight: 700; color: rgba(255,255,255,.95); }
+    .mockup-label    { font-size: 10px; color: rgba(255,255,255,.55); text-transform: uppercase; letter-spacing: .08em; }
+    .mockup-stamps {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .mockup-stamp {
+      flex: 1;
+      aspect-ratio: 1;
+      max-width: 28px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.12);
+      border: 1.5px solid rgba(255,255,255,.35);
+    }
+    .mockup-stamp.filled {
+      background: rgba(255,255,255,.90);
+      border-color: transparent;
     }
 
-    /* ── Carte principale ── */
-    .card {
-      background: #fff;
-      border-radius: var(--radius) var(--radius) 0 0;
-      margin-top: -12px;
-      padding: 28px 24px 40px;
-      min-height: calc(100dvh - 148px);
-      box-shadow: var(--shadow);
+    /* ── Carte verre (formulaire + succès) ── */
+    .content-card {
+      width: 100%;
+      max-width: 420px;
+      background: rgba(255,255,255,.10);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 24px;
+      padding: 28px 24px 32px;
     }
 
+    /* ── Description ── */
     .description {
       font-size: 15px;
       line-height: 1.6;
-      color: #444;
-      margin-bottom: 28px;
+      color: rgba(255,255,255,.75);
+      margin-bottom: 24px;
       text-align: center;
     }
+    .description strong { font-weight: 700; color: #fff; }
 
     /* ── Formulaire ── */
-    .field {
-      margin-bottom: 16px;
-    }
+    .field { margin-bottom: 14px; }
     .field label {
       display: block;
-      font-size: 13px;
-      font-weight: 600;
-      color: #666;
+      font-size: 11px;
+      font-weight: 700;
+      color: rgba(255,255,255,.6);
       margin-bottom: 6px;
-      letter-spacing: .3px;
+      letter-spacing: .06em;
       text-transform: uppercase;
     }
     .field input {
       width: 100%;
       padding: 14px 16px;
-      font-size: 16px; /* 16px min prevents iOS zoom */
-      border: 1.5px solid #ddd;
-      border-radius: 12px;
-      background: #fafafa;
-      color: #111;
+      font-size: 16px;
+      border: 1.5px solid rgba(255,255,255,.2);
+      border-radius: 14px;
+      background: rgba(255,255,255,.1);
+      color: #fff;
       outline: none;
-      transition: border-color .2s;
+      transition: border-color .2s, background .2s;
       -webkit-appearance: none;
+      font-family: inherit;
     }
-    .field input:focus { border-color: var(--brand); background: #fff; }
-    .field input::placeholder { color: #aaa; }
+    .field input:focus {
+      border-color: rgba(255,255,255,.55);
+      background: rgba(255,255,255,.16);
+    }
+    .field input::placeholder { color: rgba(255,255,255,.35); }
+    /* date input — les navigateurs appliquent leur propre couleur */
+    .field input[type="date"] { color-scheme: dark; }
 
     /* Champs V2 — présents en DOM mais invisibles en V1 */
     .field-v2 { display: none; }
-    .field-hint-v2 { font-size: 12px; color: #aaa; margin-top: 5px; line-height: 1.4; }
+    .field-hint-v2 {
+      font-size: 12px;
+      color: rgba(255,255,255,.4);
+      margin-top: 5px;
+      line-height: 1.4;
+    }
 
     .btn-submit {
       width: 100%;
       padding: 16px;
-      margin-top: 8px;
+      margin-top: 10px;
       background: var(--brand);
       color: var(--brand-text);
       border: none;
-      border-radius: 14px;
-      font-size: 16px;
+      border-radius: 16px;
+      font-size: 18px;
       font-weight: 700;
       cursor: pointer;
       transition: opacity .2s, transform .1s;
       position: relative;
-      min-height: 54px;
+      min-height: 56px;
+      letter-spacing: -.1px;
     }
     .btn-submit:active { transform: scale(.98); }
     .btn-submit:disabled { opacity: .6; cursor: default; }
     .btn-submit .spinner {
       display: none;
-      width: 20px; height: 20px;
-      border: 2px solid rgba(255,255,255,.3);
+      width: 22px; height: 22px;
+      border: 2.5px solid rgba(255,255,255,.3);
       border-top-color: #fff;
       border-radius: 50%;
       animation: spin .7s linear infinite;
@@ -146,7 +237,7 @@
     .rgpd-note {
       margin-top: 14px;
       font-size: 12px;
-      color: #aaa;
+      color: rgba(255,255,255,.4);
       text-align: center;
       line-height: 1.5;
     }
@@ -154,12 +245,12 @@
     /* ── Message d'erreur ── */
     .error-msg {
       display: none;
-      background: #fff0f0;
-      border: 1px solid #fcc;
-      border-radius: 10px;
+      background: rgba(239,68,68,.15);
+      border: 1px solid rgba(239,68,68,.4);
+      border-radius: 12px;
       padding: 12px 16px;
       font-size: 14px;
-      color: #c00;
+      color: #fca5a5;
       margin-bottom: 16px;
       text-align: center;
     }
@@ -171,31 +262,26 @@
       flex-direction: column;
       align-items: center;
       text-align: center;
-      padding-top: 8px;
     }
     .success-screen.show { display: flex; }
 
     .success-icon {
       width: 64px; height: 64px;
-      background: #e8f8ef;
+      background: rgba(34,197,94,.15);
+      border: 1.5px solid rgba(34,197,94,.4);
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      margin-bottom: 20px;
+      margin-bottom: 18px;
     }
     .success-icon svg { width: 32px; height: 32px; }
-
-    .success-title {
-      font-size: 22px;
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
+    .success-title { font-size: 22px; font-weight: 800; margin-bottom: 8px; }
     .success-sub {
       font-size: 15px;
-      color: #555;
+      color: rgba(255,255,255,.65);
       line-height: 1.5;
-      margin-bottom: 32px;
+      margin-bottom: 28px;
     }
 
     /* ── Boutons Wallet ── */
@@ -205,7 +291,6 @@
       flex-direction: column;
       gap: 12px;
     }
-
     .btn-wallet {
       display: flex;
       align-items: center;
@@ -222,56 +307,43 @@
       border: none;
     }
     .btn-wallet:active { transform: scale(.98); opacity: .85; }
-
-    .btn-apple {
-      background: #000;
-      color: #fff;
-    }
-    .btn-google {
-      background: #fff;
-      color: #1a73e8;
-      border: 1.5px solid #dadce0;
-    }
+    .btn-apple  { background: #000; color: #fff; }
+    .btn-google { background: #fff; color: #1a73e8; border: 1.5px solid #dadce0; }
     .btn-wallet svg { flex-shrink: 0; }
-
-    /* Bouton non dispo sur cette plateforme */
     .btn-wallet.unavailable {
-      background: #f4f4f6;
-      color: #999;
-      border: 1.5px solid #e0e0e0;
+      background: rgba(255,255,255,.08);
+      color: rgba(255,255,255,.4);
+      border: 1.5px solid rgba(255,255,255,.12);
       cursor: default;
       font-size: 14px;
     }
 
-    /* ── États globaux ── */
-    .form-area.hidden { display: none; }
-
-    /* ── Écran de redirection auto (iOS/Android) ── */
+    /* ── Écran de redirection auto (iOS / Android) ── */
     .redirect-screen {
       display: none;
       flex-direction: column;
       align-items: center;
       text-align: center;
-      padding-top: 40px;
-      gap: 16px;
+      gap: 14px;
     }
     .redirect-screen.show { display: flex; }
     .redirect-spinner {
       width: 48px; height: 48px;
-      border: 3px solid rgba(0,0,0,.1);
-      border-top-color: var(--brand);
+      border: 3px solid rgba(255,255,255,.15);
+      border-top-color: rgba(255,255,255,.85);
       border-radius: 50%;
       animation: spin .8s linear infinite;
       flex-shrink: 0;
     }
-    .redirect-title { font-size: 20px; font-weight: 700; margin-top: 4px; }
-    .redirect-sub { font-size: 15px; color: #555; line-height: 1.5; }
+    .redirect-title { font-size: 20px; font-weight: 700; }
+    .redirect-sub { font-size: 15px; color: rgba(255,255,255,.6); line-height: 1.5; }
     .btn-fallback {
       display: none;
-      margin-top: 8px;
+      margin-top: 6px;
       padding: 15px 20px;
-      background: var(--brand);
-      color: var(--brand-text);
+      background: rgba(255,255,255,.12);
+      border: 1.5px solid rgba(255,255,255,.25);
+      color: #fff;
       border-radius: 14px;
       font-size: 15px;
       font-weight: 600;
@@ -282,26 +354,22 @@
 
     /* ── Bandeau in-app browser ── */
     .inapp-banner {
-      background: #fff7ed;
-      border: 1px solid #fed7aa;
-      border-radius: 12px;
+      background: rgba(245,158,11,.12);
+      border: 1px solid rgba(245,158,11,.35);
+      border-radius: 14px;
       padding: 14px 16px;
-      margin-bottom: 20px;
+      margin-bottom: 16px;
       font-size: 14px;
-      color: #7c2d12;
+      color: #fde68a;
       text-align: center;
       line-height: 1.6;
     }
+    .inapp-banner strong { color: #fef3c7; }
 
     /* ── Squelette chargement ── */
-    .skeleton {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      padding-top: 8px;
-    }
+    .skeleton { display: flex; flex-direction: column; gap: 12px; }
     .skel {
-      background: linear-gradient(90deg, #eee 25%, #f8f8f8 50%, #eee 75%);
+      background: linear-gradient(90deg, rgba(255,255,255,.07) 25%, rgba(255,255,255,.13) 50%, rgba(255,255,255,.07) 75%);
       background-size: 200% 100%;
       animation: shimmer 1.2s infinite;
       border-radius: 10px;
@@ -309,7 +377,7 @@
     @keyframes shimmer { to { background-position: -200% 0; } }
     .skel-text  { height: 16px; width: 80%; }
     .skel-input { height: 52px; }
-    .skel-btn   { height: 54px; }
+    .skel-btn   { height: 56px; }
 
     /* ── Erreur marchand introuvable ── */
     .not-found {
@@ -317,152 +385,181 @@
       flex-direction: column;
       align-items: center;
       text-align: center;
-      padding-top: 20px;
-      gap: 12px;
+      gap: 10px;
     }
     .not-found.show { display: flex; }
     .not-found-icon { font-size: 48px; }
     .not-found h2 { font-size: 20px; font-weight: 700; }
-    .not-found p { font-size: 15px; color: #666; }
+    .not-found p  { font-size: 15px; color: rgba(255,255,255,.6); }
+
+    /* ── États globaux ── */
+    .form-area.hidden { display: none; }
   </style>
 </head>
 <body>
 
-  <header class="header">
-    <div class="header-logo" id="header-logo">
-      <span id="logo-initial"></span>
-    </div>
-    <div class="header-name" id="header-name">Loading…</div>
-  </header>
+  <div class="page">
 
-  <main class="card">
-
-    <!-- Squelette pendant le chargement -->
-    <div class="skeleton" id="skeleton">
-      <div class="skel skel-text"></div>
-      <div class="skel skel-text" style="width:60%"></div>
-      <br>
-      <div class="skel skel-input"></div>
-      <div class="skel skel-btn"></div>
+    <!-- Hero : logo + nom du marchand -->
+    <div class="hero">
+      <div class="hero-logo" id="hero-logo">
+        <span id="logo-initial"></span>
+      </div>
+      <div class="hero-name" id="hero-name">Loading…</div>
     </div>
 
-    <!-- Marchand introuvable / suspendu -->
-    <div class="not-found" id="not-found">
-      <div class="not-found-icon">🔒</div>
-      <h2 id="not-found-title">Program not found</h2>
-      <p id="not-found-msg">This loyalty program is not available.</p>
+    <!-- Mockup de la carte Wallet -->
+    <div class="card-mockup" id="card-mockup">
+      <div class="mockup-top">
+        <div class="mockup-logo-wrap" id="mockup-logo-wrap">
+          <span id="mockup-initial"></span>
+        </div>
+        <div class="mockup-name-wrap">
+          <div class="mockup-merchant" id="mockup-merchant"></div>
+          <div class="mockup-label">Loyalty Card</div>
+        </div>
+      </div>
+      <div class="mockup-stamps">
+        <div class="mockup-stamp filled"></div>
+        <div class="mockup-stamp filled"></div>
+        <div class="mockup-stamp filled"></div>
+        <div class="mockup-stamp"></div>
+        <div class="mockup-stamp"></div>
+        <div class="mockup-stamp"></div>
+        <div class="mockup-stamp"></div>
+        <div class="mockup-stamp"></div>
+      </div>
     </div>
 
-    <!-- Formulaire d'inscription -->
-    <div class="form-area hidden" id="form-area">
-      <p class="description" id="description"></p>
+    <!-- Carte principale (glass) -->
+    <div class="content-card">
 
-      <div class="error-msg" id="error-msg"></div>
-
-      <form id="form" novalidate>
-
-        <!-- Prénom — V1 -->
-        <div class="field">
-          <label for="prenom">First name</label>
-          <input type="text" id="prenom" name="prenom"
-            placeholder="Your first name"
-            autocomplete="given-name"
-            autocapitalize="words"
-            maxlength="50"
-            required>
-        </div>
-
-        <!-- Email — V2 (masqué en V1) -->
-        <div class="field field-v2" id="field-email">
-          <label for="email">Email</label>
-          <input type="email" id="email" name="email"
-            placeholder="votre@email.fr"
-            autocomplete="email">
-          <p class="field-hint-v2">So you never lose your points 🔒</p>
-        </div>
-
-        <!-- Téléphone — V2 (masqué en V1) -->
-        <div class="field field-v2" id="field-telephone">
-          <label for="telephone">Téléphone</label>
-          <input type="tel" id="telephone" name="telephone"
-            placeholder="06 00 00 00 00"
-            autocomplete="tel">
-          <p class="field-hint-v2">To receive exclusive flash offers 📱</p>
-        </div>
-
-        <!-- Date anniversaire — V2 (masqué en V1) -->
-        <div class="field field-v2" id="field-anniversaire">
-          <label for="date_anniversaire">Date de naissance</label>
-          <input type="date" id="date_anniversaire" name="date_anniversaire">
-          <p class="field-hint-v2">For a special surprise on your big day 🎂</p>
-        </div>
-
-        <button type="submit" class="btn-submit" id="btn-submit">
-          <span class="btn-label">Get my card</span>
-          <span class="spinner"></span>
-        </button>
-      </form>
-
-      <p class="rgpd-note" id="rgpd-note">
-        Only your first name is stored. You can request data deletion in-store at any time.
-      </p>
-    </div>
-
-    <!-- Écran succès + boutons Wallet -->
-    <div class="success-screen" id="success-screen">
-
-      <div class="success-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"/>
-          <polyline points="9 12 11 14 15 10"/>
-        </svg>
+      <!-- Squelette pendant le chargement -->
+      <div class="skeleton" id="skeleton">
+        <div class="skel skel-text"></div>
+        <div class="skel skel-text" style="width:60%"></div>
+        <br>
+        <div class="skel skel-input"></div>
+        <div class="skel skel-btn"></div>
       </div>
 
-      <div class="success-title" id="success-title">Your card is ready!</div>
-      <div class="success-sub" id="success-sub"></div>
+      <!-- Marchand introuvable / suspendu -->
+      <div class="not-found" id="not-found">
+        <div class="not-found-icon">🔒</div>
+        <h2 id="not-found-title">Program not found</h2>
+        <p id="not-found-msg">This loyalty program is not available.</p>
+      </div>
 
-      <div class="wallet-buttons" id="wallet-buttons">
+      <!-- Formulaire d'inscription -->
+      <div class="form-area hidden" id="form-area">
+        <p class="description" id="description"></p>
 
-        <!-- Apple Wallet -->
-        <a class="btn-wallet btn-apple" id="btn-apple" href="#" target="_self">
-          <svg width="22" height="22" viewBox="0 0 22 22" fill="white">
-            <path d="M15.05 1C14.1 1.87 13.5 3.17 13.7 4.5c1.2.1 2.4-.6 3.2-1.5.8-.9 1.3-2.2 1.1-3.5-1.1.1-2.2.7-2.95 1.5zM16 6.3c-1.65-.1-3.05.93-3.83.93-.78 0-2-.88-3.3-.85C7.1 6.42 5.3 7.4 4.32 9.05c-1.98 3.35-.5 8.3 1.4 11.02.96 1.36 2.1 2.88 3.6 2.83 1.42-.06 1.98-.92 3.7-.92 1.74 0 2.24.92 3.76.89 1.56-.04 2.54-1.4 3.5-2.76a12.2 12.2 0 0 0 1.56-3.12c-3.1-1.18-3.6-5.55-.53-7.3A4.73 4.73 0 0 0 16 6.3z"/>
+        <div class="error-msg" id="error-msg"></div>
+
+        <form id="form" novalidate>
+
+          <!-- Prénom — V1 -->
+          <div class="field">
+            <label for="prenom">First name</label>
+            <input type="text" id="prenom" name="prenom"
+              placeholder="Your first name"
+              autocomplete="given-name"
+              autocapitalize="words"
+              maxlength="50"
+              required>
+          </div>
+
+          <!-- Email — V2 (masqué en V1) -->
+          <div class="field field-v2" id="field-email">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email"
+              placeholder="your@email.com"
+              autocomplete="email">
+            <p class="field-hint-v2">So you never lose your points 🔒</p>
+          </div>
+
+          <!-- Téléphone — V2 (masqué en V1) -->
+          <div class="field field-v2" id="field-telephone">
+            <label for="telephone">Phone</label>
+            <input type="tel" id="telephone" name="telephone"
+              placeholder="+33 6 00 00 00 00"
+              autocomplete="tel">
+            <p class="field-hint-v2">To receive exclusive flash offers 📱</p>
+          </div>
+
+          <!-- Date anniversaire — V2 (masqué en V1) -->
+          <div class="field field-v2" id="field-anniversaire">
+            <label for="date_anniversaire">Date of birth</label>
+            <input type="date" id="date_anniversaire" name="date_anniversaire">
+            <p class="field-hint-v2">For a special surprise on your big day 🎂</p>
+          </div>
+
+          <button type="submit" class="btn-submit" id="btn-submit">
+            <span class="btn-label">Get my card</span>
+            <span class="spinner"></span>
+          </button>
+        </form>
+
+        <p class="rgpd-note" id="rgpd-note">
+          Only your first name is stored. You can request data deletion in-store at any time.
+        </p>
+      </div>
+
+      <!-- Écran succès + boutons Wallet -->
+      <div class="success-screen" id="success-screen">
+
+        <div class="success-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="9 12 11 14 15 10"/>
           </svg>
-          <span>Add to Apple Wallet</span>
-        </a>
+        </div>
 
-        <!-- Google Wallet -->
-        <a class="btn-wallet btn-google" id="btn-google" href="#" target="_blank" rel="noopener">
-          <svg width="20" height="20" viewBox="0 0 20 20">
-            <path d="M19.6 10.23c0-.68-.06-1.36-.18-2H10v3.77h5.38a4.6 4.6 0 0 1-2 3.02v2.5h3.23c1.9-1.74 2.99-4.3 2.99-7.3z" fill="#4285F4"/>
-            <path d="M10 20c2.7 0 4.96-.9 6.62-2.43l-3.23-2.5c-.9.6-2.04.95-3.39.95-2.6 0-4.81-1.76-5.6-4.12H1.06v2.58A10 10 0 0 0 10 20z" fill="#34A853"/>
-            <path d="M4.4 11.9A6 6 0 0 1 4.08 10c0-.66.12-1.3.32-1.9V5.52H1.06A10 10 0 0 0 0 10c0 1.62.39 3.15 1.06 4.48L4.4 11.9z" fill="#FBBC05"/>
-            <path d="M10 3.96c1.46 0 2.78.5 3.81 1.49l2.86-2.86C14.96.99 12.7 0 10 0A10 10 0 0 0 1.06 5.52L4.4 8.1C5.19 5.72 7.4 3.96 10 3.96z" fill="#EA4335"/>
-          </svg>
-          <span>Add to Google Wallet</span>
-        </a>
+        <div class="success-title" id="success-title">Your card is ready!</div>
+        <div class="success-sub" id="success-sub"></div>
+
+        <div class="wallet-buttons" id="wallet-buttons">
+
+          <a class="btn-wallet btn-apple" id="btn-apple" href="#" target="_self">
+            <svg width="22" height="22" viewBox="0 0 22 22" fill="white">
+              <path d="M15.05 1C14.1 1.87 13.5 3.17 13.7 4.5c1.2.1 2.4-.6 3.2-1.5.8-.9 1.3-2.2 1.1-3.5-1.1.1-2.2.7-2.95 1.5zM16 6.3c-1.65-.1-3.05.93-3.83.93-.78 0-2-.88-3.3-.85C7.1 6.42 5.3 7.4 4.32 9.05c-1.98 3.35-.5 8.3 1.4 11.02.96 1.36 2.1 2.88 3.6 2.83 1.42-.06 1.98-.92 3.7-.92 1.74 0 2.24.92 3.76.89 1.56-.04 2.54-1.4 3.5-2.76a12.2 12.2 0 0 0 1.56-3.12c-3.1-1.18-3.6-5.55-.53-7.3A4.73 4.73 0 0 0 16 6.3z"/>
+            </svg>
+            <span>Add to Apple Wallet</span>
+          </a>
+
+          <a class="btn-wallet btn-google" id="btn-google" href="#" target="_blank" rel="noopener">
+            <svg width="20" height="20" viewBox="0 0 20 20">
+              <path d="M19.6 10.23c0-.68-.06-1.36-.18-2H10v3.77h5.38a4.6 4.6 0 0 1-2 3.02v2.5h3.23c1.9-1.74 2.99-4.3 2.99-7.3z" fill="#4285F4"/>
+              <path d="M10 20c2.7 0 4.96-.9 6.62-2.43l-3.23-2.5c-.9.6-2.04.95-3.39.95-2.6 0-4.81-1.76-5.6-4.12H1.06v2.58A10 10 0 0 0 10 20z" fill="#34A853"/>
+              <path d="M4.4 11.9A6 6 0 0 1 4.08 10c0-.66.12-1.3.32-1.9V5.52H1.06A10 10 0 0 0 0 10c0 1.62.39 3.15 1.06 4.48L4.4 11.9z" fill="#FBBC05"/>
+              <path d="M10 3.96c1.46 0 2.78.5 3.81 1.49l2.86-2.86C14.96.99 12.7 0 10 0A10 10 0 0 0 1.06 5.52L4.4 8.1C5.19 5.72 7.4 3.96 10 3.96z" fill="#EA4335"/>
+            </svg>
+            <span>Add to Google Wallet</span>
+          </a>
+
+        </div>
+
+        <!-- Referral share — shown only when referral_enabled -->
+        <div id="referral-share" style="display:none;margin-top:24px;width:100%;padding:16px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:16px;text-align:center">
+          <div style="font-weight:700;margin-bottom:6px">🎁 Refer a Friend</div>
+          <div style="font-size:13px;color:rgba(255,255,255,.65);margin-bottom:12px">Earn <span id="referral-bonus-pts">1</span> point when they make their first visit</div>
+          <div style="background:rgba(0,0,0,.25);border-radius:10px;padding:10px;font-size:11px;font-family:monospace;word-break:break-all;margin-bottom:12px;user-select:all;color:rgba(255,255,255,.75)" id="referral-link-text"></div>
+          <button onclick="shareReferral()" style="background:rgba(255,255,255,.9);color:#1a1a2e;border:none;border-radius:10px;padding:10px 20px;font-weight:700;cursor:pointer;width:100%;font-size:14px">Share my link</button>
+        </div>
 
       </div>
 
-      <!-- Referral share — shown only when referral_enabled -->
-      <div id="referral-share" style="display:none;margin-top:24px;padding:16px;background:rgba(255,255,255,0.12);border-radius:12px;text-align:center">
-        <div style="font-weight:600;margin-bottom:6px">🎁 Refer a Friend</div>
-        <div style="font-size:13px;opacity:0.85;margin-bottom:12px">Earn <span id="referral-bonus-pts">1</span> point when they make their first visit</div>
-        <div style="background:rgba(0,0,0,0.2);border-radius:8px;padding:10px;font-size:11px;font-family:monospace;word-break:break-all;margin-bottom:12px;user-select:all" id="referral-link-text"></div>
-        <button onclick="shareReferral()" style="background:rgba(255,255,255,0.9);color:#1a1a2e;border:none;border-radius:8px;padding:10px 20px;font-weight:600;cursor:pointer;width:100%;font-size:14px">Share my link</button>
+      <!-- Écran de redirection automatique (iOS / Android) -->
+      <div class="redirect-screen" id="redirect-screen">
+        <div class="redirect-spinner"></div>
+        <div class="redirect-title">Opening your wallet…</div>
+        <div class="redirect-sub" id="redirect-sub">Your loyalty card is being added.</div>
+        <a class="btn-fallback" id="btn-fallback" href="#">Your card didn't open? Tap here →</a>
       </div>
 
-    </div>
+    </div><!-- /content-card -->
 
-    <!-- Écran de redirection automatique (iOS / Android) -->
-    <div class="redirect-screen" id="redirect-screen">
-      <div class="redirect-spinner"></div>
-      <div class="redirect-title">Opening your wallet…</div>
-      <div class="redirect-sub" id="redirect-sub">Your loyalty card is being added.</div>
-      <a class="btn-fallback" id="btn-fallback" href="#">Your card didn't open? Tap here →</a>
-    </div>
-
-  </main>
+  </div><!-- /page -->
 
   <script>
     // ── Détection plateforme ─────────────────────────────────
@@ -480,6 +577,7 @@
     function showForm()      { $('form-area').classList.remove('hidden'); }
     function showNotFound(title, msg) {
       hideSkeleton();
+      $('card-mockup').style.display = 'none';
       $('not-found').classList.add('show');
       $('not-found-title').textContent = title;
       $('not-found-msg').textContent   = msg;
@@ -497,13 +595,12 @@
     }
 
     // ── Slug depuis l'URL ────────────────────────────────────
-    // URL : /l/:slug
     const slug = location.pathname.split('/l/')[1]?.split('/')[0];
     if (!slug) showNotFound('Invalid link', 'This URL does not match any loyalty program.');
     window._refSerial = new URLSearchParams(location.search).get('ref') || null;
 
     // ── Chargement des données marchand ──────────────────────
-    const API = ''; // même origin que le backend
+    const API = '';
 
     async function loadMarchand() {
       try {
@@ -525,42 +622,67 @@
       }
     }
 
+    // Assombrit une couleur hex d'un facteur [0,1]
+    function darken(hex, f) {
+      const h = (hex || '#1a1a2e').replace('#', '');
+      const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
+      return '#' + [r, g, b].map(c => Math.max(0, Math.round(c * (1 - f))).toString(16).padStart(2, '0')).join('');
+    }
+
     function applyBranding(m) {
-      // Couleurs CSS
-      const brand    = m.couleur_fond  || '#1a1a2e';
+      const brand     = m.couleur_fond  || '#1a1a2e';
       const textColor = m.couleur_texte || '#ffffff';
+
+      // Dégradé de fond basé sur la couleur marchand
+      const dark1 = darken(brand, 0.18);
+      const dark2 = darken(brand, 0.58);
       document.documentElement.style.setProperty('--brand',      brand);
       document.documentElement.style.setProperty('--brand-text', textColor);
-      document.querySelector('meta[name=theme-color]').content = brand;
+      document.documentElement.style.setProperty('--bg1',        dark1);
+      document.documentElement.style.setProperty('--bg2',        dark2);
+      document.querySelector('meta[name=theme-color]').content = dark2;
 
-      // Nom
-      document.title          = `${m.nom} Loyalty`;
-      $('header-name').textContent = m.nom;
+      // Titre de page
+      document.title = `${m.nom} Loyalty`;
 
-      // Logo — icon_url en priorité (87×87, mieux adapté au cercle), fallback logo_url
-      // Si l'image échoue à charger, on affiche l'initiale du nom.
+      // Hero : nom
+      $('hero-name').textContent    = m.nom;
+      $('mockup-merchant').textContent = m.nom;
+
+      // Logo — icon_url en priorité, fallback logo_url puis initiale
       const logoSrc = m.icon_url || m.logo_url;
       const initial = m.nom.charAt(0).toUpperCase();
-      $('logo-initial').textContent = initial;
+      $('logo-initial').textContent   = initial;
+      $('mockup-initial').textContent = initial;
+
       if (logoSrc) {
-        const img = document.createElement('img');
-        img.alt = m.nom;
-        img.onerror = () => { $('header-logo').innerHTML = `<span>${initial}</span>`; };
-        img.src = logoSrc;
-        $('header-logo').innerHTML = '';
-        $('header-logo').appendChild(img);
+        // Hero logo
+        const img1 = document.createElement('img');
+        img1.alt = m.nom;
+        img1.onerror = () => { $('hero-logo').innerHTML = `<span>${initial}</span>`; };
+        img1.src = logoSrc;
+        $('hero-logo').innerHTML = '';
+        $('hero-logo').appendChild(img1);
+
+        // Mockup logo
+        const img2 = document.createElement('img');
+        img2.alt = m.nom;
+        img2.onerror = () => { $('mockup-logo-wrap').innerHTML = `<span>${initial}</span>`; };
+        img2.src = logoSrc;
+        $('mockup-logo-wrap').innerHTML = '';
+        $('mockup-logo-wrap').appendChild(img2);
       }
 
-      // Texte descriptif (supporte **gras** et sauts de ligne)
+      // Texte descriptif
       $('description').innerHTML = renderText(m.texte_landing || `Welcome to **${m.nom}**'s loyalty program!`);
 
-      // Stocker le slug et le flag premium pour le submit
+      // Stocker les flags pour le submit
       window._marchandSlug    = m.slug;
       window._premiumLanding  = m.forfait === 'pro_plus' && !!m.landing_premium;
       window._referralEnabled = !!m.referral_enabled;
       window._referralBonus   = m.referral_bonus_points || 1;
 
-      // Champs Pro+ premium — affichés en bloc si landing_premium activé
+      // Champs Pro+ premium
       if (window._premiumLanding) {
         $('field-email').style.display        = 'block';
         $('field-telephone').style.display    = 'block';
@@ -617,14 +739,13 @@
     // ── Écran succès ─────────────────────────────────────────
     function showSuccess(prenom, data) {
       $('form-area').classList.add('hidden');
+      $('card-mockup').style.display = 'none';
 
       // iOS natif (Safari / Chrome iOS, hors in-app) → redirection directe vers .pkpass
-      // iOS intercepte la navigation, ouvre la feuille Wallet sans quitter la page.
       if (isIOS && !isInApp && data.apple_pass_url) {
         $('redirect-sub').textContent = 'Your loyalty card is being added to Apple Wallet.';
         $('btn-fallback').href = data.apple_pass_url;
         $('redirect-screen').classList.add('show');
-        // Fallback visible après 2,5 s au cas où la feuille ne s'ouvre pas
         setTimeout(() => { $('btn-fallback').style.display = 'block'; }, 2500);
         window.location.href = data.apple_pass_url;
         return;
@@ -641,7 +762,7 @@
         return;
       }
 
-      // Tous les autres cas (desktop, iOS in-app, Android sans Google Wallet) → écran boutons
+      // Desktop, in-app browser, ou cas sans URL → écran boutons manuel
       showButtonScreen(prenom, data);
     }
 
@@ -649,7 +770,7 @@
       $('success-title').textContent = 'Your card is ready!';
       $('success-sub').textContent   = `Hi ${prenom}, add your loyalty card to your wallet to always have it with you.`;
 
-      // Bandeau d'avertissement in-app (Instagram / Facebook / Messenger)
+      // Bandeau in-app (Instagram / Facebook / Messenger sur iOS)
       if (isIOS && isInApp && data.apple_pass_url) {
         const banner = document.createElement('div');
         banner.className = 'inapp-banner';
@@ -706,7 +827,6 @@
     }
 
     // ── Formatage texte (markdown minimal) ──────────────────
-    // Supporte **gras** et sauts de ligne. Échappe le HTML pour éviter l'injection.
     function renderText(raw) {
       const safe = raw
         .replace(/&/g, '&amp;')
