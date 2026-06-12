@@ -1206,8 +1206,8 @@ async function deleteStripTier(tier) {
 // ════════════════════════════════════
 // DESIGN DU PASS
 // ════════════════════════════════════
-const ICON_NAMES = ['coffee','scissors','pizza','bag','heart','star','gift','nails','music','dumbbell'];
-const ICON_LABELS = { coffee:'Café', scissors:'Coiffure', pizza:'Pizza', bag:'Shopping', heart:'Bien-être', star:'Étoile', gift:'Cadeau', nails:'Beauté', music:'Musique', dumbbell:'Sport' };
+const ICON_NAMES = ['coffee','scissors','hamburger','shopping-bag','heart','star','gift','hair-dryer','barbell','fork-knife','flower','check','flower-tulip'];
+const ICON_LABELS = { coffee:'Café', scissors:'Coiffure', hamburger:'Burger', 'shopping-bag':'Boutique', heart:'Bien-être', star:'Beauté', gift:'Cadeau', 'hair-dryer':'Coiffure', barbell:'Sport', 'fork-knife':'Restaurant', flower:'Fleur', check:'Générique', 'flower-tulip':'Tulipe' };
 
 function renderIconPicker(selected) {
   const container = document.getElementById('icon-picker');
@@ -1223,7 +1223,7 @@ function renderIconPicker(selected) {
 }
 
 function iconEmoji(name) {
-  const map = { coffee:'☕', scissors:'✂️', pizza:'🍕', bag:'🛍️', heart:'❤️', star:'⭐', gift:'🎁', nails:'💅', music:'🎵', dumbbell:'🏋️' };
+  const map = { coffee:'☕', scissors:'✂️', hamburger:'🍔', 'shopping-bag':'🛍️', heart:'❤️', star:'⭐', gift:'🎁', 'hair-dryer':'💇', barbell:'🏋️', 'fork-knife':'🍽️', flower:'🌸', check:'✓', 'flower-tulip':'🌷' };
   return map[name] || '●';
 }
 
