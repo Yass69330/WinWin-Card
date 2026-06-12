@@ -318,25 +318,17 @@
       font-size: 14px;
     }
 
-    /* ── Écran de redirection auto (iOS / Android) ── */
+    /* ── Écran de redirection auto (iOS / Android) — texte seul, sobre ── */
     .redirect-screen {
       display: none;
       flex-direction: column;
       align-items: center;
       text-align: center;
       gap: 14px;
+      padding: 24px 0;
     }
     .redirect-screen.show { display: flex; }
-    .redirect-spinner {
-      width: 48px; height: 48px;
-      border: 3px solid rgba(255,255,255,.15);
-      border-top-color: rgba(255,255,255,.85);
-      border-radius: 50%;
-      animation: spin .8s linear infinite;
-      flex-shrink: 0;
-    }
     .redirect-title { font-size: 20px; font-weight: 700; }
-    .redirect-sub { font-size: 15px; color: rgba(255,255,255,.6); line-height: 1.5; }
     .btn-fallback {
       display: none;
       margin-top: 6px;
@@ -351,20 +343,7 @@
       width: 100%;
       text-align: center;
     }
-
-    /* ── Bandeau in-app browser ── */
-    .inapp-banner {
-      background: rgba(245,158,11,.12);
-      border: 1px solid rgba(245,158,11,.35);
-      border-radius: 14px;
-      padding: 14px 16px;
-      margin-bottom: 16px;
-      font-size: 14px;
-      color: #fde68a;
-      text-align: center;
-      line-height: 1.6;
-    }
-    .inapp-banner strong { color: #fef3c7; }
+    .btn-fallback.show { display: block; }
 
     /* ── Squelette chargement ── */
     .skeleton { display: flex; flex-direction: column; gap: 12px; }
@@ -539,6 +518,9 @@
 
         </div>
 
+        <!-- Fallback post-redirection — même URL de pass, jamais de re-POST -->
+        <a class="btn-fallback" id="btn-fallback-success" href="#">Your card didn't open? Tap here →</a>
+
         <!-- Referral share — shown only when referral_enabled -->
         <div id="referral-share" style="display:none;margin-top:24px;width:100%;padding:16px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:16px;text-align:center">
           <div style="font-weight:700;margin-bottom:6px">🎁 Refer a Friend</div>
@@ -549,12 +531,9 @@
 
       </div>
 
-      <!-- Écran de redirection automatique (iOS / Android) -->
+      <!-- Écran de redirection automatique (iOS / Android) — bascule vers succès après ~2 s -->
       <div class="redirect-screen" id="redirect-screen">
-        <div class="redirect-spinner"></div>
-        <div class="redirect-title">Opening your wallet…</div>
-        <div class="redirect-sub" id="redirect-sub">Your loyalty card is being added.</div>
-        <a class="btn-fallback" id="btn-fallback" href="#">Your card didn't open? Tap here →</a>
+        <div class="redirect-title">Creating your card…</div>
       </div>
 
     </div><!-- /content-card -->
@@ -742,23 +721,16 @@
       $('card-mockup').style.display = 'none';
 
       // iOS natif (Safari / Chrome iOS, hors in-app) → redirection directe vers .pkpass
+      // La feuille Wallet s'ouvre par-dessus la page ; ~2 s plus tard on bascule
+      // vers l'écran succès complet (fallback + referral) pour le retour du client.
       if (isIOS && !isInApp && data.apple_pass_url) {
-        $('redirect-sub').textContent = 'Your loyalty card is being added to Apple Wallet.';
-        $('btn-fallback').href = data.apple_pass_url;
-        $('redirect-screen').classList.add('show');
-        setTimeout(() => { $('btn-fallback').style.display = 'block'; }, 2500);
-        window.location.href = data.apple_pass_url;
+        autoRedirect(prenom, data, data.apple_pass_url);
         return;
       }
 
       // Android → redirection vers Google Wallet (si disponible)
       if (isAndroid && data.google_wallet_url) {
-        $('redirect-sub').textContent = 'Your loyalty card is being added to Google Wallet.';
-        $('btn-fallback').href = data.google_wallet_url;
-        $('btn-fallback').textContent = "Your card didn't open? Add it here →";
-        $('redirect-screen').classList.add('show');
-        setTimeout(() => { $('btn-fallback').style.display = 'block'; }, 2500);
-        window.location.href = data.google_wallet_url;
+        autoRedirect(prenom, data, data.google_wallet_url);
         return;
       }
 
@@ -766,17 +738,38 @@
       showButtonScreen(prenom, data);
     }
 
+    // Redirection auto + bascule différée vers l'écran succès.
+    // Le fallback réutilise la même URL de pass (même serial) — jamais de re-POST.
+    function autoRedirect(prenom, data, url) {
+      $('redirect-screen').classList.add('show');
+      window.location.href = url;
+      setTimeout(() => {
+        $('redirect-screen').classList.remove('show');
+        showPostRedirectScreen(prenom, data, url);
+      }, 2000);
+    }
+
+    // Écran succès post-redirection : message + fallback + referral (sans boutons Wallet)
+    function showPostRedirectScreen(prenom, data, url) {
+      $('success-title').textContent = 'Your card is ready!';
+      $('success-sub').textContent   = `Hi ${prenom}, your loyalty card has been added to your wallet.`;
+
+      $('wallet-buttons').style.display = 'none';
+      const fb = $('btn-fallback-success');
+      fb.href = url;
+      fb.classList.add('show');
+
+      showReferral(data);
+      $('success-screen').classList.add('show');
+    }
+
     function showButtonScreen(prenom, data) {
       $('success-title').textContent = 'Your card is ready!';
-      $('success-sub').textContent   = `Hi ${prenom}, add your loyalty card to your wallet to always have it with you.`;
-
-      // Bandeau in-app (Instagram / Facebook / Messenger sur iOS)
-      if (isIOS && isInApp && data.apple_pass_url) {
-        const banner = document.createElement('div');
-        banner.className = 'inapp-banner';
-        banner.innerHTML = '<strong>Open this page in Safari</strong><br>Tap ··· or the share icon, then "Open in Safari" to add your card to Apple Wallet.';
-        $('wallet-buttons').before(banner);
-      }
+      // In-app (Instagram / FB / Messenger) : les webviews ouvrent bien le .pkpass —
+      // texte court et neutre, pas d'avertissement.
+      $('success-sub').textContent = (isIOS && isInApp && data.apple_pass_url)
+        ? 'Tap Add to Wallet to receive your card.'
+        : `Hi ${prenom}, add your loyalty card to your wallet to always have it with you.`;
 
       const btnApple  = $('btn-apple');
       const btnGoogle = $('btn-google');
@@ -802,16 +795,18 @@
         btnGoogle.style.display = 'none';
       }
 
-      // Lien de parrainage
-      if (window._referralEnabled && data.serial_number) {
-        const referralUrl = `${location.origin}/l/${window._marchandSlug}?ref=${data.serial_number}`;
-        $('referral-link-text').textContent = referralUrl;
-        $('referral-bonus-pts').textContent = window._referralBonus;
-        $('referral-share').style.display   = 'block';
-        window._referralUrl = referralUrl;
-      }
-
+      showReferral(data);
       $('success-screen').classList.add('show');
+    }
+
+    // Lien de parrainage — uniquement si activé pour ce marchand
+    function showReferral(data) {
+      if (!window._referralEnabled || !data.serial_number) return;
+      const referralUrl = `${location.origin}/l/${window._marchandSlug}?ref=${data.serial_number}`;
+      $('referral-link-text').textContent = referralUrl;
+      $('referral-bonus-pts').textContent = window._referralBonus;
+      $('referral-share').style.display   = 'block';
+      window._referralUrl = referralUrl;
     }
 
     function shareReferral() {
