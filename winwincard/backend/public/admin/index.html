@@ -417,6 +417,10 @@
             <input type="text"  id="f-reward-color" placeholder="laisser vide = or par défaut" maxlength="7">
           </div>
         </div>
+        <div class="field">
+          <label for="f-logo-reward">Logo doré URL (optionnel — remplace le logo quand reward atteint)</label>
+          <input id="f-logo-reward" type="url" placeholder="https://… (fallback : Logo URL)">
+        </div>
       </div>
 
       <!-- Section : Images -->
@@ -839,7 +843,7 @@ document.getElementById('sheet-backdrop').addEventListener('click', e => {
 // FORM : REMPLIR / VIDER
 // ════════════════════════════════════
 function resetForm() {
-  ['f-nom','f-pass-name','f-slug','f-email','f-telephone','f-adresse','f-pwd','f-new-pwd','f-logo','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-how-it-works','f-tiers','f-wf-inactive-message'].forEach(id => {
+  ['f-nom','f-pass-name','f-slug','f-email','f-telephone','f-adresse','f-pwd','f-new-pwd','f-logo','f-logo-reward','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-how-it-works','f-tiers','f-wf-inactive-message'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   document.getElementById('f-strip-mode').value  = 'stamps';
@@ -885,8 +889,9 @@ function fillForm(m) {
   v('f-telephone', m.telephone);
   v('f-adresse',   m.adresse);
   v('f-texte',  m.texte_landing);
-  v('f-logo',   m.logo_url);
-  v('f-icon',   m.icon_url);
+  v('f-logo',        m.logo_url);
+  v('f-logo-reward', m.logo_reward_url);
+  v('f-icon',        m.icon_url);
   v('f-strip',  m.image_strip_url);
   v('f-glogo',  m.google_logo_url);
   v('f-ghero',  m.google_hero_url);
@@ -1052,8 +1057,9 @@ function collectForm() {
     texte_landing:    document.getElementById('f-texte').value.trim()          || undefined,
     pass_display_name: document.getElementById('f-pass-name').value.trim()    || undefined,
     how_it_works:     document.getElementById('f-how-it-works').value.trim()  || null,
-    logo_url:         document.getElementById('f-logo').value.trim()      || undefined,
-    icon_url:         document.getElementById('f-icon').value.trim()      || undefined,
+    logo_url:         document.getElementById('f-logo').value.trim()        || undefined,
+    logo_reward_url:  document.getElementById('f-logo-reward').value.trim() || null,
+    icon_url:         document.getElementById('f-icon').value.trim()        || undefined,
     image_strip_url:  document.getElementById('f-strip').value.trim()     || undefined,
     google_logo_url:  document.getElementById('f-glogo').value.trim()     || undefined,
     google_hero_url:  document.getElementById('f-ghero').value.trim()     || undefined,

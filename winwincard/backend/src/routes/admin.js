@@ -113,7 +113,7 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
   const ALLOWED = [
     'nom', 'email_contact',
     'couleur_fond', 'couleur_texte', 'couleur_label',
-    'logo_url', 'icon_url', 'image_strip_url', 'images_tiers',
+    'logo_url', 'logo_reward_url', 'icon_url', 'image_strip_url', 'images_tiers',
     'google_logo_url', 'google_hero_url',
     'texte_landing', 'pass_display_name', 'max_value', 'display_max_value', 'forfait',
     'workflow_inactive_enabled', 'workflow_inactive_days',

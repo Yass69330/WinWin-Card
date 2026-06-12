@@ -401,12 +401,13 @@ async function generateApplePass({ client, marchand, serialNumber, passNotificat
   const icon3Png = createSolidPng(87,  87,  ri, gi, bi);
   const stripPng = createSolidPng(375, 123, rf, gf, bf);
 
-  const iconUrl = marchand.icon_url || marchand.logo_url || null;
+  const iconUrl      = marchand.icon_url || marchand.logo_url || null;
+  const activeLogoUrl = (doré && marchand.logo_reward_url) ? marchand.logo_reward_url : marchand.logo_url;
   // icon@3x.png (87×87px) is what Apple uses on all modern iPhones (@3x screens).
   const [icon3Buf, logoBuf, logo2Buf] = await Promise.all([
-    iconUrl           ? fetchImage(iconUrl).catch(() => icon3Png)           : icon3Png,
-    marchand.logo_url ? fetchImage(marchand.logo_url).catch(() => iconPng)  : iconPng,
-    marchand.logo_url ? fetchImage(marchand.logo_url).catch(() => icon2Png) : icon2Png,
+    iconUrl        ? fetchImage(iconUrl).catch(() => icon3Png)        : icon3Png,
+    activeLogoUrl  ? fetchImage(activeLogoUrl).catch(() => iconPng)   : iconPng,
+    activeLogoUrl  ? fetchImage(activeLogoUrl).catch(() => icon2Png)  : icon2Png,
   ]);
 
   // Précédence strip : images_tiers → image_strip_url (override universel) → strip généré → solid

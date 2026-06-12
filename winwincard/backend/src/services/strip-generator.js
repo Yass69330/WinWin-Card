@@ -123,7 +123,7 @@ function computeLayout(n, { showLabel = true } = {}) {
 
   // Rangée unique : centrage vertical ajusté pour laisser la place au label
   if (n <= 8) {
-    const stampAreaTop = showLabel ? 66 : 20;
+    const stampAreaTop = showLabel ? 74 : 20;
     const spacing = availW / n;
     const r = Math.max(16, Math.min(30, spacing / 2 - 5));
     const cy = (stampAreaTop + stampAreaBot) / 2;
@@ -136,8 +136,8 @@ function computeLayout(n, { showLabel = true } = {}) {
 
   // Deux rangées : row1 ≥ row2, row2 centrée sous row1.
   // Avec label : équi-répartition de l'espace — autant d'air entre la baseline du
-  //   label (y=46) et le haut de rangée 1, qu'entre les bords des deux rangées.
-  //   W = (stampAreaBot − 46 − 4r) / 2  →  cy1 = 46+r+W, cy2 = 46+3r+2W.
+  //   label (y=52) et le haut de rangée 1, qu'entre les bords des deux rangées.
+  //   W = (stampAreaBot − 52 − 4r) / 2  →  cy1 = 52+r+W, cy2 = 52+3r+2W.
   // Sans label : rangées centrées dans toute la zone disponible (positions inchangées).
   const row1 = Math.ceil(n / 2);
   const row2 = n - row1;
@@ -146,7 +146,7 @@ function computeLayout(n, { showLabel = true } = {}) {
 
   let cy1, cy2;
   if (showLabel) {
-    const labelBottom = 46;
+    const labelBottom = 52;
     const W = (stampAreaBot - labelBottom - 4 * r) / 2;
     cy1 = labelBottom + r + W;
     cy2 = labelBottom + 3 * r + 2 * W;
@@ -255,8 +255,8 @@ function labelSvg({ w, h, couleurFond }) {
   // Fond clair  (lum ≥ 0.18) → texte foncé dérivé du fond (toujours lisible)
   const fill    = lum < 0.18 ? 'white'                    : darken(couleurFond, 0.62);
   const opacity = lum < 0.18 ? '0.5'                      : '0.80';
-  return `<text x="${w / 2}" y="${(46 / 246) * h}" font-family="DM Sans, sans-serif" font-weight="700"
-    font-size="${(14 / 246) * h}" letter-spacing="${(3 / 246) * h}" fill="${fill}" opacity="${opacity}"
+  return `<text x="${w / 2}" y="${(52 / 246) * h}" font-family="DM Sans, sans-serif" font-weight="700"
+    font-size="${(18 / 246) * h}" letter-spacing="${(3 / 246) * h}" fill="${fill}" opacity="${opacity}"
     text-anchor="middle">LOYALTY CARD</text>`;
 }
 
@@ -272,8 +272,8 @@ function buildSvg({ marchand, filledCount, logoB64, customBgB64, w = 750, h = 24
   // Récompense atteinte : utiliser couleur_fond_reward comme base du dégradé
   // (label adaptatif + icône icones suivent automatiquement cette couleur)
   const isReward  = filledCount >= maxValue;
-  const bgColor   = (isReward && marchand.couleur_fond_reward)
-    ? marchand.couleur_fond_reward
+  const bgColor   = isReward
+    ? (marchand.couleur_fond_reward || '#c9a84c')
     : (marchand.couleur_fond || '#1a1a2e');
   const iColor    = bgColor; // icône dans les tampons remplis = couleur du fond (adaptatif)
   const premium   = theme === 'premium';
