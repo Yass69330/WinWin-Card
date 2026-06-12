@@ -246,6 +246,53 @@
     /* ── États globaux ── */
     .form-area.hidden { display: none; }
 
+    /* ── Écran de redirection auto (iOS/Android) ── */
+    .redirect-screen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding-top: 40px;
+      gap: 16px;
+    }
+    .redirect-screen.show { display: flex; }
+    .redirect-spinner {
+      width: 48px; height: 48px;
+      border: 3px solid rgba(0,0,0,.1);
+      border-top-color: var(--brand);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+      flex-shrink: 0;
+    }
+    .redirect-title { font-size: 20px; font-weight: 700; margin-top: 4px; }
+    .redirect-sub { font-size: 15px; color: #555; line-height: 1.5; }
+    .btn-fallback {
+      display: none;
+      margin-top: 8px;
+      padding: 15px 20px;
+      background: var(--brand);
+      color: var(--brand-text);
+      border-radius: 14px;
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration: none;
+      width: 100%;
+      text-align: center;
+    }
+
+    /* ── Bandeau in-app browser ── */
+    .inapp-banner {
+      background: #fff7ed;
+      border: 1px solid #fed7aa;
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      color: #7c2d12;
+      text-align: center;
+      line-height: 1.6;
+    }
+
     /* ── Squelette chargement ── */
     .skeleton {
       display: flex;
@@ -407,12 +454,23 @@
 
     </div>
 
+    <!-- Écran de redirection automatique (iOS / Android) -->
+    <div class="redirect-screen" id="redirect-screen">
+      <div class="redirect-spinner"></div>
+      <div class="redirect-title">Opening your wallet…</div>
+      <div class="redirect-sub" id="redirect-sub">Your loyalty card is being added.</div>
+      <a class="btn-fallback" id="btn-fallback" href="#">Your card didn't open? Tap here →</a>
+    </div>
+
   </main>
 
   <script>
     // ── Détection plateforme ─────────────────────────────────
-    const isIOS     = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-    const isAndroid = /Android/.test(navigator.userAgent);
+    const ua        = navigator.userAgent;
+    const isIOS     = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+    const isAndroid = /Android/.test(ua);
+    // In-app browsers (Instagram, Facebook, Messenger) bloquent les .pkpass
+    const isInApp   = /Instagram|FBAN|FBAV|FB_IAB|Messenger/.test(ua);
 
     // ── État de l'application ────────────────────────────────
     const $ = id => document.getElementById(id);
@@ -560,17 +618,51 @@
     function showSuccess(prenom, data) {
       $('form-area').classList.add('hidden');
 
-      $('success-title').textContent = `Your card is ready!`;
+      // iOS natif (Safari / Chrome iOS, hors in-app) → redirection directe vers .pkpass
+      // iOS intercepte la navigation, ouvre la feuille Wallet sans quitter la page.
+      if (isIOS && !isInApp && data.apple_pass_url) {
+        $('redirect-sub').textContent = 'Your loyalty card is being added to Apple Wallet.';
+        $('btn-fallback').href = data.apple_pass_url;
+        $('redirect-screen').classList.add('show');
+        // Fallback visible après 2,5 s au cas où la feuille ne s'ouvre pas
+        setTimeout(() => { $('btn-fallback').style.display = 'block'; }, 2500);
+        window.location.href = data.apple_pass_url;
+        return;
+      }
+
+      // Android → redirection vers Google Wallet (si disponible)
+      if (isAndroid && data.google_wallet_url) {
+        $('redirect-sub').textContent = 'Your loyalty card is being added to Google Wallet.';
+        $('btn-fallback').href = data.google_wallet_url;
+        $('btn-fallback').textContent = "Your card didn't open? Add it here →";
+        $('redirect-screen').classList.add('show');
+        setTimeout(() => { $('btn-fallback').style.display = 'block'; }, 2500);
+        window.location.href = data.google_wallet_url;
+        return;
+      }
+
+      // Tous les autres cas (desktop, iOS in-app, Android sans Google Wallet) → écran boutons
+      showButtonScreen(prenom, data);
+    }
+
+    function showButtonScreen(prenom, data) {
+      $('success-title').textContent = 'Your card is ready!';
       $('success-sub').textContent   = `Hi ${prenom}, add your loyalty card to your wallet to always have it with you.`;
 
-      // Bouton Apple Wallet
+      // Bandeau d'avertissement in-app (Instagram / Facebook / Messenger)
+      if (isIOS && isInApp && data.apple_pass_url) {
+        const banner = document.createElement('div');
+        banner.className = 'inapp-banner';
+        banner.innerHTML = '<strong>Open this page in Safari</strong><br>Tap ··· or the share icon, then "Open in Safari" to add your card to Apple Wallet.';
+        $('wallet-buttons').before(banner);
+      }
+
       const btnApple  = $('btn-apple');
       const btnGoogle = $('btn-google');
 
       if (data.apple_pass_url) {
         btnApple.href = data.apple_pass_url;
         if (!isIOS) {
-          // Sur Android / desktop : informer que c'est pour iPhone
           btnApple.classList.add('unavailable');
           btnApple.querySelector('span').textContent = 'Apple Wallet (iPhone only)';
           btnApple.removeAttribute('href');
@@ -583,14 +675,13 @@
       if (data.google_wallet_url) {
         btnGoogle.href = data.google_wallet_url;
         if (isIOS) {
-          // Sur iOS, Google Wallet est moins courant — le mettre en second
           $('wallet-buttons').appendChild(btnGoogle);
         }
       } else {
         btnGoogle.style.display = 'none';
       }
 
-      // Lien de parrainage — uniquement si activé pour ce marchand
+      // Lien de parrainage
       if (window._referralEnabled && data.serial_number) {
         const referralUrl = `${location.origin}/l/${window._marchandSlug}?ref=${data.serial_number}`;
         $('referral-link-text').textContent = referralUrl;
