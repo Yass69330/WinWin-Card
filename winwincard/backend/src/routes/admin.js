@@ -107,7 +107,7 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
   // Champs visuels qui déclenchent un bump de strip_config_version
   const VISUAL_FIELDS = new Set([
     'couleur_fond', 'couleur_fond_reward', 'logo_url', 'nom', 'pass_display_name',
-    'strip_mode', 'strip_theme', 'stamp_icon', 'strip_custom_background_url', 'max_value',
+    'strip_mode', 'strip_theme', 'stamp_icon', 'strip_custom_background_url', 'max_value', 'strip_label',
   ]);
 
   const ALLOWED = [
