@@ -122,9 +122,13 @@ router.get('/v1/passes/:passTypeId/:serialNumber', asyncHandler(async (req, res)
   }
   if (!pass) return res.status(404).send();
 
-  // Si pas de changement depuis la dernière synchro
-  if (ifModifiedSince && new Date(pass.updated_at) <= new Date(ifModifiedSince)) {
-    return res.status(304).send();
+  // Comparaison tronquée à la seconde : toUTCString() (HTTP date) n'a pas de ms,
+  // mais updated_at Supabase en retient — sans troncature updated_at > ifModifiedSince
+  // est toujours vrai et le 304 ne tire jamais.
+  if (ifModifiedSince) {
+    const updatedSec    = Math.floor(new Date(pass.updated_at).getTime()    / 1000);
+    const ifModifiedSec = Math.floor(new Date(ifModifiedSince).getTime()    / 1000);
+    if (updatedSec <= ifModifiedSec) return res.status(304).send();
   }
 
   // Récupérer les données à jour pour régénérer le pass
