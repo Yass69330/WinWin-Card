@@ -312,6 +312,11 @@
               <option value="pro_plus">Pro+</option>
             </select>
           </div>
+          <div class="field">
+            <label for="f-quota-override">Quota notifs/mois (admin override)</label>
+            <input id="f-quota-override" type="number" min="0" max="9999" placeholder="défaut forfait">
+            <div class="field-hint">Si vide → quota par défaut du forfait.</div>
+          </div>
         </div>
         <div class="field">
           <label for="f-texte">Texte landing page</label>
@@ -465,9 +470,8 @@
           <div class="field" style="margin-bottom:12px">
             <label for="f-strip-theme">Thème des tampons</label>
             <select id="f-strip-theme">
-              <option value="icon_metier">Icône métier</option>
+              <option value="icon_metier">Icône métier (cadeau sur le dernier tampon)</option>
               <option value="logo_stamp">Logo du marchand</option>
-              <option value="premium">Premium (cadeau sur le dernier tampon)</option>
             </select>
           </div>
           <div class="field" id="section-stamp-icon" style="margin-bottom:12px">
@@ -843,7 +847,7 @@ document.getElementById('sheet-backdrop').addEventListener('click', e => {
 // FORM : REMPLIR / VIDER
 // ════════════════════════════════════
 function resetForm() {
-  ['f-nom','f-pass-name','f-slug','f-email','f-telephone','f-adresse','f-pwd','f-new-pwd','f-logo','f-logo-reward','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-how-it-works','f-tiers','f-wf-inactive-message'].forEach(id => {
+  ['f-nom','f-pass-name','f-slug','f-email','f-telephone','f-adresse','f-pwd','f-new-pwd','f-quota-override','f-logo','f-logo-reward','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-how-it-works','f-tiers','f-wf-inactive-message'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   document.getElementById('f-strip-mode').value  = 'stamps';
@@ -898,6 +902,7 @@ function fillForm(m) {
   v('f-maxval', m.max_value);
   v('f-displaymax', m.display_max_value);
   if (['basic','pro','pro_plus'].includes(m.forfait)) document.getElementById('f-forfait').value = m.forfait;
+  v('f-quota-override', m.notification_quota_override);
   if (m.couleur_fond)         setColor('cp-fond',   'f-fond',         m.couleur_fond);
   if (m.couleur_texte)        setColor('cp-texte',  'f-texte-c',      m.couleur_texte);
   if (m.couleur_label)        setColor('cp-label',  'f-label',        m.couleur_label);
@@ -1054,6 +1059,7 @@ function collectForm() {
     max_value:       parseInt(document.getElementById('f-maxval').value) || 10,
     display_max_value: parseInt(document.getElementById('f-displaymax').value) || undefined,
     forfait:         document.getElementById('f-forfait').value,
+    notification_quota_override: parseInt(document.getElementById('f-quota-override').value) || null,
     texte_landing:    document.getElementById('f-texte').value.trim()          || undefined,
     pass_display_name: document.getElementById('f-pass-name').value.trim()    || undefined,
     how_it_works:     document.getElementById('f-how-it-works').value.trim()  || null,

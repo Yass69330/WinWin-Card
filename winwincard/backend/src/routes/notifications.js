@@ -22,7 +22,7 @@ router.get('/', authMarchand, asyncHandler(async (req, res) => {
       .eq('marchand_id', req.marchandId)
       .order('created_at', { ascending: false })
       .limit(50),
-    supabase.from('marchands').select('forfait').eq('id', req.marchandId).single(),
+    supabase.from('marchands').select('forfait, notification_quota_override').eq('id', req.marchandId).single(),
     supabase.from('notification_logs')
       .select('*', { count: 'exact', head: true })
       .eq('marchand_id', req.marchandId)
@@ -32,7 +32,7 @@ router.get('/', authMarchand, asyncHandler(async (req, res) => {
   if (logsResult.error) return res.status(500).json({ error: logsResult.error.message });
 
   const forfait = meResult.data?.forfait || 'pro';
-  const limit   = NOTIF_LIMITS[forfait] ?? 10;
+  const limit   = meResult.data?.notification_quota_override ?? NOTIF_LIMITS[forfait] ?? 10;
   res.json({
     logs:  logsResult.data || [],
     quota: { used: countResult.count || 0, limit, forfait },
@@ -52,10 +52,10 @@ router.post('/', authMarchand, asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'message max 500 chars' });
   }
 
-  // Vérification quota selon forfait
-  const { data: me } = await supabase.from('marchands').select('forfait').eq('id', req.marchandId).single();
+  // Vérification quota selon forfait (ou override admin si défini)
+  const { data: me } = await supabase.from('marchands').select('forfait, notification_quota_override').eq('id', req.marchandId).single();
   const forfait = me?.forfait || 'pro';
-  const limit   = NOTIF_LIMITS[forfait] ?? 10;
+  const limit   = me?.notification_quota_override ?? NOTIF_LIMITS[forfait] ?? 10;
 
   if (limit === 0) {
     return res.status(403).json({ error: 'Push notifications are not available on the Basic plan.', upgrade: true });

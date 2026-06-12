@@ -123,9 +123,9 @@ function computeLayout(n, { showLabel = true } = {}) {
 
   // Rangée unique : centrage vertical ajusté pour laisser la place au label
   if (n <= 8) {
-    const stampAreaTop = showLabel ? 74 : 20;
+    const stampAreaTop = showLabel ? 82 : 20;
     const spacing = availW / n;
-    const r = Math.max(16, Math.min(30, spacing / 2 - 5));
+    const r = Math.max(14, Math.min(26, spacing / 2 - 5));
     const cy = (stampAreaTop + stampAreaBot) / 2;
     return Array.from({ length: n }, (_, i) => ({
       x: marginX + spacing / 2 + i * spacing,
@@ -136,17 +136,17 @@ function computeLayout(n, { showLabel = true } = {}) {
 
   // Deux rangées : row1 ≥ row2, row2 centrée sous row1.
   // Avec label : équi-répartition de l'espace — autant d'air entre la baseline du
-  //   label (y=52) et le haut de rangée 1, qu'entre les bords des deux rangées.
-  //   W = (stampAreaBot − 52 − 4r) / 2  →  cy1 = 52+r+W, cy2 = 52+3r+2W.
+  //   label (y=64) et le haut de rangée 1, qu'entre les bords des deux rangées.
+  //   W = (stampAreaBot − 64 − 4r) / 2  →  cy1 = 64+r+W, cy2 = 64+3r+2W.
   // Sans label : rangées centrées dans toute la zone disponible (positions inchangées).
   const row1 = Math.ceil(n / 2);
   const row2 = n - row1;
   const spacing = availW / row1;
-  const r = Math.max(13, Math.min(28, spacing / 2 - 4));
+  const r = Math.max(11, Math.min(24, spacing / 2 - 4));
 
   let cy1, cy2;
   if (showLabel) {
-    const labelBottom = 52;
+    const labelBottom = 64;
     const W = (stampAreaBot - labelBottom - 4 * r) / 2;
     cy1 = labelBottom + r + W;
     cy2 = labelBottom + 3 * r + 2 * W;
@@ -170,13 +170,18 @@ function iconColor(marchand) {
   return marchand.couleur_fond || '#1a1a2e';
 }
 
-// ── Génère le SVG d'un tampon (icon_metier / premium) ─────────────────────
+// ── Génère le SVG d'un tampon (icon_metier) ───────────────────────────────
 // Phosphor viewBox 0 0 256 256, centre à (128,128).
 // Transform : translate(cx,cy) scale(r*0.68/128) translate(-128,-128)
 //   → icône ≈ 68% du rayon, centrée sur (cx,cy).
-function stampSvg({ x, y, r, filled, iconName, color, isLast, premium }) {
+// Règles visuelles :
+//   - Tampon vide         → cercle seul (aucune icône)
+//   - Tampon vide + isLast → cercle + icône cadeau fantôme (toujours visible)
+//   - Tampon rempli        → cercle blanc + icône pleine
+//   - Tampon rempli + isLast → cercle blanc + icône cadeau pleine
+function stampSvg({ x, y, r, filled, iconName, color, isLast }) {
   const scale    = +((r * 0.68) / 128).toFixed(4);
-  const iconKey  = (premium && isLast) ? 'gift' : (iconName in ICONS ? iconName : 'star');
+  const iconKey  = isLast ? 'gift' : (iconName in ICONS ? iconName : 'star');
   const iconPath = ICONS[iconKey];
   const tr = `translate(${x},${y}) scale(${scale}) translate(-128,-128)`;
 
@@ -185,10 +190,14 @@ function stampSvg({ x, y, r, filled, iconName, color, isLast, premium }) {
       <circle cx="${x}" cy="${y}" r="${r}" fill="white"/>
       <g transform="${tr}" fill="${color}">${iconPath}</g>`;
   }
-  // Tampon vide : contour clair + icône fantôme
+  // Tampon vide : cercle seul, sauf le dernier qui garde l'icône cadeau en fantôme
+  if (isLast) {
+    return `
+      <circle cx="${x}" cy="${y}" r="${r}" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.58)" stroke-width="2.5"/>
+      <g transform="${tr}" fill="rgba(255,255,255,0.30)">${iconPath}</g>`;
+  }
   return `
-    <circle cx="${x}" cy="${y}" r="${r}" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.58)" stroke-width="2.5"/>
-    <g transform="${tr}" fill="rgba(255,255,255,0.30)">${iconPath}</g>`;
+    <circle cx="${x}" cy="${y}" r="${r}" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.58)" stroke-width="2.5"/>`;
 }
 
 // ── Génère le SVG d'un tampon logo_stamp ──────────────────────────────────
@@ -255,8 +264,8 @@ function labelSvg({ w, h, couleurFond }) {
   // Fond clair  (lum ≥ 0.18) → texte foncé dérivé du fond (toujours lisible)
   const fill    = lum < 0.18 ? 'white'                    : darken(couleurFond, 0.62);
   const opacity = lum < 0.18 ? '0.5'                      : '0.80';
-  return `<text x="${w / 2}" y="${(52 / 246) * h}" font-family="DM Sans, sans-serif" font-weight="700"
-    font-size="${(18 / 246) * h}" letter-spacing="${(3 / 246) * h}" fill="${fill}" opacity="${opacity}"
+  return `<text x="${w / 2}" y="${(60 / 246) * h}" font-family="DM Sans, sans-serif" font-weight="700"
+    font-size="${(22 / 246) * h}" letter-spacing="${(3.5 / 246) * h}" fill="${fill}" opacity="${opacity}"
     text-anchor="middle">LOYALTY CARD</text>`;
 }
 
@@ -276,7 +285,6 @@ function buildSvg({ marchand, filledCount, logoB64, customBgB64, w = 750, h = 24
     ? (marchand.couleur_fond_reward || '#c9a84c')
     : (marchand.couleur_fond || '#1a1a2e');
   const iColor    = bgColor; // icône dans les tampons remplis = couleur du fond (adaptatif)
-  const premium   = theme === 'premium';
   const showLabel = marchand.strip_label !== 'off';
 
   // Mise à l'échelle des positions si h != 246 (même SVG, juste viewBox changé)
@@ -296,7 +304,7 @@ function buildSvg({ marchand, filledCount, logoB64, customBgB64, w = 750, h = 24
       if (theme === 'logo_stamp') {
         return logoStampSvg({ x: sx, y: sy, r: sr, filled, logoB64, iconName, color: iColor, idx: i });
       }
-      return stampSvg({ x: sx, y: sy, r: sr, filled, iconName, color: iColor, isLast: i === maxValue - 1, premium });
+      return stampSvg({ x: sx, y: sy, r: sr, filled, iconName, color: iColor, isLast: i === maxValue - 1 });
     }).join('');
   }
 
