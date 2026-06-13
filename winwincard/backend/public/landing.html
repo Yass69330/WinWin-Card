@@ -318,6 +318,28 @@
       font-size: 14px;
     }
 
+    /* ── Écran "Welcome back" (localStorage) ── */
+    .welcome-back {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+    .welcome-back.show { display: flex; }
+    .wb-title { font-size: 22px; font-weight: 800; margin: 18px 0 8px; }
+    .wb-sub   { font-size: 15px; color: rgba(255,255,255,.65); line-height: 1.5; margin-bottom: 28px; }
+    .btn-reset-card {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,.38);
+      font-size: 13px;
+      cursor: pointer;
+      margin-top: 22px;
+      text-decoration: underline;
+      font-family: inherit;
+      padding: 4px;
+    }
+
     /* ── Écran de redirection auto (iOS / Android) — texte seul, sobre ── */
     .redirect-screen {
       display: none;
@@ -427,6 +449,28 @@
         <div class="not-found-icon">🔒</div>
         <h2 id="not-found-title">Program not found</h2>
         <p id="not-found-msg">This loyalty program is not available.</p>
+      </div>
+
+      <!-- Écran "Welcome back" — affiché si localStorage contient un pass pour ce marchand -->
+      <div class="welcome-back" id="welcome-back">
+        <div class="success-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/>
+          </svg>
+        </div>
+        <div class="wb-title" id="wb-title">Welcome back!</div>
+        <div class="wb-sub"   id="wb-sub">You already have your loyalty card.</div>
+        <div class="wallet-buttons" id="wb-wallet-buttons">
+          <a class="btn-wallet btn-apple" id="wb-btn-apple" href="#" target="_self">
+            <svg width="22" height="22" viewBox="0 0 22 22" fill="white"><path d="M15.05 1C14.1 1.87 13.5 3.17 13.7 4.5c1.2.1 2.4-.6 3.2-1.5.8-.9 1.3-2.2 1.1-3.5-1.1.1-2.2.7-2.95 1.5zM16 6.3c-1.65-.1-3.05.93-3.83.93-.78 0-2-.88-3.3-.85C7.1 6.42 5.3 7.4 4.32 9.05c-1.98 3.35-.5 8.3 1.4 11.02.96 1.36 2.1 2.88 3.6 2.83 1.42-.06 1.98-.92 3.7-.92 1.74 0 2.24.92 3.76.89 1.56-.04 2.54-1.4 3.5-2.76a12.2 12.2 0 0 0 1.56-3.12c-3.1-1.18-3.6-5.55-.53-7.3A4.73 4.73 0 0 0 16 6.3z"/></svg>
+            <span>Add to Apple Wallet</span>
+          </a>
+          <a class="btn-wallet btn-google" id="wb-btn-google" href="#" target="_blank" rel="noopener">
+            <svg width="20" height="20" viewBox="0 0 20 20"><path d="M19.6 10.23c0-.68-.06-1.36-.18-2H10v3.77h5.38a4.6 4.6 0 0 1-2 3.02v2.5h3.23c1.9-1.74 2.99-4.3 2.99-7.3z" fill="#4285F4"/><path d="M10 20c2.7 0 4.96-.9 6.62-2.43l-3.23-2.5c-.9.6-2.04.95-3.39.95-2.6 0-4.81-1.76-5.6-4.12H1.06v2.58A10 10 0 0 0 10 20z" fill="#34A853"/><path d="M4.4 11.9A6 6 0 0 1 4.08 10c0-.66.12-1.3.32-1.9V5.52H1.06A10 10 0 0 0 0 10c0 1.62.39 3.15 1.06 4.48L4.4 11.9z" fill="#FBBC05"/><path d="M10 3.96c1.46 0 2.78.5 3.81 1.49l2.86-2.86C14.96.99 12.7 0 10 0A10 10 0 0 0 1.06 5.52L4.4 8.1C5.19 5.72 7.4 3.96 10 3.96z" fill="#EA4335"/></svg>
+            <span>Add to Google Wallet</span>
+          </a>
+        </div>
+        <button class="btn-reset-card" onclick="resetCard()">Not you? Create a new card →</button>
       </div>
 
       <!-- Formulaire d'inscription -->
@@ -541,6 +585,15 @@
   </div><!-- /page -->
 
   <script>
+    // ── localStorage — helpers silencieux ───────────────────
+    // Clé par marchand pour ne jamais mélanger les données entre commerces.
+    // Toutes les opérations sont dans try/catch : mode privé strict, Safari ITP,
+    // quota dépassé → fallback transparent vers le flow normal.
+    function lsKey(slug)  { return `ww_pass_${slug}`; }
+    function lsGet(slug)  { try { return JSON.parse(localStorage.getItem(lsKey(slug)) || 'null'); } catch { return null; } }
+    function lsSet(slug, v){ try { localStorage.setItem(lsKey(slug), JSON.stringify(v)); } catch {} }
+    function lsClear(slug) { try { localStorage.removeItem(lsKey(slug)); } catch {} }
+
     // ── Détection plateforme ─────────────────────────────────
     const ua        = navigator.userAgent;
     const isIOS     = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
@@ -595,7 +648,11 @@
 
         applyBranding(data);
         hideSkeleton();
-        showForm();
+
+        // Retour client : si un pass est déjà enregistré pour ce marchand, afficher
+        // directement l'écran "Welcome back" sans formulaire.
+        const saved = lsGet(data.slug);
+        if (saved) { showWelcomeBack(saved); } else { showForm(); }
       } catch {
         showNotFound('Connection error', 'Unable to load the page. Check your connection and try again.');
       }
@@ -708,6 +765,13 @@
           return;
         }
 
+        // Persister localement pour le prochain scan du QR code
+        lsSet(window._marchandSlug, {
+          serial:            data.serial_number,
+          apple_pass_url:    data.apple_pass_url,
+          google_wallet_url: data.google_wallet_url,
+          prenom,
+        });
         showSuccess(prenom, data);
       } catch {
         setSubmitting(false);
@@ -807,6 +871,45 @@
       $('referral-bonus-pts').textContent = window._referralBonus;
       $('referral-share').style.display   = 'block';
       window._referralUrl = referralUrl;
+    }
+
+    // ── Écran "Welcome back" (client connu via localStorage) ────
+    function showWelcomeBack(saved) {
+      $('card-mockup').style.display = 'none';
+      $('wb-title').textContent = `Welcome back, ${saved.prenom}!`;
+      $('wb-sub').textContent   = 'You already have your loyalty card.';
+
+      const btnApple  = $('wb-btn-apple');
+      const btnGoogle = $('wb-btn-google');
+
+      if (saved.apple_pass_url) {
+        btnApple.href = saved.apple_pass_url;
+        if (!isIOS) {
+          btnApple.classList.add('unavailable');
+          btnApple.querySelector('span').textContent = 'Apple Wallet (iPhone only)';
+          btnApple.removeAttribute('href');
+          btnApple.style.pointerEvents = 'none';
+        }
+      } else {
+        btnApple.style.display = 'none';
+      }
+
+      if (saved.google_wallet_url) {
+        btnGoogle.href = saved.google_wallet_url;
+        if (isIOS) $('wb-wallet-buttons').appendChild(btnGoogle);
+      } else {
+        btnGoogle.style.display = 'none';
+      }
+
+      $('welcome-back').classList.add('show');
+    }
+
+    // "Not you?" — efface l'entrée locale et affiche le formulaire
+    function resetCard() {
+      lsClear(window._marchandSlug);
+      $('welcome-back').classList.remove('show');
+      $('card-mockup').style.display = '';
+      showForm();
     }
 
     function shareReferral() {
