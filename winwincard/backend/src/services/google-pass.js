@@ -50,9 +50,18 @@ function googleLogoUrl(marchand) {
   return marchand.google_logo_url || marchand.logo_url || 'https://raw.githubusercontent.com/Yass69330/WinWin-Card/claude/winwin-card-landing-ohS22/logo.png';
 }
 
-function googleHeroUrl(marchand) {
-  // 1032×336 px (~3:1). Fallback : image_strip_url (sera redimensionné par Google)
-  return marchand.google_hero_url || marchand.image_strip_url || null;
+async function googleHeroUrl(marchand) {
+  // Précédence : google_hero_url (override manuel) → strip généré (versionné par
+  // strip_config_version, même mécanisme que l'Apple Wallet) → image_strip_url (legacy).
+  if (marchand.google_hero_url) return marchand.google_hero_url;
+
+  if (marchand.strip_mode) {
+    const { getPublicUrl } = require('./strip-cache');
+    const url = await getPublicUrl({ marchand, filledCount: 0, variant: 'hero' }).catch(() => null);
+    if (url) return url;
+  }
+
+  return marchand.image_strip_url || null;
 }
 
 // Sélectionne l'URL d'image de tier selon les points du client.
@@ -119,9 +128,9 @@ async function walletRequest(method, endpoint, body, token) {
 
 // ── Construction LoyaltyClass ────────────────────────────────
 
-function buildLoyaltyClass(cId, marchand) {
+async function buildLoyaltyClass(cId, marchand) {
   const logoUrl = googleLogoUrl(marchand);
-  const heroUrl = googleHeroUrl(marchand);
+  const heroUrl = await googleHeroUrl(marchand);
 
   const obj = {
     id: cId,
@@ -241,19 +250,7 @@ async function createOrUpdateLoyaltyClass(marchand) {
 
   const cId   = classId(marchand);
   const token = await getAccessToken();
-  const body  = buildLoyaltyClass(cId, marchand);
-
-  // Si le marchand a un strip généré, utiliser l'URL hero Storage dans la classe
-  if (marchand.strip_mode && !body.heroImage) {
-    const { getPublicUrl } = require('./strip-cache');
-    const heroUrl = await getPublicUrl({ marchand, filledCount: 0, variant: 'hero' }).catch(() => null);
-    if (heroUrl) {
-      body.heroImage = {
-        sourceUri: { uri: heroUrl },
-        contentDescription: { defaultValue: { language: 'en', value: marchand.nom } },
-      };
-    }
-  }
+  const body  = await buildLoyaltyClass(cId, marchand);
 
   const { status: getStatus, data: existing } = await walletRequest(
     'GET', `/loyaltyClass/${encodeURIComponent(cId)}`, null, token
@@ -307,7 +304,7 @@ async function generateGoogleWalletUrl({ client, marchand, serialNumber }) {
   // Google Wallet soit configuré, la classe peut être absente.
   const { status: classStatus } = await walletRequest('GET', `/loyaltyClass/${encodeURIComponent(cId)}`, null, token);
   if (classStatus === 404) {
-    await walletRequest('POST', '/loyaltyClass', buildLoyaltyClass(cId, marchand), token);
+    await walletRequest('POST', '/loyaltyClass', await buildLoyaltyClass(cId, marchand), token);
   }
 
   // Créer l'objet loyalty si inexistant
