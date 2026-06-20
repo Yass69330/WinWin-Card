@@ -100,7 +100,7 @@ async function notifierMiseAJourPass(serialNumber) {
 
   const { sendPushUpdate } = require('../services/apns');
   for (const { push_token } of tokens) {
-    await sendPushUpdate(push_token).catch(() => {});
+    await sendPushUpdate(push_token).catch(e => console.error(`[scan] sendPushUpdate échoué (…${push_token.slice(-8)}):`, e.message));
   }
 }
 

@@ -46,6 +46,7 @@ let _apnsJwtTs = 0;
 function getApnsJwt() {
   const now = Math.floor(Date.now() / 1000);
   if (_apnsJwt && now - _apnsJwtTs < 2700) return _apnsJwt; // 45 min
+  console.log(`[APNs] génération nouveau JWT (ancien âge: ${_apnsJwtTs ? now - _apnsJwtTs : 'n/a'}s)`);
   _apnsJwt = jwt.sign(
     { iss: process.env.APPLE_TEAM_ID },
     loadApnKey(),
@@ -63,14 +64,20 @@ const APNS_HOST = process.env.NODE_ENV === 'production'
   ? 'https://api.push.apple.com'
   : 'https://api.sandbox.push.apple.com';
 
-let _session = null;
+let _session       = null;
+let _sessionCreatedAt = 0;
 
 function getSession() {
-  if (_session && !_session.destroyed) return _session;
+  if (_session && !_session.destroyed) {
+    console.log(`[APNs] session HTTP/2 réutilisée (âge: ${Math.floor(Date.now() / 1000) - _sessionCreatedAt}s)`);
+    return _session;
+  }
+  console.log('[APNs] ouverture nouvelle session HTTP/2');
   _session = http2.connect(APNS_HOST);
-  _session.on('error',  () => { _session = null; });
-  _session.on('close',  () => { _session = null; });
-  _session.on('goaway', () => { _session = null; });
+  _sessionCreatedAt = Math.floor(Date.now() / 1000);
+  _session.on('error',  e => { console.error('[APNs] session error:', e.message); _session = null; });
+  _session.on('close',  () => { console.log('[APNs] session close'); _session = null; });
+  _session.on('goaway', (code) => { console.log('[APNs] session goaway, code=', code); _session = null; });
   return _session;
 }
 
@@ -78,8 +85,9 @@ function getSession() {
 
 function doRequest(pushToken, payload, isAlert) {
   return new Promise((resolve, reject) => {
-    const session = getSession();
-    const topic   = process.env.APPLE_PASS_TYPE_IDENTIFIER || 'pass.com.winwincard.loyalty';
+    const session  = getSession();
+    const topic    = process.env.APPLE_PASS_TYPE_IDENTIFIER || 'pass.com.winwincard.loyalty';
+    const jwtAgeS  = Math.floor(Date.now() / 1000) - _apnsJwtTs;
 
     let req;
     try {
@@ -93,6 +101,7 @@ function doRequest(pushToken, payload, isAlert) {
         'content-type':  'application/json',
       });
     } catch (e) {
+      console.error(`[APNs] session.request() a levé une exception (jwt_age=${jwtAgeS}s):`, e.message);
       return reject(e);
     }
 
@@ -102,15 +111,24 @@ function doRequest(pushToken, payload, isAlert) {
     req.on('response', h => { status = h[':status']; });
     req.on('data',  chunk => { body += chunk; });
     req.on('end', () => {
+      let reason = null;
+      try { reason = JSON.parse(body).reason || null; } catch {}
+
+      console.log(
+        `[APNs] réponse brute — token=…${pushToken.slice(-8)} status=${status} reason=${reason || '(aucune)'} ` +
+        `jwt_age=${jwtAgeS}s push_type=${isAlert ? 'alert' : 'background'}`
+      );
+
       if (status === 200) {
         resolve();
       } else {
-        let reason = body;
-        try { reason = JSON.parse(body).reason || body; } catch {}
-        reject(new Error(`APNs ${status}: ${reason}`));
+        reject(new Error(`APNs ${status}: ${reason || body}`));
       }
     });
-    req.on('error', reject);
+    req.on('error', e => {
+      console.error(`[APNs] erreur stream HTTP/2 (jwt_age=${jwtAgeS}s):`, e.message, e.code || '');
+      reject(e);
+    });
 
     req.write(JSON.stringify(payload));
     req.end();
