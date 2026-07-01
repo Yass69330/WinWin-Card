@@ -129,11 +129,11 @@
       aspect-ratio: 1;
       max-width: 28px;
       border-radius: 50%;
-      background: rgba(255,255,255,.12);
-      border: 1.5px solid rgba(255,255,255,.35);
+      background: var(--stamp-empty-bg,    rgba(255,255,255,.12));
+      border: 1.5px solid var(--stamp-empty-border, rgba(255,255,255,.35));
     }
     .mockup-stamp.filled {
-      background: rgba(255,255,255,.90);
+      background: var(--stamp-filled-bg, rgba(255,255,255,.90));
       border-color: transparent;
     }
 
@@ -665,6 +665,22 @@
       return '#' + [r, g, b].map(c => Math.max(0, Math.round(c * (1 - f))).toString(16).padStart(2, '0')).join('');
     }
 
+    function lighten(hex, f) {
+      const h = (hex || '#1a1a2e').replace('#', '');
+      const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
+      return '#' + [r, g, b].map(c => Math.min(255, Math.round(c + (255 - c) * f)).toString(16).padStart(2, '0')).join('');
+    }
+
+    // Luminance relative WCAG 2.1 — même logique que strip-generator.js
+    function relativeLuminance(hex) {
+      const h = (hex || '#1a1a2e').replace('#', '');
+      return [0, 2, 4].reduce((lum, i, j) => {
+        const c = parseInt(h.slice(i, i + 2), 16) / 255;
+        const lin = c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+        return lum + lin * [0.2126, 0.7152, 0.0722][j];
+      }, 0);
+    }
+
     function applyBranding(m) {
       const brand     = m.couleur_fond  || '#1a1a2e';
       const textColor = m.couleur_texte || '#ffffff';
@@ -676,6 +692,21 @@
       document.documentElement.style.setProperty('--brand-text', textColor);
       document.documentElement.style.setProperty('--bg1',        dark1);
       document.documentElement.style.setProperty('--bg2',        dark2);
+
+      // Tampons du mockup — adaptatifs selon luminance (même logique que strip-generator.js)
+      const lum = relativeLuminance(brand);
+      if (lum >= 0.18) {
+        // Fond clair → tampons foncés contrastés
+        const stampDark = darken(brand, 0.62);
+        document.documentElement.style.setProperty('--stamp-empty-bg',     'rgba(0,0,0,0.05)');
+        document.documentElement.style.setProperty('--stamp-empty-border',  'rgba(0,0,0,0.40)');
+        document.documentElement.style.setProperty('--stamp-filled-bg',    stampDark);
+      } else {
+        // Fond sombre → tampons clairs (comportement historique)
+        document.documentElement.style.setProperty('--stamp-empty-bg',     'rgba(255,255,255,.12)');
+        document.documentElement.style.setProperty('--stamp-empty-border',  'rgba(255,255,255,.35)');
+        document.documentElement.style.setProperty('--stamp-filled-bg',    'rgba(255,255,255,.90)');
+      }
       document.querySelector('meta[name=theme-color]').content = dark2;
 
       // Titre de page
