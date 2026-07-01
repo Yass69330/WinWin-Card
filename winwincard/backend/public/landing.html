@@ -117,8 +117,8 @@
       display: flex;
       flex-direction: column;
     }
-    .mockup-merchant { font-size: 13px; font-weight: 700; color: rgba(255,255,255,.95); }
-    .mockup-label    { font-size: 10px; color: rgba(255,255,255,.55); text-transform: uppercase; letter-spacing: .08em; }
+    .mockup-merchant { font-size: 13px; font-weight: 700; color: var(--mockup-text,     rgba(255,255,255,.95)); }
+    .mockup-label    { font-size: 10px; color: var(--mockup-text-sub, rgba(255,255,255,.55)); text-transform: uppercase; letter-spacing: .08em; }
     .mockup-stamps {
       display: flex;
       gap: 6px;
@@ -693,19 +693,23 @@
       document.documentElement.style.setProperty('--bg1',        dark1);
       document.documentElement.style.setProperty('--bg2',        dark2);
 
-      // Tampons du mockup — adaptatifs selon luminance (même logique que strip-generator.js)
+      // Tampons et textes du mockup — adaptatifs selon luminance (même logique que strip-generator.js)
       const lum = relativeLuminance(brand);
       if (lum >= 0.18) {
-        // Fond clair → tampons foncés contrastés
-        const stampDark = darken(brand, 0.62);
+        // Fond clair → tampons et textes foncés contrastés
+        const dark = darken(brand, 0.62);
         document.documentElement.style.setProperty('--stamp-empty-bg',     'rgba(0,0,0,0.05)');
         document.documentElement.style.setProperty('--stamp-empty-border',  'rgba(0,0,0,0.40)');
-        document.documentElement.style.setProperty('--stamp-filled-bg',    stampDark);
+        document.documentElement.style.setProperty('--stamp-filled-bg',    dark);
+        document.documentElement.style.setProperty('--mockup-text',        dark);
+        document.documentElement.style.setProperty('--mockup-text-sub',    darken(brand, 0.48));
       } else {
-        // Fond sombre → tampons clairs (comportement historique)
+        // Fond sombre → tampons et textes clairs (comportement historique)
         document.documentElement.style.setProperty('--stamp-empty-bg',     'rgba(255,255,255,.12)');
         document.documentElement.style.setProperty('--stamp-empty-border',  'rgba(255,255,255,.35)');
         document.documentElement.style.setProperty('--stamp-filled-bg',    'rgba(255,255,255,.90)');
+        document.documentElement.style.setProperty('--mockup-text',        'rgba(255,255,255,.95)');
+        document.documentElement.style.setProperty('--mockup-text-sub',    'rgba(255,255,255,.55)');
       }
       document.querySelector('meta[name=theme-color]').content = dark2;
 
