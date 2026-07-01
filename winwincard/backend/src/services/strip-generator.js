@@ -164,10 +164,28 @@ function computeLayout(n, { showLabel = true } = {}) {
   return stamps;
 }
 
-// ── Couleur d'icône dans un tampon rempli ─────────────────────────────────
-// Utilise couleur_fond du marchand pour l'icône sur fond blanc.
-function iconColor(marchand) {
-  return marchand.couleur_fond || '#1a1a2e';
+// ── Couleurs adaptatives des tampons (WCAG) ───────────────────────────────
+// Fond sombre (lum < 0.18) → tampons clairs (comportement historique)
+// Fond clair  (lum ≥ 0.18) → tampons foncés contrastés
+// Même seuil et même logique que labelSvg — cohérence visuelle garantie.
+function stampColors(bgColor) {
+  const lum = relativeLuminance(bgColor || '#1a1a2e');
+  if (lum >= 0.18) {
+    return {
+      emptyFill:   'rgba(0,0,0,0.05)',
+      emptyStroke: 'rgba(0,0,0,0.40)',
+      filledFill:  darken(bgColor, 0.62),
+      filledIcon:  lighten(bgColor, 0.88),
+      ghostIcon:   'rgba(0,0,0,0.20)',
+    };
+  }
+  return {
+    emptyFill:   'rgba(255,255,255,0.07)',
+    emptyStroke: 'rgba(255,255,255,0.58)',
+    filledFill:  'white',
+    filledIcon:  bgColor || '#1a1a2e',
+    ghostIcon:   'rgba(255,255,255,0.30)',
+  };
 }
 
 // ── Génère le SVG d'un tampon (icon_metier) ───────────────────────────────
@@ -177,9 +195,9 @@ function iconColor(marchand) {
 // Règles visuelles :
 //   - Tampon vide         → cercle seul (aucune icône)
 //   - Tampon vide + isLast → cercle + icône cadeau fantôme (toujours visible)
-//   - Tampon rempli        → cercle blanc + icône pleine
-//   - Tampon rempli + isLast → cercle blanc + icône cadeau pleine
-function stampSvg({ x, y, r, filled, iconName, color, isLast }) {
+//   - Tampon rempli        → cercle coloré + icône contrastée
+//   - Tampon rempli + isLast → cercle coloré + icône cadeau contrastée
+function stampSvg({ x, y, r, filled, iconName, isLast, emptyFill, emptyStroke, filledFill, filledIcon, ghostIcon }) {
   const scale    = +((r * 0.68) / 128).toFixed(4);
   const iconKey  = isLast ? 'gift' : (iconName in ICONS ? iconName : 'star');
   const iconPath = ICONS[iconKey];
@@ -187,28 +205,27 @@ function stampSvg({ x, y, r, filled, iconName, color, isLast }) {
 
   if (filled) {
     return `
-      <circle cx="${x}" cy="${y}" r="${r}" fill="white"/>
-      <g transform="${tr}" fill="${color}">${iconPath}</g>`;
+      <circle cx="${x}" cy="${y}" r="${r}" fill="${filledFill}"/>
+      <g transform="${tr}" fill="${filledIcon}">${iconPath}</g>`;
   }
-  // Tampon vide : cercle seul, sauf le dernier qui garde l'icône cadeau en fantôme
   if (isLast) {
     return `
-      <circle cx="${x}" cy="${y}" r="${r}" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.58)" stroke-width="2.5"/>
-      <g transform="${tr}" fill="rgba(255,255,255,0.30)">${iconPath}</g>`;
+      <circle cx="${x}" cy="${y}" r="${r}" fill="${emptyFill}" stroke="${emptyStroke}" stroke-width="2.5"/>
+      <g transform="${tr}" fill="${ghostIcon}">${iconPath}</g>`;
   }
   return `
-    <circle cx="${x}" cy="${y}" r="${r}" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.58)" stroke-width="2.5"/>`;
+    <circle cx="${x}" cy="${y}" r="${r}" fill="${emptyFill}" stroke="${emptyStroke}" stroke-width="2.5"/>`;
 }
 
 // ── Génère le SVG d'un tampon logo_stamp ──────────────────────────────────
 // logoB64: PNG logo normalisé (base64), null si non disponible → fallback icon
-function logoStampSvg({ x, y, r, filled, logoB64, iconName, color, idx }) {
+function logoStampSvg({ x, y, r, filled, logoB64, iconName, idx, emptyFill, emptyStroke, filledFill, filledIcon, ghostIcon }) {
   if (!filled) {
     return `
-      <circle cx="${x}" cy="${y}" r="${r}" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.58)" stroke-width="2.5"/>`;
+      <circle cx="${x}" cy="${y}" r="${r}" fill="${emptyFill}" stroke="${emptyStroke}" stroke-width="2.5"/>`;
   }
   if (!logoB64) {
-    return stampSvg({ x, y, r, filled: true, iconName, color, isLast: false, premium: false });
+    return stampSvg({ x, y, r, filled: true, iconName, isLast: false, emptyFill, emptyStroke, filledFill, filledIcon, ghostIcon });
   }
   const imgSize = r * 1.4;
   const imgX = +(x - imgSize / 2).toFixed(1);
@@ -216,7 +233,7 @@ function logoStampSvg({ x, y, r, filled, logoB64, iconName, color, idx }) {
   const clipId = `lclip${idx}`;
   return `
     <defs><clipPath id="${clipId}"><circle cx="${x}" cy="${y}" r="${r}"/></clipPath></defs>
-    <circle cx="${x}" cy="${y}" r="${r}" fill="white"/>
+    <circle cx="${x}" cy="${y}" r="${r}" fill="${filledFill}"/>
     <image href="data:image/png;base64,${logoB64}" x="${imgX}" y="${imgY}"
       width="${imgSize}" height="${imgSize}"
       clip-path="url(#${clipId})" preserveAspectRatio="xMidYMid meet"/>`;
@@ -284,7 +301,7 @@ function buildSvg({ marchand, filledCount, logoB64, customBgB64, w = 750, h = 24
   const bgColor   = isReward
     ? (marchand.couleur_fond_reward || '#c9a84c')
     : (marchand.couleur_fond || '#1a1a2e');
-  const iColor    = bgColor; // icône dans les tampons remplis = couleur du fond (adaptatif)
+  const colors    = stampColors(bgColor); // adaptatif : sombre → tampons clairs, clair → tampons foncés
   const showLabel = marchand.strip_label !== 'off';
 
   // Mise à l'échelle des positions si h != 246 (même SVG, juste viewBox changé)
@@ -302,9 +319,9 @@ function buildSvg({ marchand, filledCount, logoB64, customBgB64, w = 750, h = 24
       const sr = +(pos.r * Math.min(scaleX, scaleY)).toFixed(1);
 
       if (theme === 'logo_stamp') {
-        return logoStampSvg({ x: sx, y: sy, r: sr, filled, logoB64, iconName, color: iColor, idx: i });
+        return logoStampSvg({ x: sx, y: sy, r: sr, filled, logoB64, iconName, idx: i, ...colors });
       }
-      return stampSvg({ x: sx, y: sy, r: sr, filled, iconName, color: iColor, isLast: i === maxValue - 1 });
+      return stampSvg({ x: sx, y: sy, r: sr, filled, iconName, isLast: i === maxValue - 1, ...colors });
     }).join('');
   }
 
