@@ -316,8 +316,12 @@ function buildPassJson({ client, marchand, serialNumber, passNotification }) {
     backgroundColor: doré
       ? (marchand.couleur_fond_reward ? hexToRgb(marchand.couleur_fond_reward) : 'rgb(201, 168, 76)')
       : hexToRgb(marchand.couleur_fond),
-    foregroundColor: doré && !marchand.couleur_fond_reward ? 'rgb(25, 15, 0)'  : hexToRgb(marchand.couleur_texte || '#ffffff'),
-    labelColor:      doré && !marchand.couleur_fond_reward ? 'rgb(90, 65, 10)' : hexToRgb(marchand.couleur_label || '#a0a0b0'),
+    foregroundColor: doré && marchand.couleur_texte_reward ? hexToRgb(marchand.couleur_texte_reward)
+      : doré && !marchand.couleur_fond_reward ? 'rgb(25, 15, 0)'
+      : hexToRgb(marchand.couleur_texte || '#ffffff'),
+    labelColor: doré && marchand.couleur_texte_reward ? hexToRgb(marchand.couleur_texte_reward)
+      : doré && !marchand.couleur_fond_reward ? 'rgb(90, 65, 10)'
+      : hexToRgb(marchand.couleur_label || '#a0a0b0'),
     storeCard: {
       headerFields: [
         {

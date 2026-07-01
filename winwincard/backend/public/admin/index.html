@@ -423,6 +423,13 @@
           </div>
         </div>
         <div class="field">
+          <label>Texte récompense (optionnel — couleur du texte quand reward atteint)</label>
+          <div class="color-row">
+            <input type="color" id="cp-texte-reward" value="#190f00">
+            <input type="text"  id="f-texte-reward-c" placeholder="laisser vide = auto" maxlength="7">
+          </div>
+        </div>
+        <div class="field">
           <label for="f-logo-reward">Logo doré URL (optionnel — remplace le logo quand reward atteint)</label>
           <input id="f-logo-reward" type="url" placeholder="https://… (fallback : Logo URL)">
         </div>
@@ -864,6 +871,8 @@ function resetForm() {
   setColor('cp-label',  'f-label',        '#888888');
   document.getElementById('cp-reward').value = '#c9a84c';
   document.getElementById('f-reward-color').value = '';
+  document.getElementById('cp-texte-reward').value = '#190f00';
+  document.getElementById('f-texte-reward-c').value = '';
   document.getElementById('f-maxval').value     = '10';
   document.getElementById('f-displaymax').value = '';
   document.getElementById('f-forfait').value    = 'pro';
@@ -908,6 +917,8 @@ function fillForm(m) {
   if (m.couleur_label)        setColor('cp-label',  'f-label',        m.couleur_label);
   if (m.couleur_fond_reward)  setColor('cp-reward', 'f-reward-color', m.couleur_fond_reward);
   else { document.getElementById('cp-reward').value = '#c9a84c'; document.getElementById('f-reward-color').value = ''; }
+  if (m.couleur_texte_reward) setColor('cp-texte-reward', 'f-texte-reward-c', m.couleur_texte_reward);
+  else { document.getElementById('cp-texte-reward').value = '#190f00'; document.getElementById('f-texte-reward-c').value = ''; }
   if (m.images_tiers)  document.getElementById('f-tiers').value = JSON.stringify(m.images_tiers, null, 2);
   document.getElementById('slug-preview').textContent = m.slug || '…';
   // Section strip tiers — visible en mode édition uniquement
@@ -963,7 +974,7 @@ function setColor(cpId, txtId, hex) {
 function isHex(s) { return /^#[0-9a-fA-F]{6}$/.test(s); }
 
 // Synchronisation color picker ↔ champ texte
-[['cp-fond','f-fond'],['cp-texte','f-texte-c'],['cp-label','f-label'],['cp-reward','f-reward-color']].forEach(([cpId, txtId]) => {
+[['cp-fond','f-fond'],['cp-texte','f-texte-c'],['cp-label','f-label'],['cp-reward','f-reward-color'],['cp-texte-reward','f-texte-reward-c']].forEach(([cpId, txtId]) => {
   document.getElementById(cpId).addEventListener('input', e => {
     document.getElementById(txtId).value = e.target.value;
   });
@@ -1040,7 +1051,8 @@ function collectForm() {
   const fondHex   = document.getElementById('f-fond').value.trim()         || '#ffffff';
   const texteHex  = document.getElementById('f-texte-c').value.trim()      || '#000000';
   const labelHex  = document.getElementById('f-label').value.trim()        || '#888888';
-  const rewardHex = document.getElementById('f-reward-color').value.trim() || null;
+  const rewardHex      = document.getElementById('f-reward-color').value.trim()   || null;
+  const texteRewardHex = document.getElementById('f-texte-reward-c').value.trim() || null;
 
   // Valider images_tiers JSON si renseigné
   const tiersRaw = document.getElementById('f-tiers').value.trim();
@@ -1056,6 +1068,7 @@ function collectForm() {
     couleur_texte:        texteHex,
     couleur_label:        labelHex,
     couleur_fond_reward:  rewardHex,
+    couleur_texte_reward: texteRewardHex,
     max_value:       parseInt(document.getElementById('f-maxval').value) || 10,
     display_max_value: parseInt(document.getElementById('f-displaymax').value) || undefined,
     forfait:         document.getElementById('f-forfait').value,
