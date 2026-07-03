@@ -1231,8 +1231,8 @@ async function deleteStripTier(tier) {
 // ════════════════════════════════════
 // DESIGN DU PASS
 // ════════════════════════════════════
-const ICON_NAMES = ['coffee','scissors','hamburger','shopping-bag','heart','star','gift','hair-dryer','barbell','fork-knife','flower','check','flower-tulip'];
-const ICON_LABELS = { coffee:'Café', scissors:'Coiffure', hamburger:'Burger', 'shopping-bag':'Boutique', heart:'Bien-être', star:'Beauté', gift:'Cadeau', 'hair-dryer':'Coiffure', barbell:'Sport', 'fork-knife':'Restaurant', flower:'Fleur', check:'Générique', 'flower-tulip':'Tulipe' };
+const ICON_NAMES = ['coffee','scissors','hamburger','shopping-bag','heart','star','gift','hair-dryer','barbell','fork-knife','flower','check','flower-tulip','game-controller'];
+const ICON_LABELS = { coffee:'Café', scissors:'Coiffure', hamburger:'Burger', 'shopping-bag':'Boutique', heart:'Bien-être', star:'Beauté', gift:'Cadeau', 'hair-dryer':'Coiffure', barbell:'Sport', 'fork-knife':'Restaurant', flower:'Fleur', check:'Générique', 'flower-tulip':'Tulipe', 'game-controller':'Gaming' };
 
 function renderIconPicker(selected) {
   const container = document.getElementById('icon-picker');
@@ -1248,7 +1248,7 @@ function renderIconPicker(selected) {
 }
 
 function iconEmoji(name) {
-  const map = { coffee:'☕', scissors:'✂️', hamburger:'🍔', 'shopping-bag':'🛍️', heart:'❤️', star:'⭐', gift:'🎁', 'hair-dryer':'💇', barbell:'🏋️', 'fork-knife':'🍽️', flower:'🌸', check:'✓', 'flower-tulip':'🌷' };
+  const map = { coffee:'☕', scissors:'✂️', hamburger:'🍔', 'shopping-bag':'🛍️', heart:'❤️', star:'⭐', gift:'🎁', 'hair-dryer':'💇', barbell:'🏋️', 'fork-knife':'🍽️', flower:'🌸', check:'✓', 'flower-tulip':'🌷', 'game-controller':'🎮' };
   return map[name] || '●';
 }
 
