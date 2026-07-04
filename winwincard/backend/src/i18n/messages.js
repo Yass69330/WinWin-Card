@@ -11,14 +11,14 @@
 const messages = {
   // ── Bienvenue (à l'installation du pass) ────────────────────────────────
   welcome: {
-    en: ({ nom }) => `Welcome to ${nom}! Collect points with every visit.`,
-    fr: ({ nom }) => `Bienvenue chez ${nom} ! Cumulez des points à chaque visite.`,
+    en: ({ nom }) => `Welcome to ${nom}! 👋 Collect points with every visit.`,
+    fr: ({ nom }) => `Bienvenue chez ${nom} ! 👋 Cumule des points à chaque visite.`,
   },
 
   // ── Pass mis à jour après un scan ───────────────────────────────────────
   passReset: {
     en: ({ prenom, max }) => `Card updated — ${prenom}: 0/${max} pts`,
-    fr: ({ prenom, max }) => `Carte mise à jour — ${prenom} : 0/${max} pts`,
+    fr: ({ prenom, max }) => `Carte remise à zéro — ${prenom} : 0/${max} pts`,
   },
   passReward: {
     en: ({ prenom }) => `Congrats ${prenom}! Reward unlocked 🎉`,
@@ -32,7 +32,7 @@ const messages = {
   // ── Relance client inactif (défaut ; l'override marchand reste prioritaire) ─
   inactive: {
     en: ({ prenom, nom }) => `Hi ${prenom}! We miss you at ${nom}. Come visit us soon! 🎯`,
-    fr: ({ prenom, nom }) => `Coucou ${prenom} ! Vous nous manquez chez ${nom}. Revenez vite ! 🎯`,
+    fr: ({ prenom, nom }) => `Salut ${prenom} ! Tu nous manques chez ${nom}. Reviens vite ! 🎯`,
   },
 
   // ── Proche de la récompense ─────────────────────────────────────────────
@@ -40,7 +40,7 @@ const messages = {
     en: ({ prenom, remaining, nom }) =>
       `Hi ${prenom}! Only ${remaining} more point${remaining > 1 ? 's' : ''} to unlock your reward at ${nom}. Come visit us! 🎁`,
     fr: ({ prenom, remaining, nom }) =>
-      `Coucou ${prenom} ! Plus que ${remaining} point${remaining > 1 ? 's' : ''} pour débloquer votre récompense chez ${nom}. Passez nous voir ! 🎁`,
+      `Salut ${prenom} ! Plus que ${remaining} point${remaining > 1 ? 's' : ''} pour débloquer ta récompense chez ${nom}. Passe nous voir ! 🎁`,
   },
 
   // ── Bonus parrainage crédité au parrain ─────────────────────────────────
