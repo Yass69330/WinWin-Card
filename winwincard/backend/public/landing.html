@@ -406,7 +406,7 @@
       <div class="hero-logo" id="hero-logo">
         <span id="logo-initial"></span>
       </div>
-      <div class="hero-name" id="hero-name">Loading…</div>
+      <div class="hero-name" id="hero-name" data-i18n="loading">Loading…</div>
     </div>
 
     <!-- Mockup de la carte Wallet -->
@@ -417,7 +417,7 @@
         </div>
         <div class="mockup-name-wrap">
           <div class="mockup-merchant" id="mockup-merchant"></div>
-          <div class="mockup-label">Loyalty Card</div>
+          <div class="mockup-label" data-i18n="mockupLabel">Loyalty Card</div>
         </div>
       </div>
       <div class="mockup-stamps">
@@ -447,8 +447,8 @@
       <!-- Marchand introuvable / suspendu -->
       <div class="not-found" id="not-found">
         <div class="not-found-icon">🔒</div>
-        <h2 id="not-found-title">Program not found</h2>
-        <p id="not-found-msg">This loyalty program is not available.</p>
+        <h2 id="not-found-title" data-i18n="notFoundTitle">Program not found</h2>
+        <p id="not-found-msg" data-i18n="notFoundMsg">This loyalty program is not available.</p>
       </div>
 
       <!-- Écran "Welcome back" — affiché si localStorage contient un pass pour ce marchand -->
@@ -458,19 +458,19 @@
             <circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/>
           </svg>
         </div>
-        <div class="wb-title" id="wb-title">Welcome back!</div>
-        <div class="wb-sub"   id="wb-sub">You already have your loyalty card.</div>
+        <div class="wb-title" id="wb-title" data-i18n="wbTitle">Welcome back!</div>
+        <div class="wb-sub"   id="wb-sub" data-i18n="wbSub">You already have your loyalty card.</div>
         <div class="wallet-buttons" id="wb-wallet-buttons">
           <a class="btn-wallet btn-apple" id="wb-btn-apple" href="#" target="_self">
             <svg width="22" height="22" viewBox="0 0 22 22" fill="white"><path d="M15.05 1C14.1 1.87 13.5 3.17 13.7 4.5c1.2.1 2.4-.6 3.2-1.5.8-.9 1.3-2.2 1.1-3.5-1.1.1-2.2.7-2.95 1.5zM16 6.3c-1.65-.1-3.05.93-3.83.93-.78 0-2-.88-3.3-.85C7.1 6.42 5.3 7.4 4.32 9.05c-1.98 3.35-.5 8.3 1.4 11.02.96 1.36 2.1 2.88 3.6 2.83 1.42-.06 1.98-.92 3.7-.92 1.74 0 2.24.92 3.76.89 1.56-.04 2.54-1.4 3.5-2.76a12.2 12.2 0 0 0 1.56-3.12c-3.1-1.18-3.6-5.55-.53-7.3A4.73 4.73 0 0 0 16 6.3z"/></svg>
-            <span>Add to Apple Wallet</span>
+            <span data-i18n="addApple">Add to Apple Wallet</span>
           </a>
           <a class="btn-wallet btn-google" id="wb-btn-google" href="#" target="_blank" rel="noopener">
             <svg width="20" height="20" viewBox="0 0 20 20"><path d="M19.6 10.23c0-.68-.06-1.36-.18-2H10v3.77h5.38a4.6 4.6 0 0 1-2 3.02v2.5h3.23c1.9-1.74 2.99-4.3 2.99-7.3z" fill="#4285F4"/><path d="M10 20c2.7 0 4.96-.9 6.62-2.43l-3.23-2.5c-.9.6-2.04.95-3.39.95-2.6 0-4.81-1.76-5.6-4.12H1.06v2.58A10 10 0 0 0 10 20z" fill="#34A853"/><path d="M4.4 11.9A6 6 0 0 1 4.08 10c0-.66.12-1.3.32-1.9V5.52H1.06A10 10 0 0 0 0 10c0 1.62.39 3.15 1.06 4.48L4.4 11.9z" fill="#FBBC05"/><path d="M10 3.96c1.46 0 2.78.5 3.81 1.49l2.86-2.86C14.96.99 12.7 0 10 0A10 10 0 0 0 1.06 5.52L4.4 8.1C5.19 5.72 7.4 3.96 10 3.96z" fill="#EA4335"/></svg>
-            <span>Add to Google Wallet</span>
+            <span data-i18n="addGoogle">Add to Google Wallet</span>
           </a>
         </div>
-        <button class="btn-reset-card" onclick="resetCard()">Not you? Create a new card →</button>
+        <button class="btn-reset-card" onclick="resetCard()" data-i18n="resetCard">Not you? Create a new card →</button>
       </div>
 
       <!-- Formulaire d'inscription -->
@@ -483,9 +483,9 @@
 
           <!-- Prénom — V1 -->
           <div class="field">
-            <label for="prenom">First name</label>
+            <label for="prenom" data-i18n="firstName">First name</label>
             <input type="text" id="prenom" name="prenom"
-              placeholder="Your first name"
+              placeholder="Your first name" data-i18n-ph="firstNamePh"
               autocomplete="given-name"
               autocapitalize="words"
               maxlength="50"
@@ -494,36 +494,36 @@
 
           <!-- Email — V2 (masqué en V1) -->
           <div class="field field-v2" id="field-email">
-            <label for="email">Email</label>
+            <label for="email" data-i18n="email">Email</label>
             <input type="email" id="email" name="email"
               placeholder="your@email.com"
               autocomplete="email">
-            <p class="field-hint-v2">So you never lose your points 🔒</p>
+            <p class="field-hint-v2" data-i18n="emailHint">So you never lose your points 🔒</p>
           </div>
 
           <!-- Téléphone — V2 (masqué en V1) -->
           <div class="field field-v2" id="field-telephone">
-            <label for="telephone">Phone</label>
+            <label for="telephone" data-i18n="phone">Phone</label>
             <input type="tel" id="telephone" name="telephone"
               placeholder="+33 6 00 00 00 00"
               autocomplete="tel">
-            <p class="field-hint-v2">To receive exclusive flash offers 📱</p>
+            <p class="field-hint-v2" data-i18n="phoneHint">To receive exclusive flash offers 📱</p>
           </div>
 
           <!-- Date anniversaire — V2 (masqué en V1) -->
           <div class="field field-v2" id="field-anniversaire">
-            <label for="date_anniversaire">Date of birth</label>
+            <label for="date_anniversaire" data-i18n="birthday">Date of birth</label>
             <input type="date" id="date_anniversaire" name="date_anniversaire">
-            <p class="field-hint-v2">For a special surprise on your big day 🎂</p>
+            <p class="field-hint-v2" data-i18n="birthdayHint">For a special surprise on your big day 🎂</p>
           </div>
 
           <button type="submit" class="btn-submit" id="btn-submit">
-            <span class="btn-label">Get my card</span>
+            <span class="btn-label" data-i18n="getCard">Get my card</span>
             <span class="spinner"></span>
           </button>
         </form>
 
-        <p class="rgpd-note" id="rgpd-note">
+        <p class="rgpd-note" id="rgpd-note" data-i18n="rgpdNote">
           Only your first name is stored. You can request data deletion in-store at any time.
         </p>
       </div>
@@ -538,7 +538,7 @@
           </svg>
         </div>
 
-        <div class="success-title" id="success-title">Your card is ready!</div>
+        <div class="success-title" id="success-title" data-i18n="cardReady">Your card is ready!</div>
         <div class="success-sub" id="success-sub"></div>
 
         <div class="wallet-buttons" id="wallet-buttons">
@@ -547,7 +547,7 @@
             <svg width="22" height="22" viewBox="0 0 22 22" fill="white">
               <path d="M15.05 1C14.1 1.87 13.5 3.17 13.7 4.5c1.2.1 2.4-.6 3.2-1.5.8-.9 1.3-2.2 1.1-3.5-1.1.1-2.2.7-2.95 1.5zM16 6.3c-1.65-.1-3.05.93-3.83.93-.78 0-2-.88-3.3-.85C7.1 6.42 5.3 7.4 4.32 9.05c-1.98 3.35-.5 8.3 1.4 11.02.96 1.36 2.1 2.88 3.6 2.83 1.42-.06 1.98-.92 3.7-.92 1.74 0 2.24.92 3.76.89 1.56-.04 2.54-1.4 3.5-2.76a12.2 12.2 0 0 0 1.56-3.12c-3.1-1.18-3.6-5.55-.53-7.3A4.73 4.73 0 0 0 16 6.3z"/>
             </svg>
-            <span>Add to Apple Wallet</span>
+            <span data-i18n="addApple">Add to Apple Wallet</span>
           </a>
 
           <a class="btn-wallet btn-google" id="btn-google" href="#" target="_blank" rel="noopener">
@@ -557,27 +557,27 @@
               <path d="M4.4 11.9A6 6 0 0 1 4.08 10c0-.66.12-1.3.32-1.9V5.52H1.06A10 10 0 0 0 0 10c0 1.62.39 3.15 1.06 4.48L4.4 11.9z" fill="#FBBC05"/>
               <path d="M10 3.96c1.46 0 2.78.5 3.81 1.49l2.86-2.86C14.96.99 12.7 0 10 0A10 10 0 0 0 1.06 5.52L4.4 8.1C5.19 5.72 7.4 3.96 10 3.96z" fill="#EA4335"/>
             </svg>
-            <span>Add to Google Wallet</span>
+            <span data-i18n="addGoogle">Add to Google Wallet</span>
           </a>
 
         </div>
 
         <!-- Fallback post-redirection — même URL de pass, jamais de re-POST -->
-        <a class="btn-fallback" id="btn-fallback-success" href="#">Your card didn't open? Tap here →</a>
+        <a class="btn-fallback" id="btn-fallback-success" href="#" data-i18n="fallbackOpen">Your card didn't open? Tap here →</a>
 
         <!-- Referral share — shown only when referral_enabled -->
         <div id="referral-share" style="display:none;margin-top:24px;width:100%;padding:16px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:16px;text-align:center">
-          <div style="font-weight:700;margin-bottom:6px">🎁 Refer a Friend</div>
-          <div style="font-size:13px;color:rgba(255,255,255,.65);margin-bottom:12px">Earn <span id="referral-bonus-pts">1</span> point when they make their first visit</div>
+          <div style="font-weight:700;margin-bottom:6px" data-i18n="referralTitle">🎁 Refer a Friend</div>
+          <div style="font-size:13px;color:rgba(255,255,255,.65);margin-bottom:12px" id="referral-earn">Earn 1 point when they make their first visit</div>
           <div style="background:rgba(0,0,0,.25);border-radius:10px;padding:10px;font-size:11px;font-family:monospace;word-break:break-all;margin-bottom:12px;user-select:all;color:rgba(255,255,255,.75)" id="referral-link-text"></div>
-          <button onclick="shareReferral()" style="background:rgba(255,255,255,.9);color:#1a1a2e;border:none;border-radius:10px;padding:10px 20px;font-weight:700;cursor:pointer;width:100%;font-size:14px">Share my link</button>
+          <button onclick="shareReferral()" style="background:rgba(255,255,255,.9);color:#1a1a2e;border:none;border-radius:10px;padding:10px 20px;font-weight:700;cursor:pointer;width:100%;font-size:14px" data-i18n="shareLink">Share my link</button>
         </div>
 
       </div>
 
       <!-- Écran de redirection automatique (iOS / Android) — bascule vers succès après ~2 s -->
       <div class="redirect-screen" id="redirect-screen">
-        <div class="redirect-title">Creating your card…</div>
+        <div class="redirect-title" data-i18n="creatingCard">Creating your card…</div>
       </div>
 
     </div><!-- /content-card -->
@@ -604,6 +604,127 @@
     // ── État de l'application ────────────────────────────────
     const $ = id => document.getElementById(id);
 
+    // ── i18n FR/EN — langue définie par le marchand (m.langue), défaut 'en' ──
+    // Textes statiques : attribut data-i18n / data-i18n-ph, remplacés par applyI18n().
+    // Textes injectés en JS : appel t('cle', {vars}). Valeurs fonction pour le pluriel.
+    let _lang = 'en';
+    const I18N = {
+      en: {
+        loading:            'Loading…',
+        mockupLabel:        'Loyalty Card',
+        notFoundTitle:      'Program not found',
+        notFoundMsg:        'This loyalty program is not available.',
+        wbTitle:            'Welcome back!',
+        wbSub:              'You already have your loyalty card.',
+        addApple:           'Add to Apple Wallet',
+        addGoogle:          'Add to Google Wallet',
+        resetCard:          'Not you? Create a new card →',
+        firstName:          'First name',
+        firstNamePh:        'Your first name',
+        email:              'Email',
+        emailHint:          'So you never lose your points 🔒',
+        phone:              'Phone',
+        phoneHint:          'To receive exclusive flash offers 📱',
+        birthday:           'Date of birth',
+        birthdayHint:       'For a special surprise on your big day 🎂',
+        getCard:            'Get my card',
+        rgpdNote:           'Only your first name is stored. You can request data deletion in-store at any time.',
+        cardReady:          'Your card is ready!',
+        fallbackOpen:       "Your card didn't open? Tap here →",
+        referralTitle:      '🎁 Refer a Friend',
+        referralEarn:       ({ pts }) => `Earn ${pts} point${pts > 1 ? 's' : ''} when they make their first visit`,
+        shareLink:          'Share my link',
+        creatingCard:       'Creating your card…',
+        invalidLinkTitle:   'Invalid link',
+        invalidLinkMsg:     'This URL does not match any loyalty program.',
+        unavailable:        'Unavailable',
+        suspendedMsg:       'This loyalty program is currently suspended.',
+        notFoundMsg2:       'Loyalty program not found.',
+        connErrorTitle:     'Connection error',
+        connErrorMsg:       'Unable to load the page. Check your connection and try again.',
+        pageTitle:          ({ nom }) => `${nom} Loyalty`,
+        descriptionFallback:({ nom }) => `Welcome to **${nom}**'s loyalty program!`,
+        rgpdNotePremium:    'Optional fields are used only to personalise your loyalty experience. You may request deletion in-store at any time.',
+        errNoFirstName:     'Please enter your first name.',
+        errGeneric:         'An error occurred. Please try again.',
+        errConnection:      'Connection failed. Check your network and try again.',
+        successAdded:       ({ prenom }) => `Hi ${prenom}, your loyalty card has been added to your wallet.`,
+        tapToReceive:       'Tap Add to Wallet to receive your card.',
+        successManual:      ({ prenom }) => `Hi ${prenom}, add your loyalty card to your wallet to always have it with you.`,
+        appleIphoneOnly:    'Apple Wallet (iPhone only)',
+        welcomeBack:        ({ prenom }) => `Welcome back, ${prenom}!`,
+        shareTitle:         'Join my loyalty program!',
+        linkCopied:         'Link copied!',
+        copyThisLink:       'Copy this link:',
+      },
+      fr: {
+        loading:            'Chargement…',
+        mockupLabel:        'Carte de fidélité',
+        notFoundTitle:      'Programme introuvable',
+        notFoundMsg:        "Ce programme de fidélité n'est pas disponible.",
+        wbTitle:            'Content de te revoir !',
+        wbSub:              'Tu as déjà ta carte de fidélité.',
+        addApple:           'Ajouter à Apple Wallet',
+        addGoogle:          'Ajouter à Google Wallet',
+        resetCard:          'Pas toi ? Créer une nouvelle carte →',
+        firstName:          'Prénom',
+        firstNamePh:        'Ton prénom',
+        email:              'Email',
+        emailHint:          'Pour ne jamais perdre tes points 🔒',
+        phone:              'Téléphone',
+        phoneHint:          'Pour recevoir des offres flash exclusives 📱',
+        birthday:           'Date de naissance',
+        birthdayHint:       'Pour une surprise spéciale le jour J 🎂',
+        getCard:            'Obtenir ma carte',
+        rgpdNote:           'Seul ton prénom est conservé. Tu peux demander la suppression de tes données en boutique à tout moment.',
+        cardReady:          'Ta carte est prête !',
+        fallbackOpen:       "Ta carte ne s'est pas ouverte ? Appuie ici →",
+        referralTitle:      '🎁 Parraine un ami',
+        referralEarn:       ({ pts }) => `Gagne ${pts} point${pts > 1 ? 's' : ''} quand ton ami fait sa première visite`,
+        shareLink:          'Partager mon lien',
+        creatingCard:       'Création de ta carte…',
+        invalidLinkTitle:   'Lien invalide',
+        invalidLinkMsg:     'Cette URL ne correspond à aucun programme de fidélité.',
+        unavailable:        'Indisponible',
+        suspendedMsg:       'Ce programme de fidélité est actuellement suspendu.',
+        notFoundMsg2:       'Programme de fidélité introuvable.',
+        connErrorTitle:     'Erreur de connexion',
+        connErrorMsg:       'Impossible de charger la page. Vérifie ta connexion et réessaie.',
+        pageTitle:          ({ nom }) => `${nom} — Fidélité`,
+        descriptionFallback:({ nom }) => `Bienvenue dans le programme de fidélité de **${nom}** !`,
+        rgpdNotePremium:    'Les champs optionnels servent uniquement à personnaliser ton expérience de fidélité. Tu peux demander leur suppression en boutique à tout moment.',
+        errNoFirstName:     'Merci de saisir ton prénom.',
+        errGeneric:         "Une erreur s'est produite. Réessaie.",
+        errConnection:      'Échec de connexion. Vérifie ton réseau et réessaie.',
+        successAdded:       ({ prenom }) => `Salut ${prenom}, ta carte de fidélité a été ajoutée à ton wallet.`,
+        tapToReceive:       'Appuie sur Ajouter au Wallet pour recevoir ta carte.',
+        successManual:      ({ prenom }) => `Salut ${prenom}, ajoute ta carte de fidélité à ton wallet pour l'avoir toujours avec toi.`,
+        appleIphoneOnly:    'Apple Wallet (iPhone uniquement)',
+        welcomeBack:        ({ prenom }) => `Content de te revoir, ${prenom} !`,
+        shareTitle:         'Rejoins mon programme de fidélité !',
+        linkCopied:         'Lien copié !',
+        copyThisLink:       'Copie ce lien :',
+      },
+    };
+
+    function t(key, vars) {
+      const dict = I18N[_lang] || I18N.en;
+      let s = dict[key] != null ? dict[key] : (I18N.en[key] != null ? I18N.en[key] : key);
+      if (typeof s === 'function') return s(vars || {});
+      if (vars) s = s.replace(/\{(\w+)\}/g, (_, k) => (vars[k] != null ? vars[k] : ''));
+      return s;
+    }
+
+    // Applique les traductions sur tout le markup statique marqué data-i18n(-ph).
+    function applyI18n() {
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        el.textContent = t(el.getAttribute('data-i18n'));
+      });
+      document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+        el.setAttribute('placeholder', t(el.getAttribute('data-i18n-ph')));
+      });
+    }
+
     function showSkeleton()  { $('skeleton').style.display = 'flex'; }
     function hideSkeleton()  { $('skeleton').style.display = 'none'; }
     function showForm()      { $('form-area').classList.remove('hidden'); }
@@ -628,7 +749,7 @@
 
     // ── Slug depuis l'URL ────────────────────────────────────
     const slug = location.pathname.split('/l/')[1]?.split('/')[0];
-    if (!slug) showNotFound('Invalid link', 'This URL does not match any loyalty program.');
+    if (!slug) showNotFound(t('invalidLinkTitle'), t('invalidLinkMsg'));
     window._refSerial = new URLSearchParams(location.search).get('ref') || null;
 
     // ── Chargement des données marchand ──────────────────────
@@ -640,10 +761,9 @@
         const data = await res.json();
 
         if (!res.ok) {
-          const msg = res.status === 403
-            ? 'This loyalty program is currently suspended.'
-            : 'Loyalty program not found.';
-          return showNotFound('Unavailable', msg);
+          if (data.langue === 'fr' || data.langue === 'en') _lang = data.langue;
+          const msg = res.status === 403 ? t('suspendedMsg') : t('notFoundMsg2');
+          return showNotFound(t('unavailable'), msg);
         }
 
         applyBranding(data);
@@ -654,7 +774,7 @@
         const saved = lsGet(data.slug);
         if (saved) { showWelcomeBack(saved); } else { showForm(); }
       } catch {
-        showNotFound('Connection error', 'Unable to load the page. Check your connection and try again.');
+        showNotFound(t('connErrorTitle'), t('connErrorMsg'));
       }
     }
 
@@ -682,6 +802,11 @@
     }
 
     function applyBranding(m) {
+      // Langue du marchand (figée à la création) — appliquée avant tout affichage.
+      if (m.langue === 'fr' || m.langue === 'en') _lang = m.langue;
+      document.documentElement.lang = _lang;
+      applyI18n();
+
       const brand     = m.couleur_fond  || '#1a1a2e';
       const textColor = m.couleur_texte || '#ffffff';
 
@@ -714,7 +839,7 @@
       document.querySelector('meta[name=theme-color]').content = dark2;
 
       // Titre de page
-      document.title = `${m.nom} Loyalty`;
+      document.title = t('pageTitle', { nom: m.nom });
 
       // Hero : nom
       $('hero-name').textContent    = m.nom;
@@ -745,7 +870,7 @@
       }
 
       // Texte descriptif
-      $('description').innerHTML = renderText(m.texte_landing || `Welcome to **${m.nom}**'s loyalty program!`);
+      $('description').innerHTML = renderText(m.texte_landing || t('descriptionFallback', { nom: m.nom }));
 
       // Stocker les flags pour le submit
       window._marchandSlug    = m.slug;
@@ -758,7 +883,7 @@
         $('field-email').style.display        = 'block';
         $('field-telephone').style.display    = 'block';
         $('field-anniversaire').style.display = 'block';
-        $('rgpd-note').textContent = 'Optional fields are used only to personalise your loyalty experience. You may request deletion in-store at any time.';
+        $('rgpd-note').textContent = t('rgpdNotePremium');
       }
     }
 
@@ -769,7 +894,7 @@
 
       const prenom = $('prenom').value.trim();
       if (!prenom) {
-        showError('Please enter your first name.');
+        showError(t('errNoFirstName'));
         $('prenom').focus();
         return;
       }
@@ -796,7 +921,7 @@
 
         if (!res.ok) {
           setSubmitting(false);
-          showError(data.error || 'An error occurred. Please try again.');
+          showError(data.error || t('errGeneric'));
           return;
         }
 
@@ -810,7 +935,7 @@
         showSuccess(prenom, data);
       } catch {
         setSubmitting(false);
-        showError('Connection failed. Check your network and try again.');
+        showError(t('errConnection'));
       }
     });
 
@@ -850,8 +975,8 @@
 
     // Écran succès post-redirection : message + fallback + referral (sans boutons Wallet)
     function showPostRedirectScreen(prenom, data, url) {
-      $('success-title').textContent = 'Your card is ready!';
-      $('success-sub').textContent   = `Hi ${prenom}, your loyalty card has been added to your wallet.`;
+      $('success-title').textContent = t('cardReady');
+      $('success-sub').textContent   = t('successAdded', { prenom });
 
       $('wallet-buttons').style.display = 'none';
       const fb = $('btn-fallback-success');
@@ -863,12 +988,12 @@
     }
 
     function showButtonScreen(prenom, data) {
-      $('success-title').textContent = 'Your card is ready!';
+      $('success-title').textContent = t('cardReady');
       // In-app (Instagram / FB / Messenger) : les webviews ouvrent bien le .pkpass —
       // texte court et neutre, pas d'avertissement.
       $('success-sub').textContent = (isIOS && isInApp && data.apple_pass_url)
-        ? 'Tap Add to Wallet to receive your card.'
-        : `Hi ${prenom}, add your loyalty card to your wallet to always have it with you.`;
+        ? t('tapToReceive')
+        : t('successManual', { prenom });
 
       const btnApple  = $('btn-apple');
       const btnGoogle = $('btn-google');
@@ -877,7 +1002,7 @@
         btnApple.href = data.apple_pass_url;
         if (!isIOS) {
           btnApple.classList.add('unavailable');
-          btnApple.querySelector('span').textContent = 'Apple Wallet (iPhone only)';
+          btnApple.querySelector('span').textContent = t('appleIphoneOnly');
           btnApple.removeAttribute('href');
           btnApple.style.pointerEvents = 'none';
         }
@@ -903,7 +1028,7 @@
       if (!window._referralEnabled || !data.serial_number) return;
       const referralUrl = `${location.origin}/l/${window._marchandSlug}?ref=${data.serial_number}`;
       $('referral-link-text').textContent = referralUrl;
-      $('referral-bonus-pts').textContent = window._referralBonus;
+      $('referral-earn').textContent      = t('referralEarn', { pts: window._referralBonus });
       $('referral-share').style.display   = 'block';
       window._referralUrl = referralUrl;
     }
@@ -911,8 +1036,8 @@
     // ── Écran "Welcome back" (client connu via localStorage) ────
     function showWelcomeBack(saved) {
       $('card-mockup').style.display = 'none';
-      $('wb-title').textContent = `Welcome back, ${saved.prenom}!`;
-      $('wb-sub').textContent   = 'You already have your loyalty card.';
+      $('wb-title').textContent = t('welcomeBack', { prenom: saved.prenom });
+      $('wb-sub').textContent   = t('wbSub');
 
       const btnApple  = $('wb-btn-apple');
       const btnGoogle = $('wb-btn-google');
@@ -921,7 +1046,7 @@
         btnApple.href = saved.apple_pass_url;
         if (!isIOS) {
           btnApple.classList.add('unavailable');
-          btnApple.querySelector('span').textContent = 'Apple Wallet (iPhone only)';
+          btnApple.querySelector('span').textContent = t('appleIphoneOnly');
           btnApple.removeAttribute('href');
           btnApple.style.pointerEvents = 'none';
         }
@@ -951,11 +1076,11 @@
       const url = window._referralUrl;
       if (!url) return;
       if (navigator.share) {
-        navigator.share({ title: 'Join my loyalty program!', url }).catch(() => {});
+        navigator.share({ title: t('shareTitle'), url }).catch(() => {});
       } else {
         navigator.clipboard.writeText(url)
-          .then(() => alert('Link copied!'))
-          .catch(() => { prompt('Copy this link:', url); });
+          .then(() => alert(t('linkCopied')))
+          .catch(() => { prompt(t('copyThisLink'), url); });
       }
     }
 
