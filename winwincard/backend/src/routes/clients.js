@@ -5,6 +5,7 @@ const supabase = require('../services/supabase');
 const asyncHandler = require('../utils/asyncHandler');
 const { authMarchand, authAdmin } = require('../middleware/auth');
 const { limiterInscription } = require('../middleware/rateLimiters');
+const { notif } = require('../i18n/messages');
 
 // POST /api/clients — inscription client depuis la landing page
 // Corps : { prenom, marchand_slug, email?, telephone?, date_anniversaire? }
@@ -250,7 +251,7 @@ async function syncPassAfterAdjustment(serialNumber, marchandId, prenom, newValu
   }
 
   const displayMax = marchand.display_max_value || marchand.max_value || '?';
-  const msg = `Points updated — ${prenom}: ${newValue}/${displayMax}`;
+  const msg = notif('pointsAdjusted', marchand.langue, { prenom, value: newValue, max: displayMax });
 
   // Toujours mettre à jour passes.notification_message (et updated_at via trigger).
   // Cela permet à Apple Wallet de récupérer le pass lors de son prochain check

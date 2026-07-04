@@ -29,6 +29,12 @@ const messages = {
     fr: ({ prenom, value, max }) => `+1 — ${prenom} : ${value}/${max} pts`,
   },
 
+  // ── Ajustement manuel des points depuis le dashboard marchand ───────────
+  pointsAdjusted: {
+    en: ({ prenom, value, max }) => `Points updated — ${prenom}: ${value}/${max} pts`,
+    fr: ({ prenom, value, max }) => `Points mis à jour — ${prenom} : ${value}/${max} pts`,
+  },
+
   // ── Relance client inactif (défaut ; l'override marchand reste prioritaire) ─
   inactive: {
     en: ({ prenom, nom }) => `Hi ${prenom}! We miss you at ${nom}. Come visit us soon! 🎯`,
