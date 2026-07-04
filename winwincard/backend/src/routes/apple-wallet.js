@@ -178,7 +178,8 @@ async function sendWelcomePush(serialNumber, pushToken, marchandId) {
 
   if (!marchand) return;
 
-  const msg = `Welcome to ${marchand.nom}! Collect points with every visit.`;
+  const { notif } = require('../i18n/messages');
+  const msg = notif('welcome', marchand.langue, { nom: marchand.nom });
 
   await supabase.from('passes')
     .update({ notification_message: msg, updated_at: new Date().toISOString() })

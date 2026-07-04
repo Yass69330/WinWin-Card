@@ -3,6 +3,7 @@ const router = express.Router();
 const supabase = require('../services/supabase');
 const asyncHandler = require('../utils/asyncHandler');
 const { authScanner, authMarchand } = require('../middleware/auth');
+const { notif } = require('../i18n/messages');
 
 // POST /scan — scan d'un pass en caisse
 // Corps : { serial_number }
@@ -49,11 +50,12 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   const isReset    = row.is_reset;
   const recompense = !isReset && apresScan >= maxValue;
 
+  const lang = client.marchands.langue;
   const scanMessage = isReset
-    ? `Card updated — ${client.prenom}: 0/${displayMaxValue} pts`
+    ? notif('passReset',    lang, { prenom: client.prenom, max: displayMaxValue })
     : recompense
-      ? `Congrats ${client.prenom}! Reward unlocked 🎉`
-      : `+1 — ${client.prenom}: ${apresScan}/${displayMaxValue} pts`;
+      ? notif('passReward',   lang, { prenom: client.prenom })
+      : notif('passProgress', lang, { prenom: client.prenom, value: apresScan, max: displayMaxValue });
 
   // Message de notification du pass + log du scan en parallèle
   await Promise.all([
@@ -144,7 +146,7 @@ async function creditReferrerIfApplicable(filleulClientId, marchandId, bonusPoin
   const newValue   = row.stored_value_apres;
   const maxValue   = parrain.marchands.max_value;
   const displayMax = parrain.marchands.display_max_value || maxValue;
-  const msg        = `+${bonusPoints} referral bonus — ${parrain.prenom}: ${newValue}/${displayMax} pts`;
+  const msg        = notif('referral', parrain.marchands.langue, { prenom: parrain.prenom, bonus: bonusPoints, value: newValue, max: displayMax });
 
   // Audit referral_credits
   supabase.from('referral_credits').insert({

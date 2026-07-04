@@ -1,5 +1,6 @@
 const cron    = require('node-cron');
 const supabase = require('../services/supabase');
+const { notif } = require('../i18n/messages');
 
 const DEDUP_DAYS   = 7;
 const PURGE_DAYS   = 90;
@@ -51,7 +52,7 @@ async function runInactiveWorkflow(opts = {}) {
     for (const client of toNotify) {
       const msg = merchant.workflow_inactive_message
         ? merchant.workflow_inactive_message.replace('{prenom}', client.prenom).replace('{nom}', merchant.nom)
-        : `Hi ${client.prenom}! We miss you at ${merchant.nom}. Come visit us soon! 🎯`;
+        : notif('inactive', merchant.langue, { prenom: client.prenom, nom: merchant.nom });
       await notifyClient(client, merchant.id, msg);
       await supabase.from('workflow_executions').insert({ workflow_type: 'inactive', client_id: client.id, marchand_id: merchant.id });
     }
@@ -113,7 +114,7 @@ async function runNearRewardWorkflow(opts = {}) {
 
     for (const client of toNotify) {
       const remaining = maxVal - client.stored_value;
-      const msg = `Hi ${client.prenom}! Only ${remaining} more point${remaining > 1 ? 's' : ''} to unlock your reward at ${merchant.nom}. Come visit us! 🎁`;
+      const msg = notif('nearReward', merchant.langue, { prenom: client.prenom, remaining, nom: merchant.nom });
       await notifyClient(client, merchant.id, msg);
       await supabase.from('workflow_executions').insert({ workflow_type: 'near_reward', client_id: client.id, marchand_id: merchant.id });
     }
