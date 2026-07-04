@@ -313,6 +313,14 @@
             </select>
           </div>
           <div class="field">
+            <label for="f-langue">Langue</label>
+            <select id="f-langue">
+              <option value="en">English</option>
+              <option value="fr">Français</option>
+            </select>
+            <div class="field-hint">Langue de l'interface, des notifs et du label du strip. Définie à la création.</div>
+          </div>
+          <div class="field">
             <label for="f-quota-override">Quota notifs/mois (admin override)</label>
             <input id="f-quota-override" type="number" min="0" max="9999" placeholder="défaut forfait">
             <div class="field-hint">Si vide → quota par défaut du forfait.</div>
@@ -876,6 +884,7 @@ function resetForm() {
   document.getElementById('f-maxval').value     = '10';
   document.getElementById('f-displaymax').value = '';
   document.getElementById('f-forfait').value    = 'pro';
+  document.getElementById('f-langue').value      = 'en';
   document.getElementById('slug-preview').textContent = '…';
   document.getElementById('sheet-err').style.display = 'none';
   document.getElementById('section-strip-tiers').style.display = 'none';
@@ -911,6 +920,7 @@ function fillForm(m) {
   v('f-maxval', m.max_value);
   v('f-displaymax', m.display_max_value);
   if (['basic','pro','pro_plus'].includes(m.forfait)) document.getElementById('f-forfait').value = m.forfait;
+  if (['fr','en'].includes(m.langue)) document.getElementById('f-langue').value = m.langue;
   v('f-quota-override', m.notification_quota_override);
   if (m.couleur_fond)         setColor('cp-fond',   'f-fond',         m.couleur_fond);
   if (m.couleur_texte)        setColor('cp-texte',  'f-texte-c',      m.couleur_texte);
@@ -1072,6 +1082,7 @@ function collectForm() {
     max_value:       parseInt(document.getElementById('f-maxval').value) || 10,
     display_max_value: parseInt(document.getElementById('f-displaymax').value) || undefined,
     forfait:         document.getElementById('f-forfait').value,
+    langue:          document.getElementById('f-langue').value,
     notification_quota_override: parseInt(document.getElementById('f-quota-override').value) || null,
     texte_landing:    document.getElementById('f-texte').value.trim()          || undefined,
     pass_display_name: document.getElementById('f-pass-name').value.trim()    || undefined,

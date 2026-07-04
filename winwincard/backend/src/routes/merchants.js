@@ -42,7 +42,7 @@ router.post('/login', asyncHandler(async (req, res) => {
 router.get('/me', authMarchand, asyncHandler(async (req, res) => {
   const { data, error } = await supabase
     .from('marchands')
-    .select('id, nom, slug, logo_url, couleur_fond, couleur_texte, couleur_label, image_strip_url, texte_landing, max_value, display_max_value, forfait, email_contact')
+    .select('id, nom, slug, logo_url, couleur_fond, couleur_texte, couleur_label, image_strip_url, texte_landing, max_value, display_max_value, forfait, langue, email_contact')
     .eq('id', req.marchandId)
     .single();
 
@@ -100,7 +100,7 @@ router.get('/me/qrcode', authMarchand, asyncHandler(async (req, res) => {
 router.get('/:slug/public', asyncHandler(async (req, res) => {
   const { data, error } = await supabase
     .from('marchands')
-    .select('id, nom, slug, logo_url, icon_url, image_strip_url, texte_landing, couleur_fond, couleur_texte, max_value, actif, forfait, landing_premium, referral_enabled, referral_bonus_points')
+    .select('id, nom, slug, logo_url, icon_url, image_strip_url, texte_landing, couleur_fond, couleur_texte, max_value, actif, forfait, langue, landing_premium, referral_enabled, referral_bonus_points')
     .eq('slug', req.params.slug)
     .single();
 

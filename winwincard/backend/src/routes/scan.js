@@ -16,7 +16,7 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   // Récupérer le client avec son marchand
   const { data: client, error: errClient } = await supabase
     .from('clients')
-    .select('id, prenom, stored_value, marchand_id, marchands(id, max_value, display_max_value, actif, nom, slug, forfait, images_tiers, couleur_fond, couleur_fond_reward, logo_url, strip_mode, strip_theme, stamp_icon, strip_custom_background_url, strip_config_version, referral_enabled, referral_bonus_points)')
+    .select('id, prenom, stored_value, marchand_id, marchands(id, max_value, display_max_value, actif, nom, slug, forfait, langue, images_tiers, couleur_fond, couleur_fond_reward, logo_url, strip_mode, strip_theme, stamp_icon, strip_custom_background_url, strip_config_version, referral_enabled, referral_bonus_points)')
     .eq('pass_serial_number', serial_number)
     .eq('marchand_id', req.marchandId)
     .is('deleted_at', null)
@@ -125,7 +125,7 @@ async function creditReferrerIfApplicable(filleulClientId, marchandId, bonusPoin
   // Récupérer pass + infos du parrain (même marchand)
   const { data: parrain } = await supabase
     .from('clients')
-    .select('prenom, pass_serial_number, marchands(id, max_value, display_max_value, images_tiers, couleur_fond, couleur_fond_reward, slug, forfait, logo_url, strip_mode, strip_theme, stamp_icon, strip_custom_background_url, strip_config_version)')
+    .select('prenom, pass_serial_number, marchands(id, max_value, display_max_value, images_tiers, couleur_fond, couleur_fond_reward, slug, forfait, langue, logo_url, strip_mode, strip_theme, stamp_icon, strip_custom_background_url, strip_config_version)')
     .eq('id', parrainClientId)
     .eq('marchand_id', marchandId)
     .single();

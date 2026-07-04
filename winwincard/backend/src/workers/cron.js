@@ -21,7 +21,7 @@ async function runInactiveWorkflow(opts = {}) {
 
   let query = supabase
     .from('marchands')
-    .select('id, nom, workflow_inactive_days, workflow_inactive_message')
+    .select('id, nom, langue, workflow_inactive_days, workflow_inactive_message')
     .eq('forfait', 'pro_plus')
     .eq('actif',   true);
 
@@ -77,7 +77,7 @@ async function runNearRewardWorkflow(opts = {}) {
 
   let query = supabase
     .from('marchands')
-    .select('id, nom, max_value, workflow_near_reward_threshold')
+    .select('id, nom, langue, max_value, workflow_near_reward_threshold')
     .eq('forfait', 'pro_plus')
     .eq('actif',   true);
 

@@ -61,7 +61,7 @@ router.get('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
 // POST /api/admin/marchands — créer un marchand
 router.post('/marchands', authAdmin, asyncHandler(async (req, res) => {
   const {
-    nom, slug, email_contact, password, forfait,
+    nom, slug, email_contact, password, forfait, langue,
     couleur_fond, couleur_texte, couleur_label,
     logo_url, icon_url, image_strip_url, google_logo_url, google_hero_url,
     texte_landing, pass_display_name, max_value, display_max_value, images_tiers,
@@ -82,6 +82,7 @@ router.post('/marchands', authAdmin, asyncHandler(async (req, res) => {
     .insert({
       nom, slug, email_contact, password_hash,
       forfait:       ['basic', 'pro', 'pro_plus'].includes(forfait) ? forfait : 'pro',
+      langue:        ['fr', 'en'].includes(langue) ? langue : 'en',
       couleur_fond:  couleur_fond  || '#ffffff',
       couleur_texte: couleur_texte || '#000000',
       couleur_label: couleur_label || '#888888',
@@ -111,7 +112,7 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
   ]);
 
   const ALLOWED = [
-    'nom', 'email_contact', 'notification_quota_override',
+    'nom', 'email_contact', 'notification_quota_override', 'langue',
     'couleur_fond', 'couleur_texte', 'couleur_texte_reward', 'couleur_label',
     'logo_url', 'logo_reward_url', 'icon_url', 'image_strip_url', 'images_tiers',
     'google_logo_url', 'google_hero_url',
