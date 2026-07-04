@@ -321,20 +321,20 @@
 <div id="screen-login" class="screen active">
   <div class="login-brand">
     <div class="login-logo">📊</div>
-    <div class="login-title">WinWin Dashboard</div>
-    <div class="login-sub">Manage your loyalty program</div>
+    <div class="login-title" data-i18n="pageTitle">WinWin Dashboard</div>
+    <div class="login-sub" data-i18n="loginSub">Manage your loyalty program</div>
   </div>
   <form class="login-form" id="login-form" onsubmit="return false">
     <div class="field">
-      <label for="in-slug">Merchant ID (slug)</label>
+      <label for="in-slug" data-i18n="merchantId">Merchant ID (slug)</label>
       <input id="in-slug" type="text" placeholder="cafe-le-central" autocorrect="off" autocapitalize="none" autocomplete="username">
     </div>
     <div class="field">
-      <label for="in-pwd">Password</label>
+      <label for="in-pwd" data-i18n="password">Password</label>
       <input id="in-pwd" type="password" placeholder="••••••••" autocomplete="current-password">
     </div>
     <div id="login-err" class="alert alert-error" style="display:none"></div>
-    <button type="submit" class="btn btn-primary" id="btn-login">Sign in</button>
+    <button type="submit" class="btn btn-primary" id="btn-login" data-i18n="signIn">Sign in</button>
   </form>
 </div>
 
@@ -346,7 +346,7 @@
     <span class="dash-header-brand">WinWin</span>
     <span class="dash-header-nom" id="header-nom">–</span>
     <span class="forfait-badge" id="forfait-badge" data-plan="pro" style="display:none"></span>
-    <button class="btn-icon" id="btn-logout" title="Sign out">⏏</button>
+    <button class="btn-icon" id="btn-logout" title="Sign out" data-i18n-title="signOut">⏏</button>
   </header>
 
   <div class="dash-content">
@@ -360,7 +360,7 @@
         <div class="skeleton skeleton-card"></div>
         <div class="skeleton skeleton-card" style="grid-column:1/-1"></div>
       </div>
-      <p class="section-title">QR code landing page</p>
+      <p class="section-title" data-i18n="qrSectionTitle">QR code landing page</p>
       <div class="qr-card" id="qr-section">
         <div class="skeleton" style="width:180px;height:180px;border-radius:10px"></div>
         <div class="skeleton" style="width:60%;height:12px;border-radius:6px"></div>
@@ -370,15 +370,15 @@
     <!-- ── Clients ── -->
     <div id="tab-clients" class="tab-panel">
       <div class="tab-header">
-        <h2>Clients</h2>
+        <h2 data-i18n="clientsTitle">Clients</h2>
         <div style="display:flex;align-items:center;gap:8px">
-          <button class="btn btn-outline btn-sm" id="btn-export-csv" style="display:none" title="Export CSV">⬇ CSV</button>
-          <button class="btn-refresh" id="btn-refresh-clients" title="Refresh">↺</button>
+          <button class="btn btn-outline btn-sm" id="btn-export-csv" style="display:none" title="Export CSV" data-i18n="csvBtn" data-i18n-title="exportCsv">⬇ CSV</button>
+          <button class="btn-refresh" id="btn-refresh-clients" title="Refresh" data-i18n-title="refresh">↺</button>
         </div>
       </div>
       <div class="search-wrap">
         <span class="search-icon">🔍</span>
-        <input class="search-input" id="search-clients" type="search" placeholder="Search by first name…">
+        <input class="search-input" id="search-clients" type="search" placeholder="Search by first name…" data-i18n-ph="searchClients">
       </div>
       <div id="clients-meta" class="list-meta"></div>
       <div id="clients-list"></div>
@@ -387,8 +387,8 @@
     <!-- ── Historique scans ── -->
     <div id="tab-scans" class="tab-panel">
       <div class="tab-header">
-        <h2>History</h2>
-        <button class="btn-refresh" id="btn-refresh-scans" title="Refresh">↺</button>
+        <h2 data-i18n="historyTitle">History</h2>
+        <button class="btn-refresh" id="btn-refresh-scans" title="Refresh" data-i18n-title="refresh">↺</button>
       </div>
       <div id="scans-list"></div>
     </div>
@@ -400,10 +400,10 @@
         <canvas id="sc-canvas" hidden></canvas>
         <div class="sc-overlay">
           <div class="sc-frame"><span></span><div class="sc-line"></div></div>
-          <div class="sc-hint">Point at the client's pass QR code</div>
+          <div class="sc-hint" data-i18n="scanHint">Point at the client's pass QR code</div>
           <div id="sc-status" class="sc-status"></div>
         </div>
-        <button class="sc-btn-manual" id="sc-btn-manual">Manual entry</button>
+        <button class="sc-btn-manual" id="sc-btn-manual" data-i18n="manualEntry">Manual entry</button>
       </div>
 
       <!-- Result sheet -->
@@ -417,7 +417,7 @@
           </div>
         </div>
         <div id="sc-progress-section" class="sc-progress-section">
-          <div class="sc-progress-label"><span>Points</span><span id="sc-fraction">–</span></div>
+          <div class="sc-progress-label"><span data-i18n="points">Points</span><span id="sc-fraction">–</span></div>
           <div class="sc-progress-value" id="sc-value">–</div>
           <div class="sc-progress-bar-wrap"><div class="sc-progress-bar" id="sc-bar" style="width:0%"></div></div>
           <div class="sc-dots-wrap" id="sc-dots"></div>
@@ -425,23 +425,23 @@
         <div id="sc-reward-banner" class="sc-reward-banner" style="display:none">
           <div style="font-size:28px">🎉</div>
           <div>
-            <div style="font-size:15px;font-weight:700">Reward unlocked!</div>
+            <div style="font-size:15px;font-weight:700" data-i18n="rewardUnlocked">Reward unlocked!</div>
             <div id="sc-reward-sub" style="font-size:13px;opacity:.85"></div>
           </div>
         </div>
-        <div id="sc-reset-banner" class="sc-reset-banner" style="display:none">↩️ Counter reset</div>
+        <div id="sc-reset-banner" class="sc-reset-banner" style="display:none" data-i18n="counterReset">↩️ Counter reset</div>
         <div id="sc-error" class="sc-result-error" style="display:none"></div>
         <div style="display:flex;flex-direction:column;gap:8px">
-          <button class="btn btn-primary" id="sc-btn-rescan">Next scan</button>
-          <button class="btn btn-ghost"   id="sc-btn-manual-after">Manual entry</button>
+          <button class="btn btn-primary" id="sc-btn-rescan" data-i18n="nextScan">Next scan</button>
+          <button class="btn btn-ghost"   id="sc-btn-manual-after" data-i18n="manualEntry">Manual entry</button>
         </div>
       </div>
     </div>
 
     <!-- ── Notifications ── -->
     <div id="tab-notifs" class="tab-panel">
-      <div class="tab-header"><h2>Push notifications</h2></div>
-      <div class="alert alert-info" style="margin-bottom:16px">
+      <div class="tab-header"><h2 data-i18n="pushNotifs">Push notifications</h2></div>
+      <div class="alert alert-info" style="margin-bottom:16px" data-i18n="notifInfo">
         📱 Sent via Apple &amp; Google Wallet to registered devices.
       </div>
       <div class="notif-quota-bar" id="notif-quota" style="display:none">
@@ -449,17 +449,17 @@
       </div>
       <form class="notif-form" id="notif-form" onsubmit="return false">
         <div class="field">
-          <label for="notif-msg">Message</label>
-          <textarea id="notif-msg" maxlength="500" placeholder="E.g.: Come enjoy 20% off all menu items this weekend!"></textarea>
+          <label for="notif-msg" data-i18n="message">Message</label>
+          <textarea id="notif-msg" maxlength="500" placeholder="E.g.: Come enjoy 20% off all menu items this weekend!" data-i18n-ph="notifPlaceholder"></textarea>
           <div class="char-count" id="cc-msg">0 / 500</div>
         </div>
-        <button type="submit" class="btn btn-primary" id="btn-send-notif">Send notification</button>
+        <button type="submit" class="btn btn-primary" id="btn-send-notif" data-i18n="sendNotif">Send notification</button>
         <div id="notif-result" class="send-result"></div>
       </form>
 
       <div class="divider" style="margin-top:8px"></div>
       <div class="tab-header" style="margin-bottom:10px">
-        <h2 style="font-size:15px;color:var(--muted)">History</h2>
+        <h2 style="font-size:15px;color:var(--muted)" data-i18n="historyTitle">History</h2>
       </div>
       <div id="notif-history-list"></div>
     </div>
@@ -468,19 +468,19 @@
 
   <nav class="dash-nav">
     <button class="nav-btn active" data-tab="overview">
-      <span class="nav-icon">📊</span>Overview
+      <span class="nav-icon">📊</span><span data-i18n="navOverview">Overview</span>
     </button>
     <button class="nav-btn" data-tab="clients">
-      <span class="nav-icon">👥</span>Clients
+      <span class="nav-icon">👥</span><span data-i18n="navClients">Clients</span>
     </button>
     <button class="nav-btn" data-tab="scans">
-      <span class="nav-icon">📋</span>Scans
+      <span class="nav-icon">📋</span><span data-i18n="navScans">Scans</span>
     </button>
     <button class="nav-btn" data-tab="scanner">
-      <span class="nav-icon">📷</span>Scanner
+      <span class="nav-icon">📷</span><span data-i18n="navScanner">Scanner</span>
     </button>
     <button class="nav-btn" data-tab="notifs" data-min-plan="pro">
-      <span class="nav-icon">🔔</span>Notifs
+      <span class="nav-icon">🔔</span><span data-i18n="navNotifs">Notifs</span>
     </button>
   </nav>
 
@@ -492,12 +492,12 @@
 <div id="modal-delete" class="modal-overlay">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
-    <div class="modal-title">Delete this client?</div>
+    <div class="modal-title" data-i18n="deleteClientTitle">Delete this client?</div>
     <div class="modal-body" id="modal-delete-body">
       This action is <strong>irreversible</strong>. All data will be erased (GDPR).
     </div>
-    <button class="btn btn-danger" id="btn-confirm-delete">Delete permanently</button>
-    <button class="btn btn-ghost"  id="btn-cancel-delete">Cancel</button>
+    <button class="btn btn-danger" id="btn-confirm-delete" data-i18n="deletePermanently">Delete permanently</button>
+    <button class="btn btn-ghost"  id="btn-cancel-delete" data-i18n="cancel">Cancel</button>
   </div>
 </div>
 
@@ -505,14 +505,14 @@
 <div id="modal-scan-manual" class="modal-overlay">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
-    <div class="modal-title">Manual entry</div>
+    <div class="modal-title" data-i18n="manualEntry">Manual entry</div>
     <div class="field">
-      <label for="sc-manual-input">Pass serial number</label>
+      <label for="sc-manual-input" data-i18n="passSerial">Pass serial number</label>
       <input id="sc-manual-input" type="text" placeholder="serial-xxxxx" autocorrect="off" autocapitalize="none">
     </div>
     <div id="sc-manual-error" class="alert alert-error" style="display:none"></div>
-    <button class="btn btn-primary" id="sc-manual-submit">Submit</button>
-    <button class="btn btn-ghost"   id="sc-manual-cancel">Cancel</button>
+    <button class="btn btn-primary" id="sc-manual-submit" data-i18n="submit">Submit</button>
+    <button class="btn btn-ghost"   id="sc-manual-cancel" data-i18n="cancel">Cancel</button>
   </div>
 </div>
 
@@ -539,17 +539,17 @@
         <div class="cs-dots2" id="cs-prog-dots"></div>
       </div>
       <div class="cs-actions2">
-        <button class="btn btn-outline btn-sm" id="cs-btn-rename">✏️ Name</button>
-        <button class="btn btn-outline btn-sm" id="cs-btn-adjust">⚖️ Points</button>
+        <button class="btn btn-outline btn-sm" id="cs-btn-rename" data-i18n="nameBtn">✏️ Name</button>
+        <button class="btn btn-outline btn-sm" id="cs-btn-adjust" data-i18n="pointsBtn">⚖️ Points</button>
       </div>
       <div id="cs-contact"></div>
       <div>
-        <div class="cs-section-lbl" style="margin-bottom:8px">Recent scans</div>
+        <div class="cs-section-lbl" style="margin-bottom:8px" data-i18n="recentScans">Recent scans</div>
         <div id="cs-scans-list"></div>
       </div>
     </div>
     <div class="cs-footer">
-      <button class="btn btn-danger btn-sm" id="cs-btn-delete" style="width:100%">🗑 Delete client (GDPR)</button>
+      <button class="btn btn-danger btn-sm" id="cs-btn-delete" style="width:100%" data-i18n="deleteClientGdpr">🗑 Delete client (GDPR)</button>
     </div>
   </div>
 </div>
@@ -558,14 +558,14 @@
 <div id="modal-rename" class="modal-overlay">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
-    <div class="modal-title">Edit first name</div>
+    <div class="modal-title" data-i18n="editFirstName">Edit first name</div>
     <div class="field">
-      <label for="rename-input">New first name</label>
-      <input id="rename-input" type="text" maxlength="50" autocomplete="off" placeholder="First name…">
+      <label for="rename-input" data-i18n="newFirstName">New first name</label>
+      <input id="rename-input" type="text" maxlength="50" autocomplete="off" placeholder="First name…" data-i18n-ph="firstNamePh2">
     </div>
     <div id="rename-err" class="alert alert-error" style="display:none"></div>
-    <button class="btn btn-primary" id="rename-confirm">Save</button>
-    <button class="btn btn-ghost" id="rename-cancel">Cancel</button>
+    <button class="btn btn-primary" id="rename-confirm" data-i18n="save">Save</button>
+    <button class="btn btn-ghost" id="rename-cancel" data-i18n="cancel">Cancel</button>
   </div>
 </div>
 
@@ -573,14 +573,14 @@
 <div id="modal-adjust" class="modal-overlay">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
-    <div class="modal-title">Adjust points</div>
+    <div class="modal-title" data-i18n="adjustPoints">Adjust points</div>
     <div class="field">
-      <label for="adjust-input">New balance (0 – <span id="adjust-max">?</span> pts)</label>
+      <label for="adjust-input" id="adjust-label">New balance (0 – <span id="adjust-max">?</span> pts)</label>
       <input id="adjust-input" type="number" min="0" autocomplete="off" placeholder="0">
     </div>
     <div id="adjust-err" class="alert alert-error" style="display:none"></div>
-    <button class="btn btn-primary" id="adjust-confirm">Confirm</button>
-    <button class="btn btn-ghost" id="adjust-cancel">Cancel</button>
+    <button class="btn btn-primary" id="adjust-confirm" data-i18n="confirm">Confirm</button>
+    <button class="btn btn-ghost" id="adjust-cancel" data-i18n="cancel">Cancel</button>
   </div>
 </div>
 
@@ -598,6 +598,136 @@ const S = {
 };
 
 const SC = { stream: null, rafId: null, scanning: false, processing: false };
+
+// ════════════════════════════════════════════════
+// i18n FR/EN — langue du marchand (via /me), persistée en localStorage.
+// Statique : data-i18n / data-i18n-ph / data-i18n-title. JS : t('cle', {vars}).
+// ════════════════════════════════════════════════
+let _lang = 'en';
+const I18N = {
+  en: {
+    pageTitle:'WinWin Dashboard', loginSub:'Manage your loyalty program',
+    merchantId:'Merchant ID (slug)', password:'Password', signIn:'Sign in', signOut:'Sign out',
+    qrSectionTitle:'QR code landing page',
+    statTotalClients:'Total clients', statScansToday:'Scans today', statActive30d:'Active (30 days)',
+    statRetention:'Retention rate', statAvgVisits:'Avg visits / active client (30d)',
+    copyLink:'📋 Copy link', copied:'✓ Copied', share:'↗ Share', qrShareTitle:'Loyalty program',
+    clientsTitle:'Clients', csvBtn:'⬇ CSV', exportCsv:'Export CSV', refresh:'Refresh',
+    searchClients:'Search by first name…',
+    clientsCount:({n,found})=>`${n} client${n>1?'s':''}${found?' found':''}`,
+    noResults:'No results', noClients:'No clients', tryAnotherName:'Try another name',
+    clientsWillAppear:'Clients will appear here after sign-up',
+    exportFailed:'Export failed', exportError:({msg})=>'Export error: '+msg,
+    historyTitle:'History', noScans:'No scans',
+    scansWillAppear:'Scan history will appear here after the first transactions',
+    rewardBadge:'🎉 Reward', resetBadge:'↩️ Reset',
+    scanHint:"Point at the client's pass QR code", manualEntry:'Manual entry', points:'Points',
+    rewardUnlocked:'Reward unlocked!',
+    rewardSub:({prenom,max})=>`${prenom} reached ${max} points — give the reward!`,
+    counterReset:'↩️ Counter reset', nextScan:'Next scan', processing:'⏳ Processing…',
+    cameraError:({msg})=>'Cannot access camera: '+msg, cameraErrorName:'Camera error',
+    unknownError:'Unknown error', errorName:'Error',
+    pushNotifs:'Push notifications',
+    notifInfo:'📱 Sent via Apple & Google Wallet to registered devices.',
+    message:'Message', notifPlaceholder:'E.g.: Come enjoy 20% off all menu items this weekend!',
+    sendNotif:'Send notification', msgRequired:'Message is required', sending:'Sending…',
+    sendError:'Send error', noDevices:'No registered devices.',
+    appleLine:({sent,total,failed})=>`🍎 Apple Wallet: ${sent}/${total} sent${failed?` · ${failed} failed`:''}`,
+    googleLine:({updated,total,failed})=>`🤖 Google Wallet: ${updated}/${total} updated${failed?` · ${failed} failed`:''}`,
+    quotaText:({used,limit})=>`${used} / ${limit} notifications this month`,
+    errLoadHistory:'Error loading history', noNotifsSent:'No notifications sent yet',
+    received:({envoyes,total})=>`${envoyes}/${total} received`, noDevicesShort:'No devices',
+    deleteClientTitle:'Delete this client?',
+    deleteBody:({nom})=>`Delete <strong>${nom}</strong>? This action is <strong>irreversible</strong> — the pass will become invalid.`,
+    deletePermanently:'Delete permanently', cancel:'Cancel',
+    passSerial:'Pass serial number', submit:'Submit', enterSerial:'Enter a serial number',
+    nameBtn:'✏️ Name', pointsBtn:'⚖️ Points', recentScans:'Recent scans',
+    deleteClientGdpr:'🗑 Delete client (GDPR)',
+    memberSince:({date})=>'Member since '+date, noScansClient:'No scans recorded for this client.',
+    editFirstName:'Edit first name', newFirstName:'New first name', firstNamePh2:'First name…',
+    save:'Save', firstNameRequired:'First name required', errorGeneric:'Error',
+    adjustPoints:'Adjust points', newBalance:({max})=>`New balance (0 – ${max} pts)`,
+    confirm:'Confirm', valueBetween:({max})=>`Value between 0 and ${max}`,
+    signOutConfirm:'Sign out?', sessionExpired:'Session expired, please sign in again',
+    fillAllFields:'Please fill in all fields', invalidCreds:'Invalid credentials',
+    justNow:'just now', minAgo:({m})=>`${m} min ago`, hoursAgo:({h})=>`${h}h ago`,
+    yesterday:'yesterday', daysAgo:({d})=>`${d} days ago`,
+    navOverview:'Overview', navClients:'Clients', navScans:'Scans', navScanner:'Scanner', navNotifs:'Notifs',
+  },
+  fr: {
+    pageTitle:'WinWin — Tableau de bord', loginSub:'Gérez votre programme de fidélité',
+    merchantId:'Identifiant marchand (slug)', password:'Mot de passe', signIn:'Se connecter', signOut:'Se déconnecter',
+    qrSectionTitle:"QR code de la page d'accueil",
+    statTotalClients:'Clients au total', statScansToday:"Scans aujourd'hui", statActive30d:'Actifs (30 jours)',
+    statRetention:'Taux de rétention', statAvgVisits:'Visites moy. / client actif (30j)',
+    copyLink:'📋 Copier le lien', copied:'✓ Copié', share:'↗ Partager', qrShareTitle:'Programme de fidélité',
+    clientsTitle:'Clients', csvBtn:'⬇ CSV', exportCsv:'Exporter CSV', refresh:'Actualiser',
+    searchClients:'Rechercher par prénom…',
+    clientsCount:({n,found})=>`${n} client${n>1?'s':''}${found?' trouvé'+(n>1?'s':''):''}`,
+    noResults:'Aucun résultat', noClients:'Aucun client', tryAnotherName:'Essayez un autre nom',
+    clientsWillAppear:'Les clients apparaîtront ici après leur inscription',
+    exportFailed:"Échec de l'export", exportError:({msg})=>'Erreur export : '+msg,
+    historyTitle:'Historique', noScans:'Aucun scan',
+    scansWillAppear:"L'historique des scans apparaîtra ici après les premières transactions",
+    rewardBadge:'🎉 Récompense', resetBadge:'↩️ Remise à zéro',
+    scanHint:'Visez le QR code du pass du client', manualEntry:'Saisie manuelle', points:'Points',
+    rewardUnlocked:'Récompense débloquée !',
+    rewardSub:({prenom,max})=>`${prenom} a atteint ${max} points — remettez la récompense !`,
+    counterReset:'↩️ Compteur remis à zéro', nextScan:'Scan suivant', processing:'⏳ Traitement…',
+    cameraError:({msg})=>"Impossible d'accéder à la caméra : "+msg, cameraErrorName:'Erreur caméra',
+    unknownError:'Erreur inconnue', errorName:'Erreur',
+    pushNotifs:'Notifications push',
+    notifInfo:'📱 Envoyées via Apple & Google Wallet aux appareils enregistrés.',
+    message:'Message', notifPlaceholder:'Ex. : Profitez de -20% sur toute la carte ce week-end !',
+    sendNotif:'Envoyer la notification', msgRequired:'Le message est requis', sending:'Envoi…',
+    sendError:"Erreur d'envoi", noDevices:'Aucun appareil enregistré.',
+    appleLine:({sent,total,failed})=>`🍎 Apple Wallet : ${sent}/${total} envoyées${failed?` · ${failed} échec${failed>1?'s':''}`:''}`,
+    googleLine:({updated,total,failed})=>`🤖 Google Wallet : ${updated}/${total} mises à jour${failed?` · ${failed} échec${failed>1?'s':''}`:''}`,
+    quotaText:({used,limit})=>`${used} / ${limit} notifications ce mois-ci`,
+    errLoadHistory:"Erreur de chargement de l'historique", noNotifsSent:'Aucune notification envoyée pour le moment',
+    received:({envoyes,total})=>`${envoyes}/${total} reçues`, noDevicesShort:'Aucun appareil',
+    deleteClientTitle:'Supprimer ce client ?',
+    deleteBody:({nom})=>`Supprimer <strong>${nom}</strong> ? Cette action est <strong>irréversible</strong> — le pass deviendra invalide.`,
+    deletePermanently:'Supprimer définitivement', cancel:'Annuler',
+    passSerial:'Numéro de série du pass', submit:'Valider', enterSerial:'Saisissez un numéro de série',
+    nameBtn:'✏️ Nom', pointsBtn:'⚖️ Points', recentScans:'Scans récents',
+    deleteClientGdpr:'🗑 Supprimer le client (RGPD)',
+    memberSince:({date})=>'Membre depuis le '+date, noScansClient:'Aucun scan enregistré pour ce client.',
+    editFirstName:'Modifier le prénom', newFirstName:'Nouveau prénom', firstNamePh2:'Prénom…',
+    save:'Enregistrer', firstNameRequired:'Prénom requis', errorGeneric:'Erreur',
+    adjustPoints:'Ajuster les points', newBalance:({max})=>`Nouveau solde (0 – ${max} pts)`,
+    confirm:'Confirmer', valueBetween:({max})=>`Valeur entre 0 et ${max}`,
+    signOutConfirm:'Se déconnecter ?', sessionExpired:'Session expirée, reconnectez-vous',
+    fillAllFields:'Veuillez remplir tous les champs', invalidCreds:'Identifiants invalides',
+    justNow:"à l'instant", minAgo:({m})=>`il y a ${m} min`, hoursAgo:({h})=>`il y a ${h} h`,
+    yesterday:'hier', daysAgo:({d})=>`il y a ${d} jours`,
+    navOverview:'Aperçu', navClients:'Clients', navScans:'Scans', navScanner:'Scanner', navNotifs:'Notifs',
+  },
+};
+
+function t(key, vars) {
+  const dict = I18N[_lang] || I18N.en;
+  let s = dict[key] != null ? dict[key] : (I18N.en[key] != null ? I18N.en[key] : key);
+  if (typeof s === 'function') return s(vars || {});
+  if (vars) s = s.replace(/\{(\w+)\}/g, (_, k) => (vars[k] != null ? vars[k] : ''));
+  return s;
+}
+
+function applyI18n() {
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.setAttribute('placeholder', t(el.getAttribute('data-i18n-ph'))); });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.setAttribute('title', t(el.getAttribute('data-i18n-title'))); });
+}
+
+function setLang(l) {
+  _lang = (l === 'fr' || l === 'en') ? l : 'en';
+  document.documentElement.lang = _lang;
+  document.title = t('pageTitle');
+  try { localStorage.setItem('ww_dash_lang', _lang); } catch {}
+  applyI18n();
+}
+
+const dateLocale = () => (_lang === 'fr' ? 'fr-FR' : 'en-GB');
 
 // ════════════════════════════════════════════════
 // AUTH / SESSION
@@ -663,7 +793,7 @@ async function api(path, opts = {}) {
     ...opts,
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.token}`, ...(opts.headers || {}) },
   });
-  if (res.status === 401) { clearSession(); showLogin(); throw new Error('Session expired, please sign in again'); }
+  if (res.status === 401) { clearSession(); showLogin(); throw new Error(t('sessionExpired')); }
   return res;
 }
 
@@ -693,7 +823,7 @@ document.getElementById('login-form').addEventListener('submit', async () => {
   const errEl = document.getElementById('login-err');
   const btn   = document.getElementById('btn-login');
   errEl.style.display = 'none';
-  if (!slug || !pwd) { showErr(errEl, 'Please fill in all fields'); return; }
+  if (!slug || !pwd) { showErr(errEl, t('fillAllFields')); return; }
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
   try {
     const res = await fetch('/api/merchants/login', {
@@ -701,14 +831,14 @@ document.getElementById('login-form').addEventListener('submit', async () => {
       body: JSON.stringify({ slug, password: pwd }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Invalid credentials');
+    if (!res.ok) throw new Error(data.error || t('invalidCreds'));
     data.slug = data.slug || slug;
     saveSession(data);
     showDashboard();
   } catch (e) {
     showErr(errEl, e.message);
   } finally {
-    btn.disabled = false; btn.textContent = 'Sign in';
+    btn.disabled = false; btn.textContent = t('signIn');
   }
 });
 
@@ -718,7 +848,7 @@ function showErr(el, msg) { el.textContent = msg; el.style.display = 'block'; }
 // LOGOUT
 // ════════════════════════════════════════════════
 document.getElementById('btn-logout').addEventListener('click', () => {
-  if (!confirm('Sign out?')) return;
+  if (!confirm(t('signOutConfirm'))) return;
   clearSession();
   S.clients = null; S.scans = null; S.stats = null; S.qr = null; S.notifLogs = null;
   showLogin();
@@ -763,6 +893,7 @@ async function loadOverview(force = false) {
     S.displayMax = me.display_max_value || S.maxValue;
     S.forfait   = me.forfait || 'pro';
     try { localStorage.setItem('ww_dash_forfait', S.forfait); } catch {}
+    setLang(me.langue);
     applyForfaitGating();
   }
   renderOverview();
@@ -771,27 +902,27 @@ async function loadOverview(force = false) {
 function renderOverview() {
   const st = S.stats;
   document.getElementById('stats-grid').innerHTML = `
-    <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-value">${st.total_clients ?? '–'}</div><div class="stat-label">Total clients</div></div>
-    <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-value">${st.scans_aujourdhui ?? '–'}</div><div class="stat-label">Scans today</div></div>
-    <div class="stat-card"><div class="stat-icon">🔥</div><div class="stat-value">${st.active_clients_30d ?? '–'}</div><div class="stat-label">Active (30 days)</div></div>
-    <div class="stat-card"><div class="stat-icon">🔄</div><div class="stat-value">${st.retention_rate != null ? st.retention_rate + '%' : '–'}</div><div class="stat-label">Retention rate</div></div>
-    <div class="stat-card" style="grid-column:1/-1;flex-direction:row;align-items:center;gap:14px"><div class="stat-icon" style="margin:0">📈</div><div><div class="stat-value" style="font-size:22px">${st.avg_frequency ?? '–'}x</div><div class="stat-label">Avg visits / active client (30d)</div></div></div>`;
+    <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-value">${st.total_clients ?? '–'}</div><div class="stat-label">${t('statTotalClients')}</div></div>
+    <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-value">${st.scans_aujourdhui ?? '–'}</div><div class="stat-label">${t('statScansToday')}</div></div>
+    <div class="stat-card"><div class="stat-icon">🔥</div><div class="stat-value">${st.active_clients_30d ?? '–'}</div><div class="stat-label">${t('statActive30d')}</div></div>
+    <div class="stat-card"><div class="stat-icon">🔄</div><div class="stat-value">${st.retention_rate != null ? st.retention_rate + '%' : '–'}</div><div class="stat-label">${t('statRetention')}</div></div>
+    <div class="stat-card" style="grid-column:1/-1;flex-direction:row;align-items:center;gap:14px"><div class="stat-icon" style="margin:0">📈</div><div><div class="stat-value" style="font-size:22px">${st.avg_frequency ?? '–'}x</div><div class="stat-label">${t('statAvgVisits')}</div></div></div>`;
   const qrSection = document.getElementById('qr-section');
   qrSection.innerHTML = `
     <img src="${S.qr.qrcode}" alt="QR code">
     <div class="qr-url">${S.qr.url}</div>
     <div class="qr-actions">
-      <button class="btn btn-outline btn-sm" id="btn-copy-url">📋 Copy link</button>
-      ${navigator.share ? '<button class="btn btn-outline btn-sm" id="btn-share-url">↗ Share</button>' : ''}
+      <button class="btn btn-outline btn-sm" id="btn-copy-url">${t('copyLink')}</button>
+      ${navigator.share ? `<button class="btn btn-outline btn-sm" id="btn-share-url">${t('share')}</button>` : ''}
     </div>`;
   document.getElementById('btn-copy-url')?.addEventListener('click', () => {
     navigator.clipboard.writeText(S.qr.url).then(() => {
       const b = document.getElementById('btn-copy-url');
-      b.textContent = '✓ Copied'; setTimeout(() => b.textContent = '📋 Copy link', 2000);
+      b.textContent = t('copied'); setTimeout(() => b.textContent = t('copyLink'), 2000);
     });
   });
   document.getElementById('btn-share-url')?.addEventListener('click', () => {
-    navigator.share({ url: S.qr.url, title: 'Loyalty program' }).catch(() => {});
+    navigator.share({ url: S.qr.url, title: t('qrShareTitle') }).catch(() => {});
   });
 }
 
@@ -819,10 +950,10 @@ function renderClients(filter = '') {
   const shown = q ? S.clients.filter(c => c.prenom.toLowerCase().includes(q)) : S.clients;
   if (shown.length === 0) {
     meta.textContent = '';
-    list.innerHTML = `<div class="empty"><div class="empty-icon">👤</div><div class="empty-title">${q ? 'No results' : 'No clients'}</div><div class="empty-sub">${q ? 'Try another name' : 'Clients will appear here after sign-up'}</div></div>`;
+    list.innerHTML = `<div class="empty"><div class="empty-icon">👤</div><div class="empty-title">${q ? t('noResults') : t('noClients')}</div><div class="empty-sub">${q ? t('tryAnotherName') : t('clientsWillAppear')}</div></div>`;
     return;
   }
-  meta.textContent = `${shown.length} client${shown.length > 1 ? 's' : ''}${q ? ' found' : ''}`;
+  meta.textContent = t('clientsCount', { n: shown.length, found: !!q });
   list.innerHTML = shown.map(c => {
     const pct = Math.min(c.stored_value / S.displayMax * 100, 100);
     const full = c.stored_value >= S.maxValue;
@@ -853,7 +984,7 @@ document.getElementById('btn-export-csv').addEventListener('click', async () => 
     const res = await api('/api/clients/export');
     if (!res.ok) {
       const d = await res.json();
-      alert(d.error || 'Export failed');
+      alert(d.error || t('exportFailed'));
       return;
     }
     const blob = await res.blob();
@@ -865,9 +996,9 @@ document.getElementById('btn-export-csv').addEventListener('click', async () => 
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   } catch (e) {
-    alert('Export error: ' + e.message);
+    alert(t('exportError', { msg: e.message }));
   } finally {
-    btn.disabled = false; btn.textContent = '⬇ CSV';
+    btn.disabled = false; btn.textContent = t('csvBtn');
   }
 });
 
@@ -890,7 +1021,7 @@ async function loadScans(force = false) {
 function renderScans() {
   const el = document.getElementById('scans-list');
   if (!Array.isArray(S.scans) || S.scans.length === 0) {
-    el.innerHTML = `<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">No scans</div><div class="empty-sub">Scan history will appear here after the first transactions</div></div>`;
+    el.innerHTML = `<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">${t('noScans')}</div><div class="empty-sub">${t('scansWillAppear')}</div></div>`;
     return;
   }
   el.innerHTML = S.scans.map(s => {
@@ -900,9 +1031,9 @@ function renderScans() {
     const reward = apres >= S.maxValue;
     const reset  = apres === 0 && avant > 0;
     const delta  = reward
-      ? `<div class="scan-pts" style="color:var(--warning)">🎉 Reward</div><div style="font-size:11px;color:var(--muted)">${avant} → ${apres}</div>`
+      ? `<div class="scan-pts" style="color:var(--warning)">${t('rewardBadge')}</div><div style="font-size:11px;color:var(--muted)">${avant} → ${apres}</div>`
       : reset
-        ? `<div class="scan-pts" style="color:var(--accent)">↩️ Reset</div><div style="font-size:11px;color:var(--muted)">${avant} → 0</div>`
+        ? `<div class="scan-pts" style="color:var(--accent)">${t('resetBadge')}</div><div style="font-size:11px;color:var(--muted)">${avant} → 0</div>`
         : `<div class="scan-pts">${avant} → ${apres}</div>`;
     return `<div class="scan-entry">
       <div class="scan-avatar" style="background:${colorFrom(prenom)}">${prenom.charAt(0).toUpperCase()}</div>
@@ -944,8 +1075,8 @@ function startScannerTab() {
     document.getElementById('sc-reward-banner').style.display = 'none';
     document.getElementById('sc-reset-banner').style.display = 'none';
     document.getElementById('sc-error').style.display = 'block';
-    document.getElementById('sc-error').textContent = 'Cannot access camera: ' + e.message;
-    document.getElementById('sc-name').textContent = 'Camera error';
+    document.getElementById('sc-error').textContent = t('cameraError', { msg: e.message });
+    document.getElementById('sc-name').textContent = t('cameraErrorName');
     document.getElementById('sc-avatar').textContent = '⚠';
     document.getElementById('sc-avatar').style.background = 'var(--error)';
     document.getElementById('sc-serial').textContent = '';
@@ -989,7 +1120,7 @@ async function submitScanDashboard(serial) {
   if (SC.processing) return;
   SC.processing = true;
   const statusEl = document.getElementById('sc-status');
-  statusEl.textContent = '⏳ Processing…'; statusEl.style.display = 'block';
+  statusEl.textContent = t('processing'); statusEl.style.display = 'block';
   try { navigator.vibrate && navigator.vibrate(50); } catch {}
   try {
     const res = await fetch('/api/scan', {
@@ -1017,9 +1148,9 @@ function showScanResult(data, ok, serial) {
   document.getElementById('sc-progress-section').style.display = ok ? '' : 'none';
 
   if (!ok) {
-    document.getElementById('sc-error').textContent = data.error || 'Unknown error';
+    document.getElementById('sc-error').textContent = data.error || t('unknownError');
     document.getElementById('sc-error').style.display = 'block';
-    document.getElementById('sc-name').textContent = 'Error';
+    document.getElementById('sc-name').textContent = t('errorName');
     document.getElementById('sc-avatar').textContent = '✗';
     document.getElementById('sc-avatar').style.background = 'var(--error)';
     document.getElementById('sc-serial').textContent = serial;
@@ -1054,7 +1185,7 @@ function showScanResult(data, ok, serial) {
 
   if (recompense) {
     document.getElementById('sc-reward-banner').style.display = 'flex';
-    document.getElementById('sc-reward-sub').textContent = `${prenom} reached ${displayMax} points — give the reward!`;
+    document.getElementById('sc-reward-sub').textContent = t('rewardSub', { prenom, max: displayMax });
     try { navigator.vibrate && navigator.vibrate([100, 50, 100, 50, 200]); } catch {}
   }
   if (isReset) document.getElementById('sc-reset-banner').style.display = 'block';
@@ -1090,7 +1221,7 @@ document.getElementById('modal-scan-manual').addEventListener('click', e => {
 document.getElementById('sc-manual-submit').addEventListener('click', async () => {
   const serial = document.getElementById('sc-manual-input').value.trim();
   const errEl  = document.getElementById('sc-manual-error');
-  if (!serial) { showErr(errEl, 'Enter a serial number'); return; }
+  if (!serial) { showErr(errEl, t('enterSerial')); return; }
   closeManualScan();
   SC.processing = false;
   await submitScanDashboard(serial);
@@ -1111,27 +1242,27 @@ document.getElementById('notif-form').addEventListener('submit', async () => {
   const result = document.getElementById('notif-result');
   const btn    = document.getElementById('btn-send-notif');
   result.innerHTML = '';
-  if (!msg) { result.innerHTML = '<div class="alert alert-error">Message is required</div>'; return; }
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Sending…';
+  if (!msg) { result.innerHTML = `<div class="alert alert-error">${t('msgRequired')}</div>`; return; }
+  btn.disabled = true; btn.innerHTML = `<span class="spinner"></span> ${t('sending')}`;
   try {
     const res  = await api('/api/notifications', { method: 'POST', body: JSON.stringify({ message: msg }) });
     const data = await res.json();
     if (!res.ok) {
-      result.innerHTML = `<div class="alert alert-error">${data.error || 'Send error'}</div>`;
+      result.innerHTML = `<div class="alert alert-error">${data.error || t('sendError')}</div>`;
       S.notifLogs = null; setTimeout(() => loadNotifHistory(true), 400);
       return;
     }
     const { apple, google } = data;
     const totalClients = apple.total + google.total;
     if (totalClients === 0) {
-      result.innerHTML = `<div class="alert alert-info">No registered devices.</div>`;
+      result.innerHTML = `<div class="alert alert-info">${t('noDevices')}</div>`;
     } else {
       const lines = [];
       if (apple.active) {
-        lines.push(`🍎 Apple Wallet: ${apple.envoyes}/${apple.total} sent${apple.echecs ? ` · ${apple.echecs} failed` : ''}`);
+        lines.push(t('appleLine', { sent: apple.envoyes, total: apple.total, failed: apple.echecs }));
       }
       if (google.active) {
-        lines.push(`🤖 Google Wallet: ${google.envoyes}/${google.total} updated${google.echecs ? ` · ${google.echecs} failed` : ''}`);
+        lines.push(t('googleLine', { updated: google.envoyes, total: google.total, failed: google.echecs }));
       }
       const totalEnvoyes = apple.envoyes + google.envoyes;
       result.innerHTML = `<div class="alert ${totalEnvoyes > 0 ? 'alert-success' : 'alert-info'}">${lines.join('<br>')}</div>`;
@@ -1145,7 +1276,7 @@ document.getElementById('notif-form').addEventListener('submit', async () => {
   } catch (e) {
     result.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
   } finally {
-    btn.disabled = false; btn.textContent = 'Send notification';
+    btn.disabled = false; btn.textContent = t('sendNotif');
   }
 });
 
@@ -1156,7 +1287,7 @@ async function loadNotifHistory(force = false) {
   try {
     const res  = await api('/api/notifications');
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Error loading history');
+    if (!res.ok) throw new Error(data.error || t('errLoadHistory'));
     // Response: { logs: [...], quota: { used, limit, forfait } }
     S.notifLogs = Array.isArray(data.logs) ? data.logs : (Array.isArray(data) ? data : []);
 
@@ -1165,7 +1296,7 @@ async function loadNotifHistory(force = false) {
     const quota     = data.quota;
     if (quota && quotaEl && quotaText) {
       const pct = quota.limit > 0 ? quota.used / quota.limit : 0;
-      quotaText.textContent   = `${quota.used} / ${quota.limit} notifications this month`;
+      quotaText.textContent   = t('quotaText', { used: quota.used, limit: quota.limit });
       quotaEl.style.display   = '';
       quotaEl.className = 'notif-quota-bar' + (pct >= 1 ? ' overlimit' : pct >= 0.8 ? ' warning' : '');
     }
@@ -1180,13 +1311,13 @@ async function loadNotifHistory(force = false) {
 function renderNotifHistory() {
   const el = document.getElementById('notif-history-list');
   if (!S.notifLogs || S.notifLogs.length === 0) {
-    el.innerHTML = `<div class="empty" style="padding:20px 0"><div class="empty-icon">📭</div><div class="empty-sub">No notifications sent yet</div></div>`;
+    el.innerHTML = `<div class="empty" style="padding:20px 0"><div class="empty-icon">📭</div><div class="empty-sub">${t('noNotifsSent')}</div></div>`;
     return;
   }
   el.innerHTML = S.notifLogs.map(n => {
     const total   = (n.total_apple || 0) + (n.total_google || 0);
     const envoyes = (n.envoyes_apple || 0) + (n.envoyes_google || 0);
-    const dest = total > 0 ? `${envoyes}/${total} received` : 'No devices';
+    const dest = total > 0 ? t('received', { envoyes, total }) : t('noDevicesShort');
     return `<div class="notif-log-entry">
       <div class="notif-log-msg">${esc(n.message)}</div>
       <div class="notif-log-meta"><span>${timeAgo(n.created_at)}</span><span>${dest}</span></div>
@@ -1230,7 +1361,7 @@ function renderClientSheet({ client, scans }) {
   av.textContent      = client.prenom.charAt(0).toUpperCase();
   av.style.background = colorFrom(client.prenom);
   document.getElementById('cs-name').textContent  = client.prenom;
-  document.getElementById('cs-since').textContent = 'Member since ' + new Date(client.created_at).toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' });
+  document.getElementById('cs-since').textContent = t('memberSince', { date: new Date(client.created_at).toLocaleDateString(dateLocale(), { day:'numeric', month:'long', year:'numeric' }) });
   document.getElementById('cs-pts').textContent   = client.stored_value;
   document.getElementById('cs-pts-max').textContent = `/ ${displayMax}`;
   document.getElementById('cs-reward-badge').style.display = full ? '' : 'none';
@@ -1247,7 +1378,7 @@ function renderClientSheet({ client, scans }) {
       const rows = [];
       if (client.email)             rows.push(`<div class="cs-contact-row"><span class="cs-contact-icon">✉️</span><a class="cs-contact-link" href="mailto:${esc(client.email)}">${esc(client.email)}</a></div>`);
       if (client.telephone)         rows.push(`<div class="cs-contact-row"><span class="cs-contact-icon">📞</span><a class="cs-contact-link" href="tel:${esc(client.telephone)}">${esc(client.telephone)}</a></div>`);
-      if (client.date_anniversaire) rows.push(`<div class="cs-contact-row"><span class="cs-contact-icon">🎂</span><span>${new Date(client.date_anniversaire + 'T00:00:00').toLocaleDateString('fr-FR', { day:'numeric', month:'long' })}</span></div>`);
+      if (client.date_anniversaire) rows.push(`<div class="cs-contact-row"><span class="cs-contact-icon">🎂</span><span>${new Date(client.date_anniversaire + 'T00:00:00').toLocaleDateString(dateLocale(), { day:'numeric', month:'long' })}</span></div>`);
       contactEl.innerHTML = `<div class="cs-contact-box">${rows.join('')}</div>`;
     } else {
       contactEl.innerHTML = '';
@@ -1256,14 +1387,14 @@ function renderClientSheet({ client, scans }) {
 
   const sl = document.getElementById('cs-scans-list');
   if (!scans || scans.length === 0) {
-    sl.innerHTML = '<div class="cs-no-scans">No scans recorded for this client.</div>';
+    sl.innerHTML = `<div class="cs-no-scans">${t('noScansClient')}</div>`;
     return;
   }
   sl.innerHTML = scans.map(s => {
     const isReset  = s.stored_value_apres === 0 && s.stored_value_avant > 0;
     const isReward = !isReset && s.stored_value_apres >= S.maxValue;
     const icon = isReset ? '↩️' : isReward ? '🎉' : '✅';
-    const dateStr = new Date(s.date_scan).toLocaleDateString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+    const dateStr = new Date(s.date_scan).toLocaleDateString(dateLocale(), { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
     return `<div class="cs-scan-row">
       <span class="cs-scan-icon">${icon}</span>
       <div style="flex:1">
@@ -1306,13 +1437,13 @@ document.getElementById('rename-confirm').addEventListener('click', async () => 
   const prenom = document.getElementById('rename-input').value.trim();
   const errEl  = document.getElementById('rename-err');
   errEl.style.display = 'none';
-  if (!prenom) { errEl.textContent = 'First name required'; errEl.style.display = 'block'; return; }
+  if (!prenom) { errEl.textContent = t('firstNameRequired'); errEl.style.display = 'block'; return; }
   const btn = document.getElementById('rename-confirm');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
   try {
     const res  = await api(`/api/clients/${S.clientId}`, { method: 'PATCH', body: JSON.stringify({ prenom }) });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Error');
+    if (!res.ok) throw new Error(data.error || t('errorGeneric'));
     if (S.clientData) S.clientData.client = { ...S.clientData.client, ...data };
     if (S.clients) { const idx = S.clients.findIndex(c => c.id === S.clientId); if (idx >= 0) S.clients[idx].prenom = data.prenom; }
     document.getElementById('modal-rename').classList.remove('open');
@@ -1321,7 +1452,7 @@ document.getElementById('rename-confirm').addEventListener('click', async () => 
   } catch (e) {
     errEl.textContent = e.message; errEl.style.display = 'block';
   } finally {
-    btn.disabled = false; btn.textContent = 'Save';
+    btn.disabled = false; btn.textContent = t('save');
   }
 });
 
@@ -1330,6 +1461,7 @@ document.getElementById('cs-btn-adjust').addEventListener('click', () => {
   if (!S.clientData) return;
   document.getElementById('adjust-input').value = S.clientData.client.stored_value;
   document.getElementById('adjust-max').textContent = S.maxValue;
+  document.getElementById('adjust-label').textContent = t('newBalance', { max: S.maxValue });
   document.getElementById('adjust-err').style.display = 'none';
   document.getElementById('modal-adjust').classList.add('open');
   setTimeout(() => document.getElementById('adjust-input').focus(), 100);
@@ -1345,14 +1477,14 @@ document.getElementById('adjust-confirm').addEventListener('click', async () => 
   const errEl = document.getElementById('adjust-err');
   errEl.style.display = 'none';
   if (isNaN(val) || val < 0 || val > S.maxValue) {
-    errEl.textContent = `Value between 0 and ${S.maxValue}`; errEl.style.display = 'block'; return;
+    errEl.textContent = t('valueBetween', { max: S.maxValue }); errEl.style.display = 'block'; return;
   }
   const btn = document.getElementById('adjust-confirm');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
   try {
     const res  = await api(`/api/clients/${S.clientId}`, { method: 'PATCH', body: JSON.stringify({ stored_value: val }) });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Error');
+    if (!res.ok) throw new Error(data.error || t('errorGeneric'));
     if (S.clientData) S.clientData.client = { ...S.clientData.client, ...data };
     if (S.clients) { const idx = S.clients.findIndex(c => c.id === S.clientId); if (idx >= 0) S.clients[idx].stored_value = data.stored_value; }
     document.getElementById('modal-adjust').classList.remove('open');
@@ -1361,7 +1493,7 @@ document.getElementById('adjust-confirm').addEventListener('click', async () => 
   } catch (e) {
     errEl.textContent = e.message; errEl.style.display = 'block';
   } finally {
-    btn.disabled = false; btn.textContent = 'Confirm';
+    btn.disabled = false; btn.textContent = t('confirm');
   }
 });
 
@@ -1370,8 +1502,7 @@ document.getElementById('adjust-confirm').addEventListener('click', async () => 
 // ════════════════════════════════════════════════
 function openDeleteModal(id, nom) {
   S.deleteTargetId = id; S.deleteTargetNom = nom;
-  document.getElementById('modal-delete-body').innerHTML =
-    `Delete <strong>${esc(nom)}</strong>? This action is <strong>irreversible</strong> — the pass will become invalid.`;
+  document.getElementById('modal-delete-body').innerHTML = t('deleteBody', { nom: esc(nom) });
   document.getElementById('modal-delete').classList.add('open');
 }
 
@@ -1388,7 +1519,7 @@ document.getElementById('btn-confirm-delete').addEventListener('click', async ()
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
   try {
     const res = await api(`/api/clients/${id}`, { method: 'DELETE' });
-    if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Deletion error'); }
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error || t('errorGeneric')); }
     document.getElementById('modal-delete').classList.remove('open');
     if (S.clients) S.clients = S.clients.filter(c => c.id !== id);
     renderClients(document.getElementById('search-clients').value);
@@ -1396,7 +1527,7 @@ document.getElementById('btn-confirm-delete').addEventListener('click', async ()
   } catch (e) {
     alert(e.message);
   } finally {
-    btn.disabled = false; btn.textContent = 'Delete permanently';
+    btn.disabled = false; btn.textContent = t('deletePermanently');
   }
 });
 
@@ -1406,14 +1537,14 @@ document.getElementById('btn-confirm-delete').addEventListener('click', async ()
 function timeAgo(iso) {
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);
-  if (m < 1)  return 'just now';
-  if (m < 60) return `${m} min ago`;
+  if (m < 1)  return t('justNow');
+  if (m < 60) return t('minAgo', { m });
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
+  if (h < 24) return t('hoursAgo', { h });
   const d = Math.floor(h / 24);
-  if (d === 1) return 'yesterday';
-  if (d < 7)  return `${d} days ago`;
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  if (d === 1) return t('yesterday');
+  if (d < 7)  return t('daysAgo', { d });
+  return new Date(iso).toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short' });
 }
 
 const COLORS = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#f97316'];
@@ -1437,6 +1568,12 @@ if ('serviceWorker' in navigator) {
     if (e.data?.type === 'SW_UPDATED') window.location.reload();
   });
 }
+
+// Langue mémorisée (persiste après logout pour garder l'écran de login traduit).
+try { _lang = localStorage.getItem('ww_dash_lang') === 'fr' ? 'fr' : 'en'; } catch {}
+document.documentElement.lang = _lang;
+document.title = t('pageTitle');
+applyI18n();
 
 if (restoreSession()) showDashboard();
 </script>
