@@ -17,7 +17,7 @@ router.post('/login', asyncHandler(async (req, res) => {
   const field = slug ? 'slug' : 'email_contact';
   const { data: marchand } = await supabase
     .from('marchands')
-    .select('id, nom, slug, email_contact, password_hash, actif')
+    .select('id, nom, slug, langue, email_contact, password_hash, actif')
     .eq(field, identifier)
     .single();
 
@@ -35,7 +35,7 @@ router.post('/login', asyncHandler(async (req, res) => {
     { expiresIn }
   );
 
-  res.json({ token, marchand_id: marchand.id, nom: marchand.nom, slug: marchand.slug });
+  res.json({ token, marchand_id: marchand.id, nom: marchand.nom, slug: marchand.slug, langue: marchand.langue });
 }));
 
 // GET /merchants/me — profil du marchand connecté

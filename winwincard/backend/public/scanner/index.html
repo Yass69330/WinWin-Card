@@ -387,21 +387,21 @@
   <div id="screen-login" class="screen active">
     <div class="login-logo">🎯</div>
     <div>
-      <div class="login-title">WinWin Scanner</div>
-      <div class="login-sub">Sign in to scan</div>
+      <div class="login-title" data-i18n="appTitle">WinWin Scanner</div>
+      <div class="login-sub" data-i18n="loginSub">Sign in to scan</div>
     </div>
     <form class="login-form" id="login-form" onsubmit="return false">
       <div class="field-group">
-        <label for="input-slug">Merchant ID (slug)</label>
+        <label for="input-slug" data-i18n="merchantId">Merchant ID (slug)</label>
         <input id="input-slug" type="text" placeholder="cafe-le-central" autocomplete="username"
                autocorrect="off" autocapitalize="none" spellcheck="false">
       </div>
       <div class="field-group">
-        <label for="input-password">Password</label>
+        <label for="input-password" data-i18n="password">Password</label>
         <input id="input-password" type="password" placeholder="••••••••" autocomplete="current-password">
       </div>
       <div id="login-error"></div>
-      <button type="submit" class="btn btn-primary" id="btn-login">Sign in</button>
+      <button type="submit" class="btn btn-primary" id="btn-login" data-i18n="signIn">Sign in</button>
     </form>
   </div>
 
@@ -412,10 +412,10 @@
     <div class="scan-overlay">
       <div class="scan-header">
         <div class="scan-header-title">
-          <span>Scanner</span>
+          <span data-i18n="scannerTitle">Scanner</span>
           <span class="scan-merchant-badge" id="merchant-badge">–</span>
         </div>
-        <button class="btn-logout" id="btn-logout">Sign out</button>
+        <button class="btn-logout" id="btn-logout" data-i18n="signOut">Sign out</button>
       </div>
       <div class="scan-frame-wrap">
         <div class="scan-frame">
@@ -423,10 +423,10 @@
           <div class="scan-line"></div>
         </div>
       </div>
-      <div class="scan-hint">Point at the pass QR code</div>
+      <div class="scan-hint" data-i18n="scanHint">Point at the pass QR code</div>
       <div id="scan-status" class="scan-status"></div>
       <div class="scan-footer">
-        <button class="btn-manual" id="btn-open-manual">Manual entry</button>
+        <button class="btn-manual" id="btn-open-manual" data-i18n="manualEntry">Manual entry</button>
       </div>
     </div>
   </div>
@@ -448,7 +448,7 @@
       <!-- Progression -->
       <div class="progress-section" id="progress-section">
         <div class="progress-label">
-          <span>Points</span>
+          <span data-i18n="points">Points</span>
           <span id="progress-fraction">0 / 10</span>
         </div>
         <div class="progress-value" id="progress-value">0</div>
@@ -462,13 +462,13 @@
       <div class="reward-banner" id="reward-banner" style="display:none">
         <div class="reward-icon">🎉</div>
         <div class="reward-text">
-          <div class="reward-title">Reward unlocked!</div>
-          <div class="reward-sub" id="reward-sub">Client reached their goal</div>
+          <div class="reward-title" data-i18n="rewardUnlocked">Reward unlocked!</div>
+          <div class="reward-sub" id="reward-sub" data-i18n="rewardSubDefault">Client reached their goal</div>
         </div>
       </div>
 
       <!-- Reset notice -->
-      <div class="reset-banner" id="reset-banner" style="display:none">
+      <div class="reset-banner" id="reset-banner" style="display:none" data-i18n="counterReset">
         ↩️ Counter reset after reward
       </div>
 
@@ -476,8 +476,8 @@
       <div class="result-error" id="result-error" style="display:none"></div>
 
       <div class="result-actions">
-        <button class="btn btn-primary" id="btn-rescan">Next scan</button>
-        <button class="btn btn-ghost"   id="btn-manual-after">Manual entry</button>
+        <button class="btn btn-primary" id="btn-rescan" data-i18n="nextScan">Next scan</button>
+        <button class="btn btn-ghost"   id="btn-manual-after" data-i18n="manualEntry">Manual entry</button>
       </div>
     </div>
   </div>
@@ -487,15 +487,15 @@
 <!-- ═══════════════════ MODAL SAISIE MANUELLE ═══════════════════ -->
 <div id="modal-manual">
   <div class="modal-sheet">
-    <div class="modal-title">Manual entry</div>
-    <div class="modal-sub">Enter the pass serial number</div>
+    <div class="modal-title" data-i18n="manualEntry">Manual entry</div>
+    <div class="modal-sub" data-i18n="enterSerialSub">Enter the pass serial number</div>
     <div class="field-group">
-      <label for="input-serial">Serial number</label>
+      <label for="input-serial" data-i18n="serialNumber">Serial number</label>
       <input id="input-serial" type="text" placeholder="serial-xxxxx" autocorrect="off" autocapitalize="none">
     </div>
     <div id="manual-error" style="color:var(--error);font-size:13px;display:none"></div>
-    <button class="btn btn-primary" id="btn-manual-submit">Submit</button>
-    <button class="btn btn-ghost"   id="btn-manual-cancel">Cancel</button>
+    <button class="btn btn-primary" id="btn-manual-submit" data-i18n="submit">Submit</button>
+    <button class="btn btn-ghost"   id="btn-manual-cancel" data-i18n="cancel">Cancel</button>
   </div>
 </div>
 
@@ -515,6 +515,65 @@ const state = {
 };
 
 // ═══════════════════════════════════════════════════════
+// i18n FR/EN — langue du marchand (via /api/merchants/login), persistée.
+// Statique : data-i18n / data-i18n-ph. JS : t('cle', {vars}).
+// ═══════════════════════════════════════════════════════
+let _lang = 'en';
+const I18N = {
+  en: {
+    appTitle:'WinWin Scanner', loginSub:'Sign in to scan',
+    merchantId:'Merchant ID (slug)', password:'Password', signIn:'Sign in',
+    scannerTitle:'Scanner', signOut:'Sign out', scanHint:'Point at the pass QR code',
+    manualEntry:'Manual entry', points:'Points', rewardUnlocked:'Reward unlocked!',
+    rewardSubDefault:'Client reached their goal',
+    rewardSub:({prenom,max})=>`${prenom} reached ${max} points — give the reward!`,
+    counterReset:'↩️ Counter reset after reward', nextScan:'Next scan',
+    enterSerialSub:'Enter the pass serial number', serialNumber:'Serial number',
+    submit:'Submit', cancel:'Cancel',
+    fillAllFields:'Please fill in all fields', invalidCreds:'Invalid credentials',
+    cameraError:({msg})=>'Cannot access camera: '+msg, processing:'⏳ Processing…',
+    networkError:({msg})=>'Network error: '+msg, unknownError:'Unknown error', errorName:'Error',
+    enterSerial:'Enter a serial number',
+  },
+  fr: {
+    appTitle:'Scanner WinWin', loginSub:'Connectez-vous pour scanner',
+    merchantId:'Identifiant marchand (slug)', password:'Mot de passe', signIn:'Se connecter',
+    scannerTitle:'Scanner', signOut:'Se déconnecter', scanHint:'Visez le QR code du pass',
+    manualEntry:'Saisie manuelle', points:'Points', rewardUnlocked:'Récompense débloquée !',
+    rewardSubDefault:'Le client a atteint son objectif',
+    rewardSub:({prenom,max})=>`${prenom} a atteint ${max} points — remettez la récompense !`,
+    counterReset:'↩️ Compteur remis à zéro après la récompense', nextScan:'Scan suivant',
+    enterSerialSub:'Saisissez le numéro de série du pass', serialNumber:'Numéro de série',
+    submit:'Valider', cancel:'Annuler',
+    fillAllFields:'Veuillez remplir tous les champs', invalidCreds:'Identifiants invalides',
+    cameraError:({msg})=>"Impossible d'accéder à la caméra : "+msg, processing:'⏳ Traitement…',
+    networkError:({msg})=>'Erreur réseau : '+msg, unknownError:'Erreur inconnue', errorName:'Erreur',
+    enterSerial:'Saisissez un numéro de série',
+  },
+};
+
+function t(key, vars) {
+  const dict = I18N[_lang] || I18N.en;
+  let s = dict[key] != null ? dict[key] : (I18N.en[key] != null ? I18N.en[key] : key);
+  if (typeof s === 'function') return s(vars || {});
+  if (vars) s = s.replace(/\{(\w+)\}/g, (_, k) => (vars[k] != null ? vars[k] : ''));
+  return s;
+}
+
+function applyI18n() {
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.setAttribute('placeholder', t(el.getAttribute('data-i18n-ph'))); });
+}
+
+function setLang(l) {
+  _lang = (l === 'fr' || l === 'en') ? l : 'en';
+  document.documentElement.lang = _lang;
+  document.title = t('appTitle');
+  try { localStorage.setItem('ww_scanner_lang', _lang); } catch {}
+  applyI18n();
+}
+
+// ═══════════════════════════════════════════════════════
 // UTILS
 // ═══════════════════════════════════════════════════════
 function show(id)  { document.getElementById(id).classList.add('active'); }
@@ -524,9 +583,10 @@ function setScreen(id) {
   document.getElementById(id).classList.add('active');
 }
 
-function saveSession(token, slug, nom) {
+function saveSession(token, slug, nom, langue) {
   state.token = token; state.marchandSlug = slug; state.marchandNom = nom;
   try { localStorage.setItem('ww_token', token); localStorage.setItem('ww_slug', slug); localStorage.setItem('ww_nom', nom); } catch {}
+  setLang(langue);
 }
 
 function clearSession() {
@@ -554,7 +614,7 @@ document.getElementById('login-form').addEventListener('submit', async () => {
   const btn = document.getElementById('btn-login');
 
   errEl.style.display = 'none';
-  if (!slug || !password) { showLoginError('Please fill in all fields'); return; }
+  if (!slug || !password) { showLoginError(t('fillAllFields')); return; }
 
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>';
@@ -566,14 +626,14 @@ document.getElementById('login-form').addEventListener('submit', async () => {
       body: JSON.stringify({ slug, password, remember_device: true })
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Invalid credentials');
-    saveSession(data.token, slug, data.nom || slug);
+    if (!res.ok) throw new Error(data.error || t('invalidCreds'));
+    saveSession(data.token, slug, data.nom || slug, data.langue);
     startScanner();
   } catch (e) {
     showLoginError(e.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Sign in';
+    btn.textContent = t('signIn');
   }
 });
 
@@ -605,7 +665,7 @@ async function startScanner() {
       requestAnimationFrame(scanLoop);
     }, { once: true });
   } catch (e) {
-    alert('Cannot access camera: ' + e.message);
+    alert(t('cameraError', { msg: e.message }));
   }
 }
 
@@ -661,7 +721,7 @@ async function submitScan(serial) {
   state.processing = true;
 
   const statusEl = document.getElementById('scan-status');
-  statusEl.textContent = '⏳ Processing…';
+  statusEl.textContent = t('processing');
   statusEl.style.display = 'block';
 
   // Vibrate on mobile
@@ -682,7 +742,7 @@ async function submitScan(serial) {
   } catch (e) {
     statusEl.style.display = 'none';
     state.processing = false;
-    showScanError('Network error: ' + e.message);
+    showScanError(t('networkError', { msg: e.message }));
   }
 }
 
@@ -707,9 +767,9 @@ function showResult(data, ok, serial) {
 
   if (!ok) {
     const errEl = document.getElementById('result-error');
-    errEl.textContent = data.error || 'Unknown error';
+    errEl.textContent = data.error || t('unknownError');
     errEl.style.display = 'block';
-    document.getElementById('result-name').textContent = 'Error';
+    document.getElementById('result-name').textContent = t('errorName');
     document.getElementById('result-avatar').textContent = '✗';
     document.getElementById('result-avatar').style.background = 'var(--error)';
     document.getElementById('result-serial').textContent = serial;
@@ -747,8 +807,7 @@ function showResult(data, ok, serial) {
   // Reward
   if (recompense) {
     document.getElementById('reward-banner').style.display = 'flex';
-    document.getElementById('reward-sub').textContent =
-      `${prenom} reached ${displayMax} points — give the reward!`;
+    document.getElementById('reward-sub').textContent = t('rewardSub', { prenom, max: displayMax });
     document.getElementById('reset-banner').style.display = 'flex';
     try { navigator.vibrate && navigator.vibrate([100, 50, 100, 50, 200]); } catch {}
   }
@@ -779,7 +838,7 @@ document.getElementById('btn-manual-cancel').addEventListener('click', closeManu
 document.getElementById('btn-manual-submit').addEventListener('click', async () => {
   const serial = document.getElementById('input-serial').value.trim();
   if (!serial) {
-    document.getElementById('manual-error').textContent = 'Enter a serial number';
+    document.getElementById('manual-error').textContent = t('enterSerial');
     document.getElementById('manual-error').style.display = 'block';
     return;
   }
@@ -813,6 +872,12 @@ if ('serviceWorker' in navigator) {
 // ═══════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════
+// Langue mémorisée (persiste après logout pour garder l'écran de login traduit).
+try { _lang = localStorage.getItem('ww_scanner_lang') === 'fr' ? 'fr' : 'en'; } catch {}
+document.documentElement.lang = _lang;
+document.title = t('appTitle');
+applyI18n();
+
 if (restoreSession()) {
   startScanner();
 }
