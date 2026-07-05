@@ -203,6 +203,13 @@ function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
         body: client.prenom,
       },
       {
+        // Filet de secours caisse : 6 derniers caractères du serial (MAJ).
+        // Miroir du backField Apple — serial immuable → code stable.
+        id: 'backup_code',
+        header: 'Backup code',
+        body: serialNumber.slice(-6).toUpperCase(),
+      },
+      {
         id: 'details',
         header: 'How it works',
         body: marchand.how_it_works || `Show your pass at every visit.\nAfter ${displayMax} visits, your reward is unlocked automatically.`,

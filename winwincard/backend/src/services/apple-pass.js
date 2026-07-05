@@ -355,6 +355,14 @@ function buildPassJson({ client, marchand, serialNumber, passNotification }) {
           changeMessage: '%@',
         },
         {
+          // Filet de secours caisse : les 6 derniers caractères du serial, en
+          // MAJ. Permet au caissier de retrouver le client en saisie manuelle
+          // quand la caméra ne lit pas le QR. Serial immuable → code stable.
+          key:   'backup_code',
+          label: 'Backup code',
+          value: serialNumber.slice(-6).toUpperCase(),
+        },
+        {
           key: 'programme',
           label: 'How it works',
           value: marchand.how_it_works || `Show your pass at every visit.\nAfter ${displayMax} visits, your reward is automatically unlocked.`,

@@ -14,16 +14,43 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'serial_number required' });
   }
 
-  // Récupérer le client avec son marchand
-  const { data: client, error: errClient } = await supabase
-    .from('clients')
-    .select('id, prenom, stored_value, marchand_id, marchands(id, max_value, display_max_value, actif, nom, slug, forfait, langue, images_tiers, couleur_fond, couleur_fond_reward, logo_url, strip_mode, strip_theme, stamp_icon, strip_custom_background_url, strip_config_version, referral_enabled, referral_bonus_points)')
-    .eq('pass_serial_number', serial_number)
-    .eq('marchand_id', req.marchandId)
-    .is('deleted_at', null)
-    .single();
+  // Résolution du client — deux formats acceptés, toujours scopés au marchand :
+  //   • UUID complet (36 car.) → scan caméra ou collage manuel → match exact
+  //   • Backup code (6 derniers caractères du serial) → filet de secours caisse
+  //     → match par suffixe insensible à la casse
+  // L'incrément passe ensuite par le même RPC atomique, quel que soit le format.
+  const SELECT_CLIENT = 'id, prenom, stored_value, marchand_id, pass_serial_number, marchands(id, max_value, display_max_value, actif, nom, slug, forfait, langue, images_tiers, couleur_fond, couleur_fond_reward, logo_url, strip_mode, strip_theme, stamp_icon, strip_custom_background_url, strip_config_version, referral_enabled, referral_bonus_points)';
+  const raw = String(serial_number).trim().toLowerCase();
+  let client = null;
 
-  if (errClient || !client) {
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(raw)) {
+    const { data } = await supabase
+      .from('clients').select(SELECT_CLIENT)
+      .eq('pass_serial_number', raw)
+      .eq('marchand_id', req.marchandId)
+      .is('deleted_at', null)
+      .single();
+    client = data || null;
+  } else if (/^[0-9a-f]{6}$/.test(raw)) {
+    const { data: matches } = await supabase
+      .from('clients').select(SELECT_CLIENT)
+      .eq('marchand_id', req.marchandId)
+      .is('deleted_at', null)
+      .ilike('pass_serial_number', '%' + raw);
+    if (matches && matches.length > 1) {
+      // Collision (ultra-rare) : jamais de tampon aveugle → on renvoie les
+      // candidats pour désambiguïsation d'un tap côté caisse.
+      return res.status(409).json({
+        error: 'ambiguous',
+        candidates: matches.map(m => ({ prenom: m.prenom, serial: m.pass_serial_number })),
+      });
+    }
+    client = (matches && matches[0]) || null;
+  } else {
+    return res.status(400).json({ error: 'Invalid code — enter the full pass ID or the 6-character backup code' });
+  }
+
+  if (!client) {
     return res.status(404).json({ error: 'Pass not found or unauthorized' });
   }
   if (!client.marchands.actif) {

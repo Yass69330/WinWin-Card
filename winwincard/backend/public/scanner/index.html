@@ -426,6 +426,7 @@
       <div class="scan-hint" data-i18n="scanHint">Point at the pass QR code</div>
       <div id="scan-status" class="scan-status"></div>
       <div class="scan-footer">
+        <button class="btn-manual" id="btn-open-history" data-i18n="history">History</button>
         <button class="btn-manual" id="btn-open-manual" data-i18n="manualEntry">Manual entry</button>
       </div>
     </div>
@@ -475,11 +476,25 @@
       <!-- Error -->
       <div class="result-error" id="result-error" style="display:none"></div>
 
+      <!-- Désambiguïsation collision backup code : boutons prénom cliquables -->
+      <div id="result-candidates" style="display:none;flex-direction:column;gap:10px;width:100%">
+        <div id="result-candidates-label" style="font-size:14px;color:var(--muted);text-align:center"></div>
+      </div>
+
       <div class="result-actions">
         <button class="btn btn-primary" id="btn-rescan" data-i18n="nextScan">Next scan</button>
         <button class="btn btn-ghost"   id="btn-manual-after" data-i18n="manualEntry">Manual entry</button>
       </div>
     </div>
+  </div>
+
+  <!-- ═══════════════════ HISTORIQUE ═══════════════════ -->
+  <div id="screen-history" class="screen">
+    <div style="display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)">
+      <button class="btn-logout" id="btn-history-back" data-i18n="back">Back</button>
+      <div style="font-size:17px;font-weight:700" data-i18n="history">History</div>
+    </div>
+    <div id="history-list" style="flex:1;overflow-y:auto;padding:12px 16px"></div>
   </div>
 
 </div>
@@ -528,12 +543,16 @@ const I18N = {
     rewardSubDefault:'Client reached their goal',
     rewardSub:({prenom,max})=>`${prenom} reached ${max} points — give the reward!`,
     counterReset:'↩️ Counter reset after reward', nextScan:'Next scan',
-    enterSerialSub:'Enter the pass serial number', serialNumber:'Serial number',
+    enterSerialSub:'Paste the full pass ID, or type the 6-character backup code from the back of the pass',
+    serialNumber:'Pass ID or backup code', pickClient:'Multiple matches — tap the right client:',
     submit:'Submit', cancel:'Cancel',
     fillAllFields:'Please fill in all fields', invalidCreds:'Invalid credentials',
     cameraError:({msg})=>'Cannot access camera: '+msg, processing:'⏳ Processing…',
     networkError:({msg})=>'Network error: '+msg, unknownError:'Unknown error', errorName:'Error',
     enterSerial:'Enter a serial number',
+    history:'History', back:'Back', noScansYet:'No scans yet', ptsShort:'pts',
+    justNow:'just now', minAgo:({m})=>`${m} min ago`, hoursAgo:({h})=>`${h}h ago`,
+    yesterday:'yesterday', daysAgo:({d})=>`${d} days ago`,
   },
   fr: {
     appTitle:'Scanner WinWin', loginSub:'Connectez-vous pour scanner',
@@ -543,12 +562,16 @@ const I18N = {
     rewardSubDefault:'Le client a atteint son objectif',
     rewardSub:({prenom,max})=>`${prenom} a atteint ${max} points — remettez la récompense !`,
     counterReset:'↩️ Compteur remis à zéro après la récompense', nextScan:'Scan suivant',
-    enterSerialSub:'Saisissez le numéro de série du pass', serialNumber:'Numéro de série',
+    enterSerialSub:'Collez l’ID complet du pass, ou tapez le code de secours à 6 caractères au dos du pass',
+    serialNumber:'ID du pass ou code de secours', pickClient:'Plusieurs clients — appuyez sur le bon :',
     submit:'Valider', cancel:'Annuler',
     fillAllFields:'Veuillez remplir tous les champs', invalidCreds:'Identifiants invalides',
     cameraError:({msg})=>"Impossible d'accéder à la caméra : "+msg, processing:'⏳ Traitement…',
     networkError:({msg})=>'Erreur réseau : '+msg, unknownError:'Erreur inconnue', errorName:'Erreur',
     enterSerial:'Saisissez un numéro de série',
+    history:'Historique', back:'Retour', noScansYet:'Aucun scan pour le moment', ptsShort:'pts',
+    justNow:"à l'instant", minAgo:({m})=>`il y a ${m} min`, hoursAgo:({h})=>`il y a ${h} h`,
+    yesterday:'hier', daysAgo:({d})=>`il y a ${d} jours`,
   },
 };
 
@@ -571,6 +594,19 @@ function setLang(l) {
   document.title = t('appTitle');
   try { localStorage.setItem('ww_scanner_lang', _lang); } catch {}
   applyI18n();
+}
+
+const dateLocale = () => (_lang === 'fr' ? 'fr-FR' : 'en-GB');
+function timeAgo(iso) {
+  const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (m < 1)  return t('justNow');
+  if (m < 60) return t('minAgo', { m });
+  const h = Math.floor(m / 60);
+  if (h < 24) return t('hoursAgo', { h });
+  const d = Math.floor(h / 24);
+  if (d === 1) return t('yesterday');
+  if (d < 7)  return t('daysAgo', { d });
+  return new Date(iso).toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short' });
 }
 
 // ═══════════════════════════════════════════════════════
@@ -738,6 +774,7 @@ async function submitScan(serial) {
     statusEl.style.display = 'none';
     state.scanning = false;
     stopScanner();
+    if (res.status === 409 && data.candidates) { showCandidates(data.candidates); return; }
     showResult(data, res.ok, serial);
   } catch (e) {
     statusEl.style.display = 'none';
@@ -756,10 +793,38 @@ function showScanError(msg) {
 // ═══════════════════════════════════════════════════════
 // RESULT
 // ═══════════════════════════════════════════════════════
+// Collision backup code : affiche les prénoms candidats en boutons.
+// Un tap re-soumet le serial complet du client choisi → match exact, tampon.
+function showCandidates(candidates) {
+  setScreen('screen-result');
+  state.processing = false;
+  document.getElementById('result-header').style.display = 'none';
+  document.getElementById('progress-section').style.display = 'none';
+  document.getElementById('reward-banner').style.display = 'none';
+  document.getElementById('reset-banner').style.display = 'none';
+  document.getElementById('result-error').style.display = 'none';
+
+  const box   = document.getElementById('result-candidates');
+  const label = document.getElementById('result-candidates-label');
+  label.textContent = t('pickClient');
+  // Purge les anciens boutons (garde le label)
+  [...box.querySelectorAll('button')].forEach(b => b.remove());
+  candidates.forEach(c => {
+    const b = document.createElement('button');
+    b.className = 'btn btn-primary';
+    b.textContent = c.prenom;
+    b.addEventListener('click', () => { box.style.display = 'none'; state.processing = false; submitScan(c.serial); });
+    box.appendChild(b);
+  });
+  box.style.display = 'flex';
+}
+
 function showResult(data, ok, serial) {
   setScreen('screen-result');
 
   // Reset UI
+  document.getElementById('result-header').style.display = '';
+  document.getElementById('result-candidates').style.display = 'none';
   document.getElementById('reward-banner').style.display = 'none';
   document.getElementById('reset-banner').style.display = 'none';
   document.getElementById('result-error').style.display = 'none';
@@ -846,6 +911,55 @@ document.getElementById('btn-manual-submit').addEventListener('click', async () 
   state.processing = false;
   await submitScan(serial);
 });
+
+// ═══════════════════════════════════════════════════════
+// HISTORIQUE — derniers scans (réutilise GET /api/scan)
+// ═══════════════════════════════════════════════════════
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+}
+
+async function openHistory() {
+  stopScanner();
+  setScreen('screen-history');
+  const el = document.getElementById('history-list');
+  el.innerHTML = `<div style="color:var(--muted);text-align:center;padding:24px">…</div>`;
+  try {
+    const res = await fetch('/api/scan?limit=20', { headers: { 'Authorization': `Bearer ${state.token}` } });
+    const data = await res.json();
+    renderHistory(Array.isArray(data) ? data : []);
+  } catch {
+    renderHistory([]);
+  }
+}
+
+function renderHistory(scans) {
+  const el = document.getElementById('history-list');
+  if (!scans.length) {
+    el.innerHTML = `<div style="color:var(--muted);text-align:center;padding:32px">${t('noScansYet')}</div>`;
+    return;
+  }
+  el.innerHTML = scans.map(s => {
+    const prenom  = (s.clients && s.clients.prenom) || '?';
+    const initial = prenom.charAt(0).toUpperCase();
+    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--border)">
+      <div style="width:40px;height:40px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">${initial}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600">${escapeHtml(prenom)}</div>
+        <div style="font-size:12px;color:var(--muted)">${timeAgo(s.date_scan)}</div>
+      </div>
+      <div style="font-weight:700;flex-shrink:0">${s.stored_value_apres} ${t('ptsShort')}</div>
+    </div>`;
+  }).join('');
+}
+
+function backFromHistory() {
+  setScreen('screen-scanner');
+  startScanner();
+}
+
+document.getElementById('btn-open-history').addEventListener('click', openHistory);
+document.getElementById('btn-history-back').addEventListener('click', backFromHistory);
 
 // ═══════════════════════════════════════════════════════
 // NAVIGATION

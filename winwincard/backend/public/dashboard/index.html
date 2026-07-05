@@ -409,7 +409,7 @@
       <!-- Result sheet -->
       <div id="sc-result-sheet" class="sc-result-sheet">
         <div class="sc-handle"></div>
-        <div class="sc-result-header">
+        <div class="sc-result-header" id="sc-result-header">
           <div class="sc-result-avatar" id="sc-avatar">?</div>
           <div>
             <div class="sc-result-name"   id="sc-name">–</div>
@@ -431,6 +431,10 @@
         </div>
         <div id="sc-reset-banner" class="sc-reset-banner" style="display:none" data-i18n="counterReset">↩️ Counter reset</div>
         <div id="sc-error" class="sc-result-error" style="display:none"></div>
+        <!-- Désambiguïsation collision backup code : boutons prénom cliquables -->
+        <div id="sc-candidates" style="display:none;flex-direction:column;gap:10px;margin-bottom:8px">
+          <div id="sc-candidates-label" style="font-size:13px;color:var(--muted);text-align:center"></div>
+        </div>
         <div style="display:flex;flex-direction:column;gap:8px">
           <button class="btn btn-primary" id="sc-btn-rescan" data-i18n="nextScan">Next scan</button>
           <button class="btn btn-ghost"   id="sc-btn-manual-after" data-i18n="manualEntry">Manual entry</button>
@@ -509,6 +513,7 @@
     <div class="field">
       <label for="sc-manual-input" data-i18n="passSerial">Pass serial number</label>
       <input id="sc-manual-input" type="text" placeholder="serial-xxxxx" autocorrect="off" autocapitalize="none">
+      <div class="field-hint" style="font-size:12px;color:var(--muted);margin-top:6px" data-i18n="manualHint">Paste the full pass ID, or type the 6-character backup code from the back of the pass</div>
     </div>
     <div id="sc-manual-error" class="alert alert-error" style="display:none"></div>
     <button class="btn btn-primary" id="sc-manual-submit" data-i18n="submit">Submit</button>
@@ -640,7 +645,9 @@ const I18N = {
     deleteClientTitle:'Delete this client?',
     deleteBody:({nom})=>`Delete <strong>${nom}</strong>? This action is <strong>irreversible</strong> — the pass will become invalid.`,
     deletePermanently:'Delete permanently', cancel:'Cancel',
-    passSerial:'Pass serial number', submit:'Submit', enterSerial:'Enter a serial number',
+    passSerial:'Pass ID or backup code', submit:'Submit', enterSerial:'Enter a serial number',
+    manualHint:'Paste the full pass ID, or type the 6-character backup code from the back of the pass',
+    pickClient:'Multiple matches — tap the right client:',
     nameBtn:'✏️ Name', pointsBtn:'⚖️ Points', recentScans:'Recent scans',
     deleteClientGdpr:'🗑 Delete client (GDPR)',
     memberSince:({date})=>'Member since '+date, noScansClient:'No scans recorded for this client.',
@@ -689,7 +696,9 @@ const I18N = {
     deleteClientTitle:'Supprimer ce client ?',
     deleteBody:({nom})=>`Supprimer <strong>${nom}</strong> ? Cette action est <strong>irréversible</strong> — le pass deviendra invalide.`,
     deletePermanently:'Supprimer définitivement', cancel:'Annuler',
-    passSerial:'Numéro de série du pass', submit:'Valider', enterSerial:'Saisissez un numéro de série',
+    passSerial:'ID du pass ou code de secours', submit:'Valider', enterSerial:'Saisissez un numéro de série',
+    manualHint:'Collez l’ID complet du pass, ou tapez le code de secours à 6 caractères au dos du pass',
+    pickClient:'Plusieurs clients — appuyez sur le bon :',
     nameBtn:'✏️ Nom', pointsBtn:'⚖️ Points', recentScans:'Scans récents',
     deleteClientGdpr:'🗑 Supprimer le client (RGPD)',
     memberSince:({date})=>'Membre depuis le '+date, noScansClient:'Aucun scan enregistré pour ce client.',
@@ -1131,17 +1140,46 @@ async function submitScanDashboard(serial) {
     const data = await res.json();
     statusEl.style.display = 'none';
     SC.scanning = false;
-    showScanResult(data, res.ok, serial);
     S.scans = null; // invalidate scan history cache
+    if (res.status === 409 && data.candidates) { showScanCandidates(data.candidates); return; }
+    showScanResult(data, res.ok, serial);
   } catch (e) {
     statusEl.textContent = '⚠️ ' + e.message;
     setTimeout(() => { statusEl.style.display = 'none'; SC.processing = false; }, 3000);
   }
 }
 
+// Collision backup code : prénoms candidats en boutons. Un tap re-soumet le
+// serial complet du client choisi → match exact, tampon posé.
+function showScanCandidates(candidates) {
+  const sheet = document.getElementById('sc-result-sheet');
+  sheet.classList.add('visible');
+  SC.processing = false;
+  document.getElementById('sc-result-header').style.display = 'none';
+  document.getElementById('sc-progress-section').style.display = 'none';
+  document.getElementById('sc-reward-banner').style.display = 'none';
+  document.getElementById('sc-reset-banner').style.display  = 'none';
+  document.getElementById('sc-error').style.display         = 'none';
+
+  const box   = document.getElementById('sc-candidates');
+  const label = document.getElementById('sc-candidates-label');
+  label.textContent = t('pickClient');
+  [...box.querySelectorAll('button')].forEach(b => b.remove());
+  candidates.forEach(c => {
+    const b = document.createElement('button');
+    b.className = 'btn btn-primary';
+    b.textContent = c.prenom;
+    b.addEventListener('click', () => { box.style.display = 'none'; SC.processing = false; submitScanDashboard(c.serial); });
+    box.appendChild(b);
+  });
+  box.style.display = 'flex';
+}
+
 function showScanResult(data, ok, serial) {
   const sheet = document.getElementById('sc-result-sheet');
   sheet.classList.add('visible');
+  document.getElementById('sc-result-header').style.display = '';
+  document.getElementById('sc-candidates').style.display = 'none';
   document.getElementById('sc-reward-banner').style.display = 'none';
   document.getElementById('sc-reset-banner').style.display  = 'none';
   document.getElementById('sc-error').style.display         = 'none';
