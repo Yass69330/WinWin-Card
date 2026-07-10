@@ -295,6 +295,16 @@
         <div class="form-section-title">Programme de fidélité</div>
         <div class="field-row">
           <div class="field">
+            <label for="f-type-programme">Type de programme</label>
+            <select id="f-type-programme">
+              <option value="stamps">Tampons (visite = +1)</option>
+              <option value="points">Points (montant variable par visite)</option>
+            </select>
+            <div class="field-hint">Détermine si le scan ajoute toujours 1 tampon, ou un nombre de points saisi en caisse.</div>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
             <label for="f-maxval">Seuil de reset (tampons)</label>
             <input id="f-maxval" type="number" min="1" max="99" placeholder="10">
           </div>
@@ -865,6 +875,7 @@ function resetForm() {
   ['f-nom','f-pass-name','f-slug','f-email','f-telephone','f-adresse','f-pwd','f-new-pwd','f-quota-override','f-logo','f-logo-reward','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-how-it-works','f-tiers','f-wf-inactive-message'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
+  document.getElementById('f-type-programme').value = 'stamps';
   document.getElementById('f-strip-mode').value  = 'stamps';
   document.getElementById('f-strip-theme').value = 'icon_metier';
   document.getElementById('f-stamp-icon').value  = 'coffee';
@@ -921,6 +932,7 @@ function fillForm(m) {
   v('f-displaymax', m.display_max_value);
   if (['basic','pro','pro_plus'].includes(m.forfait)) document.getElementById('f-forfait').value = m.forfait;
   if (['fr','en'].includes(m.langue)) document.getElementById('f-langue').value = m.langue;
+  if (['stamps','points'].includes(m.type_programme)) document.getElementById('f-type-programme').value = m.type_programme;
   v('f-quota-override', m.notification_quota_override);
   if (m.couleur_fond)         setColor('cp-fond',   'f-fond',         m.couleur_fond);
   if (m.couleur_texte)        setColor('cp-texte',  'f-texte-c',      m.couleur_texte);
@@ -1083,6 +1095,7 @@ function collectForm() {
     display_max_value: parseInt(document.getElementById('f-displaymax').value) || undefined,
     forfait:         document.getElementById('f-forfait').value,
     langue:          document.getElementById('f-langue').value,
+    type_programme:  document.getElementById('f-type-programme').value,
     notification_quota_override: parseInt(document.getElementById('f-quota-override').value) || null,
     texte_landing:    document.getElementById('f-texte').value.trim()          || undefined,
     pass_display_name: document.getElementById('f-pass-name').value.trim()    || undefined,
