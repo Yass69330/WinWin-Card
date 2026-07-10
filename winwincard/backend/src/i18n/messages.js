@@ -25,8 +25,10 @@ const messages = {
     fr: ({ prenom }) => `Bravo ${prenom} ! Récompense débloquée 🎉`,
   },
   passProgress: {
-    en: ({ prenom, value, max }) => `+1 — ${prenom}: ${value}/${max} pts`,
-    fr: ({ prenom, value, max }) => `+1 — ${prenom} : ${value}/${max} pts`,
+    // amount : nombre de points ajoutés par ce scan. Mode tampons → toujours 1
+    // (message inchangé, "+1"). Mode points → reflète le montant réel saisi.
+    en: ({ prenom, value, max, amount = 1 }) => `+${amount} — ${prenom}: ${value}/${max} pts`,
+    fr: ({ prenom, value, max, amount = 1 }) => `+${amount} — ${prenom} : ${value}/${max} pts`,
   },
 
   // ── Ajustement manuel des points depuis le dashboard marchand ───────────

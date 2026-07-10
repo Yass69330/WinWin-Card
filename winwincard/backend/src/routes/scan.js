@@ -8,7 +8,7 @@ const { notif } = require('../i18n/messages');
 // POST /scan — scan d'un pass en caisse
 // Corps : { serial_number }
 router.post('/', authScanner, asyncHandler(async (req, res) => {
-  const { serial_number } = req.body;
+  const { serial_number, points } = req.body;
 
   if (!serial_number) {
     return res.status(400).json({ error: 'serial_number required' });
@@ -60,11 +60,27 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   const maxValue = client.marchands.max_value;
   const displayMaxValue = client.marchands.display_max_value || maxValue;
 
+  // Montant ajouté par ce scan — dépend du mode du marchand :
+  //   • 'stamps' (défaut) → toujours +1, quoi que le corps contienne (défense
+  //     en profondeur : un marchand en tampons ne peut jamais recevoir un
+  //     montant variable, même si un client malveillant envoie "points").
+  //   • 'points' → montant saisi en caisse, validé (entier positif, borné).
+  const isPointsMode = client.marchands.type_programme === 'points';
+  let amount = 1;
+  if (isPointsMode) {
+    const parsed = Number(points);
+    if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 100000) {
+      return res.status(400).json({ error: 'points must be a positive integer (max 100000)' });
+    }
+    amount = parsed;
+  }
+
   // Incrément atomique côté Postgres (SELECT … FOR UPDATE) — évite la perte de
   // points si deux scans simultanés lisent puis écrivent la même valeur.
   const { data: incr, error: errIncr } = await supabase.rpc('increment_stored_value', {
     p_client_id: client.id,
     p_max_value: maxValue,
+    p_amount: amount,
   });
 
   if (errIncr) return res.status(500).json({ error: errIncr.message });
@@ -82,7 +98,7 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
     ? notif('passReset',    lang, { prenom: client.prenom, max: displayMaxValue })
     : recompense
       ? notif('passReward',   lang, { prenom: client.prenom })
-      : notif('passProgress', lang, { prenom: client.prenom, value: apresScan, max: displayMaxValue });
+      : notif('passProgress', lang, { prenom: client.prenom, value: apresScan, max: displayMaxValue, amount });
 
   // Message de notification du pass + log du scan en parallèle
   await Promise.all([
@@ -102,8 +118,11 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   notifierMiseAJourPass(serial_number).catch(e => console.error('[scan] push Apple:', e.message));
   mettreAJourGoogleWallet(serial_number, req.marchandId, apresScan, maxValue, displayMaxValue, scanMessage, client.marchands.images_tiers, client.prenom, client.marchands.couleur_fond, client.marchands.couleur_fond_reward, client.marchands).catch(e => console.error('[scan] push Google:', e.message));
 
-  // Parrainage — premier tampon du filleul = +1 au parrain, fire-and-forget
-  if (apresScan === 1 && client.marchands.referral_enabled) {
+  // Parrainage — premier scan du filleul depuis le dernier reset = crédit au
+  // parrain, fire-and-forget. avantScan === 0 (plutôt que apresScan === 1) :
+  // équivalent strict en mode tampons (le premier scan amène toujours à 1),
+  // mais correct en mode points où le premier scan peut valoir +N directement.
+  if (avantScan === 0 && client.marchands.referral_enabled) {
     creditReferrerIfApplicable(client.id, req.marchandId, client.marchands.referral_bonus_points || 1)
       .catch(e => console.error('[scan] referral credit:', e.message));
   }
@@ -114,6 +133,7 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
     stored_value_apres: apresScan,
     max_value: maxValue,
     display_max_value: displayMaxValue,
+    amount,
     recompense,
     message: scanMessage,
   });
