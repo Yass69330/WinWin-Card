@@ -355,6 +355,16 @@
     }
     #modal-manual.open { display: flex; }
 
+    /* ── Points pad modal (mode "points") ── */
+    #modal-points {
+      display: none;
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,.7);
+      align-items: flex-end;
+    }
+    #modal-points.open { display: flex; }
+    #points-input { font-size: 28px; text-align: center; letter-spacing: .02em; }
+
     .modal-sheet {
       background: var(--surface);
       border-radius: 24px 24px 0 0;
@@ -514,6 +524,21 @@
   </div>
 </div>
 
+<!-- ═══════════════════ MODAL POINTS (mode "points") ═══════════════════ -->
+<div id="modal-points">
+  <div class="modal-sheet">
+    <div class="modal-title" data-i18n="pointsToAdd">Points to add</div>
+    <div class="modal-sub" data-i18n="pointsToAddSub">Enter the number of points for this visit</div>
+    <div class="field-group">
+      <label for="points-input" data-i18n="points">Points</label>
+      <input id="points-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" autocomplete="off">
+    </div>
+    <div id="points-error" style="color:var(--error);font-size:13px;display:none"></div>
+    <button class="btn btn-primary" id="points-submit" data-i18n="submit">Submit</button>
+    <button class="btn btn-ghost"   id="points-cancel" data-i18n="cancel">Cancel</button>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script>
 // ═══════════════════════════════════════════════════════
@@ -523,8 +548,10 @@ const state = {
   token: null,
   marchandNom: null,
   marchandSlug: null,
+  typeProgramme: 'stamps',
   scanning: false,
   processing: false,
+  awaitingPoints: false,
   stream: null,
   rafId: null,
 };
@@ -553,6 +580,8 @@ const I18N = {
     history:'History', back:'Back', noScansYet:'No scans yet', ptsShort:'pts',
     justNow:'just now', minAgo:({m})=>`${m} min ago`, hoursAgo:({h})=>`${h}h ago`,
     yesterday:'yesterday', daysAgo:({d})=>`${d} days ago`,
+    pointsToAdd:'Points to add', pointsToAddSub:'Enter the number of points for this visit',
+    invalidPoints:'Enter a positive whole number',
   },
   fr: {
     appTitle:'Scanner WinWin', loginSub:'Connectez-vous pour scanner',
@@ -572,6 +601,8 @@ const I18N = {
     history:'Historique', back:'Retour', noScansYet:'Aucun scan pour le moment', ptsShort:'pts',
     justNow:"à l'instant", minAgo:({m})=>`il y a ${m} min`, hoursAgo:({h})=>`il y a ${h} h`,
     yesterday:'hier', daysAgo:({d})=>`il y a ${d} jours`,
+    pointsToAdd:'Points à ajouter', pointsToAddSub:'Saisis le nombre de points pour cette visite',
+    invalidPoints:'Saisis un nombre entier positif',
   },
 };
 
@@ -619,15 +650,19 @@ function setScreen(id) {
   document.getElementById(id).classList.add('active');
 }
 
-function saveSession(token, slug, nom, langue) {
+function saveSession(token, slug, nom, langue, typeProgramme) {
   state.token = token; state.marchandSlug = slug; state.marchandNom = nom;
-  try { localStorage.setItem('ww_token', token); localStorage.setItem('ww_slug', slug); localStorage.setItem('ww_nom', nom); } catch {}
+  state.typeProgramme = (typeProgramme === 'points') ? 'points' : 'stamps';
+  try {
+    localStorage.setItem('ww_token', token); localStorage.setItem('ww_slug', slug); localStorage.setItem('ww_nom', nom);
+    localStorage.setItem('ww_type_programme', state.typeProgramme);
+  } catch {}
   setLang(langue);
 }
 
 function clearSession() {
-  state.token = null; state.marchandSlug = null; state.marchandNom = null;
-  try { localStorage.removeItem('ww_token'); localStorage.removeItem('ww_slug'); localStorage.removeItem('ww_nom'); } catch {}
+  state.token = null; state.marchandSlug = null; state.marchandNom = null; state.typeProgramme = 'stamps';
+  try { localStorage.removeItem('ww_token'); localStorage.removeItem('ww_slug'); localStorage.removeItem('ww_nom'); localStorage.removeItem('ww_type_programme'); } catch {}
 }
 
 function restoreSession() {
@@ -635,7 +670,12 @@ function restoreSession() {
     const t = localStorage.getItem('ww_token');
     const s = localStorage.getItem('ww_slug');
     const n = localStorage.getItem('ww_nom');
-    if (t && s) { state.token = t; state.marchandSlug = s; state.marchandNom = n || s; return true; }
+    const tp = localStorage.getItem('ww_type_programme');
+    if (t && s) {
+      state.token = t; state.marchandSlug = s; state.marchandNom = n || s;
+      state.typeProgramme = (tp === 'points') ? 'points' : 'stamps';
+      return true;
+    }
   } catch {}
   return false;
 }
@@ -663,7 +703,7 @@ document.getElementById('login-form').addEventListener('submit', async () => {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || t('invalidCreds'));
-    saveSession(data.token, slug, data.nom || slug, data.langue);
+    saveSession(data.token, slug, data.nom || slug, data.langue, data.type_programme);
     startScanner();
   } catch (e) {
     showLoginError(e.message);
@@ -715,7 +755,7 @@ function stopScanner() {
 function scanLoop() {
   if (!state.scanning) return;
   state.rafId = requestAnimationFrame(scanLoop);
-  if (state.processing) return;
+  if (state.processing || state.awaitingPoints) return;
 
   const video = document.getElementById('video');
   if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
@@ -735,7 +775,7 @@ function scanLoop() {
 }
 
 async function handleScannedData(raw) {
-  if (state.processing) return;
+  if (state.processing || state.awaitingPoints) return;
   // Extract serial number from URL or raw string
   // Expected formats: serial-xxx, or https://api.example.com/... (ignore URLs without serial)
   let serial = raw.trim();
@@ -749,10 +789,21 @@ async function handleScannedData(raw) {
     if (candidate && candidate.length > 4) serial = candidate;
   } catch {}
 
-  await submitScan(serial);
+  proceedToScan(serial);
 }
 
-async function submitScan(serial) {
+// Point d'entrée unique après résolution du serial (caméra ou saisie manuelle).
+// Mode points : ouvre le pavé numérique avant tout appel API. Mode tampons :
+// scan immédiat, comportement strictement inchangé.
+function proceedToScan(serial) {
+  if (state.typeProgramme === 'points') {
+    openPointsPad(serial);
+  } else {
+    submitScan(serial);
+  }
+}
+
+async function submitScan(serial, points) {
   if (state.processing) return;
   state.processing = true;
 
@@ -764,10 +815,12 @@ async function submitScan(serial) {
   try { navigator.vibrate && navigator.vibrate(50); } catch {}
 
   try {
+    const body = { serial_number: serial };
+    if (points != null) body.points = points;
     const res = await fetch('/api/scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${state.token}` },
-      body: JSON.stringify({ serial_number: serial })
+      body: JSON.stringify(body)
     });
     const data = await res.json();
 
@@ -813,7 +866,7 @@ function showCandidates(candidates) {
     const b = document.createElement('button');
     b.className = 'btn btn-primary';
     b.textContent = c.prenom;
-    b.addEventListener('click', () => { box.style.display = 'none'; state.processing = false; submitScan(c.serial); });
+    b.addEventListener('click', () => { box.style.display = 'none'; state.processing = false; proceedToScan(c.serial); });
     box.appendChild(b);
   });
   box.style.display = 'flex';
@@ -853,20 +906,27 @@ function showResult(data, ok, serial) {
   document.getElementById('result-name').textContent = prenom || '–';
   document.getElementById('result-serial').textContent = serial;
 
-  // Progress
+  // Progress — clampé à displayMax : un scan points peut franchir le seuil en
+  // un coup (ex. 480 + 50 = 530 pour un seuil à 500) ; on affiche "500/500",
+  // jamais "530/500". La valeur réelle reste en base (surplus non reporté, V1).
+  const clamped = Math.min(stored_value, displayMax);
   const pct = Math.min(stored_value / displayMax * 100, 100);
-  document.getElementById('progress-value').textContent = stored_value;
-  document.getElementById('progress-fraction').textContent = `${stored_value} / ${displayMax}`;
+  document.getElementById('progress-value').textContent = clamped;
+  document.getElementById('progress-fraction').textContent = `${clamped} / ${displayMax}`;
   document.getElementById('progress-bar').style.width = pct + '%';
 
-  // Dots
+  // Dots — un point visuel par unité. N'a de sens qu'en mode tampons (peu
+  // d'unités) ; en mode points le seuil peut être élevé (ex. 500), la barre
+  // de progression + la fraction suffisent (compteur numérique simple).
   const dotsWrap = document.getElementById('dots-wrap');
   dotsWrap.innerHTML = '';
-  for (let i = 1; i <= displayMax; i++) {
-    const d = document.createElement('div');
-    d.className = 'dot' + (i <= stored_value ? ' filled' : '');
-    if (!d.classList.contains('filled')) d.textContent = i;
-    dotsWrap.appendChild(d);
+  if (state.typeProgramme !== 'points') {
+    for (let i = 1; i <= displayMax; i++) {
+      const d = document.createElement('div');
+      d.className = 'dot' + (i <= stored_value ? ' filled' : '');
+      if (!d.classList.contains('filled')) d.textContent = i;
+      dotsWrap.appendChild(d);
+    }
   }
 
   // Reward
@@ -909,7 +969,47 @@ document.getElementById('btn-manual-submit').addEventListener('click', async () 
   }
   closeManual();
   state.processing = false;
-  await submitScan(serial);
+  proceedToScan(serial);
+});
+
+// ═══════════════════════════════════════════════════════
+// POINTS PAD — mode "points" : saisie du montant avant l'incrément
+// ═══════════════════════════════════════════════════════
+let _pendingSerial = null;
+
+function openPointsPad(serial) {
+  _pendingSerial = serial;
+  state.awaitingPoints = true;
+  document.getElementById('points-input').value = '';
+  document.getElementById('points-error').style.display = 'none';
+  document.getElementById('modal-points').classList.add('open');
+  setTimeout(() => document.getElementById('points-input').focus(), 100);
+}
+
+function closePointsPad() {
+  document.getElementById('modal-points').classList.remove('open');
+  _pendingSerial = null;
+  state.awaitingPoints = false;
+}
+
+document.getElementById('points-cancel').addEventListener('click', closePointsPad);
+
+document.getElementById('points-submit').addEventListener('click', async () => {
+  const raw = document.getElementById('points-input').value.trim();
+  const errEl = document.getElementById('points-error');
+  if (!/^[0-9]+$/.test(raw) || parseInt(raw, 10) <= 0) {
+    errEl.textContent = t('invalidPoints');
+    errEl.style.display = 'block';
+    return;
+  }
+  const n = parseInt(raw, 10);
+  const serial = _pendingSerial;
+  closePointsPad();
+  await submitScan(serial, n);
+});
+
+document.getElementById('points-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('points-submit').click();
 });
 
 // ═══════════════════════════════════════════════════════

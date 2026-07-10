@@ -521,6 +521,22 @@
   </div>
 </div>
 
+<!-- ── Modal: points à ajouter (mode "points") ── -->
+<div id="modal-sc-points" class="modal-overlay">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" data-i18n="pointsToAdd">Points to add</div>
+    <div class="field">
+      <label for="sc-points-input" data-i18n="points">Points</label>
+      <input id="sc-points-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" autocomplete="off" style="font-size:24px;text-align:center">
+      <div class="field-hint" style="font-size:12px;color:var(--muted);margin-top:6px" data-i18n="pointsToAddSub">Enter the number of points for this visit</div>
+    </div>
+    <div id="sc-points-error" class="alert alert-error" style="display:none"></div>
+    <button class="btn btn-primary" id="sc-points-submit" data-i18n="submit">Submit</button>
+    <button class="btn btn-ghost"   id="sc-points-cancel" data-i18n="cancel">Cancel</button>
+  </div>
+</div>
+
 <!-- ── Sheet: Fiche client ── -->
 <div id="modal-client" class="modal-overlay">
   <div class="modal-sheet modal-sheet-client">
@@ -595,14 +611,14 @@
 // ════════════════════════════════════════════════
 const S = {
   token: null, marchandId: null, marchandNom: null, marchandSlug: null, maxValue: 10, displayMax: 10,
-  forfait: null,
+  forfait: null, typeProgramme: 'stamps',
   tab: 'overview',
   clients: null, scans: null, stats: null, qr: null, notifLogs: null,
   deleteTargetId: null, deleteTargetNom: null,
   clientId: null, clientData: null,
 };
 
-const SC = { stream: null, rafId: null, scanning: false, processing: false };
+const SC = { stream: null, rafId: null, scanning: false, processing: false, awaitingPoints: false };
 
 // ════════════════════════════════════════════════
 // i18n FR/EN — langue du marchand (via /me), persistée en localStorage.
@@ -660,6 +676,8 @@ const I18N = {
     justNow:'just now', minAgo:({m})=>`${m} min ago`, hoursAgo:({h})=>`${h}h ago`,
     yesterday:'yesterday', daysAgo:({d})=>`${d} days ago`,
     navOverview:'Overview', navClients:'Clients', navScans:'Scans', navScanner:'Scanner', navNotifs:'Notifs',
+    pointsToAdd:'Points to add', pointsToAddSub:'Enter the number of points for this visit',
+    invalidPoints:'Enter a positive whole number',
   },
   fr: {
     pageTitle:'WinWin — Tableau de bord', loginSub:'Gérez votre programme de fidélité',
@@ -711,6 +729,8 @@ const I18N = {
     justNow:"à l'instant", minAgo:({m})=>`il y a ${m} min`, hoursAgo:({h})=>`il y a ${h} h`,
     yesterday:'hier', daysAgo:({d})=>`il y a ${d} jours`,
     navOverview:'Aperçu', navClients:'Clients', navScans:'Scans', navScanner:'Scanner', navNotifs:'Notifs',
+    pointsToAdd:'Points à ajouter', pointsToAddSub:'Saisis le nombre de points pour cette visite',
+    invalidPoints:'Saisis un nombre entier positif',
   },
 };
 
@@ -752,8 +772,8 @@ function saveSession(d) {
 }
 
 function clearSession() {
-  Object.assign(S, { token: null, marchandId: null, marchandNom: null, marchandSlug: null, forfait: null });
-  try { ['ww_dash_token','ww_dash_id','ww_dash_nom','ww_dash_slug','ww_dash_forfait'].forEach(k => localStorage.removeItem(k)); } catch {}
+  Object.assign(S, { token: null, marchandId: null, marchandNom: null, marchandSlug: null, forfait: null, typeProgramme: 'stamps' });
+  try { ['ww_dash_token','ww_dash_id','ww_dash_nom','ww_dash_slug','ww_dash_forfait','ww_dash_type_programme'].forEach(k => localStorage.removeItem(k)); } catch {}
 }
 
 function restoreSession() {
@@ -765,6 +785,7 @@ function restoreSession() {
     S.marchandNom = localStorage.getItem('ww_dash_nom') || '';
     S.marchandSlug= localStorage.getItem('ww_dash_slug') || '';
     S.forfait     = localStorage.getItem('ww_dash_forfait') || null;
+    S.typeProgramme = localStorage.getItem('ww_dash_type_programme') === 'points' ? 'points' : 'stamps';
     return true;
   } catch { return false; }
 }
@@ -901,7 +922,11 @@ async function loadOverview(force = false) {
     S.maxValue  = me.max_value || 10;
     S.displayMax = me.display_max_value || S.maxValue;
     S.forfait   = me.forfait || 'pro';
-    try { localStorage.setItem('ww_dash_forfait', S.forfait); } catch {}
+    S.typeProgramme = me.type_programme === 'points' ? 'points' : 'stamps';
+    try {
+      localStorage.setItem('ww_dash_forfait', S.forfait);
+      localStorage.setItem('ww_dash_type_programme', S.typeProgramme);
+    } catch {}
     setLang(me.langue);
     applyForfaitGating();
   }
@@ -1101,7 +1126,7 @@ function stopScannerTab() {
 function scLoop() {
   if (!SC.scanning) return;
   SC.rafId = requestAnimationFrame(scLoop);
-  if (SC.processing) return;
+  if (SC.processing || SC.awaitingPoints) return;
   const video = document.getElementById('sc-video');
   if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
   const canvas = document.getElementById('sc-canvas');
@@ -1114,7 +1139,7 @@ function scLoop() {
 }
 
 async function handleScanQR(raw) {
-  if (SC.processing) return;
+  if (SC.processing || SC.awaitingPoints) return;
   let serial = raw.trim();
   try {
     const url = new URL(serial);
@@ -1122,20 +1147,33 @@ async function handleScanQR(raw) {
     const candidate = parts[parts.length - 1];
     if (candidate && candidate.length > 4) serial = candidate;
   } catch {}
-  await submitScanDashboard(serial);
+  proceedToScanDashboard(serial);
 }
 
-async function submitScanDashboard(serial) {
+// Point d'entrée unique après résolution du serial (caméra ou saisie manuelle).
+// Mode points : ouvre le pavé numérique avant tout appel API. Mode tampons :
+// scan immédiat, comportement strictement inchangé.
+function proceedToScanDashboard(serial) {
+  if (S.typeProgramme === 'points') {
+    openPointsPadDashboard(serial);
+  } else {
+    submitScanDashboard(serial);
+  }
+}
+
+async function submitScanDashboard(serial, points) {
   if (SC.processing) return;
   SC.processing = true;
   const statusEl = document.getElementById('sc-status');
   statusEl.textContent = t('processing'); statusEl.style.display = 'block';
   try { navigator.vibrate && navigator.vibrate(50); } catch {}
   try {
+    const body = { serial_number: serial };
+    if (points != null) body.points = points;
     const res = await fetch('/api/scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.token}` },
-      body: JSON.stringify({ serial_number: serial }),
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     statusEl.style.display = 'none';
@@ -1169,7 +1207,7 @@ function showScanCandidates(candidates) {
     const b = document.createElement('button');
     b.className = 'btn btn-primary';
     b.textContent = c.prenom;
-    b.addEventListener('click', () => { box.style.display = 'none'; SC.processing = false; submitScanDashboard(c.serial); });
+    b.addEventListener('click', () => { box.style.display = 'none'; SC.processing = false; proceedToScanDashboard(c.serial); });
     box.appendChild(b);
   });
   box.style.display = 'flex';
@@ -1207,18 +1245,26 @@ function showScanResult(data, ok, serial) {
   document.getElementById('sc-name').textContent   = prenom || '–';
   document.getElementById('sc-serial').textContent = serial;
 
+  // Clampé à displayMax : un scan points peut franchir le seuil en un coup
+  // (ex. 480 + 50 = 530 pour un seuil à 500) → afficher "500/500", jamais
+  // "530/500". La valeur réelle reste en base (surplus non reporté, V1).
+  const clamped = Math.min(stored, displayMax);
   const pct = Math.min(stored / displayMax * 100, 100);
-  document.getElementById('sc-value').textContent    = stored;
-  document.getElementById('sc-fraction').textContent = `${stored} / ${displayMax}`;
+  document.getElementById('sc-value').textContent    = clamped;
+  document.getElementById('sc-fraction').textContent = `${clamped} / ${displayMax}`;
   document.getElementById('sc-bar').style.width      = pct + '%';
 
+  // Dots — n'a de sens qu'en mode tampons (peu d'unités). En mode points le
+  // seuil peut être élevé ; la barre + la fraction suffisent (compteur simple).
   const dotsWrap = document.getElementById('sc-dots');
   dotsWrap.innerHTML = '';
-  for (let i = 1; i <= Math.min(displayMax, 20); i++) {
-    const d = document.createElement('div');
-    d.className = 'sc-dot' + (i <= stored ? ' filled' : '');
-    if (!d.classList.contains('filled')) d.textContent = i;
-    dotsWrap.appendChild(d);
+  if (S.typeProgramme !== 'points') {
+    for (let i = 1; i <= Math.min(displayMax, 20); i++) {
+      const d = document.createElement('div');
+      d.className = 'sc-dot' + (i <= stored ? ' filled' : '');
+      if (!d.classList.contains('filled')) d.textContent = i;
+      dotsWrap.appendChild(d);
+    }
   }
 
   if (recompense) {
@@ -1262,7 +1308,47 @@ document.getElementById('sc-manual-submit').addEventListener('click', async () =
   if (!serial) { showErr(errEl, t('enterSerial')); return; }
   closeManualScan();
   SC.processing = false;
-  await submitScanDashboard(serial);
+  proceedToScanDashboard(serial);
+});
+
+// ════════════════════════════════════════════════
+// POINTS PAD — mode "points" : saisie du montant avant l'incrément
+// ════════════════════════════════════════════════
+let SC_pendingSerial = null;
+
+function openPointsPadDashboard(serial) {
+  SC_pendingSerial = serial;
+  SC.awaitingPoints = true;
+  document.getElementById('sc-points-input').value = '';
+  document.getElementById('sc-points-error').style.display = 'none';
+  document.getElementById('modal-sc-points').classList.add('open');
+  setTimeout(() => document.getElementById('sc-points-input').focus(), 150);
+}
+
+function closePointsPadDashboard() {
+  document.getElementById('modal-sc-points').classList.remove('open');
+  SC_pendingSerial = null;
+  SC.awaitingPoints = false;
+}
+
+document.getElementById('sc-points-cancel').addEventListener('click', closePointsPadDashboard);
+document.getElementById('modal-sc-points').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-sc-points')) closePointsPadDashboard();
+});
+document.getElementById('sc-points-submit').addEventListener('click', async () => {
+  const raw = document.getElementById('sc-points-input').value.trim();
+  const errEl = document.getElementById('sc-points-error');
+  if (!/^[0-9]+$/.test(raw) || parseInt(raw, 10) <= 0) {
+    showErr(errEl, t('invalidPoints'));
+    return;
+  }
+  const n = parseInt(raw, 10);
+  const serial = SC_pendingSerial;
+  closePointsPadDashboard();
+  await submitScanDashboard(serial, n);
+});
+document.getElementById('sc-points-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('sc-points-submit').click();
 });
 
 // ════════════════════════════════════════════════
