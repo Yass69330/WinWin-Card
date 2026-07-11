@@ -77,10 +77,14 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
 
   // Incrément atomique côté Postgres (SELECT … FOR UPDATE) — évite la perte de
   // points si deux scans simultanés lisent puis écrivent la même valeur.
+  // p_type_programme : mode tampons (défaut) → v_apres reset à 0 comme avant,
+  // strictement inchangé. Mode points → le scan de redemption reporte le
+  // surplus au lieu de repartir à 0 (migration_022_points_report.sql).
   const { data: incr, error: errIncr } = await supabase.rpc('increment_stored_value', {
     p_client_id: client.id,
     p_max_value: maxValue,
     p_amount: amount,
+    p_type_programme: client.marchands.type_programme || 'stamps',
   });
 
   if (errIncr) return res.status(500).json({ error: errIncr.message });
@@ -94,8 +98,15 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   const recompense = !isReset && apresScan >= maxValue;
 
   const lang = client.marchands.langue;
+  // isReset : mode tampons → vraie remise à 0, message passReset inchangé.
+  // Mode points → "redemption" avec report (apresScan = surplus, jamais 0) :
+  // passReset dirait littéralement "0/max" (faux, surtout le texte FR "remise
+  // à zéro"). On envoie passProgress avec la vraie valeur reportée à la
+  // place — le client voit "+100 — Sarah : 130/500", jamais un mensonge.
   const scanMessage = isReset
-    ? notif('passReset',    lang, { prenom: client.prenom, max: displayMaxValue })
+    ? (isPointsMode
+        ? notif('passProgress', lang, { prenom: client.prenom, value: apresScan, max: displayMaxValue, amount })
+        : notif('passReset',    lang, { prenom: client.prenom, max: displayMaxValue }))
     : recompense
       ? notif('passReward',   lang, { prenom: client.prenom })
       : notif('passProgress', lang, { prenom: client.prenom, value: apresScan, max: displayMaxValue, amount });

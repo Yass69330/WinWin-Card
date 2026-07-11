@@ -1,3 +1,23 @@
+-- ⚠️⚠️⚠️ OBSOLÈTE — NE JAMAIS REJOUER CE FICHIER SEUL ⚠️⚠️⚠️
+--
+-- Ce fichier ne reflète PLUS la fonction increment_stored_value telle qu'elle
+-- existe réellement en base de production. Elle a été étendue depuis :
+--   - migration (Phase 1, non fichée à l'époque) : ajout de p_amount integer
+--     DEFAULT 1, en surcharge (uuid, integer, integer) — coexiste avec la
+--     signature 2-arg ci-dessous, ne l'a jamais remplacée.
+--   - migration_022_points_report.sql : ajout de p_type_programme text
+--     DEFAULT 'stamps', en surcharge (uuid, integer, integer, text) — source
+--     de vérité actuelle, seule fonction que scan.js appelle depuis lors.
+--
+-- Rejouer CE fichier tel quel recréerait uniquement la surcharge 2-arg
+-- (uuid, integer) — déjà présente et jamais appelée par le code applicatif,
+-- donc sans effet destructeur direct MAIS source de confusion : si quelqu'un
+-- s'imagine que ce fichier est la référence et se met à modifier CETTE
+-- fonction pour "corriger" un bug, il modifiera une fonction morte pendant
+-- que la prod continue d'utiliser migration_022. Référence à jour :
+-- migration_022_points_report.sql.
+--
+-- ── Contenu original (historique, pour mémoire) ──────────────────────────
 -- Migration 012 : incrément atomique des points de fidélité
 --
 -- Remplace le pattern read-then-write (lecture de stored_value puis écriture)

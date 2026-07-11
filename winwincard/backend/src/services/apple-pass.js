@@ -304,13 +304,10 @@ function selectStripImageUrl(marchand, storedValue) {
 function buildPassJson({ client, marchand, serialNumber, passNotification }) {
   const doré = isPassDoré(client, marchand);
   const displayMax = marchand.display_max_value || marchand.max_value;
-  // Mode points : un scan peut franchir le seuil en un coup (ex. 480 + 50 pour
-  // un seuil à 500) → affiche "500/500", jamais "530/500". Mode tampons :
-  // le solde ne dépasse jamais le seuil (increment +1 s'arrête pile dessus),
-  // donc ce clamp est un no-op — comportement strictement inchangé.
-  const displayValue = marchand.type_programme === 'points'
-    ? Math.min(client.stored_value, displayMax)
-    : client.stored_value;
+  // Mode points : le surplus est désormais reporté (migration_022), jamais
+  // clampé — le pass affiche la valeur réelle (ex. "530/500" sur le scan
+  // gagnant). Mode tampons : le solde ne dépasse jamais le seuil, inchangé.
+  const displayValue = client.stored_value;
   return {
     formatVersion: 1,
     passTypeIdentifier: process.env.APPLE_PASS_TYPE_IDENTIFIER || 'pass.com.winwincard.loyalty',

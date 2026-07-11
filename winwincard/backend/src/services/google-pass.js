@@ -182,12 +182,9 @@ async function buildLoyaltyClass(cId, marchand) {
 function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
   const isRecompense = client.stored_value > 0 && client.stored_value >= (marchand.max_value || 1);
   const displayMax = marchand.display_max_value || marchand.max_value;
-  // Mode points : un scan peut franchir le seuil en un coup → clampe l'affichage
-  // à displayMax, jamais au-delà. Mode tampons : no-op (le +1 s'arrête pile
-  // sur le seuil), comportement strictement inchangé.
-  const displayValue = marchand.type_programme === 'points'
-    ? Math.min(client.stored_value, displayMax)
-    : client.stored_value;
+  // Mode points : le surplus est reporté (migration_022), jamais clampé —
+  // affiche la valeur réelle. Mode tampons : inchangé.
+  const displayValue = client.stored_value;
 
   const obj = {
     id: oId,
@@ -357,11 +354,9 @@ async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, 
   const oId = objectId(serialNumber);
   const token = await getAccessToken();
   const isRecompense = storedValue > 0 && storedValue >= (maxValue || 1);
-  // Mode points : clamp à l'affichage (jamais au-delà du seuil, ex. "500" et
-  // non "530"). Mode tampons : no-op, comportement inchangé.
-  const displayValue = marchand?.type_programme === 'points'
-    ? Math.min(storedValue, displayMaxValue || maxValue)
-    : storedValue;
+  // Mode points : le surplus est reporté (migration_022), jamais clampé —
+  // affiche la valeur réelle. Mode tampons : inchangé.
+  const displayValue = storedValue;
 
   const patch = {
     loyaltyPoints: {

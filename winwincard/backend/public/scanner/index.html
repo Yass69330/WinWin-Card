@@ -906,13 +906,13 @@ function showResult(data, ok, serial) {
   document.getElementById('result-name').textContent = prenom || '–';
   document.getElementById('result-serial').textContent = serial;
 
-  // Progress — clampé à displayMax : un scan points peut franchir le seuil en
-  // un coup (ex. 480 + 50 = 530 pour un seuil à 500) ; on affiche "500/500",
-  // jamais "530/500". La valeur réelle reste en base (surplus non reporté, V1).
-  const clamped = Math.min(stored_value, displayMax);
+  // Texte non clampé : un scan points peut franchir le seuil en un coup (ex.
+  // 480 + 50 = 530 pour un seuil à 500) → on affiche la valeur réelle "530/500"
+  // (surplus reporté au scan de redemption, migration_022, jamais perdu).
+  // Seule la BARRE visuelle reste bridée à 100% (pas de débordement du cadre).
   const pct = Math.min(stored_value / displayMax * 100, 100);
-  document.getElementById('progress-value').textContent = clamped;
-  document.getElementById('progress-fraction').textContent = `${clamped} / ${displayMax}`;
+  document.getElementById('progress-value').textContent = stored_value;
+  document.getElementById('progress-fraction').textContent = `${stored_value} / ${displayMax}`;
   document.getElementById('progress-bar').style.width = pct + '%';
 
   // Dots — un point visuel par unité. N'a de sens qu'en mode tampons (peu

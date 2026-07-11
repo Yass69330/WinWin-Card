@@ -1245,13 +1245,13 @@ function showScanResult(data, ok, serial) {
   document.getElementById('sc-name').textContent   = prenom || '–';
   document.getElementById('sc-serial').textContent = serial;
 
-  // Clampé à displayMax : un scan points peut franchir le seuil en un coup
-  // (ex. 480 + 50 = 530 pour un seuil à 500) → afficher "500/500", jamais
-  // "530/500". La valeur réelle reste en base (surplus non reporté, V1).
-  const clamped = Math.min(stored, displayMax);
+  // Texte non clampé : un scan points peut franchir le seuil en un coup (ex.
+  // 480 + 50 = 530 pour un seuil à 500) → on affiche la valeur réelle "530/500"
+  // (surplus reporté au scan de redemption, migration_022, jamais perdu).
+  // Seule la BARRE visuelle reste bridée à 100% (pas de débordement du cadre).
   const pct = Math.min(stored / displayMax * 100, 100);
-  document.getElementById('sc-value').textContent    = clamped;
-  document.getElementById('sc-fraction').textContent = `${clamped} / ${displayMax}`;
+  document.getElementById('sc-value').textContent    = stored;
+  document.getElementById('sc-fraction').textContent = `${stored} / ${displayMax}`;
   document.getElementById('sc-bar').style.width      = pct + '%';
 
   // Dots — n'a de sens qu'en mode tampons (peu d'unités). En mode points le
