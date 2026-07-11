@@ -55,7 +55,9 @@ async function googleHeroUrl(marchand) {
   // strip_config_version, même mécanisme que l'Apple Wallet) → image_strip_url (legacy).
   if (marchand.google_hero_url) return marchand.google_hero_url;
 
-  if (marchand.strip_mode) {
+  // Mode points : jamais de tampons générés (seuil potentiellement élevé) —
+  // retombe directement sur l'image fixe (ou aucune hero image).
+  if (marchand.strip_mode && marchand.type_programme !== 'points') {
     const { getPublicUrl } = require('./strip-cache');
     const url = await getPublicUrl({ marchand, filledCount: 0, variant: 'hero' }).catch(() => null);
     if (url) return url;
@@ -180,6 +182,12 @@ async function buildLoyaltyClass(cId, marchand) {
 function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
   const isRecompense = client.stored_value > 0 && client.stored_value >= (marchand.max_value || 1);
   const displayMax = marchand.display_max_value || marchand.max_value;
+  // Mode points : un scan peut franchir le seuil en un coup → clampe l'affichage
+  // à displayMax, jamais au-delà. Mode tampons : no-op (le +1 s'arrête pile
+  // sur le seuil), comportement strictement inchangé.
+  const displayValue = marchand.type_programme === 'points'
+    ? Math.min(client.stored_value, displayMax)
+    : client.stored_value;
 
   const obj = {
     id: oId,
@@ -191,7 +199,7 @@ function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
 
     // Solde de points
     loyaltyPoints: {
-      balance: { int: client.stored_value },
+      balance: { int: displayValue },
       label: isRecompense ? 'Reward!' : 'Progress',
     },
 
@@ -349,10 +357,15 @@ async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, 
   const oId = objectId(serialNumber);
   const token = await getAccessToken();
   const isRecompense = storedValue > 0 && storedValue >= (maxValue || 1);
+  // Mode points : clamp à l'affichage (jamais au-delà du seuil, ex. "500" et
+  // non "530"). Mode tampons : no-op, comportement inchangé.
+  const displayValue = marchand?.type_programme === 'points'
+    ? Math.min(storedValue, displayMaxValue || maxValue)
+    : storedValue;
 
   const patch = {
     loyaltyPoints: {
-      balance: { int: storedValue },
+      balance: { int: displayValue },
       label: isRecompense ? 'Reward!' : 'Progress',
     },
   };
@@ -367,7 +380,7 @@ async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, 
       sourceUri: { uri: tierUrl || staticUrl },
       contentDescription: { defaultValue: { language: 'en', value: 'loyalty progress' } },
     };
-  } else if (marchand?.strip_mode) {
+  } else if (marchand?.strip_mode && marchand?.type_programme !== 'points') {
     const { getPublicUrl } = require('./strip-cache');
     const heroUrl = await getPublicUrl({ marchand, filledCount: storedValue, variant: 'hero' })
       .catch(e => { console.error('[google-pass] hero gen:', e.message); return null; });

@@ -304,6 +304,13 @@ function selectStripImageUrl(marchand, storedValue) {
 function buildPassJson({ client, marchand, serialNumber, passNotification }) {
   const doré = isPassDoré(client, marchand);
   const displayMax = marchand.display_max_value || marchand.max_value;
+  // Mode points : un scan peut franchir le seuil en un coup (ex. 480 + 50 pour
+  // un seuil à 500) → affiche "500/500", jamais "530/500". Mode tampons :
+  // le solde ne dépasse jamais le seuil (increment +1 s'arrête pile dessus),
+  // donc ce clamp est un no-op — comportement strictement inchangé.
+  const displayValue = marchand.type_programme === 'points'
+    ? Math.min(client.stored_value, displayMax)
+    : client.stored_value;
   return {
     formatVersion: 1,
     passTypeIdentifier: process.env.APPLE_PASS_TYPE_IDENTIFIER || 'pass.com.winwincard.loyalty',
@@ -340,7 +347,7 @@ function buildPassJson({ client, marchand, serialNumber, passNotification }) {
         {
           key:           'points',
           label:         doré ? '🎉 REWARD' : 'PROGRESS',
-          value:         `${client.stored_value} / ${displayMax}`,
+          value:         `${displayValue} / ${displayMax}`,
           textAlignment: 'PKTextAlignmentRight',
         },
       ],
@@ -434,11 +441,16 @@ async function generateApplePass({ client, marchand, serialNumber, passNotificat
     return null;
   })();
 
+  // Mode points : jamais de tampons générés (le seuil peut être élevé, ex. 500
+  // — dessiner autant de pastilles n'a aucun sens). Précédence inchangée :
+  // image fixe (images_tiers / image_strip_url) → sinon strip uni.
+  const canGenerateStamps = marchand.strip_mode && marchand.type_programme !== 'points';
+
   let strip2xBuf, strip3xBuf;
   if (manualStripUrl) {
     const buf = await fetchImage(manualStripUrl).catch(() => null);
     strip2xBuf = strip3xBuf = buf || stripPng;
-  } else if (marchand.strip_mode) {
+  } else if (canGenerateStamps) {
     const { getOrGenerate } = require('./strip-cache');
     [strip2xBuf, strip3xBuf] = await Promise.all([
       getOrGenerate({ marchand, filledCount: client.stored_value, variant: 'strip2x' })
