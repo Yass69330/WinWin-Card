@@ -1,61 +1,28 @@
--- ⚠️⚠️⚠️ OBSOLÈTE — NE JAMAIS REJOUER CE FICHIER SEUL ⚠️⚠️⚠️
+-- ⚠️⚠️⚠️ NEUTRALISÉE — CE FICHIER NE CRÉE PLUS AUCUNE FONCTION ⚠️⚠️⚠️
 --
--- Ce fichier ne reflète PLUS la fonction increment_stored_value telle qu'elle
--- existe réellement en base de production. Elle a été étendue depuis :
---   - migration (Phase 1, non fichée à l'époque) : ajout de p_amount integer
---     DEFAULT 1, en surcharge (uuid, integer, integer) — coexiste avec la
---     signature 2-arg ci-dessous, ne l'a jamais remplacée.
---   - migration_022_points_report.sql : ajout de p_type_programme text
---     DEFAULT 'stamps', en surcharge (uuid, integer, integer, text) — source
---     de vérité actuelle, seule fonction que scan.js appelle depuis lors.
+-- La définition d'increment_stored_value a été DÉLIBÉRÉMENT retirée de ce
+-- fichier. La SEULE source de vérité de cette fonction est désormais :
+--     database/migration_023_drop_legacy_overloads.sql
 --
--- Rejouer CE fichier tel quel recréerait uniquement la surcharge 2-arg
--- (uuid, integer) — déjà présente et jamais appelée par le code applicatif,
--- donc sans effet destructeur direct MAIS source de confusion : si quelqu'un
--- s'imagine que ce fichier est la référence et se met à modifier CETTE
--- fonction pour "corriger" un bug, il modifiera une fonction morte pendant
--- que la prod continue d'utiliser migration_022. Référence à jour :
--- migration_022_points_report.sql.
+-- Pourquoi ce fichier ne crée plus rien : le CREATE 2-arg qu'il contenait
+-- (uuid, integer) a fini par cohabiter avec des surcharges à paramètre DEFAULT
+-- ajoutées plus tard (p_amount, puis p_type_programme). Cette cohabitation a
+-- provoqué une ambiguïté "42725: function is not unique" qui menaçait tout
+-- scan de production (voir l'en-tête de migration_023 pour le récit complet et
+-- la leçon). Tant que ce fichier recréait la 2-arg, un rejeu — même partiel —
+-- pouvait réintroduire l'ambiguïté. On l'a donc vidé de son CREATE : rejouer
+-- ce fichier est maintenant un no-op total, incapable de recréer un doublon.
 --
--- ── Contenu original (historique, pour mémoire) ──────────────────────────
--- Migration 012 : incrément atomique des points de fidélité
+-- Rejeu depuis zéro dans l'ordre : 012 (no-op) → … → 022 (no-op) → 023 pose
+-- l'unique fonction canonique. Une seule fonction en base, quel que soit le
+-- chemin. NE RÉINTRODUIS JAMAIS de CREATE increment_stored_value ici.
 --
--- Remplace le pattern read-then-write (lecture de stored_value puis écriture)
+-- ── Contenu original (historique, pour mémoire uniquement — NE PAS exécuter) ─
+-- Migration 012 : incrément atomique des points de fidélité.
+-- Remplaçait le pattern read-then-write (lecture de stored_value puis écriture)
 -- qui pouvait perdre des points en cas de scans simultanés (deux caisses qui
 -- scannent le même pass au même instant lisent 4, écrivent 5 → un point perdu).
---
 -- SELECT ... FOR UPDATE pose un verrou ligne : le second scan attend la fin du
 -- premier et lit la valeur à jour. La logique de reset (atteinte du seuil → 0)
--- est exécutée dans la même transaction, donc atomiquement.
-
-CREATE OR REPLACE FUNCTION increment_stored_value(p_client_id uuid, p_max_value integer)
-RETURNS TABLE(stored_value_avant integer, stored_value_apres integer, is_reset boolean)
-LANGUAGE plpgsql
-AS $$
-DECLARE
-  v_avant integer;
-  v_apres integer;
-  v_reset boolean := false;
-BEGIN
-  -- Verrou ligne : sérialise les scans concurrents sur le même client
-  SELECT stored_value INTO v_avant
-  FROM clients
-  WHERE id = p_client_id
-  FOR UPDATE;
-
-  IF v_avant IS NULL THEN
-    RAISE EXCEPTION 'client introuvable: %', p_client_id;
-  END IF;
-
-  IF v_avant >= p_max_value THEN
-    v_apres := 0;
-    v_reset := true;
-  ELSE
-    v_apres := v_avant + 1;
-  END IF;
-
-  UPDATE clients SET stored_value = v_apres WHERE id = p_client_id;
-
-  RETURN QUERY SELECT v_avant, v_apres, v_reset;
-END;
-$$;
+-- était exécutée dans la même transaction, donc atomiquement. Cette logique
+-- vit désormais, étendue (p_amount, p_type_programme), dans migration_023.
