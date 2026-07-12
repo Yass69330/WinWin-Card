@@ -207,7 +207,7 @@ router.patch('/:id([0-9a-f\\-]{36})', authMarchand, asyncHandler(async (req, res
   }
   if (stored_value !== undefined) {
     const val = parseInt(stored_value, 10);
-    if (isNaN(val) || val < 0 || val > 99) return res.status(400).json({ error: 'stored_value must be an integer between 0 and 99' });
+    if (isNaN(val) || val < 0 || val > 1000000) return res.status(400).json({ error: 'stored_value must be an integer between 0 and 1000000' });
     updates.stored_value = val;
   }
   if (Object.keys(updates).length === 0) {

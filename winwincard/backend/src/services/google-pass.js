@@ -15,6 +15,13 @@ const jwt = require('jsonwebtoken');
 
 const WALLET_API = 'https://walletobjects.googleapis.com/walletobjects/v1';
 
+// Doré par défaut au reward — miroir exact du fallback Apple rgb(201,168,76).
+// Appliqué à TOUS les marchands (tampons ET points) au reward quand aucune
+// couleur_fond_reward n'est configurée. Corrige un bug silencieux pré-existant :
+// Apple dorait déjà par défaut, Google non → les deux célèbrent maintenant la
+// récompense de façon cohérente. Une couleur_fond_reward perso reste prioritaire.
+const REWARD_GOLD = '#c9a84c';
+
 // ── Config ───────────────────────────────────────────────────
 
 function isConfigured() {
@@ -244,9 +251,12 @@ function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
     },
   };
 
-  // Couleur de fond reward — appliquée sur l'objet pour override la class
-  if (marchand.couleur_fond_reward && isRecompense) {
-    obj.hexBackgroundColor = marchand.couleur_fond_reward;
+  // Couleur de fond reward — override l'objet par-dessus la classe (miroir Apple) :
+  //   reward → couleur perso si définie, sinon doré par défaut (tous modes)
+  //   hors reward + couleur perso → couleur de fond normale
+  //   hors reward sans couleur perso → rien (classe inchangée)
+  if (isRecompense) {
+    obj.hexBackgroundColor = marchand.couleur_fond_reward || REWARD_GOLD;
   } else if (marchand.couleur_fond_reward) {
     obj.hexBackgroundColor = marchand.couleur_fond || '#1a1a2e';
   }
@@ -387,9 +397,12 @@ async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, 
     }
   }
 
-  if (couleurFondReward) {
-    patch.hexBackgroundColor = isRecompense ? couleurFondReward : (couleurFond || '#1a1a2e');
-  }
+  // Couleur de fond (miroir Apple, tous modes) : au reward, couleur perso si
+  // définie sinon doré par défaut ; hors reward, retour à la couleur normale
+  // (indispensable, sinon la carte resterait dorée après le reset/redemption).
+  patch.hexBackgroundColor = isRecompense
+    ? (couleurFondReward || REWARD_GOLD)
+    : (couleurFond || '#1a1a2e');
 
   await walletRequest('PATCH', `/loyaltyObject/${encodeURIComponent(oId)}`, patch, token);
 }
