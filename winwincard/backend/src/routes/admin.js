@@ -27,7 +27,7 @@ router.get('/marchands', authAdmin, asyncHandler(async (req, res) => {
   ] = await Promise.all([
     supabase
       .from('marchands')
-      .select('id, nom, slug, forfait, actif, email_contact, couleur_fond, logo_url, max_value, created_at')
+      .select('id, nom, slug, forfait, actif, email_contact, couleur_fond, logo_url, max_value, type_programme, created_at')
       .order('created_at', { ascending: false }),
     supabase.from('clients').select('marchand_id').is('deleted_at', null),
     supabase.from('scans').select('marchand_id').gte('date_scan', new Date().toISOString().split('T')[0]),

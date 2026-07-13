@@ -1490,9 +1490,17 @@ function renderClientSheet({ client, scans }) {
   document.getElementById('cs-pts-max').textContent = `/ ${displayMax}`;
   document.getElementById('cs-reward-badge').style.display = full ? '' : 'none';
   document.getElementById('cs-prog-bar').style.width = pct + '%';
-  document.getElementById('cs-prog-dots').innerHTML = Array.from({ length: S.maxValue }, (_, i) =>
-    `<div class="cs-dot2${i < client.stored_value ? ' on' : ''}"></div>`
-  ).join('');
+  // Pastilles — n'a de sens qu'en mode tampons (peu d'unités). En mode points
+  // le seuil peut être élevé (ex. 500) ; le compteur "X/max" + la barre suffisent
+  // (compteur numérique, cohérent avec les autres surfaces). Bypass identique au
+  // scanner. Mode tampons : strictement inchangé.
+  const dotsEl = document.getElementById('cs-prog-dots');
+  dotsEl.innerHTML = '';
+  if (S.typeProgramme !== 'points') {
+    dotsEl.innerHTML = Array.from({ length: S.maxValue }, (_, i) =>
+      `<div class="cs-dot2${i < client.stored_value ? ' on' : ''}"></div>`
+    ).join('');
+  }
 
   // Données contact — Pro+ uniquement
   const contactEl = document.getElementById('cs-contact');
