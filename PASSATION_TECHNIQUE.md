@@ -60,7 +60,7 @@ commerçant scanne le QR du pass du client → le solde avance → à un seuil, 
 | `public/dashboard/index.html` | Dashboard marchand (stats, clients, scanner intégré, notifs) |
 | `public/scanner/index.html` | PWA scanner de caisse (login marchand, caméra, saisie manuelle, historique) |
 | `public/landing.html` | Page d'inscription client (`/l/:slug`) |
-| `database/schema.sql` + `database/migration_*.sql` | Schéma et migrations (voir pièges §3.3 : 012 et 022 sont NEUTRALISÉES, 023 est la référence) |
+| `database/schema.sql` + `database/migration_*.sql` | Schéma et migrations (voir pièges §3.3 : 012 et 022 sont NEUTRALISÉES, 023 est la référence pour le RPC ; 025 réconcilie repo↔prod — schema.sql + 002→025 reproduit la prod) |
 
 ### Données clés (table `marchands` et `clients`)
 
@@ -120,8 +120,13 @@ sinon                          → additionne
   casse, scopé marchand). Collision (ultra-rare) → HTTP 409 + boutons prénom cliquables.
 - **i18n FR/EN** : catalogues inline dans chaque page front (`I18N` + `t()` +
   `data-i18n`), messages serveur dans `src/i18n/messages.js`. Langue par marchand.
-- **Parrainage** : premier scan d'un filleul depuis le dernier reset (`avantScan === 0`)
-  → crédit au parrain (RPC `credit_referral`).
+- **Parrainage** : le parrain est crédité **UNE SEULE FOIS par filleul, à vie**, au
+  premier tampon/point du filleul. Déclencheur `avantScan === 0` dans `scan.js`,
+  dédupliqué par un « ticket » écrit dans `referral_credits` AVANT le crédit, garanti
+  par l'index unique `referral_credits_filleul_unique` (migration_024). RPC
+  `credit_referral` inchangé. ⚠️ L'ancienne sémantique décrite ici (« premier scan
+  depuis le dernier reset ») était un BUG (re-crédit à chaque cycle en tampons),
+  corrigé le 2026-07-13 — voir §2 item [5].
 - **Auth** : JWT stateless. Dashboard 7 jours, scanner 365 jours (`remember_device`),
   stockés en `localStorage`. Sessions simultanées illimitées, aucune révocation possible.
 
@@ -168,6 +173,32 @@ sinon                          → additionne
 - **Fix** : libellé adaptatif `points/tampons` selon `m.type_programme`
   (`public/admin/index.html`) + ajout de `type_programme` au `select` de l'endpoint
   liste (`src/routes/admin.js` — il n'y était pas).
+
+### Session du 2026-07-13 — suite de l'audit #3 (parrainage + schéma)
+
+### [5] CRITIQUE — Parrain re-crédité en boucle (mode tampons)
+- **Symptôme** : en tampons, le solde du filleul revient à 0 à chaque carte bouclée ;
+  `avantScan === 0` re-déclenchait le crédit parrain à CHAQUE cycle, indéfiniment.
+  Aucune déduplication : `referral_credits` était un journal jamais consulté avant de
+  créditer, écrit en fire-and-forget muet (voir §3.9). En points le solde ne repasse
+  jamais par 0 (bug invisible chez Wam N Fade), mais une remise à zéro manuelle depuis
+  la fiche client le reproduisait dans les DEUX modes — la cause racine était l'absence
+  de déduplication, pas le reset des tampons.
+- **Fix** : règle métier « un crédit par filleul, à vie », portée par la BASE :
+  index unique `referral_credits_filleul_unique` (migration_024) + dans `scan.js` le
+  ticket est inséré AVANT le crédit, avec lecture de l'erreur (23505 = déjà crédité →
+  refus silencieux ; autre erreur → échec bruyant SANS crédit). Comportement
+  **fail-closed assumé** : si quelque chose casse entre ticket et crédit, on rate un
+  crédit (rattrapable à la main) — on n'en double jamais un.
+
+### [6] Schéma non reproductible — réglé par migration_025
+- Trois colonnes de `marchands` (`type_programme`, `langue`, `couleur_texte_reward`)
+  existaient en prod sans être créées par AUCUN fichier (SQL manuel jamais committé) :
+  rejouer les migrations sur une base vierge cassait login marchand, scan et génération
+  de pass. La photographie complète de la prod (2026-07-13) a aussi révélé 2 contraintes
+  CHECK hors fichiers (`langue`, `type_programme`) et une divergence de nullabilité sur
+  `landing_premium`. `migration_025_delta_reconciliation.sql` clôt le tout :
+  **schema.sql + 002→025 reproduit la prod**. Le repo dit à nouveau la vérité.
 
 ---
 
@@ -278,6 +309,32 @@ appel du code déployé ET le nouveau.
   de redemption en mode points (le solde n'y est pas 0) — `scan.js` route déjà ce cas
   vers `passProgress`.
 
+### 3.9 — supabase-js NE REJETTE JAMAIS : tout `.catch()` sur une requête Supabase est du CODE MORT
+**Règle** : supabase-js (v2) ne lance jamais d'exception sur une erreur de requête — il
+RÉSOUT toujours avec `{ data, error }`, y compris sur une panne réseau. Conséquence :
+un `.then().catch(console.error)` collé sur une requête n'attrapera JAMAIS rien, et un
+`.then()` vide jette l'erreur sans la regarder — l'échec est alors invisible PARTOUT,
+même dans les logs Railway. Toute requête dont l'échec compte doit LIRE `error` dans la
+réponse et le traiter explicitement. (Nuance : un `.catch()` sur l'appel d'une fonction
+`async` maison fonctionne normalement — le piège ne concerne que les requêtes/builders
+supabase-js.) Chasse faite le 2026-07-13 : le pattern muet existe ENCORE sur l'insert
+des consentements RGPD (`clients.js`) — si cet insert échoue, la preuve de consentement
+n'est jamais enregistrée et personne ne le sait. Non corrigé (hors périmètre), à traiter.
+**Né de** : le diagnostic du bug parrainage — `referral_credits` était VIDE en prod
+malgré des tests « réussis », sans la moindre trace d'erreur nulle part. C'est le
+finding le plus important de cette session.
+
+### 3.10 — Le repo ne dit pas forcément la vérité sur la base : PHOTOGRAPHIER avant tout chantier SQL
+**Règle** : ne jamais déduire l'état réel de la base des fichiers de migration. Avant
+tout chantier qui touche au schéma, photographier la base réelle en lecture seule
+(`information_schema.columns`, `pg_constraint` + `pg_get_constraintdef`, `pg_indexes`,
+`pg_proc` + `pg_get_functiondef`, triggers, policies) et réconcilier ligne à ligne avec
+`database/`. ⚠️ L'éditeur SQL Supabase tronque l'affichage à ~100 lignes sans le dire :
+vérifier que les résultats d'introspection sont complets (compter les tables attendues).
+**Né de** : l'item [3] de l'audit #3. Deux contraintes CHECK vivaient en prod sans être
+dans AUCUN fichier — même l'audit ne les avait pas vues. Généralise la règle §5
+« listez les fonctions réellement en base » à TOUT le schéma.
+
 ---
 
 ## 4. LA DETTE OUVERTE
@@ -304,6 +361,9 @@ Par gravité décroissante :
    quota), la classe reste périmée et **personne ne le sait**. Pas de statut « dernière
    synchro » ni de bouton re-sync dans l'admin (la manip passe par la console, §3.4).
    *Impact : le bug Pizza Sabbioni peut se reproduire sans SQL direct.*
+   **REPORTÉ (arbitrage fondateur, 2026-07-13)** : il ne veut pas multiplier les appels
+   à l'API Google Wallet, par crainte de restrictions côté Google. Ne pas re-proposer
+   sans élément nouveau.
 
 5. **Historiques : le scan de redemption points est mal classé** — dans l'onglet Scans
    et la fiche client du dashboard, reward/reset sont **reconstruits après coup** depuis
@@ -325,6 +385,20 @@ Par gravité décroissante :
    vrai solde, jugé caduc) ; endpoint `/api/admin/google-wallet/classes/sync` (batch)
    existe et est dangereux par volume ; `display_max_value` permet d'afficher un
    dénominateur différent du seuil réel (utilisé rarement, pensez-y en debug).
+
+9. **Aucune idempotence sur /api/scan — REPORTÉE (arbitrage fondateur, 2026-07-13),
+   dette assumée** : pas de clé d'idempotence ni de fenêtre anti-rejeu ; un double-tap
+   du caissier ou un retry réseau = double crédit (le FOR UPDATE sérialise mais ne
+   dédoublonne pas). Raisons du report : volume trop faible aujourd'hui + garde-fou
+   humain (le caissier montre l'historique au client après chaque scan).
+   **À TRAITER AVANT d'avoir plusieurs marchands en mode points** — en points c'est de
+   la valeur monétaire.
+
+10. **Login email fragile — CLASSÉ SANS SUITE (arbitrage fondateur, 2026-07-13)** :
+    `merchants.js` fait `.single()` sur `email_contact`, colonne sans contrainte
+    unique ; deux marchands avec le même email = login email impossible. Décision :
+    emails bidon, champ inutilisé aujourd'hui. Ne pas ressortir ce finding sans
+    changement d'usage du champ.
 
 ---
 
@@ -383,7 +457,9 @@ en `en` ET `fr`).
 Avant d'attaquer un chantier, valider l'état de départ :
 
 1. `git log --oneline -5` — la branche de travail est `claude/keen-goldberg-MXslu`,
-   dernier commit connu de cette passation : `37ecc63` (items [3]+[4]).
+   derniers commits connus : `72a96c4` (fix parrainage, item [5] §2) et les migrations
+   024/025 + cette mise à jour (session du 2026-07-13 ; `37ecc63` = fin de la session
+   précédente).
 2. En base : une **seule** fonction `increment_stored_value` (requête §5-migrations).
 3. Un scan caméra ET un scan backup code sur le cobaye Pizza Sabbioni (voir son état,
    dette #7) : solde + notif + pass rafraîchi dans les deux cas.
@@ -415,3 +491,8 @@ manuel ; le reset immédiat abandonné avant code). La respecter :
 FR/EN complète, backup code, historique scanner, mode points (fondation → report du
 surplus), résolution de l'incident RPC, re-sync Google Wallet, et les 4 correctifs de
 l'audit #3. Dernier commit : `37ecc63`.*
+
+*Mis à jour le 2026-07-13 par la session suivante : fix du parrainage (un crédit par
+filleul à vie — migration_024 + ticket avant crédit dans scan.js), réconciliation
+repo↔prod (migration_025), pièges §3.9 (supabase-js ne rejette jamais) et §3.10
+(photographier la base), arbitrages fondateur consignés en dette #4, #9, #10.*
