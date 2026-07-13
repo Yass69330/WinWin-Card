@@ -7,10 +7,15 @@ const { notif } = require('../i18n/messages');
 
 // POST /scan — scan d'un pass en caisse
 // Corps : { serial_number }
+//   ⚠️ Le champ `serial_number` du body n'est PAS forcément un serial : c'est
+//   une ENTRÉE à résoudre — soit un UUID complet (caméra), soit un code de
+//   secours 6 caractères (saisie manuelle). D'où le nom local `serial_input`.
+//   Ne JAMAIS s'en servir pour agir sur une entité (passes, device_tokens,
+//   objet Google) : utiliser `client.pass_serial_number` (le serial résolu).
 router.post('/', authScanner, asyncHandler(async (req, res) => {
-  const { serial_number, points } = req.body;
+  const { serial_number: serial_input, points } = req.body;
 
-  if (!serial_number) {
+  if (!serial_input) {
     return res.status(400).json({ error: 'serial_number required' });
   }
 
@@ -20,7 +25,7 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   //     → match par suffixe insensible à la casse
   // L'incrément passe ensuite par le même RPC atomique, quel que soit le format.
   const SELECT_CLIENT = 'id, prenom, stored_value, marchand_id, pass_serial_number, marchands(id, max_value, display_max_value, actif, nom, slug, forfait, langue, type_programme, images_tiers, couleur_fond, couleur_fond_reward, logo_url, strip_mode, strip_theme, stamp_icon, strip_custom_background_url, strip_config_version, referral_enabled, referral_bonus_points)';
-  const raw = String(serial_number).trim().toLowerCase();
+  const raw = String(serial_input).trim().toLowerCase();
   let client = null;
 
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(raw)) {
@@ -111,11 +116,14 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
       ? notif('passReward',   lang, { prenom: client.prenom })
       : notif('passProgress', lang, { prenom: client.prenom, value: apresScan, max: displayMaxValue, amount });
 
-  // Message de notification du pass + log du scan en parallèle
+  // Message de notification du pass + log du scan en parallèle.
+  // On agit sur le serial RÉSOLU (client.pass_serial_number), jamais sur
+  // l'entrée brute : sinon un scan par code de secours ne matcherait aucune ligne.
+  const serial = client.pass_serial_number;
   await Promise.all([
     supabase.from('passes')
       .update({ notification_message: scanMessage, updated_at: new Date().toISOString() })
-      .eq('serial_number', serial_number)
+      .eq('serial_number', serial)
       .eq('marchand_id', req.marchandId),
     supabase.from('scans').insert({
       client_id: client.id,
@@ -126,8 +134,8 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   ]);
 
   // Mises à jour Apple + Google Wallet en parallèle, sans bloquer la réponse
-  notifierMiseAJourPass(serial_number).catch(e => console.error('[scan] push Apple:', e.message));
-  mettreAJourGoogleWallet(serial_number, req.marchandId, apresScan, maxValue, displayMaxValue, scanMessage, client.marchands.images_tiers, client.prenom, client.marchands.couleur_fond, client.marchands.couleur_fond_reward, client.marchands).catch(e => console.error('[scan] push Google:', e.message));
+  notifierMiseAJourPass(serial).catch(e => console.error('[scan] push Apple:', e.message));
+  mettreAJourGoogleWallet(serial, req.marchandId, apresScan, maxValue, displayMaxValue, scanMessage, client.marchands.images_tiers, client.prenom, client.marchands.couleur_fond, client.marchands.couleur_fond_reward, client.marchands).catch(e => console.error('[scan] push Google:', e.message));
 
   // Parrainage — premier scan du filleul depuis le dernier reset = crédit au
   // parrain, fire-and-forget. avantScan === 0 (plutôt que apresScan === 1) :
