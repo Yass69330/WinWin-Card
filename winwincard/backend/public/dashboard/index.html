@@ -596,7 +596,7 @@
     <div class="modal-handle"></div>
     <div class="modal-title" data-i18n="adjustPoints">Adjust points</div>
     <div class="field">
-      <label for="adjust-input" id="adjust-label">New balance (0 – <span id="adjust-max">?</span> pts)</label>
+      <label for="adjust-input" id="adjust-label">New balance</label>
       <input id="adjust-input" type="number" min="0" autocomplete="off" placeholder="0">
     </div>
     <div id="adjust-err" class="alert alert-error" style="display:none"></div>
@@ -1584,7 +1584,9 @@ document.getElementById('rename-confirm').addEventListener('click', async () => 
 document.getElementById('cs-btn-adjust').addEventListener('click', () => {
   if (!S.clientData) return;
   document.getElementById('adjust-input').value = S.clientData.client.stored_value;
-  document.getElementById('adjust-max').textContent = S.maxValue;
+  // t('newBalance') rend le libellé complet (valeur du seuil incluse). On écrit
+  // dans adjust-label (élément stable sans enfant) — plus de <span id="adjust-max">
+  // à détruire puis relire (cause du bug « le bouton Points ne répond plus »).
   document.getElementById('adjust-label').textContent = t('newBalance', { max: S.maxValue });
   document.getElementById('adjust-err').style.display = 'none';
   document.getElementById('modal-adjust').classList.add('open');
