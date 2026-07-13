@@ -137,10 +137,13 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   notifierMiseAJourPass(serial).catch(e => console.error('[scan] push Apple:', e.message));
   mettreAJourGoogleWallet(serial, req.marchandId, apresScan, maxValue, displayMaxValue, scanMessage, client.marchands.images_tiers, client.prenom, client.marchands.couleur_fond, client.marchands.couleur_fond_reward, client.marchands).catch(e => console.error('[scan] push Google:', e.message));
 
-  // Parrainage — premier scan du filleul depuis le dernier reset = crédit au
-  // parrain, fire-and-forget. avantScan === 0 (plutôt que apresScan === 1) :
-  // équivalent strict en mode tampons (le premier scan amène toujours à 1),
-  // mais correct en mode points où le premier scan peut valoir +N directement.
+  // Parrainage — crédit au parrain au premier tampon/point du filleul, UNE
+  // SEULE FOIS à vie. avantScan === 0 est le déclencheur (plutôt que
+  // apresScan === 1, faux en mode points où le premier scan peut valoir +N) ;
+  // il redevient vrai à chaque cycle en tampons (reset) et après une remise à
+  // zéro manuelle — ces re-déclenchements sont refusés par le ticket unique
+  // posé dans creditReferrerIfApplicable (index referral_credits_filleul_unique,
+  // migration_024), jamais re-crédités.
   if (avantScan === 0 && client.marchands.referral_enabled) {
     creditReferrerIfApplicable(client.id, req.marchandId, client.marchands.referral_bonus_points || 1)
       .catch(e => console.error('[scan] referral credit:', e.message));
@@ -200,6 +203,24 @@ async function creditReferrerIfApplicable(filleulClientId, marchandId, bonusPoin
 
   if (!parrain?.pass_serial_number) return;
 
+  // LE TICKET, avant le crédit. L'index unique referral_credits_filleul_unique
+  // (migration_024) fait respecter la règle métier par la base elle-même : un
+  // filleul ne génère qu'un crédit, à vie. Si la ligne existe déjà, l'insert
+  // échoue en 23505 (unique_violation) → déjà crédité → on s'arrête sans bruit.
+  // Ticket AVANT crédit : un échec entre les deux fait rater un crédit
+  // (rattrapable), jamais le doubler. L'erreur est LUE (supabase-js ne rejette
+  // jamais : l'ancien .then().catch() jetait la réponse sans la regarder).
+  const { error: errTicket } = await supabase.from('referral_credits').insert({
+    marchand_id:       marchandId,
+    parrain_client_id: parrainClientId,
+    filleul_client_id: filleulClientId,
+    points_credited:   bonusPoints,
+  });
+  if (errTicket) {
+    if (errTicket.code === '23505') return; // parrain déjà crédité pour ce filleul
+    throw new Error(`referral_credits insert: ${errTicket.message}`);
+  }
+
   // Crédit atomique — cap à max_value, jamais de reset
   const { data: credit, error } = await supabase.rpc('credit_referral', {
     p_parrain_client_id: parrainClientId,
@@ -213,14 +234,6 @@ async function creditReferrerIfApplicable(filleulClientId, marchandId, bonusPoin
   const maxValue   = parrain.marchands.max_value;
   const displayMax = parrain.marchands.display_max_value || maxValue;
   const msg        = notif('referral', parrain.marchands.langue, { prenom: parrain.prenom, bonus: bonusPoints, value: newValue, max: displayMax });
-
-  // Audit referral_credits
-  supabase.from('referral_credits').insert({
-    marchand_id:       marchandId,
-    parrain_client_id: parrainClientId,
-    filleul_client_id: filleulClientId,
-    points_credited:   bonusPoints,
-  }).then().catch(e => console.error('[scan] referral_credits insert:', e.message));
 
   // Mise à jour du pass parrain (notification + updated_at pour Apple)
   await supabase.from('passes')
