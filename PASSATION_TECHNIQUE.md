@@ -200,6 +200,22 @@ sinon                          → additionne
   `landing_premium`. `migration_025_delta_reconciliation.sql` clôt le tout :
   **schema.sql + 002→025 reproduit la prod**. Le repo dit à nouveau la vérité.
 
+### [7] Push Apple perdus — session APNs zombie (incident Magic Clean, 2026-07-15)
+- **Symptôme** : ajustement de points depuis le dashboard → la carte sur le téléphone ne
+  se met jamais à jour (pas « en retard » : JAMAIS, jusqu'au prochain scan ou à
+  l'ouverture manuelle de Wallet). Intermittent, ancien, réapparu.
+- **Cause réelle** : `apns.js` réutilise une connexion HTTP/2 persistante vers Apple.
+  Quand le réseau la coupe EN SILENCE (session « zombie »), le push est écrit dans le
+  vide : aucune réponse, erreur `read ETIMEDOUT` seulement ~7 min plus tard — code
+  d'erreur ABSENT de la liste du retry existant → jamais renvoyé. Preuve : logs Railway
+  du 2026-07-15, deux pushes (09:52 et 09:59) morts dans la même session zombie ; le
+  premier avait « marché » uniquement parce que Wallet était ouvert sous les yeux du
+  fondateur (synchro déclenchée par l'appareil, pas par le push).
+- **Fix** (`apns.js`) : borne de 10 s par push (`req.setTimeout` → destroy stream +
+  session) + `ETIMEDOUT`/`APNS_TIMEOUT` ajoutés aux erreurs déclenchant le retry unique
+  sur session neuve. Zéro push supplémentaire en fonctionnement normal ; au pire UN
+  renvoi du même push quand la ligne était morte.
+
 ---
 
 ## 3. LES PIÈGES DE CETTE CODEBASE (règles apprises douloureusement)
@@ -399,6 +415,21 @@ Par gravité décroissante :
     unique ; deux marchands avec le même email = login email impossible. Décision :
     emails bidon, champ inutilisé aujourd'hui. Ne pas ressortir ce finding sans
     changement d'usage du champ.
+
+11. **Listing Apple sur-inclusif + horodatage sur la mauvaise horloge — À CORRIGER
+    ENSEMBLE, JAMAIS séparément — REPORTÉ (arbitrage fondateur, 2026-07-15)** :
+    dans `apple-wallet.js`, `GET /v1/devices/:id/registrations/...` répond « tous les
+    passes de l'appareil ont changé » (le filtre `passesUpdatedSince` porte sur l'embed
+    `passes(updated_at)` sans `!inner` → il n'exclut pas les parents) et renvoie
+    `lastUpdated = new Date()` (horloge Node) alors que le filtre compare des
+    timestamps Postgres. Les DEUX défauts se neutralisent : la sur-inclusion fait tout
+    revérifier par l'iPhone et le 304 par pass (If-Modified-Since) fait le tri.
+    Impact prod : marginal (un client réel a 1-3 passes) — quelques téléchargements
+    inutiles et des erreurs « Server requested update but the pass was unchanged »
+    consignées par Apple à chaque synchro d'appareil multi-passes. ⚠️ PIÈGE : corriger
+    le filtrage SANS l'horodatage (ou l'inverse) activerait le bug masqué → mises à
+    jour RATÉES. Raison du report : impact réel négligeable, prudence vis-à-vis du
+    canal Apple.
 
 ---
 
