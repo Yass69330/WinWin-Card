@@ -58,7 +58,9 @@ function getApnsJwt() {
 
 // ── Session HTTP/2 persistante ────────────────────────────────
 // Une seule connexion TCP/TLS réutilisée pour tous les push successifs.
-// Reconnexion automatique sur GOAWAY ou erreur réseau.
+// Reconnexion automatique sur GOAWAY, erreur réseau, ou session zombie
+// (connexion coupée en silence — détectée par la borne 10 s de doRequest,
+// puis le push est renvoyé UNE fois sur une session neuve par apnsRequest).
 
 const APNS_HOST = process.env.NODE_ENV === 'production'
   ? 'https://api.push.apple.com'
@@ -130,6 +132,21 @@ function doRequest(pushToken, payload, isAlert) {
       reject(e);
     });
 
+    // Borne l'attente à 10 s : une session zombie (connexion coupée en silence
+    // par le réseau, le serveur croit qu'elle est ouverte) ne répond JAMAIS —
+    // sans borne, le push reste suspendu ~7 min jusqu'au read ETIMEDOUT TCP et
+    // la mise à jour du pass est perdue (incident Magic Clean, 2026-07-15).
+    // APNs répond normalement en < 1 s. req.destroy(err) passe par le handler
+    // 'error' ci-dessus (log + reject), PUIS on jette la session présumée
+    // morte — dans cet ordre : détruire la session d'abord fermerait le stream
+    // sans notre code d'erreur et le retry ne se déclencherait pas.
+    req.setTimeout(10000, () => {
+      const err = new Error('timeout APNs (10s) — connexion présumée morte');
+      err.code = 'APNS_TIMEOUT';
+      req.destroy(err);
+      try { session.destroy(); } catch {}
+    });
+
     req.write(JSON.stringify(payload));
     req.end();
   });
@@ -143,6 +160,8 @@ async function apnsRequest(pushToken, payload, isAlert) {
     const isConnErr = e.code === 'ERR_HTTP2_GOAWAY_SESSION' ||
                      e.code === 'ERR_HTTP2_STREAM_ERROR'    ||
                      e.code === 'ECONNRESET'                ||
+                     e.code === 'ETIMEDOUT'                 || // ligne morte détectée (tard) par TCP
+                     e.code === 'APNS_TIMEOUT'              || // ligne morte détectée par notre borne 10 s
                      (_session && _session.destroyed);
     if (isConnErr) {
       _session = null;
