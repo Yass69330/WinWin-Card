@@ -506,6 +506,33 @@
           </div>
         </div>
 
+        <!-- Couleurs manuelles des pastilles (optionnel) — écrasent le calcul WCAG auto -->
+        <div id="section-pastille-colors">
+          <div class="field" style="margin-bottom:12px">
+            <label>Pastille — fond du cercle rempli (optionnel)</label>
+            <div class="color-row">
+              <input type="color" id="cp-past-fond" value="#000000">
+              <input type="text"  id="f-past-fond" placeholder="vide = auto · accepte « transparent »">
+            </div>
+          </div>
+          <div class="field" style="margin-bottom:12px">
+            <label>Pastille — contour, vides + remplies (optionnel)</label>
+            <div class="color-row">
+              <input type="color" id="cp-past-contour" value="#c9a84c">
+              <input type="text"  id="f-past-contour" placeholder="vide = auto · accepte « transparent »">
+            </div>
+          </div>
+          <div class="field" style="margin-bottom:8px">
+            <label>Pastille — couleur de l'icône remplie (optionnel)</label>
+            <div class="color-row">
+              <input type="color" id="cp-past-icone" value="#c9a84c">
+              <input type="text"  id="f-past-icone" placeholder="vide = auto">
+            </div>
+          </div>
+          <div id="pastille-contrast-warn" class="field-hint" style="display:none;color:var(--warning)"></div>
+          <div class="field-hint">Vide = couleurs auto (contraste WCAG). Sans effet en mode points, ni sur l'état récompense (doré).</div>
+        </div>
+
         <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:12px">
           <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px">
             <input type="checkbox" id="f-strip-label" checked style="width:18px;height:18px;accent-color:var(--accent)">
@@ -892,6 +919,13 @@ function resetForm() {
   document.getElementById('f-reward-color').value = '';
   document.getElementById('cp-texte-reward').value = '#190f00';
   document.getElementById('f-texte-reward-c').value = '';
+  document.getElementById('cp-past-fond').value = '#000000';
+  document.getElementById('f-past-fond').value = '';
+  document.getElementById('cp-past-contour').value = '#c9a84c';
+  document.getElementById('f-past-contour').value = '';
+  document.getElementById('cp-past-icone').value = '#c9a84c';
+  document.getElementById('f-past-icone').value = '';
+  const pcw = document.getElementById('pastille-contrast-warn'); if (pcw) pcw.style.display = 'none';
   document.getElementById('f-maxval').value     = '10';
   document.getElementById('f-displaymax').value = '';
   document.getElementById('f-forfait').value    = 'pro';
@@ -941,6 +975,13 @@ function fillForm(m) {
   else { document.getElementById('cp-reward').value = '#c9a84c'; document.getElementById('f-reward-color').value = ''; }
   if (m.couleur_texte_reward) setColor('cp-texte-reward', 'f-texte-reward-c', m.couleur_texte_reward);
   else { document.getElementById('cp-texte-reward').value = '#190f00'; document.getElementById('f-texte-reward-c').value = ''; }
+  if (m.couleur_pastille_fond)    setColor('cp-past-fond', 'f-past-fond', m.couleur_pastille_fond);
+  else { document.getElementById('cp-past-fond').value = '#000000'; document.getElementById('f-past-fond').value = ''; }
+  if (m.couleur_pastille_contour) setColor('cp-past-contour', 'f-past-contour', m.couleur_pastille_contour);
+  else { document.getElementById('cp-past-contour').value = '#c9a84c'; document.getElementById('f-past-contour').value = ''; }
+  if (m.couleur_pastille_icone)   setColor('cp-past-icone', 'f-past-icone', m.couleur_pastille_icone);
+  else { document.getElementById('cp-past-icone').value = '#c9a84c'; document.getElementById('f-past-icone').value = ''; }
+  updatePastilleContrastWarn();
   if (m.images_tiers)  document.getElementById('f-tiers').value = JSON.stringify(m.images_tiers, null, 2);
   document.getElementById('slug-preview').textContent = m.slug || '…';
   // Section strip tiers — visible en mode édition uniquement
@@ -996,14 +1037,52 @@ function setColor(cpId, txtId, hex) {
 function isHex(s) { return /^#[0-9a-fA-F]{6}$/.test(s); }
 
 // Synchronisation color picker ↔ champ texte
-[['cp-fond','f-fond'],['cp-texte','f-texte-c'],['cp-label','f-label'],['cp-reward','f-reward-color'],['cp-texte-reward','f-texte-reward-c']].forEach(([cpId, txtId]) => {
+[['cp-fond','f-fond'],['cp-texte','f-texte-c'],['cp-label','f-label'],['cp-reward','f-reward-color'],['cp-texte-reward','f-texte-reward-c'],['cp-past-fond','f-past-fond'],['cp-past-contour','f-past-contour'],['cp-past-icone','f-past-icone']].forEach(([cpId, txtId]) => {
   document.getElementById(cpId).addEventListener('input', e => {
     document.getElementById(txtId).value = e.target.value;
+    updatePastilleContrastWarn();
   });
   document.getElementById(txtId).addEventListener('input', e => {
     if (isHex(e.target.value)) document.getElementById(cpId).value = e.target.value;
+    updatePastilleContrastWarn();
   });
 });
+
+// ── Garde-fou contraste pastille (non bloquant) ───────────────────────────
+// Réplique relativeLuminance de strip-generator.js (WCAG 2.1). Retourne null
+// si la couleur n'est pas un hex #rrggbb (ex. « transparent », rgba, vide) →
+// on ne peut alors pas calculer, on n'avertit pas.
+function _hexLum(hex) {
+  const h = (hex || '').replace('#', '');
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
+  return [0, 2, 4].reduce((L, i, j) => {
+    const c = parseInt(h.slice(i, i + 2), 16) / 255;
+    const lin = c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    return L + lin * [0.2126, 0.7152, 0.0722][j];
+  }, 0);
+}
+function updatePastilleContrastWarn() {
+  const warn = document.getElementById('pastille-contrast-warn');
+  if (!warn) return;
+  const iconV = document.getElementById('f-past-icone').value.trim();
+  const fondV = document.getElementById('f-past-fond').value.trim();
+  // Fond effectif de l'icône : le fond de pastille s'il est un hex, sinon
+  // (transparent/vide) le fond du pass (couleur_fond) sur lequel l'icône repose.
+  const bgV = isHex(fondV) ? fondV : document.getElementById('f-fond').value.trim();
+  const li = _hexLum(iconV), lb = _hexLum(bgV);
+  if (li == null || lb == null) { warn.style.display = 'none'; return; }
+  const ratio = (Math.max(li, lb) + 0.05) / (Math.min(li, lb) + 0.05);
+  if (ratio < 3) {
+    warn.textContent = `⚠️ Contraste icône/cercle faible (${ratio.toFixed(1)}:1) — vérifie sur un vrai téléphone.`;
+    warn.style.display = '';
+  } else {
+    warn.style.display = 'none';
+  }
+}
+// Recalcul aussi quand le fond du pass change (il sert de fond effectif si la
+// pastille est transparente).
+document.getElementById('f-fond').addEventListener('input', updatePastilleContrastWarn);
+document.getElementById('cp-fond').addEventListener('input', updatePastilleContrastWarn);
 
 // Toggle sections Pro+ quand le forfait change en mode édition
 document.getElementById('f-forfait').addEventListener('change', function() {
@@ -1132,6 +1211,11 @@ function collectForm() {
   body.strip_theme = document.getElementById('f-strip-theme').value || 'icon_metier';
   body.stamp_icon  = document.getElementById('f-stamp-icon').value  || 'coffee';
   body.strip_label = document.getElementById('f-strip-label').checked ? 'on' : 'off';
+  // Couleurs manuelles des pastilles (optionnel) — vide → null → repli WCAG auto.
+  // Champ texte : accepte hex, rgba() ou « transparent ».
+  body.couleur_pastille_fond    = document.getElementById('f-past-fond').value.trim()    || null;
+  body.couleur_pastille_contour = document.getElementById('f-past-contour').value.trim() || null;
+  body.couleur_pastille_icone   = document.getElementById('f-past-icone').value.trim()   || null;
 
   return body;
 }

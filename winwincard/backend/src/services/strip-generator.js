@@ -170,23 +170,42 @@ function computeLayout(n, { showLabel = true } = {}) {
 // Fond sombre (lum < 0.18) → tampons clairs (comportement historique)
 // Fond clair  (lum ≥ 0.18) → tampons foncés contrastés
 // Même seuil et même logique que labelSvg — cohérence visuelle garantie.
-function stampColors(bgColor) {
+function stampColors(bgColor, overrides = {}) {
   const lum = relativeLuminance(bgColor || '#1a1a2e');
-  if (lum >= 0.18) {
-    return {
-      emptyFill:   'rgba(0,0,0,0.05)',
-      emptyStroke: 'rgba(0,0,0,0.40)',
-      filledFill:  darken(bgColor, 0.62),
-      filledIcon:  lighten(bgColor, 0.88),
-      ghostIcon:   'rgba(0,0,0,0.20)',
-    };
-  }
+  // Palette WCAG automatique — calcul strictement inchangé.
+  const base = lum >= 0.18
+    ? {
+        emptyFill:   'rgba(0,0,0,0.05)',
+        emptyStroke: 'rgba(0,0,0,0.40)',
+        filledFill:  darken(bgColor, 0.62),
+        filledIcon:  lighten(bgColor, 0.88),
+        ghostIcon:   'rgba(0,0,0,0.20)',
+      }
+    : {
+        emptyFill:   'rgba(255,255,255,0.07)',
+        emptyStroke: 'rgba(255,255,255,0.58)',
+        filledFill:  'white',
+        filledIcon:  bgColor || '#1a1a2e',
+        ghostIcon:   'rgba(255,255,255,0.30)',
+      };
+
+  // Overrides manuels par marchand (couleur_pastille_*). Chaque valeur non-vide
+  // écrase le calcul WCAG pour cette sortie ; NULL/undefined/'' → repli sur la
+  // base (via ||) → zéro régression quand rien n'est configuré.
+  //   • fond    → filledFill (cercle rempli)
+  //   • contour → emptyStroke ET filledStroke (contour des deux états — décision A/B)
+  //   • icone   → filledIcon (icône remplie)
+  // Restent WCAG (décision A) : emptyFill (fond des vides) et ghostIcon (icône
+  // fantôme, portée par une pastille vide). filledStroke est NOUVEAU : null par
+  // défaut → aucun contour rendu sur la pastille remplie (comportement historique).
+  // NB : les overrides ne sont PAS passés en état reward (cf. buildSvg, décision C).
   return {
-    emptyFill:   'rgba(255,255,255,0.07)',
-    emptyStroke: 'rgba(255,255,255,0.58)',
-    filledFill:  'white',
-    filledIcon:  bgColor || '#1a1a2e',
-    ghostIcon:   'rgba(255,255,255,0.30)',
+    emptyFill:    base.emptyFill,
+    emptyStroke:  overrides.contour || base.emptyStroke,
+    filledFill:   overrides.fond    || base.filledFill,
+    filledStroke: overrides.contour || null,
+    filledIcon:   overrides.icone   || base.filledIcon,
+    ghostIcon:    base.ghostIcon,
   };
 }
 
@@ -199,15 +218,19 @@ function stampColors(bgColor) {
 //   - Tampon vide + isLast → cercle + icône cadeau fantôme (toujours visible)
 //   - Tampon rempli        → cercle coloré + icône contrastée
 //   - Tampon rempli + isLast → cercle coloré + icône cadeau contrastée
-function stampSvg({ x, y, r, filled, iconName, isLast, emptyFill, emptyStroke, filledFill, filledIcon, ghostIcon }) {
+function stampSvg({ x, y, r, filled, iconName, isLast, emptyFill, emptyStroke, filledFill, filledStroke, filledIcon, ghostIcon }) {
   const scale    = +((r * 0.68) / 128).toFixed(4);
   const iconKey  = isLast ? 'gift' : (iconName in ICONS ? iconName : 'star');
   const iconPath = ICONS[iconKey];
   const tr = `translate(${x},${y}) scale(${scale}) translate(-128,-128)`;
 
   if (filled) {
+    // filledStroke (couleur_pastille_contour) : contour optionnel de la pastille
+    // remplie — rien si non défini (comportement historique). Rend visible un
+    // cercle transparent/sombre (ex. étoile dorée cerclée sur fond noir).
+    const stroke = filledStroke ? ` stroke="${filledStroke}" stroke-width="2.5"` : '';
     return `
-      <circle cx="${x}" cy="${y}" r="${r}" fill="${filledFill}"/>
+      <circle cx="${x}" cy="${y}" r="${r}" fill="${filledFill}"${stroke}/>
       <g transform="${tr}" fill="${filledIcon}">${iconPath}</g>`;
   }
   if (isLast) {
@@ -221,21 +244,24 @@ function stampSvg({ x, y, r, filled, iconName, isLast, emptyFill, emptyStroke, f
 
 // ── Génère le SVG d'un tampon logo_stamp ──────────────────────────────────
 // logoB64: PNG logo normalisé (base64), null si non disponible → fallback icon
-function logoStampSvg({ x, y, r, filled, logoB64, iconName, idx, emptyFill, emptyStroke, filledFill, filledIcon, ghostIcon }) {
+function logoStampSvg({ x, y, r, filled, logoB64, iconName, idx, emptyFill, emptyStroke, filledFill, filledStroke, filledIcon, ghostIcon }) {
   if (!filled) {
     return `
       <circle cx="${x}" cy="${y}" r="${r}" fill="${emptyFill}" stroke="${emptyStroke}" stroke-width="2.5"/>`;
   }
   if (!logoB64) {
-    return stampSvg({ x, y, r, filled: true, iconName, isLast: false, emptyFill, emptyStroke, filledFill, filledIcon, ghostIcon });
+    return stampSvg({ x, y, r, filled: true, iconName, isLast: false, emptyFill, emptyStroke, filledFill, filledStroke, filledIcon, ghostIcon });
   }
   const imgSize = r * 1.4;
   const imgX = +(x - imgSize / 2).toFixed(1);
   const imgY = +(y - imgSize / 2).toFixed(1);
   const clipId = `lclip${idx}`;
+  // Contour optionnel de la pastille remplie (couleur_pastille_contour), cohérent
+  // avec stampSvg — rien si non défini.
+  const stroke = filledStroke ? ` stroke="${filledStroke}" stroke-width="2.5"` : '';
   return `
     <defs><clipPath id="${clipId}"><circle cx="${x}" cy="${y}" r="${r}"/></clipPath></defs>
-    <circle cx="${x}" cy="${y}" r="${r}" fill="${filledFill}"/>
+    <circle cx="${x}" cy="${y}" r="${r}" fill="${filledFill}"${stroke}/>
     <image href="data:image/png;base64,${logoB64}" x="${imgX}" y="${imgY}"
       width="${imgSize}" height="${imgSize}"
       clip-path="url(#${clipId})" preserveAspectRatio="xMidYMid meet"/>`;
@@ -305,7 +331,16 @@ function buildSvg({ marchand, filledCount, logoB64, customBgB64, w = 750, h = 24
   const bgColor   = isReward
     ? (marchand.couleur_fond_reward || '#c9a84c')
     : (marchand.couleur_fond || '#1a1a2e');
-  const colors    = stampColors(bgColor); // adaptatif : sombre → tampons clairs, clair → tampons foncés
+  // Décision C : les couleurs manuelles de pastille ne s'appliquent PAS en reward
+  // (le fond passe au doré ; une icône dorée sur doré serait illisible au moment
+  // même de la récompense). En reward → overrides vides → palette WCAG depuis
+  // couleur_fond_reward, strictement comme avant.
+  const overrides = isReward ? {} : {
+    fond:    marchand.couleur_pastille_fond,
+    contour: marchand.couleur_pastille_contour,
+    icone:   marchand.couleur_pastille_icone,
+  };
+  const colors    = stampColors(bgColor, overrides); // WCAG auto + overrides manuels éventuels
   const showLabel = marchand.strip_label !== 'off';
 
   // Mise à l'échelle des positions si h != 246 (même SVG, juste viewBox changé)

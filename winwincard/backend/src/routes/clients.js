@@ -22,7 +22,7 @@ router.post('/', limiterInscription, asyncHandler(async (req, res) => {
   // Récupérer le marchand complet (nécessaire pour Google Wallet + forfait)
   const { data: marchand, error: errMarchand } = await supabase
     .from('marchands')
-    .select('id, nom, slug, forfait, langue, type_programme, max_value, display_max_value, actif, couleur_fond, couleur_fond_reward, couleur_texte, couleur_label, logo_url, image_strip_url, google_logo_url, google_hero_url, images_tiers, how_it_works, referral_enabled, referral_bonus_points, telephone, adresse, strip_mode, strip_theme, stamp_icon, strip_custom_background_url, strip_config_version')
+    .select('id, nom, slug, forfait, langue, type_programme, max_value, display_max_value, actif, couleur_fond, couleur_fond_reward, couleur_pastille_fond, couleur_pastille_contour, couleur_pastille_icone, couleur_texte, couleur_label, logo_url, image_strip_url, google_logo_url, google_hero_url, images_tiers, how_it_works, referral_enabled, referral_bonus_points, telephone, adresse, strip_mode, strip_theme, stamp_icon, strip_custom_background_url, strip_config_version')
     .eq('slug', marchand_slug)
     .single();
 
@@ -241,7 +241,7 @@ async function syncPassAfterAdjustment(serialNumber, marchandId, prenom, newValu
 
   const { data: marchand } = await supabase
     .from('marchands')
-    .select('id, nom, slug, forfait, langue, type_programme, max_value, display_max_value, images_tiers, couleur_fond, couleur_fond_reward, logo_url, strip_mode, strip_theme, stamp_icon, strip_custom_background_url, strip_config_version')
+    .select('id, nom, slug, forfait, langue, type_programme, max_value, display_max_value, images_tiers, couleur_fond, couleur_fond_reward, couleur_pastille_fond, couleur_pastille_contour, couleur_pastille_icone, logo_url, strip_mode, strip_theme, stamp_icon, strip_custom_background_url, strip_config_version')
     .eq('id', marchandId)
     .single();
 

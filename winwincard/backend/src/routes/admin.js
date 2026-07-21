@@ -111,6 +111,7 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
     'couleur_fond', 'couleur_fond_reward', 'logo_url', 'nom', 'pass_display_name',
     'strip_mode', 'strip_theme', 'stamp_icon', 'strip_custom_background_url', 'max_value', 'strip_label',
     'type_programme',
+    'couleur_pastille_fond', 'couleur_pastille_contour', 'couleur_pastille_icone',
   ]);
 
   const ALLOWED = [
@@ -126,6 +127,7 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
     'referral_enabled', 'referral_bonus_points',
     'how_it_works', 'workflow_inactive_message',
     'couleur_fond_reward',
+    'couleur_pastille_fond', 'couleur_pastille_contour', 'couleur_pastille_icone',
     // Champs générateur de strip (aucun gating forfait côté admin)
     'strip_mode', 'strip_theme', 'stamp_icon', 'strip_custom_background_url', 'strip_label',
   ];
