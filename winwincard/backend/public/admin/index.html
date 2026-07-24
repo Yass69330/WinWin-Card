@@ -391,8 +391,26 @@
               <span style="font-size:13px;color:var(--muted)">points de la récompense</span>
             </div>
           </div>
+
+          <div style="height:1px;background:var(--border)"></div>
+
+          <!-- Anniversaire -->
+          <div>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;font-weight:600">
+              <input type="checkbox" id="f-wf-birthday-enabled" style="width:18px;height:18px;accent-color:var(--accent)">
+              Message d'anniversaire 🎂
+            </label>
+            <div style="padding-left:28px;margin-top:8px">
+              <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Message personnalisé (optionnel)</label>
+              <textarea id="f-wf-birthday-message" rows="2"
+                style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;resize:vertical;box-sizing:border-box"
+                placeholder="Happy birthday {prenom}! 🎂 A little treat waiting for you at {nom}."></textarea>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">Variables : <code>{prenom}</code> et <code>{nom}</code>. Vide = message standard. Envoyé le jour J, une fois par an.</div>
+              <div style="font-size:11px;color:var(--warning);margin-top:4px">⚠️ Nécessite la landing premium activée (c'est là que le client saisit sa date de naissance).</div>
+            </div>
+          </div>
         </div>
-        <div class="field-hint">⏱ Déduplication : un même client ne reçoit pas le même workflow plus d'une fois par 7 jours.</div>
+        <div class="field-hint">⏱ Déduplication : relance/récompense max une fois par 7 jours ; anniversaire max une fois par an.</div>
       </div>
 
       <!-- Section : Landing page premium (Pro+ uniquement, visible en mode édition) -->
@@ -899,7 +917,7 @@ document.getElementById('sheet-backdrop').addEventListener('click', e => {
 // FORM : REMPLIR / VIDER
 // ════════════════════════════════════
 function resetForm() {
-  ['f-nom','f-pass-name','f-slug','f-email','f-telephone','f-adresse','f-pwd','f-new-pwd','f-quota-override','f-logo','f-logo-reward','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-how-it-works','f-tiers','f-wf-inactive-message'].forEach(id => {
+  ['f-nom','f-pass-name','f-slug','f-email','f-telephone','f-adresse','f-pwd','f-new-pwd','f-quota-override','f-logo','f-logo-reward','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-how-it-works','f-tiers','f-wf-inactive-message','f-wf-birthday-message'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   document.getElementById('f-type-programme').value = 'stamps';
@@ -943,6 +961,7 @@ function resetForm() {
   document.getElementById('f-wf-inactive-days').value       = '30';
   document.getElementById('f-wf-near-enabled').checked      = false;
   document.getElementById('f-wf-near-threshold').value      = '2';
+  document.getElementById('f-wf-birthday-enabled').checked  = false;
   document.getElementById('f-landing-premium').checked  = false;
   document.getElementById('f-referral-enabled').checked = false;
   document.getElementById('f-referral-bonus').value     = '1';
@@ -996,6 +1015,8 @@ function fillForm(m) {
     v('f-wf-inactive-message', m.workflow_inactive_message);
     document.getElementById('f-wf-near-enabled').checked      = !!m.workflow_near_reward_enabled;
     document.getElementById('f-wf-near-threshold').value      = m.workflow_near_reward_threshold || 2;
+    document.getElementById('f-wf-birthday-enabled').checked  = !!m.workflow_birthday_enabled;
+    v('f-wf-birthday-message', m.workflow_birthday_message);
     document.getElementById('f-landing-premium').checked = !!m.landing_premium;
   }
   document.getElementById('f-referral-enabled').checked = !!m.referral_enabled;
@@ -1200,6 +1221,8 @@ function collectForm() {
     body.workflow_inactive_message      = document.getElementById('f-wf-inactive-message').value.trim() || null;
     body.workflow_near_reward_enabled   = document.getElementById('f-wf-near-enabled').checked;
     body.workflow_near_reward_threshold = parseInt(document.getElementById('f-wf-near-threshold').value) || 2;
+    body.workflow_birthday_enabled      = document.getElementById('f-wf-birthday-enabled').checked;
+    body.workflow_birthday_message      = document.getElementById('f-wf-birthday-message').value.trim() || null;
     body.landing_premium = document.getElementById('f-landing-premium').checked;
   }
 

@@ -10,6 +10,7 @@ cron.schedule('0 8 * * *', async () => {
   console.log('[cron] Démarrage des workflows…');
   try { await runInactiveWorkflow();   } catch (e) { console.error('[cron] inactive:', e.message); }
   try { await runNearRewardWorkflow(); } catch (e) { console.error('[cron] near_reward:', e.message); }
+  try { await runBirthdayWorkflow();   } catch (e) { console.error('[cron] birthday:', e.message); }
   try { await purgeOldExecutions();   } catch (e) { console.error('[cron] purge:', e.message); }
   console.log('[cron] Workflows terminés.');
 });
@@ -131,6 +132,77 @@ async function runNearRewardWorkflow(opts = {}) {
   return results;
 }
 
+// ── Workflow : anniversaire client ────────────────────────────────
+// Envoi le jour de l'anniversaire (jour + mois ; année ignorée). Réservé aux
+// marchands Pro+ AVEC landing premium — seule surface où le client saisit sa
+// date de naissance. Zéro écriture sur stored_value : simple message via
+// notifyClient (identique stamps/points). Pas de quota (aucun notification_logs).
+// opts.marchandId : limiter à un seul marchand (test)
+// opts.force      : ignorer workflow_birthday_enabled (test)
+async function runBirthdayWorkflow(opts = {}) {
+  const { marchandId, force } = opts;
+
+  let query = supabase
+    .from('marchands')
+    .select('id, nom, langue, workflow_birthday_message')
+    .eq('forfait', 'pro_plus')
+    .eq('actif',   true)
+    .eq('landing_premium', true); // date d'anniversaire collectée uniquement sur landing premium
+
+  if (!force) query = query.eq('workflow_birthday_enabled', true);
+  if (marchandId) query = query.eq('id', marchandId);
+
+  const { data: merchants } = await query;
+  if (!merchants?.length) return [];
+
+  // Clé jour+mois du jour, en UTC (cohérent avec tout le cron). Comparaison en
+  // chaîne 'MM-JJ' — aucun parsing Date de la date de naissance (évite les
+  // décalages de fuseau). date_anniversaire est un DATE Postgres → 'AAAA-MM-JJ'.
+  const now       = new Date();
+  const todayMMDD = `${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
+  // Dédup « une fois par an » sans nouvelle colonne : exécutions birthday de ce
+  // client depuis le 1er janvier UTC de l'année courante.
+  const yearStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1)).toISOString();
+  const results   = [];
+
+  for (const merchant of merchants) {
+    const [{ data: clients }, { data: sentThisYear }] = await Promise.all([
+      supabase.from('clients')
+        .select('id, prenom, pass_serial_number, date_anniversaire')
+        .eq('marchand_id', merchant.id)
+        .is('deleted_at', null)
+        .not('date_anniversaire', 'is', null),
+      supabase.from('workflow_executions')
+        .select('client_id')
+        .eq('marchand_id', merchant.id)
+        .eq('workflow_type', 'birthday')
+        .gte('executed_at', yearStart),
+    ]);
+
+    const sentSet = new Set((sentThisYear || []).map(e => e.client_id));
+    // slice(5) de 'AAAA-MM-JJ' → 'MM-JJ'. 29/02 ne matche que les années
+    // bissextiles → aucun envoi les autres années (voulu, pas de contournement).
+    const toNotify = (clients || []).filter(c =>
+      typeof c.date_anniversaire === 'string' &&
+      c.date_anniversaire.slice(5) === todayMMDD &&
+      !sentSet.has(c.id)
+    );
+
+    for (const client of toNotify) {
+      const msg = merchant.workflow_birthday_message
+        ? merchant.workflow_birthday_message.replace('{prenom}', client.prenom).replace('{nom}', merchant.nom)
+        : notif('birthday', merchant.langue, { prenom: client.prenom, nom: merchant.nom });
+      await notifyClient(client, merchant.id, msg);
+      await supabase.from('workflow_executions').insert({ workflow_type: 'birthday', client_id: client.id, marchand_id: merchant.id });
+    }
+
+    console.log(`[cron] birthday: ${toNotify.length} client(s) notifié(s) — ${merchant.nom}`);
+    results.push({ marchand: merchant.nom, notifies: toNotify.length });
+  }
+
+  return results;
+}
+
 // ── Envoi de notification à un client ────────────────────────────
 async function notifyClient(client, marchandId, msg) {
   if (!client.pass_serial_number) return;
@@ -165,4 +237,4 @@ async function purgeOldExecutions() {
   if (count > 0) console.log(`[cron] purge: ${count} workflow_executions supprimée(s)`);
 }
 
-module.exports = { runInactiveWorkflow, runNearRewardWorkflow };
+module.exports = { runInactiveWorkflow, runNearRewardWorkflow, runBirthdayWorkflow };

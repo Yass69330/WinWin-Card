@@ -10,6 +10,8 @@ const WORKFLOW_FIELDS = [
   'workflow_inactive_message',
   'workflow_near_reward_enabled',
   'workflow_near_reward_threshold',
+  'workflow_birthday_enabled',
+  'workflow_birthday_message',
 ];
 
 // GET /api/admin/workflows/:marchandId — config workflow d'un marchand

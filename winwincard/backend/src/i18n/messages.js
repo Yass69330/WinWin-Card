@@ -51,6 +51,12 @@ const messages = {
       `Salut ${prenom} ! Plus que ${remaining} point${remaining > 1 ? 's' : ''} pour débloquer ta récompense chez ${nom}. Passe nous voir ! 🎁`,
   },
 
+  // ── Anniversaire client (workflow birthday — Pro+ avec landing premium) ──
+  birthday: {
+    en: ({ prenom }) => `Happy birthday ${prenom}! 🎂 We hope you have a wonderful day.`,
+    fr: ({ prenom }) => `Joyeux anniversaire ${prenom} ! 🎂 On te souhaite une très belle journée.`,
+  },
+
   // ── Bonus parrainage crédité au parrain ─────────────────────────────────
   referral: {
     en: ({ prenom, bonus, value, max }) => `+${bonus} referral bonus — ${prenom}: ${value}/${max} pts`,

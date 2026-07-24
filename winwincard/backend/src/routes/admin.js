@@ -122,6 +122,7 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
     'texte_landing', 'pass_display_name', 'max_value', 'display_max_value', 'forfait',
     'workflow_inactive_enabled', 'workflow_inactive_days',
     'workflow_near_reward_enabled', 'workflow_near_reward_threshold',
+    'workflow_birthday_enabled', 'workflow_birthday_message',
     'landing_premium',
     'telephone', 'adresse',
     'referral_enabled', 'referral_bonus_points',
