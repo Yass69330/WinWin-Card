@@ -51,16 +51,16 @@ commerçant scanne le QR du pass du client → le solde avance → à un seuil, 
 | `src/services/apple-pass.js` | Génération du .pkpass (pass.json, images, signature) |
 | `src/services/google-pass.js` | API REST Google Wallet (LoyaltyClass + LoyaltyObject) |
 | `src/services/apns.js` | Push silencieux Apple (HTTP/2, JWT ES256) |
-| `src/services/strip-generator.js` | Génère l'image « strip » à tampons (SVG → PNG via sharp) |
+| `src/services/strip-generator.js` | Génère l'image « strip » à tampons (SVG → PNG via sharp). Couleurs des pastilles adaptatives WCAG, écrasables par marchand (`couleur_pastille_fond/contour/icone`, migration_026). Icônes Phosphor dans `ICONS` (dont `sneaker`). |
 | `src/services/strip-cache.js` | Cache des strips : LRU mémoire + Supabase Storage, clé versionnée par `strip_config_version` |
-| `src/workers/cron.js` | Workflows quotidiens (relance inactifs, near-reward) |
+| `src/workers/cron.js` | Workflows quotidiens (relance inactifs, near-reward, **anniversaire**). Un seul par client par nuit non implémenté — voir dette. |
 | `src/i18n/messages.js` | Messages de notifications FR/EN côté serveur |
 | `src/middleware/auth.js` | JWT : rôles `marchand`, `admin` (+ `scanner` prévu mais jamais émis) |
 | `public/admin/index.html` | Panel admin (le fondateur) — création/édition marchands |
 | `public/dashboard/index.html` | Dashboard marchand (stats, clients, scanner intégré, notifs) |
 | `public/scanner/index.html` | PWA scanner de caisse (login marchand, caméra, saisie manuelle, historique) |
 | `public/landing.html` | Page d'inscription client (`/l/:slug`) |
-| `database/schema.sql` + `database/migration_*.sql` | Schéma et migrations (voir pièges §3.3 : 012 et 022 sont NEUTRALISÉES, 023 est la référence pour le RPC ; 025 réconcilie repo↔prod — schema.sql + 002→025 reproduit la prod) |
+| `database/schema.sql` + `database/migration_*.sql` | Schéma et migrations (voir pièges §3.3 : 012 et 022 sont NEUTRALISÉES, 023 est la référence pour le RPC ; 025 réconcilie repo↔prod ; 026 = couleurs pastilles ; 027 = colonnes workflow birthday — schema.sql + 002→027 reproduit la prod) |
 
 ### Données clés (table `marchands` et `clients`)
 
@@ -71,8 +71,15 @@ commerçant scanne le QR du pass du client → le solde avance → à un seuil, 
 - `marchands.langue` : `'en'` (défaut) ou `'fr'`. **Figée à la création**, pilote toute
   l'i18n (landing, dashboard, scanner, notifs, label du strip).
 - `clients.stored_value` : le solde. `clients.pass_serial_number` : UUID v4, **immuable**,
-  encodé dans le QR du pass, clé de tout (passes, device_tokens, objet Google).
-- Table `scans` : journal de chaque scan (`stored_value_avant`, `stored_value_apres`).
+  encodé dans le QR du pass (le QR ne contient QUE le serial — pas le prénom), clé de tout
+  (passes, device_tokens, objet Google).
+- `clients.date_anniversaire` : type `date` Postgres, nullable, collectée **uniquement sur
+  la landing premium** (Pro+ ET `landing_premium`). Sert au workflow birthday.
+- `marchands.couleur_pastille_fond/contour/icone` : couleurs manuelles optionnelles des
+  pastilles du strip (migration_026). NULL = calcul WCAG auto (voir §3.10).
+- `marchands.workflow_birthday_enabled/message` : workflow anniversaire (migration_027).
+- Table `scans` : journal de chaque scan (`stored_value_avant`, `stored_value_apres`),
+  **jamais purgée** (conservée à vie ; seule `workflow_executions` est purgée à 90 j).
 
 ### Mode tampons vs mode points — concrètement dans le code
 
@@ -215,6 +222,44 @@ sinon                          → additionne
   session) + `ETIMEDOUT`/`APNS_TIMEOUT` ajoutés aux erreurs déclenchant le retry unique
   sur session neuve. Zéro push supplémentaire en fonctionnement normal ; au pire UN
   renvoi du même push quand la ligne était morte.
+
+### Session du 2026-07-2x — strip, i18n, birthday, scanner
+
+### [8] Icône `sneaker` + couleurs manuelles des pastilles
+- **Sneaker** ajoutée au générateur (`ICONS`, path Phosphor authentique v2.1.1) + sélecteur admin.
+- **Couleurs manuelles** `couleur_pastille_fond/contour/icone` (migration_026) : écrasent le
+  calcul WCAG dans `stampColors(bgColor, overrides)`. NULL → comportement historique
+  identique (prouvé par test isolé). Contour optionnel ajouté sur la pastille **remplie**
+  (permet cercle transparent + icône visible). **Non appliquées en état reward** (le doré
+  garde son WCAG) ni en mode points (générateur bypassé). Champ texte admin accepte
+  `transparent`/rgba/hex ; garde-fou contraste non bloquant. Voir §3.10.
+
+### [9] Placeholder téléphone landing selon la langue
+- L'input tel avait un placeholder `+33…` figé pour tous. Branché sur l'i18n (`data-i18n-ph`,
+  clé `phonePh`) : `+971…` en `en` (marché UAE), `+33…` en `fr`. Repli statique = `+971`.
+
+### [10] Workflow anniversaire (birthday)
+- Nouveau workflow auto dans `cron.js`, calqué sur inactive : envoi le jour J (matching
+  jour+mois **UTC**, année ignorée, 29/02 sans code spécial), une fois par an (dédup via
+  `workflow_executions` type `birthday`, `executed_at >= 1er janvier UTC`, sans nouvelle
+  colonne). **Réservé Pro+ ET `landing_premium=true`** (seule surface où la date est
+  collectée). Message custom `workflow_birthday_message` ou fallback i18n `birthday`.
+  Zéro écriture `stored_value`, pas de quota (comme inactive). Colonnes = migration_027.
+  Déclenchement manuel : **PAS** câblé dans `/api/admin/workflows/trigger` (choix fondateur,
+  test via le cron nocturne 08:00 UTC = 12:00 Dubaï).
+
+### [11] Scanner — confirmation avant écriture (tampons) + historique renforcé
+- **Anti double-scan** : au retour de « next scan », la caméra rouvrait et re-scannait le
+  même QR → +1 involontaire (stamps). Fix : écran « Valider ce scan ? » (sans nom : le QR
+  ne contient que le serial, afficher le prénom aurait exigé une lecture — refusé). **Le
+  POST d'écriture ne part QUE sur le tap**, jamais sur la détection. Flag `awaitingConfirm`
+  (pause `scanLoop`), réinitialisé sur TOUS les chemins de sortie + jamais persisté (reload
+  = reset ; le réflexe caissier fermer/rouvrir est donc auto-réparateur). Points inchangé
+  (le pavé fait déjà office de validation). POST `/api/scan` **strictement inchangé**.
+- **Historique** (`GET /api/scan`, plafond 200 ; scanner passé à `?limit=50`) : affiche
+  désormais `avant → après` + heure exacte (données déjà récupérées). Devient la « preuve
+  de caisse » puisque l'annulation LIFO a été écartée (trop complexe — rattrapage d'erreur
+  reste sur le dashboard marchand).
 
 ---
 
@@ -431,6 +476,33 @@ Par gravité décroissante :
     jour RATÉES. Raison du report : impact réel négligeable, prudence vis-à-vis du
     canal Apple.
 
+12. **Fiabilité des notifs à l'échelle — EXPLORÉ, EN ATTENTE DE MESURE (2026-07-2x)** :
+    trois angles identifiés, non implémentés. (a) **Pas de nettoyage 410/BadDeviceToken**
+    dans `apns.js` : les device_tokens morts s'accumulent à vie et sont re-poussés (Apple
+    répond 200 = accepté ≠ livré). (b) **Churn de `device_id`** : une réinstall peut créer
+    un nouveau `device_id` en laissant l'ancien = zombie (candidats mesurables : serials à
+    plusieurs `device_id`). (c) **Zéro observabilité** sur les chemins auto (scan, cron) —
+    seul le marketing compte ses envois (`notification_logs`). Ordre proposé si on reprend :
+    mesurer d'abord (churn en base ; tokens morts nécessitent un envoi-diagnostic ou un
+    logging déployé), puis 410-cleanup (avec garde-fou timestamp → suppose une colonne
+    `last_registered_at`, absente aujourd'hui car `created_at` figé au upsert). Ligne rouge
+    fondateur : zéro régression sur near_reward/inactive/welcome/scan. Reste minimal.
+
+13. **Anti-rafale push (priorité workflows + apns-collapse-id) — PARKÉ (2026-07-2x)** :
+    un client peut matcher inactive + near_reward + birthday le même run → 2-3 push au
+    même pass alors que `notification_message` est un champ unique écrasé (seul le dernier
+    message est réellement affichable). Pistes évaluées : « un seul workflow/client/nuit »
+    (priorité birthday > inactive > near_reward via un Set en mémoire, réordonner les
+    appels du schedule) + `apns-collapse-id = serial` (coalescence Apple, sans effet sur
+    les push isolés). **Abandonné pour l'instant** : trop peu de valeur à ~50 clients pour
+    le risque. Ressortir si volume ↑.
+
+14. **Couleur du texte « LOYALTY CARD » du strip — DEMANDÉ, NON FAIT** : aujourd'hui
+    calculée en WCAG depuis le fond (`labelSvg`, blanc 50 % sur fond sombre), aucun champ
+    manuel. Le fondateur veut pouvoir la choisir. Même plomberie que les couleurs de
+    pastilles (colonne optionnelle `couleur_label_strip` → override dans `labelSvg`, NULL =
+    comportement actuel, + trio admin + `VISUAL_FIELDS`). Petit chantier, à faire plus tard.
+
 ---
 
 ## 5. LES ZONES DANGEREUSES
@@ -487,10 +559,12 @@ en `en` ET `fr`).
 
 Avant d'attaquer un chantier, valider l'état de départ :
 
-1. `git log --oneline -5` — la branche de travail est `claude/keen-goldberg-MXslu`,
-   derniers commits connus : `72a96c4` (fix parrainage, item [5] §2) et les migrations
-   024/025 + cette mise à jour (session du 2026-07-13 ; `37ecc63` = fin de la session
-   précédente).
+1. `git log --oneline -8` — la branche de prod est `claude/keen-goldberg-MXslu`, la
+   branche de travail de la session en cours est `claude/epic-dijkstra-4pnlu9` (poussée
+   en fast-forward vers la prod à chaque feu vert). Dernier commit connu : `25cd3cf`
+   (confirmation scanner + historique renforcé). Repères antérieurs : `225e022`
+   (placeholder tél), `34c4bb6` (birthday), `b197bdc` (couleurs pastilles), `7795411`
+   (SW scanner network-first), `72a96c4` (fix parrainage), `37ecc63` (fin session i18n/points).
 2. En base : une **seule** fonction `increment_stored_value` (requête §5-migrations).
 3. Un scan caméra ET un scan backup code sur le cobaye Pizza Sabbioni (voir son état,
    dette #7) : solde + notif + pass rafraîchi dans les deux cas.
@@ -527,3 +601,13 @@ l'audit #3. Dernier commit : `37ecc63`.*
 filleul à vie — migration_024 + ticket avant crédit dans scan.js), réconciliation
 repo↔prod (migration_025), pièges §3.9 (supabase-js ne rejette jamais) et §3.10
 (photographier la base), arbitrages fondateur consignés en dette #4, #9, #10.*
+
+*Mis à jour ~2026-07-2x par la session suivante : incident push APNs zombie corrigé
+(§2 item [7], timeout+retry `apns.js`) ; SW scanner passé en network-first (fin du
+bundle figé) ; icône sneaker + couleurs manuelles des pastilles (§2 [8], migration_026) ;
+placeholder tél i18n (§2 [9]) ; workflow anniversaire (§2 [10], migration_027) ;
+confirmation scanner avant écriture + historique renforcé (§2 [11]). Nouvelles dettes
+consignées : #12 fiabilité notifs à l'échelle (410-cleanup/observabilité/churn, à mesurer
+d'abord), #13 anti-rafale push (parké), #14 couleur du label strip (demandé, non fait).
+LIFO/annulation caissier explicitement écartée (rattrapage sur dashboard). Dernier
+commit : `25cd3cf`.*
