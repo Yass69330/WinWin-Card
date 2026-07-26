@@ -365,6 +365,16 @@
     #modal-points.open { display: flex; }
     #points-input { font-size: 28px; text-align: center; letter-spacing: .02em; }
 
+    /* ── Confirmation modal (mode "stamps") ── */
+    #modal-confirm {
+      display: none;
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,.7);
+      align-items: flex-end;
+    }
+    #modal-confirm.open { display: flex; }
+    #confirm-scan-btn { font-size: 18px; padding: 20px; }
+
     .modal-sheet {
       background: var(--surface);
       border-radius: 24px 24px 0 0;
@@ -539,6 +549,16 @@
   </div>
 </div>
 
+<!-- ═══════════════════ MODAL CONFIRMATION (mode "stamps") ═══════════════════ -->
+<div id="modal-confirm">
+  <div class="modal-sheet">
+    <div class="modal-title" data-i18n="confirmScanTitle">Confirm this scan?</div>
+    <div class="modal-sub" data-i18n="confirmScanSub">Only the tap below records the scan.</div>
+    <button class="btn btn-primary" id="confirm-scan-btn" data-i18n="confirmScanValidate">Confirm scan</button>
+    <button class="btn btn-ghost"   id="confirm-scan-cancel" data-i18n="cancel">Cancel</button>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script>
 // ═══════════════════════════════════════════════════════
@@ -552,6 +572,7 @@ const state = {
   scanning: false,
   processing: false,
   awaitingPoints: false,
+  awaitingConfirm: false,
   stream: null,
   rafId: null,
 };
@@ -582,6 +603,8 @@ const I18N = {
     yesterday:'yesterday', daysAgo:({d})=>`${d} days ago`,
     pointsToAdd:'Points to add', pointsToAddSub:'Enter the number of points for this visit',
     invalidPoints:'Enter a positive whole number',
+    confirmScanTitle:'Confirm this scan?', confirmScanSub:'Only the tap below records the scan.',
+    confirmScanValidate:'Confirm scan',
   },
   fr: {
     appTitle:'Scanner WinWin', loginSub:'Connectez-vous pour scanner',
@@ -603,6 +626,8 @@ const I18N = {
     yesterday:'hier', daysAgo:({d})=>`il y a ${d} jours`,
     pointsToAdd:'Points à ajouter', pointsToAddSub:'Saisis le nombre de points pour cette visite',
     invalidPoints:'Saisis un nombre entier positif',
+    confirmScanTitle:'Valider ce scan ?', confirmScanSub:'Seul l\'appui ci-dessous enregistre le scan.',
+    confirmScanValidate:'Valider le scan',
   },
 };
 
@@ -755,7 +780,7 @@ function stopScanner() {
 function scanLoop() {
   if (!state.scanning) return;
   state.rafId = requestAnimationFrame(scanLoop);
-  if (state.processing || state.awaitingPoints) return;
+  if (state.processing || state.awaitingPoints || state.awaitingConfirm) return;
 
   const video = document.getElementById('video');
   if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
@@ -775,7 +800,7 @@ function scanLoop() {
 }
 
 async function handleScannedData(raw) {
-  if (state.processing || state.awaitingPoints) return;
+  if (state.processing || state.awaitingPoints || state.awaitingConfirm) return;
   // Extract serial number from URL or raw string
   // Expected formats: serial-xxx, or https://api.example.com/... (ignore URLs without serial)
   let serial = raw.trim();
@@ -793,15 +818,50 @@ async function handleScannedData(raw) {
 }
 
 // Point d'entrée unique après résolution du serial (caméra ou saisie manuelle).
-// Mode points : ouvre le pavé numérique avant tout appel API. Mode tampons :
-// scan immédiat, comportement strictement inchangé.
+// Mode points : ouvre le pavé numérique (qui fait office de validation) avant
+// tout appel API. Mode tampons : écran de confirmation avant écriture — l'appel
+// POST ne part QUE sur le tap « Valider », jamais sur la détection caméra
+// (anti double-scan involontaire). Le POST d'écriture est strictement inchangé.
 function proceedToScan(serial) {
   if (state.typeProgramme === 'points') {
     openPointsPad(serial);
   } else {
-    submitScan(serial);
+    openConfirm(serial);
   }
 }
+
+// ── Confirmation avant écriture (mode tampons) ──────────────────────────────
+// awaitingConfirm met scanLoop en pause (caméra allumée mais aucune détection)
+// tant que la confirmation est ouverte. Réinitialisé sur TOUS les chemins de
+// sortie (valider, annuler, next-scan, logout, erreur) — un flag bloqué figerait
+// le scan. Filet de sécurité : le flag n'est jamais persisté (localStorage), donc
+// un simple reload (réflexe caissier fermer/rouvrir) le remet à zéro.
+let _pendingConfirmSerial = null;
+
+function openConfirm(serial) {
+  _pendingConfirmSerial = serial;
+  state.awaitingConfirm = true;
+  document.getElementById('confirm-scan-btn').disabled = false; // ré-armer (debounce du tour précédent)
+  document.getElementById('modal-confirm').classList.add('open');
+}
+
+function closeConfirm() {
+  document.getElementById('modal-confirm').classList.remove('open');
+  _pendingConfirmSerial = null;
+  state.awaitingConfirm = false;
+}
+
+document.getElementById('confirm-scan-btn').addEventListener('click', () => {
+  const serial = _pendingConfirmSerial;
+  if (!serial) return;
+  document.getElementById('confirm-scan-btn').disabled = true; // debounce anti double-tap réflexe
+  document.getElementById('modal-confirm').classList.remove('open');
+  _pendingConfirmSerial = null;
+  state.awaitingConfirm = false;
+  submitScan(serial); // POST d'écriture inchangé
+});
+
+document.getElementById('confirm-scan-cancel').addEventListener('click', closeConfirm);
 
 async function submitScan(serial, points) {
   if (state.processing) return;
@@ -840,7 +900,7 @@ function showScanError(msg) {
   const statusEl = document.getElementById('scan-status');
   statusEl.textContent = '⚠️ ' + msg;
   statusEl.style.display = 'block';
-  setTimeout(() => { statusEl.style.display = 'none'; state.processing = false; }, 3000);
+  setTimeout(() => { statusEl.style.display = 'none'; state.processing = false; state.awaitingConfirm = false; }, 3000);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1025,7 +1085,7 @@ async function openHistory() {
   const el = document.getElementById('history-list');
   el.innerHTML = `<div style="color:var(--muted);text-align:center;padding:24px">…</div>`;
   try {
-    const res = await fetch('/api/scan?limit=20', { headers: { 'Authorization': `Bearer ${state.token}` } });
+    const res = await fetch('/api/scan?limit=50', { headers: { 'Authorization': `Bearer ${state.token}` } });
     const data = await res.json();
     renderHistory(Array.isArray(data) ? data : []);
   } catch {
@@ -1042,13 +1102,15 @@ function renderHistory(scans) {
   el.innerHTML = scans.map(s => {
     const prenom  = (s.clients && s.clients.prenom) || '?';
     const initial = prenom.charAt(0).toUpperCase();
+    // Heure exacte (JJ/MM HH:MM) : preuve de caisse fiable, plus que le relatif.
+    const exact = new Date(s.date_scan).toLocaleString(dateLocale(), { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     return `<div style="display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--border)">
       <div style="width:40px;height:40px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">${initial}</div>
       <div style="flex:1;min-width:0">
         <div style="font-weight:600">${escapeHtml(prenom)}</div>
-        <div style="font-size:12px;color:var(--muted)">${timeAgo(s.date_scan)}</div>
+        <div style="font-size:12px;color:var(--muted)">${exact}</div>
       </div>
-      <div style="font-weight:700;flex-shrink:0">${s.stored_value_apres} ${t('ptsShort')}</div>
+      <div style="font-weight:700;flex-shrink:0">${s.stored_value_avant} → ${s.stored_value_apres}</div>
     </div>`;
   }).join('');
 }
@@ -1066,6 +1128,7 @@ document.getElementById('btn-history-back').addEventListener('click', backFromHi
 // ═══════════════════════════════════════════════════════
 document.getElementById('btn-rescan').addEventListener('click', () => {
   state.processing = false;
+  state.awaitingConfirm = false;
   startScanner();
 });
 
@@ -1073,6 +1136,7 @@ document.getElementById('btn-logout').addEventListener('click', () => {
   stopScanner();
   clearSession();
   state.processing = false;
+  state.awaitingConfirm = false;
   setScreen('screen-login');
 });
 
