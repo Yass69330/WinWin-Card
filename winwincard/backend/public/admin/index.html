@@ -549,6 +549,14 @@
           </div>
           <div id="pastille-contrast-warn" class="field-hint" style="display:none;color:var(--warning)"></div>
           <div class="field-hint">Vide = couleurs auto (contraste WCAG). Sans effet en mode points, ni sur l'état récompense (doré).</div>
+          <div class="field" style="margin-top:12px;margin-bottom:8px">
+            <label>Texte « LOYALTY CARD » — couleur (optionnel)</label>
+            <div class="color-row">
+              <input type="color" id="cp-label-strip" value="#c9a84c">
+              <input type="text"  id="f-label-strip" placeholder="vide = auto WCAG">
+            </div>
+            <div class="field-hint">Vide = couleur auto. Sans effet en mode points ni sur l'état récompense.</div>
+          </div>
         </div>
 
         <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:12px">
@@ -943,6 +951,8 @@ function resetForm() {
   document.getElementById('f-past-contour').value = '';
   document.getElementById('cp-past-icone').value = '#c9a84c';
   document.getElementById('f-past-icone').value = '';
+  document.getElementById('cp-label-strip').value = '#c9a84c';
+  document.getElementById('f-label-strip').value = '';
   const pcw = document.getElementById('pastille-contrast-warn'); if (pcw) pcw.style.display = 'none';
   document.getElementById('f-maxval').value     = '10';
   document.getElementById('f-displaymax').value = '';
@@ -1000,6 +1010,8 @@ function fillForm(m) {
   else { document.getElementById('cp-past-contour').value = '#c9a84c'; document.getElementById('f-past-contour').value = ''; }
   if (m.couleur_pastille_icone)   setColor('cp-past-icone', 'f-past-icone', m.couleur_pastille_icone);
   else { document.getElementById('cp-past-icone').value = '#c9a84c'; document.getElementById('f-past-icone').value = ''; }
+  if (m.couleur_label_strip)      setColor('cp-label-strip', 'f-label-strip', m.couleur_label_strip);
+  else { document.getElementById('cp-label-strip').value = '#c9a84c'; document.getElementById('f-label-strip').value = ''; }
   updatePastilleContrastWarn();
   if (m.images_tiers)  document.getElementById('f-tiers').value = JSON.stringify(m.images_tiers, null, 2);
   document.getElementById('slug-preview').textContent = m.slug || '…';
@@ -1058,7 +1070,7 @@ function setColor(cpId, txtId, hex) {
 function isHex(s) { return /^#[0-9a-fA-F]{6}$/.test(s); }
 
 // Synchronisation color picker ↔ champ texte
-[['cp-fond','f-fond'],['cp-texte','f-texte-c'],['cp-label','f-label'],['cp-reward','f-reward-color'],['cp-texte-reward','f-texte-reward-c'],['cp-past-fond','f-past-fond'],['cp-past-contour','f-past-contour'],['cp-past-icone','f-past-icone']].forEach(([cpId, txtId]) => {
+[['cp-fond','f-fond'],['cp-texte','f-texte-c'],['cp-label','f-label'],['cp-reward','f-reward-color'],['cp-texte-reward','f-texte-reward-c'],['cp-past-fond','f-past-fond'],['cp-past-contour','f-past-contour'],['cp-past-icone','f-past-icone'],['cp-label-strip','f-label-strip']].forEach(([cpId, txtId]) => {
   document.getElementById(cpId).addEventListener('input', e => {
     document.getElementById(txtId).value = e.target.value;
     updatePastilleContrastWarn();
@@ -1239,6 +1251,7 @@ function collectForm() {
   body.couleur_pastille_fond    = document.getElementById('f-past-fond').value.trim()    || null;
   body.couleur_pastille_contour = document.getElementById('f-past-contour').value.trim() || null;
   body.couleur_pastille_icone   = document.getElementById('f-past-icone').value.trim()   || null;
+  body.couleur_label_strip      = document.getElementById('f-label-strip').value.trim()  || null;
 
   return body;
 }

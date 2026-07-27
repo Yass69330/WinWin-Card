@@ -304,12 +304,14 @@ function relativeLuminance(hex) {
 
 // ── Label optionnel, centré en haut — couleur adaptative à la luminosité du fond
 // Texte bilingue selon la langue du marchand (figée à la création) : défaut EN.
-function labelSvg({ w, h, couleurFond, langue }) {
+function labelSvg({ w, h, couleurFond, langue, labelColor }) {
   const lum = relativeLuminance(couleurFond || '#1a1a2e');
-  // Fond sombre (lum < 0.18) → texte blanc semi-transparent
-  // Fond clair  (lum ≥ 0.18) → texte foncé dérivé du fond (toujours lisible)
-  const fill    = lum < 0.18 ? 'white'                    : darken(couleurFond, 0.62);
-  const opacity = lum < 0.18 ? '0.5'                      : '0.80';
+  // Couleur manuelle (couleur_label_strip) : écrase le calcul WCAG, en opacité
+  // PLEINE (choix explicite = couleur nette). NULL/'' → calcul WCAG inchangé :
+  //   fond sombre (lum < 0.18) → blanc atténué ; fond clair → foncé dérivé du fond.
+  // Non passée en état reward (cf. buildSvg) → le doré garde son WCAG lisible.
+  const fill    = labelColor || (lum < 0.18 ? 'white' : darken(couleurFond, 0.62));
+  const opacity = labelColor ? '1' : (lum < 0.18 ? '0.5' : '0.80');
   const text    = langue === 'fr' ? 'CARTE DE FIDÉLITÉ' : 'LOYALTY CARD';
   return `<text x="${w / 2}" y="${(60 / 246) * h}" font-family="DM Sans, sans-serif" font-weight="700"
     font-size="${(22 / 246) * h}" letter-spacing="${(3.5 / 246) * h}" fill="${fill}" opacity="${opacity}"
@@ -366,7 +368,7 @@ function buildSvg({ marchand, filledCount, logoB64, customBgB64, w = 750, h = 24
 
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${w}" height="${h}">
   ${bgSvg({ w, h, couleurFond: bgColor, customBgB64 })}
-  ${showLabel ? labelSvg({ w, h, couleurFond: bgColor, langue: marchand.langue }) : ''}
+  ${showLabel ? labelSvg({ w, h, couleurFond: bgColor, langue: marchand.langue, labelColor: isReward ? null : marchand.couleur_label_strip }) : ''}
   ${stampsHtml}
 </svg>`;
 }
