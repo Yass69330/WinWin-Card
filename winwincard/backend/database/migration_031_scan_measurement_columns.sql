@@ -1,0 +1,41 @@
+-- Migration 031 : colonnes de mesure sur les scans (montant crédité + récompense distribuée)
+--
+-- Contexte (chantier multi-boutiques, étape 1). Deux besoins non couverts par
+-- le schéma actuel de `scans` (qui ne stocke que stored_value_avant/apres) :
+--   • Le montant réellement crédité par un scan n'est pas récupérable a
+--     posteriori : sur un scan de redemption en mode tampons, apres−avant = −max,
+--     un négatif qui fausse tout compteur d'activité par boutique.
+--   • L'événement « récompense remise au client » (redemption) n'est marqué
+--     nulle part et ne peut pas être inféré de façon fiable (max_value peut
+--     avoir changé dans le temps → l'inférence historique casse).
+--
+-- Ces deux colonnes sont REMPLIES PAR LE CODE À L'INSERTION (scan.js), à partir
+-- de variables déjà en portée (amount, is_reset, avant/apres). La fonction
+-- increment_stored_value N'EST PAS touchée — donc aucun risque du type
+-- « incident juillet » (signature/overload de fonction). `scans` est une table
+-- existante DÉJÀ accessible en écriture au service_role (le backend y insère
+-- aujourd'hui) : ajouter des colonnes n'exige AUCUN nouveau GRANT.
+--
+-- Rétrocompatibilité : colonnes NULLABLE, sans DEFAULT. Les lignes historiques
+-- restent NULL = « non mesuré avant le chantier » (jamais backfillé, honnête).
+-- Le code déployé AUJOURD'HUI insère sans ces colonnes → elles valent NULL, ce
+-- qui est valide : exécuter cette migration NE CASSE PAS la production en cours.
+-- Un marchand mono-site est strictement inchangé — ces colonnes ne sont lues
+-- par aucune surface tant que le dashboard groupe (étape 4) n'existe pas.
+--
+-- Définitions figées (validées avec le fondateur) :
+--   • montant_credite : nombre de points/tampons réellement AJOUTÉS par ce scan,
+--     jamais négatif. = amount sur un scan normal ou gagnant ; = 0 sur une pure
+--     redemption en mode tampons (reset, aucun tampon ajouté) ; = amount sur une
+--     redemption en mode points (le client crédite amount, le surplus est
+--     reporté). Sommer cette colonne sur une boutique = total distribué propre.
+--   • recompense_distribuee : TRUE sur le scan de REDEMPTION — le moment où la
+--     boutique remet effectivement le cadeau (is_reset de la RPC). C'est cette
+--     boutique qui est créditée de la récompense. FALSE sinon. (Nommée
+--     « distribuée » et non « débloquée » : elle marque la remise du cadeau,
+--     pas le franchissement du seuil, qui est un autre scan.)
+--
+-- À exécuter dans Supabase. Rejouable sans risque (IF NOT EXISTS).
+
+ALTER TABLE public.scans ADD COLUMN IF NOT EXISTS montant_credite       integer;
+ALTER TABLE public.scans ADD COLUMN IF NOT EXISTS recompense_distribuee  boolean;
