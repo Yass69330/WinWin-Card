@@ -102,6 +102,19 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   const isReset    = row.is_reset;
   const recompense = !isReset && apresScan >= maxValue;
 
+  // Colonnes de mesure (migration_031) — remplies ICI, jamais dans la RPC
+  // (increment_stored_value reste intacte → hors du mode d'échec de juillet).
+  //   • montant_credite : points/tampons réellement AJOUTÉS par ce scan, jamais
+  //     négatif. 0 sur une redemption en tampons (reset, rien n'est ajouté) ;
+  //     amount sinon — en points, une redemption crédite bien amount, le surplus
+  //     étant reporté (migration_022). Sommer = total distribué propre, sans les
+  //     négatifs des resets.
+  //   • recompense_distribuee : TRUE sur le scan de REDEMPTION (is_reset) — le
+  //     moment où la boutique remet le cadeau. C'est l'événement « récompense
+  //     distribuée » ; c'est cette boutique qui en est créditée.
+  const montantCredite       = (isReset && !isPointsMode) ? 0 : amount;
+  const recompenseDistribuee = isReset;
+
   const lang = client.marchands.langue;
   // isReset : mode tampons → vraie remise à 0, message passReset inchangé.
   // Mode points → "redemption" avec report (apresScan = surplus, jamais 0) :
@@ -130,6 +143,8 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
       marchand_id: req.marchandId,
       stored_value_avant: avantScan,
       stored_value_apres: apresScan,
+      montant_credite:       montantCredite,
+      recompense_distribuee: recompenseDistribuee,
     }),
   ]);
 
