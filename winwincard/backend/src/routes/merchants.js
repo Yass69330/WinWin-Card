@@ -96,6 +96,47 @@ router.get('/me/qrcode', authMarchand, asyncHandler(async (req, res) => {
   res.json({ url, qrcode: qr });
 }));
 
+// ── Points de vente (boutiques du réseau) — lecture + renommage (OWNER) ──────
+// Multi-boutiques, étape 2. Le franchiseur LIT ses boutiques et peut les
+// RENOMMER (neutre pour la facturation). Création et archivage = admin (ils
+// changent le nombre facturé). Un mono-site n'a aucune ligne → liste vide,
+// l'UI reste masquée côté dashboard.
+
+// GET /merchants/me/points-de-vente — boutiques actives du réseau
+router.get('/me/points-de-vente', authMarchand, asyncHandler(async (req, res) => {
+  const { data, error } = await supabase
+    .from('points_de_vente')
+    .select('id, nom, created_at')
+    .eq('marchand_id', req.marchandId)
+    .is('deleted_at', null)
+    .order('nom');
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+}));
+
+// PATCH /merchants/me/points-de-vente/:id — renommer une de SES boutiques
+router.patch('/me/points-de-vente/:id', authMarchand, asyncHandler(async (req, res) => {
+  const nom = typeof req.body.nom === 'string' ? req.body.nom.trim().slice(0, 80) : '';
+  if (!nom) return res.status(400).json({ error: 'nom is required' });
+
+  // Scope marchand_id : le propriétaire ne renomme QUE ses propres boutiques
+  // actives. 23505 = l'index unique (marchand_id, lower(nom)) rejette un doublon.
+  const { data, error } = await supabase
+    .from('points_de_vente')
+    .update({ nom })
+    .eq('id', req.params.id)
+    .eq('marchand_id', req.marchandId)
+    .is('deleted_at', null)
+    .select('id, nom')
+    .single();
+
+  if (error) {
+    if (error.code === '23505') return res.status(409).json({ error: 'Une boutique active porte déjà ce nom' });
+    return res.status(404).json({ error: 'Boutique introuvable' });
+  }
+  res.json(data);
+}));
+
 // GET /merchants/:slug/public — infos publiques pour la landing page
 router.get('/:slug/public', asyncHandler(async (req, res) => {
   const { data, error } = await supabase

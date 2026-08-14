@@ -24,6 +24,7 @@ router.get('/marchands', authAdmin, asyncHandler(async (req, res) => {
     { data: marchands, error },
     { data: clientRows },
     { data: scanRows },
+    { data: boutiqueRows },
   ] = await Promise.all([
     supabase
       .from('marchands')
@@ -31,19 +32,24 @@ router.get('/marchands', authAdmin, asyncHandler(async (req, res) => {
       .order('created_at', { ascending: false }),
     supabase.from('clients').select('marchand_id').is('deleted_at', null),
     supabase.from('scans').select('marchand_id').gte('date_scan', new Date().toISOString().split('T')[0]),
+    // Boutiques ACTIVES par marchand = base de facturation (multi-boutiques).
+    supabase.from('points_de_vente').select('marchand_id').is('deleted_at', null),
   ]);
 
   if (error) return res.status(500).json({ error: error.message });
 
-  const clientsParMarchand = {};
-  const scansParMarchand   = {};
-  (clientRows || []).forEach(c => { clientsParMarchand[c.marchand_id] = (clientsParMarchand[c.marchand_id] || 0) + 1; });
-  (scanRows   || []).forEach(s => { scansParMarchand[s.marchand_id]   = (scansParMarchand[s.marchand_id]   || 0) + 1; });
+  const clientsParMarchand   = {};
+  const scansParMarchand     = {};
+  const boutiquesParMarchand = {};
+  (clientRows   || []).forEach(c => { clientsParMarchand[c.marchand_id]   = (clientsParMarchand[c.marchand_id]   || 0) + 1; });
+  (scanRows     || []).forEach(s => { scansParMarchand[s.marchand_id]     = (scansParMarchand[s.marchand_id]     || 0) + 1; });
+  (boutiqueRows || []).forEach(b => { boutiquesParMarchand[b.marchand_id] = (boutiquesParMarchand[b.marchand_id] || 0) + 1; });
 
   res.json(marchands.map(m => ({
     ...m,
-    total_clients:    clientsParMarchand[m.id] || 0,
-    scans_aujourdhui: scansParMarchand[m.id]   || 0,
+    total_clients:     clientsParMarchand[m.id]   || 0,
+    scans_aujourdhui:  scansParMarchand[m.id]     || 0,
+    boutiques_actives: boutiquesParMarchand[m.id] || 0,
   })));
 }));
 
@@ -56,6 +62,61 @@ router.get('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
     .single();
   if (error || !data) return res.status(404).json({ error: 'Marchand introuvable' });
   res.json(data);
+}));
+
+// ── Points de vente (boutiques) — création / liste / archivage (ADMIN) ──────
+// Multi-boutiques, étape 2. Création et archivage RÉSERVÉS À L'ADMIN car ils
+// changent le nombre de boutiques actives = la base de facturation. Le
+// franchiseur, lui, ne peut que lister et renommer (merchants.js /me/...).
+
+// GET /api/admin/marchands/:id/points-de-vente — boutiques actives d'un réseau
+router.get('/marchands/:id/points-de-vente', authAdmin, asyncHandler(async (req, res) => {
+  const { data, error } = await supabase
+    .from('points_de_vente')
+    .select('id, nom, created_at')
+    .eq('marchand_id', req.params.id)
+    .is('deleted_at', null)
+    .order('nom');
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+}));
+
+// POST /api/admin/marchands/:id/points-de-vente — créer une boutique (facturable)
+router.post('/marchands/:id/points-de-vente', authAdmin, asyncHandler(async (req, res) => {
+  const nom = typeof req.body.nom === 'string' ? req.body.nom.trim().slice(0, 80) : '';
+  if (!nom) return res.status(400).json({ error: 'nom est requis' });
+
+  const { data: marchand } = await supabase.from('marchands').select('id').eq('id', req.params.id).single();
+  if (!marchand) return res.status(404).json({ error: 'Marchand introuvable' });
+
+  const { data, error } = await supabase
+    .from('points_de_vente')
+    .insert({ marchand_id: req.params.id, nom })
+    .select('id, nom, created_at')
+    .single();
+
+  // 23505 = violation de l'index unique (marchand_id, lower(nom)) où deleted_at is null.
+  if (error) {
+    if (error.code === '23505') return res.status(409).json({ error: 'Une boutique active porte déjà ce nom' });
+    return res.status(500).json({ error: error.message });
+  }
+  res.status(201).json(data);
+}));
+
+// DELETE /api/admin/points-de-vente/:id — archiver une boutique (réduit la facturation)
+// Soft-delete : deleted_at renseigné, l'historique des scans reste intact et le
+// nom redevient réutilisable (l'index unique n'exclut que les boutiques actives).
+router.delete('/points-de-vente/:id', authAdmin, asyncHandler(async (req, res) => {
+  const { data, error } = await supabase
+    .from('points_de_vente')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', req.params.id)
+    .is('deleted_at', null)
+    .select('id, nom')
+    .single();
+
+  if (error) return res.status(404).json({ error: 'Boutique introuvable ou déjà archivée' });
+  res.json({ archived: true, ...data });
 }));
 
 // POST /api/admin/marchands — créer un marchand
