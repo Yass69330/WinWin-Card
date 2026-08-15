@@ -655,6 +655,34 @@
   </div>
 </div>
 
+<!-- Feuille de gestion des points de vente (boutiques) — ADMIN -->
+<div class="sheet-backdrop" id="pdv-backdrop">
+  <div class="sheet">
+    <div class="sheet-header">
+      <div class="sheet-title" id="pdv-title">Points de vente</div>
+      <button class="btn-icon" id="btn-close-pdv">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="form-section">
+        <div class="form-section-title">Ajouter une boutique</div>
+        <div class="field" style="display:flex;gap:8px;align-items:flex-end">
+          <div style="flex:1">
+            <label for="pdv-nom">Nom de la boutique</label>
+            <input id="pdv-nom" type="text" placeholder="Boutique Lyon Bellecour" maxlength="80">
+          </div>
+          <button class="btn btn-primary" id="btn-pdv-create">Créer</button>
+        </div>
+        <div class="field-hint">Créer une boutique ajoute une unité facturée à ce réseau.</div>
+      </div>
+      <div id="pdv-err" class="alert alert-error" style="display:none"></div>
+      <div class="form-section">
+        <div class="form-section-title">Boutiques actives (<span id="pdv-count">0</span>)</div>
+        <div id="pdv-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 // ════════════════════════════════════
 // STATE
@@ -832,15 +860,18 @@ function renderMerchants(filter = '') {
         <div class="merchant-stat">👥 <strong>${m.total_clients}</strong> clients</div>
         <div class="merchant-stat">✅ <strong>${m.scans_aujourdhui}</strong> scans aujourd'hui</div>
         <div class="merchant-stat">🎯 <strong>${m.max_value}</strong> ${m.type_programme === 'points' ? 'points' : 'tampons'}</div>
+        ${m.boutiques_actives > 0 ? `<div class="merchant-stat">🏪 <strong>${m.boutiques_actives}</strong> boutiques</div>` : ''}
       </div>
       <div class="merchant-actions">
         <button class="btn btn-outline btn-sm btn-edit" data-id="${m.id}">✏️ Modifier</button>
+        <button class="btn btn-outline btn-sm btn-pdv" data-id="${m.id}" data-nom="${esc(m.nom)}">🏪 Boutiques</button>
         <button class="btn ${toggleClass} btn-sm btn-toggle" data-id="${m.id}" data-actif="${m.actif}">${toggleLabel}</button>
       </div>
     </div>`;
   }).join('');
 
   list.querySelectorAll('.btn-edit').forEach(b => b.addEventListener('click', () => openEditSheet(b.dataset.id)));
+  list.querySelectorAll('.btn-pdv').forEach(b => b.addEventListener('click', () => openPdvSheet(b.dataset.id, b.dataset.nom)));
   list.querySelectorAll('.btn-toggle').forEach(b => {
     b.addEventListener('click', () => toggleSuspension(b.dataset.id, b.dataset.actif === 'true'));
   });
@@ -913,6 +944,70 @@ async function openEditSheet(id) {
 
 function openSheet()  { document.getElementById('sheet-backdrop').classList.add('open'); }
 function closeSheet() { document.getElementById('sheet-backdrop').classList.remove('open'); }
+
+// ════════════════════════════════════
+// POINTS DE VENTE (boutiques) — admin
+// ════════════════════════════════════
+function openPdvSheet(marchandId, marchandNom) {
+  S.pdvMarchandId = marchandId;
+  document.getElementById('pdv-title').textContent = `Points de vente — ${marchandNom || ''}`;
+  document.getElementById('pdv-nom').value = '';
+  document.getElementById('pdv-err').style.display = 'none';
+  document.getElementById('pdv-backdrop').classList.add('open');
+  loadPdvList();
+}
+function closePdvSheet() { document.getElementById('pdv-backdrop').classList.remove('open'); }
+
+async function loadPdvList() {
+  const listEl = document.getElementById('pdv-list');
+  listEl.innerHTML = '<div class="field-hint">Chargement…</div>';
+  try {
+    const res  = await api(`/api/admin/marchands/${S.pdvMarchandId}/points-de-vente`);
+    const list = await res.json();
+    document.getElementById('pdv-count').textContent = list.length;
+    if (!list.length) { listEl.innerHTML = '<div class="field-hint">Aucune boutique.</div>'; return; }
+    listEl.innerHTML = list.map(b =>
+      `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--border,#eee)">
+        <span>${esc(b.nom)}</span>
+        <button class="btn btn-danger btn-sm btn-pdv-archive" data-id="${esc(b.id)}" data-nom="${esc(b.nom)}">Archiver</button>
+      </div>`).join('');
+    listEl.querySelectorAll('.btn-pdv-archive').forEach(b =>
+      b.addEventListener('click', () => archivePdv(b.dataset.id, b.dataset.nom)));
+  } catch (e) { listEl.innerHTML = '<div class="alert alert-error">Erreur de chargement</div>'; }
+}
+
+async function createPdv() {
+  const err = document.getElementById('pdv-err');
+  const nom = document.getElementById('pdv-nom').value.trim();
+  err.style.display = 'none';
+  if (!nom) { err.textContent = 'Nom requis'; err.style.display = 'block'; return; }
+  const btn = document.getElementById('btn-pdv-create');
+  btn.disabled = true;
+  try {
+    const res  = await api(`/api/admin/marchands/${S.pdvMarchandId}/points-de-vente`, {
+      method: 'POST', body: JSON.stringify({ nom }),
+    });
+    const data = await res.json();
+    if (!res.ok) { err.textContent = data.error || 'Erreur'; err.style.display = 'block'; return; }
+    document.getElementById('pdv-nom').value = '';
+    await loadPdvList();
+    await loadMerchants();  // rafraîchit le compteur de facturation sur les cartes
+  } finally { btn.disabled = false; }
+}
+
+async function archivePdv(id, nom) {
+  if (!confirm(`Archiver la boutique "${nom}" ? Son historique est conservé, mais elle ne sera plus facturée.`)) return;
+  const res = await api(`/api/admin/points-de-vente/${id}`, { method: 'DELETE' });
+  if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || 'Erreur'); return; }
+  await loadPdvList();
+  await loadMerchants();
+}
+
+document.getElementById('btn-close-pdv').addEventListener('click', closePdvSheet);
+document.getElementById('btn-pdv-create').addEventListener('click', createPdv);
+document.getElementById('pdv-backdrop').addEventListener('click', e => {
+  if (e.target === document.getElementById('pdv-backdrop')) closePdvSheet();
+});
 
 document.getElementById('btn-new-merchant').addEventListener('click', openCreateSheet);
 document.getElementById('btn-close-sheet').addEventListener('click', closeSheet);
