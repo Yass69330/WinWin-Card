@@ -968,12 +968,35 @@ async function loadPdvList() {
     if (!list.length) { listEl.innerHTML = '<div class="field-hint">Aucune boutique.</div>'; return; }
     listEl.innerHTML = list.map(b =>
       `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--border,#eee)">
-        <span>${esc(b.nom)}</span>
-        <button class="btn btn-danger btn-sm btn-pdv-archive" data-id="${esc(b.id)}" data-nom="${esc(b.nom)}">Archiver</button>
+        <div style="min-width:0">
+          <div>${esc(b.nom)}</div>
+          <div class="field-hint" style="margin:0">${b.scanner_login ? '🔑 ' + esc(b.scanner_login) : '— aucun identifiant scanner —'}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn btn-outline btn-sm btn-pdv-cred" data-id="${esc(b.id)}" data-nom="${esc(b.nom)}" data-login="${esc(b.scanner_login || '')}">Identifiants</button>
+          <button class="btn btn-danger btn-sm btn-pdv-archive" data-id="${esc(b.id)}" data-nom="${esc(b.nom)}">Archiver</button>
+        </div>
       </div>`).join('');
     listEl.querySelectorAll('.btn-pdv-archive').forEach(b =>
       b.addEventListener('click', () => archivePdv(b.dataset.id, b.dataset.nom)));
+    listEl.querySelectorAll('.btn-pdv-cred').forEach(b =>
+      b.addEventListener('click', () => setPdvCredentials(b.dataset.id, b.dataset.nom, b.dataset.login)));
   } catch (e) { listEl.innerHTML = '<div class="alert alert-error">Erreur de chargement</div>'; }
+}
+
+// Provisioning des identifiants scanner d'une boutique (étape 3b, admin).
+async function setPdvCredentials(id, nom, currentLogin) {
+  const login = prompt(`Login scanner pour « ${nom} » (min 3 caractères) :`, currentLogin || '');
+  if (login === null) return;
+  const password = prompt('Mot de passe scanner (min 6 caractères) :', '');
+  if (password === null) return;
+  const res  = await api(`/api/admin/points-de-vente/${id}/scanner`, {
+    method: 'PATCH', body: JSON.stringify({ scanner_login: login.trim(), password }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { alert(data.error || 'Erreur'); return; }
+  alert(`Identifiants enregistrés pour « ${nom} ».\nLogin : ${data.scanner_login}\nÀ transmettre au point de vente.`);
+  await loadPdvList();
 }
 
 async function createPdv() {

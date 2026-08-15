@@ -70,10 +70,11 @@ router.get('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
 // franchiseur, lui, ne peut que lister et renommer (merchants.js /me/...).
 
 // GET /api/admin/marchands/:id/points-de-vente — boutiques actives d'un réseau
+// Expose scanner_login + actif (jamais scanner_password_hash — règle d'hygiène).
 router.get('/marchands/:id/points-de-vente', authAdmin, asyncHandler(async (req, res) => {
   const { data, error } = await supabase
     .from('points_de_vente')
-    .select('id, nom, created_at')
+    .select('id, nom, created_at, scanner_login, actif')
     .eq('marchand_id', req.params.id)
     .is('deleted_at', null)
     .order('nom');
@@ -117,6 +118,35 @@ router.delete('/points-de-vente/:id', authAdmin, asyncHandler(async (req, res) =
 
   if (error) return res.status(404).json({ error: 'Boutique introuvable ou déjà archivée' });
   res.json({ archived: true, ...data });
+}));
+
+// PATCH /api/admin/points-de-vente/:id/scanner — définir/réinitialiser les
+// identifiants scanner d'une boutique (provisioning, étape 3b — ADMIN).
+// Hash via hashPassword (identique à l'auth marchand). Ne renvoie JAMAIS le
+// hash. Collision de login (index unique lower(scanner_login)) → 409 propre.
+// Lot INERTE : rien ne lit encore ces identifiants (l'enforcement est en 3c).
+router.patch('/points-de-vente/:id/scanner', authAdmin, asyncHandler(async (req, res) => {
+  const login    = typeof req.body.scanner_login === 'string' ? req.body.scanner_login.trim() : '';
+  const password = typeof req.body.password === 'string' ? req.body.password : '';
+  if (login.length < 3)    return res.status(400).json({ error: 'scanner_login requis (min 3 caractères)' });
+  if (password.length < 6) return res.status(400).json({ error: 'password requis (min 6 caractères)' });
+
+  const { hashPassword } = require('../services/auth-utils');
+  const scanner_password_hash = await hashPassword(password);
+
+  const { data, error } = await supabase
+    .from('points_de_vente')
+    .update({ scanner_login: login, scanner_password_hash })
+    .eq('id', req.params.id)
+    .is('deleted_at', null)
+    .select('id, nom, scanner_login, actif') // jamais le hash
+    .single();
+
+  if (error) {
+    if (error.code === '23505') return res.status(409).json({ error: 'Ce login scanner est déjà utilisé' });
+    return res.status(404).json({ error: 'Boutique introuvable ou archivée' });
+  }
+  res.json(data);
 }));
 
 // POST /api/admin/marchands — créer un marchand
