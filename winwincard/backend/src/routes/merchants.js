@@ -106,7 +106,7 @@ router.get('/me/qrcode', authMarchand, asyncHandler(async (req, res) => {
 router.get('/me/points-de-vente', authMarchand, asyncHandler(async (req, res) => {
   const { data, error } = await supabase
     .from('points_de_vente')
-    .select('id, nom, created_at')
+    .select('id, nom, created_at, actif')
     .eq('marchand_id', req.marchandId)
     .is('deleted_at', null)
     .order('nom');
@@ -134,6 +134,27 @@ router.patch('/me/points-de-vente/:id', authMarchand, asyncHandler(async (req, r
     if (error.code === '23505') return res.status(409).json({ error: 'Une boutique active porte déjà ce nom' });
     return res.status(404).json({ error: 'Boutique introuvable' });
   }
+  res.json(data);
+}));
+
+// PATCH /merchants/me/points-de-vente/:id/actif — couper / rétablir l'accès
+// scanner d'une boutique. Levier FRANCHISEUR, réversible, NEUTRE pour la
+// facturation (≠ archivage). Effet immédiat : le scan relit `actif` en base à
+// chaque passage → le scan suivant de la boutique coupée est refusé.
+router.patch('/me/points-de-vente/:id/actif', authMarchand, asyncHandler(async (req, res) => {
+  const actif = req.body.actif === true || req.body.actif === false ? req.body.actif : null;
+  if (actif === null) return res.status(400).json({ error: 'actif (boolean) is required' });
+
+  const { data, error } = await supabase
+    .from('points_de_vente')
+    .update({ actif })
+    .eq('id', req.params.id)
+    .eq('marchand_id', req.marchandId) // le propriétaire ne touche QUE ses boutiques
+    .is('deleted_at', null)
+    .select('id, nom, actif')
+    .single();
+
+  if (error) return res.status(404).json({ error: 'Boutique introuvable' });
   res.json(data);
 }));
 
