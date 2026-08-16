@@ -119,6 +119,9 @@ SELECT jsonb_build_object(
       'recompenses', recompenses
     ) ORDER BY scans_mois DESC)
     FROM boutiques
+    -- Boutique active : toujours affichée. Archivée : seulement si activité dans
+    -- les fenêtres montrées (sinon une boutique fermée depuis longtemps encombre).
+    WHERE NOT archivee OR scans_mois > 0 OR scans_prec > 0
   ), '[]'::jsonb),
   'scans_non_attribues', (SELECT n FROM non_attribues),
   'distribution', jsonb_build_object(
