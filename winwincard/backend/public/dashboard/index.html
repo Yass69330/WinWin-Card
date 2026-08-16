@@ -100,6 +100,11 @@
     .dash-content { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: calc(var(--nav-h) + 8px); }
 
     .tab-panel { display: none; padding: 16px; }
+    .rs-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .rs-table th, .rs-table td { padding:8px 10px; text-align:right; border-bottom:1px solid rgba(0,0,0,.06); font-variant-numeric:tabular-nums; }
+    .rs-table th:first-child, .rs-table td:first-child { text-align:left; }
+    .rs-table th { cursor:pointer; user-select:none; color:var(--muted); font-weight:600; white-space:nowrap; }
+    .rs-table th:hover { color:var(--accent); }
     .tab-panel.active { display: block; }
 
     .dash-nav {
@@ -372,6 +377,9 @@
       </div>
     </div>
 
+    <!-- ── Réseau (groupe) — visible seulement si ≥ 1 boutique ── -->
+    <div id="tab-reseau" class="tab-panel"></div>
+
     <!-- ── Clients ── -->
     <div id="tab-clients" class="tab-panel">
       <div class="tab-header">
@@ -478,6 +486,9 @@
   <nav class="dash-nav">
     <button class="nav-btn active" data-tab="overview">
       <span class="nav-icon">📊</span><span data-i18n="navOverview">Overview</span>
+    </button>
+    <button class="nav-btn" data-tab="reseau" id="nav-reseau" style="display:none">
+      <span class="nav-icon">🏪</span><span data-i18n="navReseau">Network</span>
     </button>
     <button class="nav-btn" data-tab="clients">
       <span class="nav-icon">👥</span><span data-i18n="navClients">Clients</span>
@@ -687,6 +698,14 @@ const I18N = {
     justNow:'just now', minAgo:({m})=>`${m} min ago`, hoursAgo:({h})=>`${h}h ago`,
     yesterday:'yesterday', daysAgo:({d})=>`${d} days ago`,
     navOverview:'Overview', navClients:'Clients', navScans:'Scans', navScanner:'Scanner', navNotifs:'Notifs',
+    navReseau:'Network',
+    rsPorteurs:'Carriers', rsActifs30:'Active (30d)', rsNouveaux:'New this month', rsRetour:'Return rate',
+    rsMobilite:'Carriers visiting more than one store', rsDistribTitle:'Monthly visit distribution',
+    rsLessThan:'under', rsMoreThan:'over', rsVisitsCaption:'visits per month',
+    rsDistEmpty:'No active carriers this month yet.',
+    rsBoutiquesTitle:'Stores', rsNonAttribues:'Unattributed scans',
+    rsColBoutique:'Store', rsColScans:'Scans', rsColEvol:'vs last month', rsColClients:'Clients served', rsColRecomp:'Rewards',
+    rsArchived:'archived', rsNoBoutique:'No store.', rsLoadError:'Loading error',
     pointsToAdd:'Points to add', pointsToAddSub:'Enter the number of points for this visit',
     invalidPoints:'Enter a positive whole number',
   },
@@ -746,6 +765,14 @@ const I18N = {
     justNow:"à l'instant", minAgo:({m})=>`il y a ${m} min`, hoursAgo:({h})=>`il y a ${h} h`,
     yesterday:'hier', daysAgo:({d})=>`il y a ${d} jours`,
     navOverview:'Aperçu', navClients:'Clients', navScans:'Scans', navScanner:'Scanner', navNotifs:'Notifs',
+    navReseau:'Réseau',
+    rsPorteurs:'Porteurs', rsActifs30:'Actifs (30 j)', rsNouveaux:'Nouveaux ce mois', rsRetour:'Taux de retour',
+    rsMobilite:'Porteurs fréquentant plusieurs boutiques', rsDistribTitle:'Répartition des passages mensuels',
+    rsLessThan:'moins de', rsMoreThan:'plus de', rsVisitsCaption:'passages par mois',
+    rsDistEmpty:"Aucun porteur actif ce mois pour l'instant.",
+    rsBoutiquesTitle:'Boutiques', rsNonAttribues:'Scans non attribués',
+    rsColBoutique:'Boutique', rsColScans:'Scans', rsColEvol:'vs mois préc.', rsColClients:'Clients servis', rsColRecomp:'Récompenses',
+    rsArchived:'archivée', rsNoBoutique:'Aucune boutique.', rsLoadError:'Erreur de chargement',
     pointsToAdd:'Points à ajouter', pointsToAddSub:'Saisis le nombre de points pour cette visite',
     invalidPoints:'Saisis un nombre entier positif',
   },
@@ -915,6 +942,7 @@ function switchTab(tab) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.getElementById('tab-' + tab).classList.add('active');
   if (tab === 'overview') loadOverview();
+  if (tab === 'reseau')   loadReseau();
   if (tab === 'clients')  loadClients();
   if (tab === 'scans')    loadScans();
   if (tab === 'scanner')  startScannerTab();
@@ -956,8 +984,11 @@ async function loadOverview(force = false) {
 function renderPdv() {
   const section = document.getElementById('pdv-section');
   const card    = document.getElementById('pdv-card');
-  if (!section || !card) return;
   const list = Array.isArray(S.pdv) ? S.pdv : [];
+  // Onglet Réseau visible uniquement pour un réseau (≥ 1 boutique) → mono-site intact.
+  const navR = document.getElementById('nav-reseau');
+  if (navR) navR.style.display = list.length ? '' : 'none';
+  if (!section || !card) return;
   if (list.length === 0) { section.style.display = 'none'; return; }
   section.style.display = '';
   card.innerHTML = list.map(b => {
@@ -989,6 +1020,94 @@ async function toggleActif(id, nom, currentlyActif) {
   const b = (S.pdv || []).find(x => x.id === id);
   if (b) b.actif = data.actif;
   renderPdv();
+}
+
+// ════════════════════════════════════════════════
+// TAB: RÉSEAU (dashboard groupe)
+// ════════════════════════════════════════════════
+async function loadReseau(force = false) {
+  if (!force && S.reseau) { renderReseau(); return; }
+  const el = document.getElementById('tab-reseau');
+  el.innerHTML = '<div class="skeleton skeleton-card"></div>';
+  try {
+    const res = await api('/api/merchants/me/group-stats');
+    S.reseau = await res.json();
+  } catch (e) { el.innerHTML = `<p style="color:var(--error)">${t('rsLoadError')}</p>`; return; }
+  renderReseau();
+}
+
+function rsEvolCell(v) {
+  if (v == null) return '<span style="opacity:.45">—</span>';
+  const c = v > 0 ? '#4ea672' : v < 0 ? '#ef4444' : 'inherit';
+  return `<span style="color:${c};font-weight:600">${v > 0 ? '+' : ''}${v}%</span>`;
+}
+
+function renderReseau() {
+  const d = S.reseau; if (!d) return;
+  const el = document.getElementById('tab-reseau');
+  const r = d.reseau || {};
+  const dist = d.distribution || {};
+  const total = (dist.bas || 0) + (dist.milieu || 0) + (dist.haut || 0);
+  const pc = n => total > 0 ? Math.round((n || 0) / total * 100) : 0;
+  const sort = S.reseauSort || (S.reseauSort = { col: 'scans', dir: -1 });
+  const boutiques = (d.boutiques || []).slice().sort((a, b) => {
+    let va = a[sort.col], vb = b[sort.col];
+    if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    return (va < vb ? -1 : va > vb ? 1 : 0) * sort.dir;
+  });
+  el.innerHTML = `
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-value">${r.porteurs ?? '–'}</div><div class="stat-label">${t('rsPorteurs')}</div></div>
+      <div class="stat-card"><div class="stat-icon">🔥</div><div class="stat-value">${r.actifs_30j ?? '–'}</div><div class="stat-label">${t('rsActifs30')}</div></div>
+      <div class="stat-card"><div class="stat-icon">✨</div><div class="stat-value">${r.nouveaux_ce_mois ?? '–'}</div><div class="stat-label">${t('rsNouveaux')}</div></div>
+      <div class="stat-card"><div class="stat-icon">🔄</div><div class="stat-value">${r.taux_retour_reseau != null ? r.taux_retour_reseau + '%' : '–'}</div><div class="stat-label">${t('rsRetour')}</div></div>
+    </div>
+    <div class="field-hint" style="margin:6px 2px 0">${t('rsMobilite')} : <strong>${r.mobilite ?? 0}</strong></div>
+
+    <p class="section-title">${t('rsDistribTitle')}</p>
+    <div class="qr-card" style="align-items:stretch">
+      <div style="display:flex;height:26px;border-radius:6px;overflow:hidden;background:rgba(0,0,0,.05)">
+        <div style="width:${pc(dist.bas)}%;background:#e0a458"></div>
+        <div style="width:${pc(dist.milieu)}%;background:#8b90ff"></div>
+        <div style="width:${pc(dist.haut)}%;background:#4ea672"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-top:8px;flex-wrap:wrap">
+        <span><span style="color:#e0a458">■</span> ${t('rsLessThan')} ${dist.seuil_bas} — <strong>${pc(dist.bas)}%</strong> (${dist.bas || 0})</span>
+        <span><span style="color:#8b90ff">■</span> ${dist.seuil_bas}–${dist.seuil_haut} — <strong>${pc(dist.milieu)}%</strong> (${dist.milieu || 0})</span>
+        <span><span style="color:#4ea672">■</span> ${t('rsMoreThan')} ${dist.seuil_haut} — <strong>${pc(dist.haut)}%</strong> (${dist.haut || 0})</span>
+      </div>
+      <div class="field-hint" style="margin-top:4px">${t('rsVisitsCaption')}${total === 0 ? ' — ' + t('rsDistEmpty') : ''}</div>
+    </div>
+
+    <p class="section-title">${t('rsBoutiquesTitle')} <span class="field-hint" style="font-weight:400">· ${t('rsNonAttribues')} : <strong>${d.scans_non_attribues ?? 0}</strong></span></p>
+    <div style="overflow-x:auto">
+      <table class="rs-table">
+        <thead><tr>
+          <th data-sort="nom">${t('rsColBoutique')}</th>
+          <th data-sort="scans">${t('rsColScans')}</th>
+          <th data-sort="evolution_pct">${t('rsColEvol')}</th>
+          <th data-sort="clients_distincts">${t('rsColClients')}</th>
+          <th data-sort="recompenses">${t('rsColRecomp')}</th>
+        </tr></thead>
+        <tbody>
+          ${boutiques.map(b => `<tr>
+            <td>${esc(b.nom)}${b.archivee ? ` <span style="color:var(--error);font-size:11px">(${t('rsArchived')})</span>` : ''}</td>
+            <td>${b.scans}</td>
+            <td>${rsEvolCell(b.evolution_pct)}</td>
+            <td>${b.clients_distincts}</td>
+            <td>${b.recompenses}</td>
+          </tr>`).join('') || `<tr><td colspan="5" class="field-hint">${t('rsNoBoutique')}</td></tr>`}
+        </tbody>
+      </table>
+    </div>`;
+  el.querySelectorAll('th[data-sort]').forEach(th => th.addEventListener('click', () => {
+    const col = th.dataset.sort;
+    S.reseauSort = { col, dir: (sort.col === col ? -sort.dir : (col === 'nom' ? 1 : -1)) };
+    renderReseau();
+  }));
 }
 
 async function renamePdv(id, currentNom) {

@@ -79,6 +79,17 @@ router.get('/me/stats', authMarchand, asyncHandler(async (req, res) => {
   });
 }));
 
+// GET /merchants/me/group-stats — agrégats du dashboard groupe (réseau).
+// Délègue tout le GROUP BY à la fonction SQL group_stats (lecture seule) : Postgres
+// agrège et renvoie un petit jsonb, ce qui évite la troncature PostgREST à 1000
+// lignes qui fausserait un réseau. Renvoie tel quel le jsonb (réseau, boutiques,
+// distribution, scans_non_attribues).
+router.get('/me/group-stats', authMarchand, asyncHandler(async (req, res) => {
+  const { data, error } = await supabase.rpc('group_stats', { p_marchand_id: req.marchandId });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || {});
+}));
+
 // GET /merchants/qrcode — QR code de la landing page du marchand
 router.get('/me/qrcode', authMarchand, asyncHandler(async (req, res) => {
   const { data: marchand } = await supabase
