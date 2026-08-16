@@ -1720,11 +1720,12 @@ function renderClientSheet({ client, scans }) {
     const isReward = !isReset && s.stored_value_apres >= S.maxValue;
     const icon = isReset ? '↩️' : isReward ? '🎉' : '✅';
     const dateStr = new Date(s.date_scan).toLocaleDateString(dateLocale(), { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+    const lieu = s.points_de_vente && s.points_de_vente.nom;  // null pour un scan mono-site
     return `<div class="cs-scan-row">
       <span class="cs-scan-icon">${icon}</span>
       <div style="flex:1">
         <span class="cs-scan-delta">${s.stored_value_avant} → ${s.stored_value_apres} pts</span>
-        <span class="cs-scan-date">${dateStr}</span>
+        <span class="cs-scan-date">${dateStr}${lieu ? ' · ' + esc(lieu) : ''}</span>
       </div>
     </div>`;
   }).join('');

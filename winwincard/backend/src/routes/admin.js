@@ -226,11 +226,29 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
     'couleur_label_strip',
     // Champs générateur de strip (aucun gating forfait côté admin)
     'strip_mode', 'strip_theme', 'stamp_icon', 'strip_custom_background_url', 'strip_label',
+    'freq_seuil_bas', 'freq_seuil_haut',
   ];
 
   const updates = {};
   for (const field of ALLOWED) {
     if (req.body[field] !== undefined) updates[field] = req.body[field];
+  }
+
+  // Seuils de fréquence : entiers cohérents. Le formulaire admin envoie toujours
+  // les deux ensemble → la comparaison bas ≤ haut est fiable ici (le CHECK DB
+  // reste le filet en cas d'appel partiel). On renvoie un 400 propre.
+  for (const k of ['freq_seuil_bas', 'freq_seuil_haut']) {
+    if (updates[k] !== undefined) {
+      const v = parseInt(updates[k], 10);
+      if (!Number.isInteger(v) || v < 1 || v > 1000) {
+        return res.status(400).json({ error: `${k} doit être un entier entre 1 et 1000` });
+      }
+      updates[k] = v;
+    }
+  }
+  if (updates.freq_seuil_bas !== undefined && updates.freq_seuil_haut !== undefined
+      && updates.freq_seuil_bas > updates.freq_seuil_haut) {
+    return res.status(400).json({ error: 'freq_seuil_bas doit être ≤ freq_seuil_haut' });
   }
 
   // Bump strip_config_version si un champ visuel a changé

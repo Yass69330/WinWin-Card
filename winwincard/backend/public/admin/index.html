@@ -335,6 +335,17 @@
             <input id="f-quota-override" type="number" min="0" max="9999" placeholder="défaut forfait">
             <div class="field-hint">Si vide → quota par défaut du forfait.</div>
           </div>
+          <div class="field" style="display:flex;gap:8px">
+            <div style="flex:1">
+              <label for="f-freq-bas">Seuil fréquence bas</label>
+              <input id="f-freq-bas" type="number" min="1" max="1000" placeholder="5">
+            </div>
+            <div style="flex:1">
+              <label for="f-freq-haut">Seuil fréquence haut</label>
+              <input id="f-freq-haut" type="number" min="1" max="1000" placeholder="10">
+            </div>
+          </div>
+          <div class="field-hint" style="margin-top:-6px">Tranches de la distribution du dashboard Réseau : moins de « bas » / entre / plus de « haut » passages par mois. Défauts 5 et 10.</div>
         </div>
         <div class="field">
           <label for="f-texte">Texte landing page</label>
@@ -1115,6 +1126,8 @@ function fillForm(m) {
   if (['fr','en'].includes(m.langue)) document.getElementById('f-langue').value = m.langue;
   if (['stamps','points'].includes(m.type_programme)) document.getElementById('f-type-programme').value = m.type_programme;
   v('f-quota-override', m.notification_quota_override);
+  v('f-freq-bas',  m.freq_seuil_bas);
+  v('f-freq-haut', m.freq_seuil_haut);
   if (m.couleur_fond)         setColor('cp-fond',   'f-fond',         m.couleur_fond);
   if (m.couleur_texte)        setColor('cp-texte',  'f-texte-c',      m.couleur_texte);
   if (m.couleur_label)        setColor('cp-label',  'f-label',        m.couleur_label);
@@ -1327,6 +1340,8 @@ function collectForm() {
     langue:          document.getElementById('f-langue').value,
     type_programme:  document.getElementById('f-type-programme').value,
     notification_quota_override: parseInt(document.getElementById('f-quota-override').value) || null,
+    freq_seuil_bas:  parseInt(document.getElementById('f-freq-bas').value)  || 5,
+    freq_seuil_haut: parseInt(document.getElementById('f-freq-haut').value) || 10,
     texte_landing:    document.getElementById('f-texte').value.trim()          || undefined,
     pass_display_name: document.getElementById('f-pass-name').value.trim()    || undefined,
     how_it_works:     document.getElementById('f-how-it-works').value.trim()  || null,
