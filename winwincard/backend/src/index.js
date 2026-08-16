@@ -49,7 +49,7 @@ app.use(rateLimit({
 // Rate limiters dédiés (anti brute-force logins).
 // limiterInscription est appliqué directement sur POST /api/clients (dans clients.js),
 // pas au niveau du routeur, pour ne pas pénaliser les lectures du dashboard.
-const { limiterAdminLogin, limiterMarchandLogin } = require('./middleware/rateLimiters');
+const { limiterAdminLogin, limiterMarchandLogin, limiterScannerLogin } = require('./middleware/rateLimiters');
 
 // ── Routes ───────────────────────────────────────────────────
 const appleWalletRoutes   = require('./routes/apple-wallet');
@@ -65,6 +65,7 @@ const scannerRoutes       = require('./routes/scanner');
 const dashboardRoutes     = require('./routes/dashboard');
 const adminUiRoutes       = require('./routes/admin-ui');
 const workflowsRoutes     = require('./routes/workflows');
+const scannerAuthRoutes   = require('./routes/scanner-auth');
 
 // Fichiers statiques — HTML servi avec no-cache pour garantir la fraîcheur PWA
 app.use(express.static(path.join(__dirname, '../public'), {
@@ -98,6 +99,8 @@ app.use('/', appleWalletRoutes);
 app.use('/api/passes', passesRoutes);
 app.use('/api/clients', clientsRoutes);
 app.use('/api/scan', scanRoutes);
+app.use('/api/scanner/login', limiterScannerLogin);
+app.use('/api/scanner', scannerAuthRoutes);
 app.use('/api/merchants/login', limiterMarchandLogin);
 app.use('/api/merchants', merchantsRoutes);
 app.use('/api/google-wallet', googleWalletRoutes);

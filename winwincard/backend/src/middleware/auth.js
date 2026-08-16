@@ -53,6 +53,11 @@ function authScanner(req, res, next) {
       return res.status(403).json({ error: 'Accès refusé' });
     }
     req.marchandId = payload.marchand_id;
+    // Multi-boutiques (3c) : le scan lira ces champs. Le point_de_vente_id du
+    // token ne sert QU'À désigner la boutique — son statut (actif/archivé) est
+    // TOUJOURS relu en base au scan, jamais présumé depuis le JWT.
+    req.scannerRole   = payload.role;
+    req.pointDeVenteId = payload.point_de_vente_id || null;
     next();
   } catch {
     return res.status(401).json({ error: 'Token invalide ou expiré' });

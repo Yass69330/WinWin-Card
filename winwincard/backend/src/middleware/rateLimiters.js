@@ -27,4 +27,15 @@ const limiterMarchandLogin = rateLimit({
   legacyHeaders: false,
 });
 
-module.exports = { limiterInscription, limiterAdminLogin, limiterMarchandLogin };
+// Anti brute-force login scanner (boutique ou marchand mono-site). Max un peu
+// plus haut que les autres : l'IP d'un comptoir de boutique est partagée par
+// plusieurs vendeurs, mais le login reste rare (token 1 an).
+const limiterScannerLogin = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1h
+  max: 20,
+  message: { error: 'Too many attempts, please try again in an hour' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+module.exports = { limiterInscription, limiterAdminLogin, limiterMarchandLogin, limiterScannerLogin };

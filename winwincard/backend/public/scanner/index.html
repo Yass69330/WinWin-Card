@@ -595,6 +595,8 @@ const I18N = {
     serialNumber:'Pass ID or backup code', pickClient:'Multiple matches — tap the right client:',
     submit:'Submit', cancel:'Cancel',
     fillAllFields:'Please fill in all fields', invalidCreds:'Invalid credentials',
+    accessDisabled:'Access disabled — contact head office',
+    useBoutiqueLogin:'Log in with your store credentials',
     cameraError:({msg})=>'Cannot access camera: '+msg, processing:'⏳ Processing…',
     networkError:({msg})=>'Network error: '+msg, unknownError:'Unknown error', errorName:'Error',
     enterSerial:'Enter a serial number',
@@ -618,6 +620,8 @@ const I18N = {
     serialNumber:'ID du pass ou code de secours', pickClient:'Plusieurs clients — appuyez sur le bon :',
     submit:'Valider', cancel:'Annuler',
     fillAllFields:'Veuillez remplir tous les champs', invalidCreds:'Identifiants invalides',
+    accessDisabled:'Accès désactivé — contactez le siège',
+    useBoutiqueLogin:"Connectez-vous avec l'identifiant de votre boutique",
     cameraError:({msg})=>"Impossible d'accéder à la caméra : "+msg, processing:'⏳ Traitement…',
     networkError:({msg})=>'Erreur réseau : '+msg, unknownError:'Erreur inconnue', errorName:'Erreur',
     enterSerial:'Saisissez un numéro de série',
@@ -721,14 +725,20 @@ document.getElementById('login-form').addEventListener('submit', async () => {
   btn.innerHTML = '<span class="spinner"></span>';
 
   try {
-    const res = await fetch('/api/merchants/login', {
+    // Login unifié (multi-boutiques 3c) : l'identifiant est soit un login
+    // boutique, soit un slug marchand (mono-site). Le backend tranche.
+    const res = await fetch('/api/scanner/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slug, password, remember_device: true })
+      body: JSON.stringify({ identifiant: slug, password, remember_device: true })
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || t('invalidCreds'));
-    saveSession(data.token, slug, data.nom || slug, data.langue, data.type_programme);
+    if (!res.ok) {
+      if (data.error === 'access_disabled')    throw new Error(t('accessDisabled'));
+      if (data.error === 'use_boutique_login') throw new Error(t('useBoutiqueLogin'));
+      throw new Error(data.error || t('invalidCreds'));
+    }
+    saveSession(data.token, data.slug || slug, data.nom || slug, data.langue, data.type_programme);
     startScanner();
   } catch (e) {
     showLoginError(e.message);
@@ -887,6 +897,18 @@ async function submitScan(serial, points) {
     statusEl.style.display = 'none';
     state.scanning = false;
     stopScanner();
+    // Refus multi-boutiques (3c) : boutique coupée/archivée, ou réseau exigeant
+    // le login boutique. use_boutique_login → le token courant n'est plus valable
+    // pour scanner : on déconnecte pour forcer une reconnexion avec le bon login.
+    if (res.status === 403 && (data.error === 'access_disabled' || data.error === 'use_boutique_login')) {
+      if (data.error === 'use_boutique_login') {
+        showScanError(t('useBoutiqueLogin'));
+        setTimeout(() => { clearSession(); location.reload(); }, 3500);
+      } else {
+        showScanError(t('accessDisabled'));
+      }
+      return;
+    }
     if (res.status === 409 && data.candidates) { showCandidates(data.candidates); return; }
     showResult(data, res.ok, serial);
   } catch (e) {

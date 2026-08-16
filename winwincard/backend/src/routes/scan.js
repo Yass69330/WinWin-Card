@@ -19,6 +19,39 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'serial_number required' });
   }
 
+  // ── Multi-boutiques (3c) : attribution + coupure + durcissement ────────────
+  // On statue AVANT toute écriture. Le statut de la boutique est TOUJOURS relu
+  // en base (jamais présumé depuis le JWT) → c'est ce qui rend la coupure
+  // effective au scan suivant.
+  let pointDeVenteId = null;
+  if (req.scannerRole === 'scanner') {
+    const { data: pdv } = await supabase
+      .from('points_de_vente')
+      .select('id, actif, deleted_at')
+      .eq('id', req.pointDeVenteId)
+      .eq('marchand_id', req.marchandId)
+      .maybeSingle();
+    // Coupée (actif=false), archivée (deleted_at), ou introuvable → refus.
+    if (!pdv || pdv.deleted_at || !pdv.actif) {
+      return res.status(403).json({ error: 'access_disabled' });
+    }
+    pointDeVenteId = pdv.id;
+  } else {
+    // Token marchand : refusé si le réseau a AU MOINS une boutique provisionnée
+    // (index partiel idx_points_de_vente_reseau_actif). Sinon mono-site → autorisé,
+    // point_de_vente_id reste NULL, comportement identique à aujourd'hui.
+    const { data: reseau } = await supabase
+      .from('points_de_vente')
+      .select('id')
+      .eq('marchand_id', req.marchandId)
+      .is('deleted_at', null)
+      .not('scanner_login', 'is', null)
+      .limit(1);
+    if (reseau && reseau.length > 0) {
+      return res.status(403).json({ error: 'use_boutique_login' });
+    }
+  }
+
   // Résolution du client — deux formats acceptés, toujours scopés au marchand :
   //   • UUID complet (36 car.) → scan caméra ou collage manuel → match exact
   //   • Backup code (6 derniers caractères du serial) → filet de secours caisse
@@ -145,6 +178,7 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
       stored_value_apres: apresScan,
       montant_credite:       montantCredite,
       recompense_distribuee: recompenseDistribuee,
+      point_de_vente_id:     pointDeVenteId,
     }),
   ]);
 

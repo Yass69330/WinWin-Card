@@ -136,7 +136,9 @@ router.patch('/points-de-vente/:id/scanner', authAdmin, asyncHandler(async (req,
 
   const { data, error } = await supabase
     .from('points_de_vente')
-    .update({ scanner_login: login, scanner_password_hash })
+    // Stocké en minuscules → match de login sûr et insensible à la casse
+    // (le login PWA compare en minuscules ; cohérent avec l'index unique lower()).
+    .update({ scanner_login: login.toLowerCase(), scanner_password_hash })
     .eq('id', req.params.id)
     .is('deleted_at', null)
     .select('id, nom, scanner_login, actif') // jamais le hash
