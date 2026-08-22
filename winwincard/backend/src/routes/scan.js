@@ -302,13 +302,23 @@ async function creditReferrerIfApplicable(filleulClientId, marchandId, bonusPoin
   console.log(`[scan] referral credit OK parrain=${parrainClientId} +${bonusPoints}pts → ${newValue}/${maxValue}`);
 }
 
-// GET /api/scans — historique des scans du marchand (100 derniers)
-router.get('/', authMarchand, asyncHandler(async (req, res) => {
+// GET /api/scan — historique des scans (100 derniers).
+// authScanner (et non authMarchand) : un token BOUTIQUE (role scanner) doit
+// pouvoir lire son historique — sinon la caissière de réseau a un écran vide
+// (bug live depuis l'étape 3). authScanner accepte aussi le token marchand,
+// donc le dashboard (mono-site + owner) reste inchangé.
+router.get('/', authScanner, asyncHandler(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 100, 200);
-  const { data, error } = await supabase
+  let query = supabase
     .from('scans')
     .select('id, date_scan, stored_value_avant, stored_value_apres, clients(id, prenom)')
-    .eq('marchand_id', req.marchandId)
+    .eq('marchand_id', req.marchandId);
+  // Token boutique → historique scopé à SA boutique. Token marchand → tout le
+  // marchand (comportement actuel, mono-site et dashboard).
+  if (req.scannerRole === 'scanner' && req.pointDeVenteId) {
+    query = query.eq('point_de_vente_id', req.pointDeVenteId);
+  }
+  const { data, error } = await query
     .order('date_scan', { ascending: false })
     .limit(limit);
 

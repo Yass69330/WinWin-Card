@@ -1107,7 +1107,7 @@ async function openHistory() {
   const el = document.getElementById('history-list');
   el.innerHTML = `<div style="color:var(--muted);text-align:center;padding:24px">…</div>`;
   try {
-    const res = await fetch('/api/scan?limit=50', { headers: { 'Authorization': `Bearer ${state.token}` } });
+    const res = await fetch('/api/scan?limit=100', { headers: { 'Authorization': `Bearer ${state.token}` } });
     const data = await res.json();
     renderHistory(Array.isArray(data) ? data : []);
   } catch {
