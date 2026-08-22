@@ -688,7 +688,7 @@ const I18N = {
     pickClient:'Multiple matches — tap the right client:',
     nameBtn:'✏️ Name', pointsBtn:'⚖️ Points', recentScans:'Recent scans',
     deleteClientGdpr:'🗑 Delete client (GDPR)',
-    memberSince:({date})=>'Member since '+date, noScansClient:'No scans recorded for this client.',
+    memberSince:({date})=>'Member since '+date, noScansClient:'No scans recorded for this client.', scanAnnule:'undone',
     editFirstName:'Edit first name', newFirstName:'New first name', firstNamePh2:'First name…',
     save:'Save', firstNameRequired:'First name required', errorGeneric:'Error',
     adjustPoints:'Adjust points', newBalance:({max})=>`New balance (0 – ${max} pts)`,
@@ -755,7 +755,7 @@ const I18N = {
     pickClient:'Plusieurs clients — appuyez sur le bon :',
     nameBtn:'✏️ Nom', pointsBtn:'⚖️ Points', recentScans:'Scans récents',
     deleteClientGdpr:'🗑 Supprimer le client (RGPD)',
-    memberSince:({date})=>'Membre depuis le '+date, noScansClient:'Aucun scan enregistré pour ce client.',
+    memberSince:({date})=>'Membre depuis le '+date, noScansClient:'Aucun scan enregistré pour ce client.', scanAnnule:'annulé',
     editFirstName:'Modifier le prénom', newFirstName:'Nouveau prénom', firstNamePh2:'Prénom…',
     save:'Enregistrer', firstNameRequired:'Prénom requis', errorGeneric:'Erreur',
     adjustPoints:'Ajuster les points', newBalance:({max})=>`Nouveau solde (0 – ${max} pts)`,
@@ -1262,9 +1262,10 @@ function renderScans() {
       : reset
         ? `<div class="scan-pts" style="color:var(--accent)">${t('resetBadge')}</div><div style="font-size:11px;color:var(--muted)">${avant} → 0</div>`
         : `<div class="scan-pts">${avant} → ${apres}</div>`;
-    return `<div class="scan-entry">
+    const annule = !!s.annule_le;
+    return `<div class="scan-entry"${annule ? ' style="opacity:.5"' : ''}>
       <div class="scan-avatar" style="background:${colorFrom(prenom)}">${prenom.charAt(0).toUpperCase()}</div>
-      <div class="scan-info"><div class="scan-name">${esc(prenom)}</div><div class="scan-time">${timeAgo(s.date_scan)}</div></div>
+      <div class="scan-info"><div class="scan-name"${annule ? ' style="text-decoration:line-through"' : ''}>${esc(prenom)}</div><div class="scan-time">${timeAgo(s.date_scan)}${annule ? ' · ' + t('scanAnnule') : ''}</div></div>
       <div class="scan-delta">${delta}</div>
     </div>`;
   }).join('');
@@ -1721,11 +1722,12 @@ function renderClientSheet({ client, scans }) {
     const icon = isReset ? '↩️' : isReward ? '🎉' : '✅';
     const dateStr = new Date(s.date_scan).toLocaleDateString(dateLocale(), { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
     const lieu = s.points_de_vente && s.points_de_vente.nom;  // null pour un scan mono-site
-    return `<div class="cs-scan-row">
-      <span class="cs-scan-icon">${icon}</span>
+    const annule = !!s.annule_le;
+    return `<div class="cs-scan-row"${annule ? ' style="opacity:.5"' : ''}>
+      <span class="cs-scan-icon">${annule ? '↩️' : icon}</span>
       <div style="flex:1">
-        <span class="cs-scan-delta">${s.stored_value_avant} → ${s.stored_value_apres} pts</span>
-        <span class="cs-scan-date">${dateStr}${lieu ? ' · ' + esc(lieu) : ''}</span>
+        <span class="cs-scan-delta"${annule ? ' style="text-decoration:line-through"' : ''}>${s.stored_value_avant} → ${s.stored_value_apres} pts</span>
+        <span class="cs-scan-date">${dateStr}${lieu ? ' · ' + esc(lieu) : ''}${annule ? ' · ' + t('scanAnnule') : ''}</span>
       </div>
     </div>`;
   }).join('');
