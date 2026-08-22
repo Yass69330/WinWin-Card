@@ -56,8 +56,8 @@ router.get('/me/stats', authMarchand, asyncHandler(async (req, res) => {
 
   const [{ count: totalClients }, { count: scansAujourdhui }, { data: scansRecent }] = await Promise.all([
     supabase.from('clients').select('*', { count: 'exact', head: true }).eq('marchand_id', req.marchandId).is('deleted_at', null),
-    supabase.from('scans').select('*', { count: 'exact', head: true }).eq('marchand_id', req.marchandId).gte('date_scan', new Date().toISOString().split('T')[0]),
-    supabase.from('scans').select('client_id').eq('marchand_id', req.marchandId).gte('date_scan', thirtyDaysAgo),
+    supabase.from('scans').select('*', { count: 'exact', head: true }).eq('marchand_id', req.marchandId).gte('date_scan', new Date().toISOString().split('T')[0]).is('annule_le', null),
+    supabase.from('scans').select('client_id').eq('marchand_id', req.marchandId).gte('date_scan', thirtyDaysAgo).is('annule_le', null),
   ]);
 
   const ids = (scansRecent || []).map(s => s.client_id);

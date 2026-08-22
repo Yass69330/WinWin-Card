@@ -184,7 +184,7 @@ router.get('/:id([0-9a-f\\-]{36})', authMarchand, asyncHandler(async (req, res) 
 
   const { data: scans, error: errScans } = await supabase
     .from('scans')
-    .select('id, date_scan, stored_value_avant, stored_value_apres, point_de_vente_id, points_de_vente(nom)')
+    .select('id, date_scan, stored_value_avant, stored_value_apres, point_de_vente_id, points_de_vente(nom), annule_le')
     .eq('client_id', id)
     .order('date_scan', { ascending: false })
     .limit(10);
@@ -324,3 +324,6 @@ router.get('/admin/all', authAdmin, asyncHandler(async (req, res) => {
 }));
 
 module.exports = router;
+// Réutilisé par l'annulation de scan (scan.js) pour resync le pass après
+// restauration du solde — Apple + Google, message client cohérent.
+module.exports.syncPassAfterAdjustment = syncPassAfterAdjustment;

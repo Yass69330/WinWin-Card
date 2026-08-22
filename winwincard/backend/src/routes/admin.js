@@ -31,7 +31,7 @@ router.get('/marchands', authAdmin, asyncHandler(async (req, res) => {
       .select('id, nom, slug, forfait, actif, email_contact, couleur_fond, logo_url, max_value, type_programme, created_at')
       .order('created_at', { ascending: false }),
     supabase.from('clients').select('marchand_id').is('deleted_at', null),
-    supabase.from('scans').select('marchand_id').gte('date_scan', new Date().toISOString().split('T')[0]),
+    supabase.from('scans').select('marchand_id').gte('date_scan', new Date().toISOString().split('T')[0]).is('annule_le', null),
     // Boutiques ACTIVES par marchand = base de facturation (multi-boutiques).
     supabase.from('points_de_vente').select('marchand_id').is('deleted_at', null),
   ]);
@@ -343,7 +343,7 @@ router.get('/stats', authAdmin, asyncHandler(async (req, res) => {
   ] = await Promise.all([
     supabase.from('marchands').select('*', { count: 'exact', head: true }).eq('actif', true),
     supabase.from('clients').select('*',   { count: 'exact', head: true }).is('deleted_at', null),
-    supabase.from('scans').select('*',     { count: 'exact', head: true }),
+    supabase.from('scans').select('*',     { count: 'exact', head: true }).is('annule_le', null),
   ]);
 
   res.json({ marchands_actifs: marchandsActifs, total_clients: totalClients, total_scans: totalScans });

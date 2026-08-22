@@ -311,7 +311,7 @@ router.get('/', authScanner, asyncHandler(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 100, 200);
   let query = supabase
     .from('scans')
-    .select('id, date_scan, stored_value_avant, stored_value_apres, clients(id, prenom)')
+    .select('id, date_scan, stored_value_avant, stored_value_apres, annule_le, clients(id, prenom)')
     .eq('marchand_id', req.marchandId);
   // Token boutique → historique scopé à SA boutique. Token marchand → tout le
   // marchand (comportement actuel, mono-site et dashboard).
@@ -324,6 +324,43 @@ router.get('/', authScanner, asyncHandler(async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
   res.json(data ?? []);
+}));
+
+// POST /api/scan/:id/annuler — annuler le dernier scan D'UN CLIENT (étape 5).
+// Délègue à la fonction atomique annuler_scan (verrou par carte, restaure le
+// solde, marque le scan). Refus propre (409) si ce n'est pas le dernier scan
+// actif du client, si le solde est incohérent, ou s'il est déjà annulé.
+router.post('/:id/annuler', authScanner, asyncHandler(async (req, res) => {
+  // Token boutique : ne peut annuler QUE les scans de SA boutique (isolation
+  // réseau, cohérent avec l'étape 3). Contrôle d'autorisation ; la RPC revalide
+  // l'intégrité de façon atomique juste après.
+  if (req.scannerRole === 'scanner' && req.pointDeVenteId) {
+    const { data: sc } = await supabase
+      .from('scans').select('point_de_vente_id')
+      .eq('id', req.params.id).eq('marchand_id', req.marchandId).maybeSingle();
+    if (!sc || sc.point_de_vente_id !== req.pointDeVenteId) {
+      return res.status(403).json({ ok: false, reason: 'autre_boutique' });
+    }
+  }
+
+  const { data, error } = await supabase.rpc('annuler_scan', {
+    p_scan_id: req.params.id,
+    p_marchand_id: req.marchandId,
+  });
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data || data.ok !== true) {
+    return res.status(409).json({ ok: false, reason: (data && data.reason) || 'refus' });
+  }
+
+  // Solde restauré → resync du pass (Apple + Google). Réutilise le chemin de
+  // l'ajustement manuel pour un message client cohérent. Fire-and-forget.
+  const { data: client } = await supabase
+    .from('clients').select('prenom').eq('id', data.client_id).single();
+  const { syncPassAfterAdjustment } = require('./clients');
+  syncPassAfterAdjustment(data.serial, req.marchandId, client?.prenom || '', data.stored_value)
+    .catch(e => console.error('[scan] annulation resync:', e.message));
+
+  res.json({ ok: true, stored_value: data.stored_value });
 }));
 
 module.exports = router;
