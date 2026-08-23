@@ -1,0 +1,29 @@
+-- ⚠️⚠️⚠️ NEUTRALISÉE — CE FICHIER NE CRÉE PLUS AUCUNE FONCTION ⚠️⚠️⚠️
+--
+-- Ce fichier a introduit, le soir de l'incident, la surcharge 4-arg
+-- increment_stored_value(uuid, integer, integer, text) via un CREATE OR
+-- REPLACE. C'est précisément ce CREATE qui a "chargé l'arme" : sa 4ᵉ colonne
+-- en DEFAULT ('stamps') rendait un appel 3-arg ambigu vis-à-vis de la 3-arg
+-- déjà présente → "42725: function is not unique" → risque de 500 sur tout
+-- scan de production. Laisser ce CREATE ici, c'est risquer de recréer
+-- l'ambiguïté à chaque rejeu partiel ou hors séquence.
+--
+-- Le CREATE a donc été RETIRÉ de ce fichier. La SEULE source de vérité de la
+-- fonction est désormais :
+--     database/migration_023_drop_legacy_overloads.sql
+-- qui droppe d'abord toutes les signatures héritées PUIS pose l'unique 4-arg
+-- canonique — jamais un doublon. Rejouer ce fichier 022 est maintenant un
+-- no-op total. NE RÉINTRODUIS JAMAIS de CREATE increment_stored_value ici.
+--
+-- ── Logique métier introduite ici (historique, portée par 023 désormais) ──
+-- Report du surplus en mode points (reward + reset) :
+--   • Mode tampons : quand le solde est déjà au seuil avant le scan, reset
+--     strict à 0 (v_apres := 0). Inchangé.
+--   • Mode points : ce même scan (dit "de redemption") ne repart plus à 0 mais
+--     reporte le surplus → v_apres := v_avant - p_max_value + p_amount
+--     (ex. solde 530, seuil 500, +100 → 130). is_reset reste TRUE (pas de
+--     second reward), seule la valeur change, plus jamais 0.
+--   • Le reset du scan GAGNANT reste toujours différé d'un scan (le solde reste
+--     au-dessus du seuil jusqu'au scan suivant → fond doré Apple préservé au
+--     prochain rafraîchissement asynchrone du pass).
+-- Le corps exact et à jour de la fonction se trouve dans migration_023.

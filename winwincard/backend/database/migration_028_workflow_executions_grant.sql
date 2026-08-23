@@ -1,0 +1,29 @@
+-- Migration 028 : GRANT service_role sur workflow_executions (dédup workflows)
+--
+-- ── Le bug ─────────────────────────────────────────────────────────────────
+-- workflow_executions (créée en migration_010) n'a JAMAIS reçu de GRANT DML
+-- pour service_role — contrairement à notification_logs (migration_006, qui a
+-- son grant et fonctionne). Le backend utilise la clé service_role via
+-- PostgREST : sans SELECT/INSERT, la lecture ET l'écriture de la table de
+-- déduplication échouaient EN SILENCE (supabase-js ne rejette jamais — §3.9,
+-- et cron.js ne vérifiait pas l'erreur de l'insert).
+--
+-- Conséquence : la table est restée VIDE depuis sa création (0 ligne). La
+-- déduplication des workflows (inactive / near_reward / birthday) lisait donc
+-- toujours une table vide → aucun dédoublonnage → chaque client éligible
+-- re-notifié à CHAQUE run nocturne. La purge (DELETE) échouait aussi.
+-- Diagnostic prouvé en base le 2026-07-2x : service_role n'avait que
+-- REFERENCES/TRIGGER/TRUNCATE sur workflow_executions, pas la DML.
+--
+-- ── Le fix ─────────────────────────────────────────────────────────────────
+-- Accorder la DML à service_role (miroir exact de migration_006 pour
+-- notification_logs). Le code de cron.js est DÉJÀ correct : dès le grant posé,
+-- l'insert persiste et la lecture voit les tickets → la dédup fonctionne
+-- (limite 7 jours pour inactive/near_reward ; 1×/an pour birthday), sans
+-- toucher au code. Effet dès le run nocturne suivant (08:00 UTC).
+--
+-- Least privilege : seul le backend (service_role) touche cette table interne ;
+-- pas de grant à authenticated/anon (rien côté client public ne la lit).
+-- Rejouable sans risque.
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.workflow_executions TO service_role;

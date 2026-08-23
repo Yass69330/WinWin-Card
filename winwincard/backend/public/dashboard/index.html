@@ -1,0 +1,1911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Dashboard">
+  <link rel="manifest" href="/dashboard/manifest.json">
+  <link rel="apple-touch-icon" href="/dashboard/icon-192.png">
+  <title>WinWin Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #0f172a;
+      --surface:    #1e293b;
+      --surface2:   #273548;
+      --border:     #334155;
+      --accent:     #6366f1;
+      --accent-dim: rgba(99,102,241,.15);
+      --text:       #f1f5f9;
+      --muted:      #94a3b8;
+      --success:    #22c55e;
+      --warning:    #f59e0b;
+      --error:      #ef4444;
+      --radius:     14px;
+      --nav-h:      64px;
+      --header-h:   56px;
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased; }
+
+    #app { height: 100%; }
+    .screen { display: none; height: 100%; flex-direction: column; }
+    .screen.active { display: flex; }
+
+    /* ═══════════════ LOGIN ═══════════════ */
+    #screen-login { justify-content: center; align-items: center; padding: 24px; gap: 28px; overflow-y: auto; }
+    .login-brand { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .login-logo { width: 68px; height: 68px; background: var(--accent); border-radius: 18px; display: flex; align-items: center; justify-content: center; font-size: 32px; }
+    .login-title { font-size: 22px; font-weight: 700; }
+    .login-sub   { font-size: 13px; color: var(--muted); text-align: center; }
+    .login-form { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 14px; }
+
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .field label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .field input, .field textarea {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 11px;
+      color: var(--text); font-size: 16px; padding: 13px 15px; outline: none;
+      transition: border-color .15s; -webkit-appearance: none; font-family: inherit;
+    }
+    .field input:focus, .field textarea:focus { border-color: var(--accent); }
+    .field textarea { resize: vertical; min-height: 100px; }
+
+    .char-count { font-size: 11px; color: var(--muted); text-align: right; margin-top: 2px; }
+    .char-count.over { color: var(--error); }
+
+    .btn {
+      padding: 14px 20px; border-radius: 11px; font-size: 15px; font-weight: 600;
+      border: none; cursor: pointer; transition: opacity .15s, transform .1s;
+      -webkit-tap-highlight-color: transparent;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn-primary  { background: var(--accent); color: #fff; }
+    .btn-primary:disabled { opacity: .5; pointer-events: none; }
+    .btn-danger   { background: rgba(239,68,68,.1); color: var(--error); border: 1px solid rgba(239,68,68,.2); }
+    .btn-ghost    { background: transparent; color: var(--muted); }
+    .btn-outline  { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-sm       { padding: 8px 14px; font-size: 13px; border-radius: 8px; }
+
+    .alert { border-radius: 10px; padding: 12px 14px; font-size: 14px; }
+    .alert-error   { background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.25); color: var(--error); }
+    .alert-success { background: rgba(34,197,94,.1); border: 1px solid rgba(34,197,94,.25); color: var(--success); }
+    .alert-info    { background: var(--accent-dim); border: 1px solid rgba(99,102,241,.25); color: #a5b4fc; font-size: 13px; }
+
+    /* ═══════════════ DASHBOARD ═══════════════ */
+    #screen-dashboard { background: var(--bg); }
+
+    .dash-header {
+      height: var(--header-h); flex-shrink: 0;
+      display: flex; align-items: center; padding: 0 16px;
+      background: var(--surface); border-bottom: 1px solid var(--border); gap: 10px;
+    }
+    .dash-header-brand { font-size: 16px; font-weight: 700; flex: 1; }
+    .dash-header-nom   { font-size: 13px; color: var(--muted); max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .forfait-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; letter-spacing: .05em; text-transform: uppercase; flex-shrink: 0; }
+    .forfait-badge[data-plan="basic"]    { background: rgba(148,163,184,.2); color: var(--muted); }
+    .forfait-badge[data-plan="pro"]      { background: var(--accent-dim); color: #a5b4fc; }
+    .forfait-badge[data-plan="pro_plus"] { background: rgba(251,191,36,.15); color: #fbbf24; }
+    .notif-quota-bar { font-size: 13px; color: var(--muted); margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+    .notif-quota-bar.warning { color: var(--warning); }
+    .notif-quota-bar.overlimit { color: var(--error); }
+    .btn-icon { background: none; border: none; cursor: pointer; color: var(--muted); padding: 6px; border-radius: 8px; font-size: 18px; -webkit-tap-highlight-color: transparent; }
+    .btn-icon:active { background: var(--surface2); }
+
+    .dash-content { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: calc(var(--nav-h) + 8px); }
+
+    .tab-panel { display: none; padding: 16px; }
+    .rs-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .rs-table th, .rs-table td { padding:8px 10px; text-align:right; border-bottom:1px solid rgba(0,0,0,.06); font-variant-numeric:tabular-nums; }
+    .rs-table th:first-child, .rs-table td:first-child { text-align:left; }
+    .rs-table th { cursor:pointer; user-select:none; color:var(--muted); font-weight:600; white-space:nowrap; }
+    .rs-table th:hover { color:var(--accent); }
+    .tab-panel.active { display: block; }
+
+    .dash-nav {
+      height: var(--nav-h); flex-shrink: 0;
+      display: flex; background: var(--surface); border-top: 1px solid var(--border);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .nav-btn {
+      flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 3px; background: none; border: none; cursor: pointer; color: var(--muted);
+      font-size: 10px; font-weight: 500; -webkit-tap-highlight-color: transparent; transition: color .15s;
+    }
+    .nav-btn .nav-icon { font-size: 18px; line-height: 1; }
+    .nav-btn.active { color: var(--accent); }
+
+    /* ═══════════════ CARDS / STATS ═══════════════ */
+    .section-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 0 0 10px; }
+
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+    .stat-card { background: var(--surface); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 4px; }
+    .stat-icon  { font-size: 22px; margin-bottom: 4px; }
+    .stat-value { font-size: 28px; font-weight: 800; line-height: 1; }
+    .stat-label { font-size: 12px; color: var(--muted); }
+
+    .qr-card { background: var(--surface); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .qr-card img { width: 180px; height: 180px; border-radius: 10px; background: #fff; }
+    .qr-url { font-size: 12px; color: var(--muted); word-break: break-all; text-align: center; }
+    .qr-actions { display: flex; gap: 8px; width: 100%; }
+    .qr-actions .btn { flex: 1; }
+
+    /* ═══════════════ CLIENTS ═══════════════ */
+    .search-wrap { position: relative; margin-bottom: 12px; }
+    .search-input { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 11px; color: var(--text); font-size: 15px; padding: 11px 14px 11px 38px; outline: none; -webkit-appearance: none; }
+    .search-input:focus { border-color: var(--accent); }
+    .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; font-size: 16px; }
+    .list-meta { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+
+    .client-card { background: var(--surface); border-radius: var(--radius); padding: 14px; display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+    .client-avatar { width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; flex-shrink: 0; color: #fff; }
+    .client-info { flex: 1; min-width: 0; }
+    .client-name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .client-progress { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+    .mini-bar-wrap { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+    .mini-bar { height: 100%; background: var(--accent); border-radius: 2px; transition: width .3s; }
+    .client-pts { font-size: 11px; color: var(--muted); white-space: nowrap; }
+    .client-full { color: var(--warning); font-weight: 600; }
+    .btn-delete { flex-shrink: 0; color: var(--error); background: none; border: none; font-size: 18px; padding: 6px; cursor: pointer; opacity: .6; border-radius: 8px; -webkit-tap-highlight-color: transparent; }
+    .btn-delete:active { opacity: 1; background: rgba(239,68,68,.1); }
+
+    .skeleton { background: var(--surface2); border-radius: 8px; animation: shimmer 1.4s ease-in-out infinite; }
+    @keyframes shimmer { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+    .skeleton-card { height: 70px; border-radius: var(--radius); margin-bottom: 8px; }
+
+    /* ═══════════════ HISTORIQUE SCANS ═══════════════ */
+    .scan-entry { background: var(--surface); border-radius: var(--radius); padding: 12px 14px; display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+    .scan-avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; flex-shrink: 0; color: #fff; }
+    .scan-info { flex: 1; min-width: 0; }
+    .scan-name { font-size: 14px; font-weight: 600; }
+    .scan-time { font-size: 11px; color: var(--muted); }
+    .scan-delta { flex-shrink: 0; text-align: right; }
+    .scan-pts { font-size: 14px; font-weight: 700; }
+
+    .tab-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .tab-header h2 { font-size: 17px; font-weight: 700; }
+    .btn-refresh { background: none; border: none; color: var(--muted); font-size: 16px; cursor: pointer; padding: 4px; -webkit-tap-highlight-color: transparent; }
+
+    /* ═══════════════ SCANNER TAB ═══════════════ */
+    #tab-scanner {
+      padding: 0;
+      position: relative;
+      min-height: calc(100vh - var(--header-h) - var(--nav-h));
+      display: none;
+      overflow: hidden;
+    }
+    #tab-scanner.active { display: block; }
+
+    #sc-camera-view {
+      position: absolute; inset: 0;
+      background: #000;
+    }
+    #sc-video { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+    .sc-overlay {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      pointer-events: none;
+    }
+    .sc-frame {
+      width: 220px; height: 220px;
+      position: relative;
+    }
+    .sc-frame::before, .sc-frame::after,
+    .sc-frame > span::before, .sc-frame > span::after {
+      content: ''; position: absolute;
+      width: 28px; height: 28px;
+      border-color: #fff; border-style: solid;
+    }
+    .sc-frame::before  { top: 0; left: 0;   border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
+    .sc-frame::after   { top: 0; right: 0;  border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
+    .sc-frame > span::before { bottom: 0; left: 0;  border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
+    .sc-frame > span::after  { bottom: 0; right: 0; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
+    .sc-line {
+      position: absolute; left: 0; right: 0; height: 2px;
+      background: linear-gradient(to right, transparent, var(--accent), transparent);
+      animation: sc-scan 2s ease-in-out infinite;
+    }
+    @keyframes sc-scan { 0%, 100% { top: 10%; } 50% { top: 86%; } }
+    .sc-hint { margin-top: 18px; font-size: 13px; color: rgba(255,255,255,.65); text-align: center; }
+    .sc-status {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: rgba(0,0,0,.75); color: #fff; padding: 10px 20px;
+      border-radius: 20px; font-size: 14px; display: none; white-space: nowrap; pointer-events: none;
+    }
+    .sc-btn-manual {
+      position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2);
+      color: #fff; padding: 10px 22px; border-radius: 20px; font-size: 14px;
+      cursor: pointer; -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Result sheet — bottom overlay */
+    .sc-result-sheet {
+      display: none;
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: var(--surface);
+      border-radius: 20px 20px 0 0;
+      padding: 16px 16px max(24px, env(safe-area-inset-bottom));
+      flex-direction: column; gap: 14px;
+      max-height: 72%;
+      overflow-y: auto;
+    }
+    .sc-result-sheet.visible { display: flex; }
+
+    .sc-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 4px; flex-shrink: 0; }
+    .sc-result-header { display: flex; align-items: center; gap: 12px; }
+    .sc-result-avatar { width: 44px; height: 44px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; flex-shrink: 0; color: #fff; }
+    .sc-result-name   { font-size: 18px; font-weight: 700; }
+    .sc-result-serial { font-size: 11px; color: var(--muted); font-family: monospace; }
+
+    .sc-progress-section { display: flex; flex-direction: column; gap: 8px; }
+    .sc-progress-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+    .sc-progress-value { font-size: 24px; font-weight: 800; }
+    .sc-progress-bar-wrap { background: var(--border); border-radius: 8px; height: 8px; overflow: hidden; }
+    .sc-progress-bar { height: 100%; border-radius: 8px; background: var(--accent); transition: width .5s ease; }
+    .sc-dots-wrap { display: flex; gap: 6px; flex-wrap: wrap; }
+    .sc-dot { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 11px; }
+    .sc-dot.filled { background: var(--accent); border-color: var(--accent); }
+    .sc-dot.filled::after { content: '✓'; color: #fff; font-size: 10px; }
+
+    .sc-reward-banner { background: linear-gradient(135deg, #f59e0b, #ef4444); border-radius: 12px; padding: 14px; display: flex; align-items: center; gap: 12px; }
+    .sc-reset-banner  { background: var(--accent-dim); border: 1px solid rgba(99,102,241,.3); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: #a5b4fc; }
+    .sc-result-error  { background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.2); border-radius: 10px; padding: 14px; color: var(--error); font-size: 14px; }
+
+    /* ═══════════════ NOTIFICATIONS ═══════════════ */
+    .notif-form { display: flex; flex-direction: column; gap: 14px; }
+    .send-result { margin-top: 4px; }
+
+    .notif-log-entry { background: var(--surface); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 5px; }
+    .notif-log-msg  { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .notif-log-meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+
+    /* ═══════════════ EMPTY STATES ═══════════════ */
+    .empty { text-align: center; padding: 40px 20px; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .empty-icon  { font-size: 36px; }
+    .empty-title { font-size: 16px; font-weight: 600; color: var(--text); }
+    .empty-sub   { font-size: 13px; }
+
+    /* ═══════════════ MODALS ═══════════════ */
+    .modal-overlay { display: none; position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.65); align-items: flex-end; }
+    .modal-overlay.open { display: flex; }
+    .modal-sheet { background: var(--surface); border-radius: 24px 24px 0 0; padding: 20px 20px 32px; padding-bottom: max(32px, env(safe-area-inset-bottom)); width: 100%; display: flex; flex-direction: column; gap: 14px; }
+    .modal-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 4px; }
+    .modal-title { font-size: 17px; font-weight: 700; }
+    .modal-body  { font-size: 14px; color: var(--muted); line-height: 1.5; }
+
+    .spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .divider { height: 1px; background: var(--border); margin: 4px 0 12px; }
+
+    /* ═══ FICHE CLIENT ═══ */
+    .modal-sheet-client { padding:0; gap:0; max-height:88vh; overflow:hidden; }
+    .cs-header { display:flex; align-items:center; gap:12px; padding:14px 16px 12px; flex-shrink:0; border-bottom:1px solid var(--border); }
+    .cs-avatar-lg { width:48px; height:48px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:700; flex-shrink:0; color:#fff; }
+    .cs-name { font-size:17px; font-weight:700; }
+    .cs-since { font-size:12px; color:var(--muted); margin-top:2px; }
+    .cs-body { flex:1; overflow-y:auto; padding:14px 16px 8px; -webkit-overflow-scrolling:touch; display:flex; flex-direction:column; gap:12px; }
+    .cs-pts-box { background:var(--surface2); border-radius:12px; padding:14px; }
+    .cs-pts-row { display:flex; align-items:baseline; gap:6px; margin-bottom:10px; }
+    .cs-pts-val { font-size:38px; font-weight:800; line-height:1; }
+    .cs-pts-denom { font-size:16px; color:var(--muted); }
+    .cs-bar-wrap2 { height:6px; background:var(--border); border-radius:3px; margin-bottom:8px; overflow:hidden; }
+    .cs-bar2 { height:100%; background:var(--accent); border-radius:3px; transition:width .4s; }
+    .cs-dots2 { display:flex; gap:5px; flex-wrap:wrap; }
+    .cs-dot2 { width:22px; height:22px; border-radius:50%; background:var(--border); }
+    .cs-dot2.on { background:var(--accent); }
+    .cs-actions2 { display:flex; gap:8px; }
+    .cs-actions2 .btn { flex:1; }
+    .cs-section-lbl { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+    .cs-scan-row { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); }
+    .cs-scan-row:last-child { border-bottom:none; }
+    .cs-scan-icon { font-size:15px; width:26px; text-align:center; flex-shrink:0; }
+    .cs-scan-delta { font-size:14px; font-weight:600; display:block; }
+    .cs-scan-date { font-size:12px; color:var(--muted); display:block; }
+    .cs-no-scans { color:var(--muted); font-size:13px; text-align:center; padding:16px 0; }
+    .cs-footer { flex-shrink:0; padding:12px 16px; border-top:1px solid var(--border); padding-bottom:max(12px,env(safe-area-inset-bottom)); }
+    .cs-contact-box { background:var(--surface2); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
+    .cs-contact-row { display:flex; align-items:center; gap:10px; font-size:14px; }
+    .cs-contact-icon { font-size:16px; width:22px; flex-shrink:0; }
+    .cs-contact-link { color:var(--accent); text-decoration:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .cs-contact-link:hover { text-decoration:underline; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════════════════ LOGIN ═══════════════════════ -->
+<div id="screen-login" class="screen active">
+  <div class="login-brand">
+    <div class="login-logo">📊</div>
+    <div class="login-title" data-i18n="pageTitle">WinWin Dashboard</div>
+    <div class="login-sub" data-i18n="loginSub">Manage your loyalty program</div>
+  </div>
+  <form class="login-form" id="login-form" onsubmit="return false">
+    <div class="field">
+      <label for="in-slug" data-i18n="merchantId">Merchant ID (slug)</label>
+      <input id="in-slug" type="text" placeholder="cafe-le-central" autocorrect="off" autocapitalize="none" autocomplete="username">
+    </div>
+    <div class="field">
+      <label for="in-pwd" data-i18n="password">Password</label>
+      <input id="in-pwd" type="password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <div id="login-err" class="alert alert-error" style="display:none"></div>
+    <button type="submit" class="btn btn-primary" id="btn-login" data-i18n="signIn">Sign in</button>
+  </form>
+</div>
+
+<!-- ═══════════════════════ DASHBOARD ═══════════════════════ -->
+<div id="screen-dashboard" class="screen">
+
+  <header class="dash-header">
+    <span style="font-size:20px">🎯</span>
+    <span class="dash-header-brand">WinWin</span>
+    <span class="dash-header-nom" id="header-nom">–</span>
+    <span class="forfait-badge" id="forfait-badge" data-plan="pro" style="display:none"></span>
+    <button class="btn-icon" id="btn-logout" title="Sign out" data-i18n-title="signOut">⏏</button>
+  </header>
+
+  <div class="dash-content">
+
+    <!-- ── Aperçu ── -->
+    <div id="tab-overview" class="tab-panel active">
+      <div class="stats-grid" id="stats-grid">
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card" style="grid-column:1/-1"></div>
+      </div>
+      <p class="section-title" data-i18n="qrSectionTitle">QR code landing page</p>
+      <div class="qr-card" id="qr-section">
+        <div class="skeleton" style="width:180px;height:180px;border-radius:10px"></div>
+        <div class="skeleton" style="width:60%;height:12px;border-radius:6px"></div>
+      </div>
+      <!-- ── Points de vente (visible uniquement si le réseau a ≥ 1 boutique) ── -->
+      <div id="pdv-section" style="display:none">
+        <p class="section-title" data-i18n="pdvSectionTitle">Points de vente</p>
+        <div class="qr-card" id="pdv-card" style="align-items:stretch;gap:6px"></div>
+      </div>
+    </div>
+
+    <!-- ── Réseau (groupe) — visible seulement si ≥ 1 boutique ── -->
+    <div id="tab-reseau" class="tab-panel"></div>
+
+    <!-- ── Clients ── -->
+    <div id="tab-clients" class="tab-panel">
+      <div class="tab-header">
+        <h2 data-i18n="clientsTitle">Clients</h2>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn btn-outline btn-sm" id="btn-export-csv" style="display:none" title="Export CSV" data-i18n="csvBtn" data-i18n-title="exportCsv">⬇ CSV</button>
+          <button class="btn-refresh" id="btn-refresh-clients" title="Refresh" data-i18n-title="refresh">↺</button>
+        </div>
+      </div>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input class="search-input" id="search-clients" type="search" placeholder="Search by first name…" data-i18n-ph="searchClients">
+      </div>
+      <div id="clients-meta" class="list-meta"></div>
+      <div id="clients-list"></div>
+    </div>
+
+    <!-- ── Historique scans ── -->
+    <div id="tab-scans" class="tab-panel">
+      <div class="tab-header">
+        <h2 data-i18n="historyTitle">History</h2>
+        <button class="btn-refresh" id="btn-refresh-scans" title="Refresh" data-i18n-title="refresh">↺</button>
+      </div>
+      <div id="scans-list"></div>
+    </div>
+
+    <!-- ── Scanner ── -->
+    <div id="tab-scanner" class="tab-panel">
+      <div id="sc-camera-view">
+        <video id="sc-video" playsinline autoplay muted></video>
+        <canvas id="sc-canvas" hidden></canvas>
+        <div class="sc-overlay">
+          <div class="sc-frame"><span></span><div class="sc-line"></div></div>
+          <div class="sc-hint" data-i18n="scanHint">Point at the client's pass QR code</div>
+          <div id="sc-status" class="sc-status"></div>
+        </div>
+        <button class="sc-btn-manual" id="sc-btn-manual" data-i18n="manualEntry">Manual entry</button>
+      </div>
+
+      <!-- Result sheet -->
+      <div id="sc-result-sheet" class="sc-result-sheet">
+        <div class="sc-handle"></div>
+        <div class="sc-result-header" id="sc-result-header">
+          <div class="sc-result-avatar" id="sc-avatar">?</div>
+          <div>
+            <div class="sc-result-name"   id="sc-name">–</div>
+            <div class="sc-result-serial" id="sc-serial"></div>
+          </div>
+        </div>
+        <div id="sc-progress-section" class="sc-progress-section">
+          <div class="sc-progress-label"><span data-i18n="points">Points</span><span id="sc-fraction">–</span></div>
+          <div class="sc-progress-value" id="sc-value">–</div>
+          <div class="sc-progress-bar-wrap"><div class="sc-progress-bar" id="sc-bar" style="width:0%"></div></div>
+          <div class="sc-dots-wrap" id="sc-dots"></div>
+        </div>
+        <div id="sc-reward-banner" class="sc-reward-banner" style="display:none">
+          <div style="font-size:28px">🎉</div>
+          <div>
+            <div style="font-size:15px;font-weight:700" data-i18n="rewardUnlocked">Reward unlocked!</div>
+            <div id="sc-reward-sub" style="font-size:13px;opacity:.85"></div>
+          </div>
+        </div>
+        <div id="sc-reset-banner" class="sc-reset-banner" style="display:none" data-i18n="counterReset">↩️ Counter reset</div>
+        <div id="sc-error" class="sc-result-error" style="display:none"></div>
+        <!-- Désambiguïsation collision backup code : boutons prénom cliquables -->
+        <div id="sc-candidates" style="display:none;flex-direction:column;gap:10px;margin-bottom:8px">
+          <div id="sc-candidates-label" style="font-size:13px;color:var(--muted);text-align:center"></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button class="btn btn-primary" id="sc-btn-rescan" data-i18n="nextScan">Next scan</button>
+          <button class="btn btn-ghost"   id="sc-btn-manual-after" data-i18n="manualEntry">Manual entry</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Notifications ── -->
+    <div id="tab-notifs" class="tab-panel">
+      <div class="tab-header"><h2 data-i18n="pushNotifs">Push notifications</h2></div>
+      <div class="alert alert-info" style="margin-bottom:16px" data-i18n="notifInfo">
+        📱 Sent via Apple &amp; Google Wallet to registered devices.
+      </div>
+      <div class="notif-quota-bar" id="notif-quota" style="display:none">
+        <span id="notif-quota-text"></span>
+      </div>
+      <form class="notif-form" id="notif-form" onsubmit="return false">
+        <div class="field">
+          <label for="notif-msg" data-i18n="message">Message</label>
+          <textarea id="notif-msg" maxlength="500" placeholder="E.g.: Come enjoy 20% off all menu items this weekend!" data-i18n-ph="notifPlaceholder"></textarea>
+          <div class="char-count" id="cc-msg">0 / 500</div>
+        </div>
+        <button type="submit" class="btn btn-primary" id="btn-send-notif" data-i18n="sendNotif">Send notification</button>
+        <div id="notif-result" class="send-result"></div>
+      </form>
+
+      <div class="divider" style="margin-top:8px"></div>
+      <div class="tab-header" style="margin-bottom:10px">
+        <h2 style="font-size:15px;color:var(--muted)" data-i18n="historyTitle">History</h2>
+      </div>
+      <div id="notif-history-list"></div>
+    </div>
+
+  </div><!-- /dash-content -->
+
+  <nav class="dash-nav">
+    <button class="nav-btn active" data-tab="overview">
+      <span class="nav-icon">📊</span><span data-i18n="navOverview">Overview</span>
+    </button>
+    <button class="nav-btn" data-tab="reseau" id="nav-reseau" style="display:none">
+      <span class="nav-icon">🏪</span><span data-i18n="navReseau">Network</span>
+    </button>
+    <button class="nav-btn" data-tab="clients">
+      <span class="nav-icon">👥</span><span data-i18n="navClients">Clients</span>
+    </button>
+    <button class="nav-btn" data-tab="scans">
+      <span class="nav-icon">📋</span><span data-i18n="navScans">Scans</span>
+    </button>
+    <button class="nav-btn" data-tab="scanner">
+      <span class="nav-icon">📷</span><span data-i18n="navScanner">Scanner</span>
+    </button>
+    <button class="nav-btn" data-tab="notifs" data-min-plan="pro">
+      <span class="nav-icon">🔔</span><span data-i18n="navNotifs">Notifs</span>
+    </button>
+  </nav>
+
+</div><!-- /screen-dashboard -->
+
+</div><!-- /app -->
+
+<!-- ── Modal: supprimer client ── -->
+<div id="modal-delete" class="modal-overlay">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" data-i18n="deleteClientTitle">Delete this client?</div>
+    <div class="modal-body" id="modal-delete-body">
+      This action is <strong>irreversible</strong>. All data will be erased (GDPR).
+    </div>
+    <button class="btn btn-danger" id="btn-confirm-delete" data-i18n="deletePermanently">Delete permanently</button>
+    <button class="btn btn-ghost"  id="btn-cancel-delete" data-i18n="cancel">Cancel</button>
+  </div>
+</div>
+
+<!-- ── Modal: saisie manuelle scanner ── -->
+<div id="modal-scan-manual" class="modal-overlay">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" data-i18n="manualEntry">Manual entry</div>
+    <div class="field">
+      <label for="sc-manual-input" data-i18n="passSerial">Pass serial number</label>
+      <input id="sc-manual-input" type="text" placeholder="serial-xxxxx" autocorrect="off" autocapitalize="none">
+      <div class="field-hint" style="font-size:12px;color:var(--muted);margin-top:6px" data-i18n="manualHint">Paste the full pass ID, or type the 6-character backup code from the back of the pass</div>
+    </div>
+    <div id="sc-manual-error" class="alert alert-error" style="display:none"></div>
+    <button class="btn btn-primary" id="sc-manual-submit" data-i18n="submit">Submit</button>
+    <button class="btn btn-ghost"   id="sc-manual-cancel" data-i18n="cancel">Cancel</button>
+  </div>
+</div>
+
+<!-- ── Modal: points à ajouter (mode "points") ── -->
+<div id="modal-sc-points" class="modal-overlay">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" data-i18n="pointsToAdd">Points to add</div>
+    <div class="field">
+      <label for="sc-points-input" data-i18n="points">Points</label>
+      <input id="sc-points-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" autocomplete="off" style="font-size:24px;text-align:center">
+      <div class="field-hint" style="font-size:12px;color:var(--muted);margin-top:6px" data-i18n="pointsToAddSub">Enter the number of points for this visit</div>
+    </div>
+    <div id="sc-points-error" class="alert alert-error" style="display:none"></div>
+    <button class="btn btn-primary" id="sc-points-submit" data-i18n="submit">Submit</button>
+    <button class="btn btn-ghost"   id="sc-points-cancel" data-i18n="cancel">Cancel</button>
+  </div>
+</div>
+
+<!-- ── Sheet: Fiche client ── -->
+<div id="modal-client" class="modal-overlay">
+  <div class="modal-sheet modal-sheet-client">
+    <div class="modal-handle" style="margin:14px auto 0;flex-shrink:0"></div>
+    <div class="cs-header">
+      <div class="cs-avatar-lg" id="cs-avatar">?</div>
+      <div style="flex:1;min-width:0">
+        <div class="cs-name" id="cs-name">–</div>
+        <div class="cs-since" id="cs-since"></div>
+      </div>
+      <button class="btn-icon" id="cs-close">✕</button>
+    </div>
+    <div class="cs-body">
+      <div class="cs-pts-box">
+        <div class="cs-pts-row">
+          <span class="cs-pts-val" id="cs-pts">–</span>
+          <span class="cs-pts-denom" id="cs-pts-max">/ –</span>
+          <span id="cs-reward-badge" style="display:none;font-size:22px;margin-left:4px">🎉</span>
+        </div>
+        <div class="cs-bar-wrap2"><div class="cs-bar2" id="cs-prog-bar"></div></div>
+        <div class="cs-dots2" id="cs-prog-dots"></div>
+      </div>
+      <div class="cs-actions2">
+        <button class="btn btn-outline btn-sm" id="cs-btn-rename" data-i18n="nameBtn">✏️ Name</button>
+        <button class="btn btn-outline btn-sm" id="cs-btn-adjust" data-i18n="pointsBtn">⚖️ Points</button>
+      </div>
+      <div id="cs-contact"></div>
+      <div>
+        <div class="cs-section-lbl" style="margin-bottom:8px" data-i18n="recentScans">Recent scans</div>
+        <div id="cs-scans-list"></div>
+      </div>
+    </div>
+    <div class="cs-footer">
+      <button class="btn btn-danger btn-sm" id="cs-btn-delete" style="width:100%" data-i18n="deleteClientGdpr">🗑 Delete client (GDPR)</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modal: Modifier le prénom ── -->
+<div id="modal-rename" class="modal-overlay">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" data-i18n="editFirstName">Edit first name</div>
+    <div class="field">
+      <label for="rename-input" data-i18n="newFirstName">New first name</label>
+      <input id="rename-input" type="text" maxlength="50" autocomplete="off" placeholder="First name…" data-i18n-ph="firstNamePh2">
+    </div>
+    <div id="rename-err" class="alert alert-error" style="display:none"></div>
+    <button class="btn btn-primary" id="rename-confirm" data-i18n="save">Save</button>
+    <button class="btn btn-ghost" id="rename-cancel" data-i18n="cancel">Cancel</button>
+  </div>
+</div>
+
+<!-- ── Modal: Ajuster les points ── -->
+<div id="modal-adjust" class="modal-overlay">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" data-i18n="adjustPoints">Adjust points</div>
+    <div class="field">
+      <label for="adjust-input" id="adjust-label">New balance</label>
+      <input id="adjust-input" type="number" min="0" autocomplete="off" placeholder="0">
+    </div>
+    <div id="adjust-err" class="alert alert-error" style="display:none"></div>
+    <button class="btn btn-primary" id="adjust-confirm" data-i18n="confirm">Confirm</button>
+    <button class="btn btn-ghost" id="adjust-cancel" data-i18n="cancel">Cancel</button>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════
+const S = {
+  token: null, marchandId: null, marchandNom: null, marchandSlug: null, maxValue: 10, displayMax: 10,
+  forfait: null, typeProgramme: 'stamps',
+  tab: 'overview',
+  clients: null, scans: null, stats: null, qr: null, notifLogs: null,
+  deleteTargetId: null, deleteTargetNom: null,
+  clientId: null, clientData: null,
+};
+
+const SC = { stream: null, rafId: null, scanning: false, processing: false, awaitingPoints: false };
+
+// ════════════════════════════════════════════════
+// i18n FR/EN — langue du marchand (via /me), persistée en localStorage.
+// Statique : data-i18n / data-i18n-ph / data-i18n-title. JS : t('cle', {vars}).
+// ════════════════════════════════════════════════
+let _lang = 'en';
+const I18N = {
+  en: {
+    pageTitle:'WinWin Dashboard', loginSub:'Manage your loyalty program',
+    merchantId:'Merchant ID (slug)', password:'Password', signIn:'Sign in', signOut:'Sign out',
+    qrSectionTitle:'QR code landing page',
+    pdvSectionTitle:'Points of sale', pdvRename:'Rename',
+    pdvAddHint:'To add a point of sale, contact us.',
+    pdvRenamePrompt:'New name for this point of sale:',
+    pdvCut:'Cut access', pdvRestore:'Restore', pdvCutStatus:'cut off',
+    pdvConfirmCut:'Cut scanner access for "{nom}"? Scanning stops immediately at this store.',
+    pdvConfirmRestore:'Restore scanner access for "{nom}"?',
+    statTotalClients:'Total clients', statScansToday:'Scans today', statActive30d:'Active (30 days)',
+    statRetention:'Retention rate', statAvgVisits:'Avg visits / active client (30d)',
+    copyLink:'📋 Copy link', copied:'✓ Copied', share:'↗ Share', qrShareTitle:'Loyalty program',
+    clientsTitle:'Clients', csvBtn:'⬇ CSV', exportCsv:'Export CSV', refresh:'Refresh',
+    searchClients:'Search by first name…',
+    clientsCount:({n,found})=>`${n} client${n>1?'s':''}${found?' found':''}`,
+    noResults:'No results', noClients:'No clients', tryAnotherName:'Try another name',
+    clientsWillAppear:'Clients will appear here after sign-up',
+    exportFailed:'Export failed', exportError:({msg})=>'Export error: '+msg,
+    historyTitle:'History', noScans:'No scans',
+    scansWillAppear:'Scan history will appear here after the first transactions',
+    rewardBadge:'🎉 Reward', resetBadge:'↩️ Reset',
+    scanHint:"Point at the client's pass QR code", manualEntry:'Manual entry', points:'Points',
+    rewardUnlocked:'Reward unlocked!',
+    rewardSub:({prenom,max})=>`${prenom} reached ${max} points — give the reward!`,
+    counterReset:'↩️ Counter reset', nextScan:'Next scan', processing:'⏳ Processing…',
+    cameraError:({msg})=>'Cannot access camera: '+msg, cameraErrorName:'Camera error',
+    unknownError:'Unknown error', errorName:'Error',
+    pushNotifs:'Push notifications',
+    notifInfo:'📱 Sent via Apple & Google Wallet to registered devices.',
+    message:'Message', notifPlaceholder:'E.g.: Come enjoy 20% off all menu items this weekend!',
+    sendNotif:'Send notification', msgRequired:'Message is required', sending:'Sending…',
+    sendError:'Send error', noDevices:'No registered devices.',
+    appleLine:({sent,total,failed})=>`🍎 Apple Wallet: ${sent}/${total} sent${failed?` · ${failed} failed`:''}`,
+    googleLine:({updated,total,failed})=>`🤖 Google Wallet: ${updated}/${total} updated${failed?` · ${failed} failed`:''}`,
+    quotaText:({used,limit})=>`${used} / ${limit} notifications this month`,
+    errLoadHistory:'Error loading history', noNotifsSent:'No notifications sent yet',
+    received:({envoyes,total})=>`${envoyes}/${total} received`, noDevicesShort:'No devices',
+    deleteClientTitle:'Delete this client?',
+    deleteBody:({nom})=>`Delete <strong>${nom}</strong>? This action is <strong>irreversible</strong> — the pass will become invalid.`,
+    deletePermanently:'Delete permanently', cancel:'Cancel',
+    passSerial:'Pass ID or backup code', submit:'Submit', enterSerial:'Enter a serial number',
+    manualHint:'Paste the full pass ID, or type the 6-character backup code from the back of the pass',
+    pickClient:'Multiple matches — tap the right client:',
+    nameBtn:'✏️ Name', pointsBtn:'⚖️ Points', recentScans:'Recent scans',
+    deleteClientGdpr:'🗑 Delete client (GDPR)',
+    memberSince:({date})=>'Member since '+date, noScansClient:'No scans recorded for this client.', scanAnnule:'undone',
+    editFirstName:'Edit first name', newFirstName:'New first name', firstNamePh2:'First name…',
+    save:'Save', firstNameRequired:'First name required', errorGeneric:'Error',
+    adjustPoints:'Adjust points', newBalance:({max})=>`New balance (0 – ${max} pts)`,
+    confirm:'Confirm', valueBetween:({max})=>`Value between 0 and ${max}`,
+    signOutConfirm:'Sign out?', sessionExpired:'Session expired, please sign in again',
+    fillAllFields:'Please fill in all fields', invalidCreds:'Invalid credentials',
+    justNow:'just now', minAgo:({m})=>`${m} min ago`, hoursAgo:({h})=>`${h}h ago`,
+    yesterday:'yesterday', daysAgo:({d})=>`${d} days ago`,
+    navOverview:'Overview', navClients:'Clients', navScans:'Scans', navScanner:'Scanner', navNotifs:'Notifs',
+    navReseau:'Network',
+    rsPorteurs:'Carriers', rsActifs30:'Active (30d)', rsNouveaux:'New this month', rsRetour:'Return rate',
+    rsMobilite:'Carriers visiting more than one store', rsDistribTitle:'Monthly visit distribution',
+    rsLessThan:'under', rsMoreThan:'over', rsVisitsCaption:'visits per month',
+    rsDistEmpty:'No active carriers this month yet.',
+    rsBoutiquesTitle:'Stores', rsNonAttribues:'Unattributed scans',
+    rsColBoutique:'Store', rsColScans:'Scans', rsColEvol:'vs last month', rsColClients:'Clients served', rsColRecomp:'Rewards',
+    rsArchived:'archived', rsNoBoutique:'No store.', rsLoadError:'Loading error',
+    pointsToAdd:'Points to add', pointsToAddSub:'Enter the number of points for this visit',
+    invalidPoints:'Enter a positive whole number',
+  },
+  fr: {
+    pageTitle:'WinWin — Tableau de bord', loginSub:'Gérez votre programme de fidélité',
+    merchantId:'Identifiant marchand (slug)', password:'Mot de passe', signIn:'Se connecter', signOut:'Se déconnecter',
+    qrSectionTitle:"QR code de la page d'accueil",
+    pdvSectionTitle:'Points de vente', pdvRename:'Renommer',
+    pdvAddHint:'Pour ajouter un point de vente, contactez-nous.',
+    pdvRenamePrompt:'Nouveau nom de ce point de vente :',
+    pdvCut:"Couper l'accès", pdvRestore:'Rétablir', pdvCutStatus:'coupée',
+    pdvConfirmCut:"Couper l'accès scanner de « {nom} » ? Le scan s'arrête immédiatement dans cette boutique.",
+    pdvConfirmRestore:"Rétablir l'accès scanner de « {nom} » ?",
+    statTotalClients:'Clients au total', statScansToday:"Scans aujourd'hui", statActive30d:'Actifs (30 jours)',
+    statRetention:'Taux de rétention', statAvgVisits:'Visites moy. / client actif (30j)',
+    copyLink:'📋 Copier le lien', copied:'✓ Copié', share:'↗ Partager', qrShareTitle:'Programme de fidélité',
+    clientsTitle:'Clients', csvBtn:'⬇ CSV', exportCsv:'Exporter CSV', refresh:'Actualiser',
+    searchClients:'Rechercher par prénom…',
+    clientsCount:({n,found})=>`${n} client${n>1?'s':''}${found?' trouvé'+(n>1?'s':''):''}`,
+    noResults:'Aucun résultat', noClients:'Aucun client', tryAnotherName:'Essayez un autre nom',
+    clientsWillAppear:'Les clients apparaîtront ici après leur inscription',
+    exportFailed:"Échec de l'export", exportError:({msg})=>'Erreur export : '+msg,
+    historyTitle:'Historique', noScans:'Aucun scan',
+    scansWillAppear:"L'historique des scans apparaîtra ici après les premières transactions",
+    rewardBadge:'🎉 Récompense', resetBadge:'↩️ Remise à zéro',
+    scanHint:'Visez le QR code du pass du client', manualEntry:'Saisie manuelle', points:'Points',
+    rewardUnlocked:'Récompense débloquée !',
+    rewardSub:({prenom,max})=>`${prenom} a atteint ${max} points — remettez la récompense !`,
+    counterReset:'↩️ Compteur remis à zéro', nextScan:'Scan suivant', processing:'⏳ Traitement…',
+    cameraError:({msg})=>"Impossible d'accéder à la caméra : "+msg, cameraErrorName:'Erreur caméra',
+    unknownError:'Erreur inconnue', errorName:'Erreur',
+    pushNotifs:'Notifications push',
+    notifInfo:'📱 Envoyées via Apple & Google Wallet aux appareils enregistrés.',
+    message:'Message', notifPlaceholder:'Ex. : Profitez de -20% sur toute la carte ce week-end !',
+    sendNotif:'Envoyer la notification', msgRequired:'Le message est requis', sending:'Envoi…',
+    sendError:"Erreur d'envoi", noDevices:'Aucun appareil enregistré.',
+    appleLine:({sent,total,failed})=>`🍎 Apple Wallet : ${sent}/${total} envoyées${failed?` · ${failed} échec${failed>1?'s':''}`:''}`,
+    googleLine:({updated,total,failed})=>`🤖 Google Wallet : ${updated}/${total} mises à jour${failed?` · ${failed} échec${failed>1?'s':''}`:''}`,
+    quotaText:({used,limit})=>`${used} / ${limit} notifications ce mois-ci`,
+    errLoadHistory:"Erreur de chargement de l'historique", noNotifsSent:'Aucune notification envoyée pour le moment',
+    received:({envoyes,total})=>`${envoyes}/${total} reçues`, noDevicesShort:'Aucun appareil',
+    deleteClientTitle:'Supprimer ce client ?',
+    deleteBody:({nom})=>`Supprimer <strong>${nom}</strong> ? Cette action est <strong>irréversible</strong> — le pass deviendra invalide.`,
+    deletePermanently:'Supprimer définitivement', cancel:'Annuler',
+    passSerial:'ID du pass ou code de secours', submit:'Valider', enterSerial:'Saisissez un numéro de série',
+    manualHint:'Collez l’ID complet du pass, ou tapez le code de secours à 6 caractères au dos du pass',
+    pickClient:'Plusieurs clients — appuyez sur le bon :',
+    nameBtn:'✏️ Nom', pointsBtn:'⚖️ Points', recentScans:'Scans récents',
+    deleteClientGdpr:'🗑 Supprimer le client (RGPD)',
+    memberSince:({date})=>'Membre depuis le '+date, noScansClient:'Aucun scan enregistré pour ce client.', scanAnnule:'annulé',
+    editFirstName:'Modifier le prénom', newFirstName:'Nouveau prénom', firstNamePh2:'Prénom…',
+    save:'Enregistrer', firstNameRequired:'Prénom requis', errorGeneric:'Erreur',
+    adjustPoints:'Ajuster les points', newBalance:({max})=>`Nouveau solde (0 – ${max} pts)`,
+    confirm:'Confirmer', valueBetween:({max})=>`Valeur entre 0 et ${max}`,
+    signOutConfirm:'Se déconnecter ?', sessionExpired:'Session expirée, reconnectez-vous',
+    fillAllFields:'Veuillez remplir tous les champs', invalidCreds:'Identifiants invalides',
+    justNow:"à l'instant", minAgo:({m})=>`il y a ${m} min`, hoursAgo:({h})=>`il y a ${h} h`,
+    yesterday:'hier', daysAgo:({d})=>`il y a ${d} jours`,
+    navOverview:'Aperçu', navClients:'Clients', navScans:'Scans', navScanner:'Scanner', navNotifs:'Notifs',
+    navReseau:'Réseau',
+    rsPorteurs:'Porteurs', rsActifs30:'Actifs (30 j)', rsNouveaux:'Nouveaux ce mois', rsRetour:'Taux de retour',
+    rsMobilite:'Porteurs fréquentant plusieurs boutiques', rsDistribTitle:'Répartition des passages mensuels',
+    rsLessThan:'moins de', rsMoreThan:'plus de', rsVisitsCaption:'passages par mois',
+    rsDistEmpty:"Aucun porteur actif ce mois pour l'instant.",
+    rsBoutiquesTitle:'Boutiques', rsNonAttribues:'Scans non attribués',
+    rsColBoutique:'Boutique', rsColScans:'Scans', rsColEvol:'vs mois préc.', rsColClients:'Clients servis', rsColRecomp:'Récompenses',
+    rsArchived:'archivée', rsNoBoutique:'Aucune boutique.', rsLoadError:'Erreur de chargement',
+    pointsToAdd:'Points à ajouter', pointsToAddSub:'Saisis le nombre de points pour cette visite',
+    invalidPoints:'Saisis un nombre entier positif',
+  },
+};
+
+function t(key, vars) {
+  const dict = I18N[_lang] || I18N.en;
+  let s = dict[key] != null ? dict[key] : (I18N.en[key] != null ? I18N.en[key] : key);
+  if (typeof s === 'function') return s(vars || {});
+  if (vars) s = s.replace(/\{(\w+)\}/g, (_, k) => (vars[k] != null ? vars[k] : ''));
+  return s;
+}
+
+function applyI18n() {
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.setAttribute('placeholder', t(el.getAttribute('data-i18n-ph'))); });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.setAttribute('title', t(el.getAttribute('data-i18n-title'))); });
+}
+
+function setLang(l) {
+  _lang = (l === 'fr' || l === 'en') ? l : 'en';
+  document.documentElement.lang = _lang;
+  document.title = t('pageTitle');
+  try { localStorage.setItem('ww_dash_lang', _lang); } catch {}
+  applyI18n();
+}
+
+const dateLocale = () => (_lang === 'fr' ? 'fr-FR' : 'en-GB');
+
+// ════════════════════════════════════════════════
+// AUTH / SESSION
+// ════════════════════════════════════════════════
+function saveSession(d) {
+  Object.assign(S, { token: d.token, marchandId: d.marchand_id, marchandNom: d.nom, marchandSlug: d.slug });
+  try {
+    localStorage.setItem('ww_dash_token',   d.token);
+    localStorage.setItem('ww_dash_id',      d.marchand_id);
+    localStorage.setItem('ww_dash_nom',     d.nom || '');
+    localStorage.setItem('ww_dash_slug',    d.slug || '');
+  } catch {}
+}
+
+function clearSession() {
+  Object.assign(S, { token: null, marchandId: null, marchandNom: null, marchandSlug: null, forfait: null, typeProgramme: 'stamps' });
+  try { ['ww_dash_token','ww_dash_id','ww_dash_nom','ww_dash_slug','ww_dash_forfait','ww_dash_type_programme'].forEach(k => localStorage.removeItem(k)); } catch {}
+}
+
+function restoreSession() {
+  try {
+    const t = localStorage.getItem('ww_dash_token');
+    if (!t) return false;
+    S.token       = t;
+    S.marchandId  = localStorage.getItem('ww_dash_id');
+    S.marchandNom = localStorage.getItem('ww_dash_nom') || '';
+    S.marchandSlug= localStorage.getItem('ww_dash_slug') || '';
+    S.forfait     = localStorage.getItem('ww_dash_forfait') || null;
+    S.typeProgramme = localStorage.getItem('ww_dash_type_programme') === 'points' ? 'points' : 'stamps';
+    return true;
+  } catch { return false; }
+}
+
+// ── Gating forfait ───────────────────────────────────────────
+function applyForfaitGating() {
+  const f    = S.forfait || 'pro';
+  const rank = { basic: 0, pro: 1, pro_plus: 2 }[f] ?? 1;
+
+  const badge = document.getElementById('forfait-badge');
+  if (badge) {
+    badge.textContent  = f === 'pro_plus' ? 'Pro+' : f.charAt(0).toUpperCase() + f.slice(1);
+    badge.dataset.plan = f;
+    badge.style.display = '';
+  }
+
+  document.querySelectorAll('.nav-btn[data-min-plan]').forEach(btn => {
+    const req = { basic: 0, pro: 1, pro_plus: 2 }[btn.dataset.minPlan] ?? 1;
+    btn.style.display = rank >= req ? '' : 'none';
+  });
+
+  const exportBtn = document.getElementById('btn-export-csv');
+  if (exportBtn) exportBtn.style.display = f === 'pro_plus' ? '' : 'none';
+
+  // Si l'onglet actif est masqué, revenir à overview
+  const cur = document.querySelector(`.nav-btn[data-tab="${S.tab}"]`);
+  if (cur && cur.style.display === 'none') switchTab('overview');
+}
+
+// ════════════════════════════════════════════════
+// API WRAPPER
+// ════════════════════════════════════════════════
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.token}`, ...(opts.headers || {}) },
+  });
+  if (res.status === 401) { clearSession(); showLogin(); throw new Error(t('sessionExpired')); }
+  return res;
+}
+
+// ════════════════════════════════════════════════
+// SCREEN HELPERS
+// ════════════════════════════════════════════════
+function showLogin() {
+  stopScannerTab();
+  document.getElementById('screen-dashboard').classList.remove('active');
+  document.getElementById('screen-login').classList.add('active');
+}
+
+function showDashboard() {
+  document.getElementById('screen-login').classList.remove('active');
+  document.getElementById('screen-dashboard').classList.add('active');
+  document.getElementById('header-nom').textContent = S.marchandNom || S.marchandSlug || '';
+  applyForfaitGating();
+  switchTab('overview');
+}
+
+// ════════════════════════════════════════════════
+// LOGIN
+// ════════════════════════════════════════════════
+document.getElementById('login-form').addEventListener('submit', async () => {
+  const slug = document.getElementById('in-slug').value.trim();
+  const pwd  = document.getElementById('in-pwd').value;
+  const errEl = document.getElementById('login-err');
+  const btn   = document.getElementById('btn-login');
+  errEl.style.display = 'none';
+  if (!slug || !pwd) { showErr(errEl, t('fillAllFields')); return; }
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await fetch('/api/merchants/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug, password: pwd }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || t('invalidCreds'));
+    data.slug = data.slug || slug;
+    saveSession(data);
+    showDashboard();
+  } catch (e) {
+    showErr(errEl, e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = t('signIn');
+  }
+});
+
+function showErr(el, msg) { el.textContent = msg; el.style.display = 'block'; }
+
+// ════════════════════════════════════════════════
+// LOGOUT
+// ════════════════════════════════════════════════
+document.getElementById('btn-logout').addEventListener('click', () => {
+  if (!confirm(t('signOutConfirm'))) return;
+  clearSession();
+  S.clients = null; S.scans = null; S.stats = null; S.qr = null; S.notifLogs = null;
+  showLogin();
+});
+
+// ════════════════════════════════════════════════
+// TABS
+// ════════════════════════════════════════════════
+document.querySelectorAll('.nav-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
+
+function switchTab(tab) {
+  if (S.tab === 'scanner' && tab !== 'scanner') stopScannerTab();
+  S.tab = tab;
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.getElementById('tab-' + tab).classList.add('active');
+  if (tab === 'overview') loadOverview();
+  if (tab === 'reseau')   loadReseau();
+  if (tab === 'clients')  loadClients();
+  if (tab === 'scans')    loadScans();
+  if (tab === 'scanner')  startScannerTab();
+  if (tab === 'notifs')   loadNotifHistory();
+}
+
+// ════════════════════════════════════════════════
+// TAB: APERÇU
+// ════════════════════════════════════════════════
+async function loadOverview(force = false) {
+  if (!force && S.stats && S.qr) { renderOverview(); return; }
+  const needMe = !S.forfait || S.maxValue === 10;
+  const [statsRes, qrRes, meRes, pdvRes] = await Promise.all([
+    api('/api/merchants/me/stats'),
+    api('/api/merchants/me/qrcode'),
+    needMe ? api('/api/merchants/me') : Promise.resolve(null),
+    api('/api/merchants/me/points-de-vente'),
+  ]);
+  S.stats = await statsRes.json();
+  S.qr    = await qrRes.json();
+  S.pdv   = await pdvRes.json().catch(() => []);
+  if (meRes) {
+    const me = await meRes.json();
+    S.maxValue  = me.max_value || 10;
+    S.displayMax = me.display_max_value || S.maxValue;
+    S.forfait   = me.forfait || 'pro';
+    S.typeProgramme = me.type_programme === 'points' ? 'points' : 'stamps';
+    try {
+      localStorage.setItem('ww_dash_forfait', S.forfait);
+      localStorage.setItem('ww_dash_type_programme', S.typeProgramme);
+    } catch {}
+    setLang(me.langue);
+    applyForfaitGating();
+  }
+  renderOverview();
+}
+
+// Points de vente — visible uniquement si le réseau a ≥ 1 boutique (mono-site : masqué)
+function renderPdv() {
+  const section = document.getElementById('pdv-section');
+  const card    = document.getElementById('pdv-card');
+  const list = Array.isArray(S.pdv) ? S.pdv : [];
+  // Onglet Réseau visible uniquement pour un réseau (≥ 1 boutique) → mono-site intact.
+  const navR = document.getElementById('nav-reseau');
+  if (navR) navR.style.display = list.length ? '' : 'none';
+  if (!section || !card) return;
+  if (list.length === 0) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  card.innerHTML = list.map(b => {
+    const cut = b.actif === false;
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid rgba(0,0,0,.06)">
+      <span style="font-weight:600">${esc(b.nom)}${cut ? ` <span style="color:var(--error,#ef4444);font-size:12px;font-weight:600">• ${t('pdvCutStatus')}</span>` : ''}</span>
+      <span style="display:flex;gap:6px;flex-shrink:0">
+        <button class="btn btn-outline btn-sm btn-pdv-rename" data-id="${esc(b.id)}" data-nom="${esc(b.nom)}">${t('pdvRename')}</button>
+        <button class="btn btn-outline btn-sm btn-pdv-actif" data-id="${esc(b.id)}" data-nom="${esc(b.nom)}" data-actif="${b.actif !== false}">${cut ? t('pdvRestore') : t('pdvCut')}</button>
+      </span>
+    </div>`;
+  }).join('') +
+    `<div class="field-hint" style="margin-top:10px;opacity:.75">${t('pdvAddHint')}</div>`;
+  card.querySelectorAll('.btn-pdv-rename').forEach(btn =>
+    btn.addEventListener('click', () => renamePdv(btn.dataset.id, btn.dataset.nom)));
+  card.querySelectorAll('.btn-pdv-actif').forEach(btn =>
+    btn.addEventListener('click', () => toggleActif(btn.dataset.id, btn.dataset.nom, btn.dataset.actif === 'true')));
+}
+
+// Couper / rétablir l'accès scanner d'une boutique (levier franchiseur, 3d).
+async function toggleActif(id, nom, currentlyActif) {
+  const msg = (currentlyActif ? t('pdvConfirmCut') : t('pdvConfirmRestore')).replace('{nom}', nom);
+  if (!confirm(msg)) return;
+  const res  = await api(`/api/merchants/me/points-de-vente/${id}/actif`, {
+    method: 'PATCH', body: JSON.stringify({ actif: !currentlyActif }),
+  });
+  const data = await res.json();
+  if (!res.ok) { alert(data.error || 'Erreur'); return; }
+  const b = (S.pdv || []).find(x => x.id === id);
+  if (b) b.actif = data.actif;
+  renderPdv();
+}
+
+// ════════════════════════════════════════════════
+// TAB: RÉSEAU (dashboard groupe)
+// ════════════════════════════════════════════════
+async function loadReseau(force = false) {
+  if (!force && S.reseau) { renderReseau(); return; }
+  const el = document.getElementById('tab-reseau');
+  el.innerHTML = '<div class="skeleton skeleton-card"></div>';
+  try {
+    const res = await api('/api/merchants/me/group-stats');
+    S.reseau = await res.json();
+  } catch (e) { el.innerHTML = `<p style="color:var(--error)">${t('rsLoadError')}</p>`; return; }
+  renderReseau();
+}
+
+function rsEvolCell(v) {
+  if (v == null) return '<span style="opacity:.45">—</span>';
+  const c = v > 0 ? '#4ea672' : v < 0 ? '#ef4444' : 'inherit';
+  return `<span style="color:${c};font-weight:600">${v > 0 ? '+' : ''}${v}%</span>`;
+}
+
+function renderReseau() {
+  const d = S.reseau; if (!d) return;
+  const el = document.getElementById('tab-reseau');
+  const r = d.reseau || {};
+  const dist = d.distribution || {};
+  const total = (dist.bas || 0) + (dist.milieu || 0) + (dist.haut || 0);
+  const pc = n => total > 0 ? Math.round((n || 0) / total * 100) : 0;
+  const sort = S.reseauSort || (S.reseauSort = { col: 'scans', dir: -1 });
+  const boutiques = (d.boutiques || []).slice().sort((a, b) => {
+    let va = a[sort.col], vb = b[sort.col];
+    if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    return (va < vb ? -1 : va > vb ? 1 : 0) * sort.dir;
+  });
+  el.innerHTML = `
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-value">${r.porteurs ?? '–'}</div><div class="stat-label">${t('rsPorteurs')}</div></div>
+      <div class="stat-card"><div class="stat-icon">🔥</div><div class="stat-value">${r.actifs_30j ?? '–'}</div><div class="stat-label">${t('rsActifs30')}</div></div>
+      <div class="stat-card"><div class="stat-icon">✨</div><div class="stat-value">${r.nouveaux_ce_mois ?? '–'}</div><div class="stat-label">${t('rsNouveaux')}</div></div>
+      <div class="stat-card"><div class="stat-icon">🔄</div><div class="stat-value">${r.taux_retour_reseau != null ? r.taux_retour_reseau + '%' : '–'}</div><div class="stat-label">${t('rsRetour')}</div></div>
+    </div>
+    <div class="field-hint" style="margin:6px 2px 0">${t('rsMobilite')} : <strong>${r.mobilite ?? 0}</strong></div>
+
+    <p class="section-title">${t('rsDistribTitle')}</p>
+    <div class="qr-card" style="align-items:stretch">
+      <div style="display:flex;height:26px;border-radius:6px;overflow:hidden;background:rgba(0,0,0,.05)">
+        <div style="width:${pc(dist.bas)}%;background:#e0a458"></div>
+        <div style="width:${pc(dist.milieu)}%;background:#8b90ff"></div>
+        <div style="width:${pc(dist.haut)}%;background:#4ea672"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-top:8px;flex-wrap:wrap">
+        <span><span style="color:#e0a458">■</span> ${t('rsLessThan')} ${dist.seuil_bas} — <strong>${pc(dist.bas)}%</strong> (${dist.bas || 0})</span>
+        <span><span style="color:#8b90ff">■</span> ${dist.seuil_bas}–${dist.seuil_haut} — <strong>${pc(dist.milieu)}%</strong> (${dist.milieu || 0})</span>
+        <span><span style="color:#4ea672">■</span> ${t('rsMoreThan')} ${dist.seuil_haut} — <strong>${pc(dist.haut)}%</strong> (${dist.haut || 0})</span>
+      </div>
+      <div class="field-hint" style="margin-top:4px">${t('rsVisitsCaption')}${total === 0 ? ' — ' + t('rsDistEmpty') : ''}</div>
+    </div>
+
+    <p class="section-title">${t('rsBoutiquesTitle')} <span class="field-hint" style="font-weight:400">· ${t('rsNonAttribues')} : <strong>${d.scans_non_attribues ?? 0}</strong></span></p>
+    <div style="overflow-x:auto">
+      <table class="rs-table">
+        <thead><tr>
+          <th data-sort="nom">${t('rsColBoutique')}</th>
+          <th data-sort="scans">${t('rsColScans')}</th>
+          <th data-sort="evolution_pct">${t('rsColEvol')}</th>
+          <th data-sort="clients_distincts">${t('rsColClients')}</th>
+          <th data-sort="recompenses">${t('rsColRecomp')}</th>
+        </tr></thead>
+        <tbody>
+          ${boutiques.map(b => `<tr>
+            <td>${esc(b.nom)}${b.archivee ? ` <span style="color:var(--error);font-size:11px">(${t('rsArchived')})</span>` : ''}</td>
+            <td>${b.scans}</td>
+            <td>${rsEvolCell(b.evolution_pct)}</td>
+            <td>${b.clients_distincts}</td>
+            <td>${b.recompenses}</td>
+          </tr>`).join('') || `<tr><td colspan="5" class="field-hint">${t('rsNoBoutique')}</td></tr>`}
+        </tbody>
+      </table>
+    </div>`;
+  el.querySelectorAll('th[data-sort]').forEach(th => th.addEventListener('click', () => {
+    const col = th.dataset.sort;
+    S.reseauSort = { col, dir: (sort.col === col ? -sort.dir : (col === 'nom' ? 1 : -1)) };
+    renderReseau();
+  }));
+}
+
+async function renamePdv(id, currentNom) {
+  const saisi = prompt(t('pdvRenamePrompt'), currentNom);
+  if (saisi === null) return;
+  const nom = saisi.trim();
+  if (!nom || nom === currentNom) return;
+  const res  = await api(`/api/merchants/me/points-de-vente/${id}`, {
+    method: 'PATCH', body: JSON.stringify({ nom }),
+  });
+  const data = await res.json();
+  if (!res.ok) { alert(data.error || 'Erreur'); return; }
+  const b = (S.pdv || []).find(x => x.id === id);
+  if (b) b.nom = data.nom;
+  renderPdv();
+}
+
+function renderOverview() {
+  const st = S.stats;
+  document.getElementById('stats-grid').innerHTML = `
+    <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-value">${st.total_clients ?? '–'}</div><div class="stat-label">${t('statTotalClients')}</div></div>
+    <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-value">${st.scans_aujourdhui ?? '–'}</div><div class="stat-label">${t('statScansToday')}</div></div>
+    <div class="stat-card"><div class="stat-icon">🔥</div><div class="stat-value">${st.active_clients_30d ?? '–'}</div><div class="stat-label">${t('statActive30d')}</div></div>
+    <div class="stat-card"><div class="stat-icon">🔄</div><div class="stat-value">${st.retention_rate != null ? st.retention_rate + '%' : '–'}</div><div class="stat-label">${t('statRetention')}</div></div>
+    <div class="stat-card" style="grid-column:1/-1;flex-direction:row;align-items:center;gap:14px"><div class="stat-icon" style="margin:0">📈</div><div><div class="stat-value" style="font-size:22px">${st.avg_frequency ?? '–'}x</div><div class="stat-label">${t('statAvgVisits')}</div></div></div>`;
+  renderPdv();
+  const qrSection = document.getElementById('qr-section');
+  qrSection.innerHTML = `
+    <img src="${S.qr.qrcode}" alt="QR code">
+    <div class="qr-url">${S.qr.url}</div>
+    <div class="qr-actions">
+      <button class="btn btn-outline btn-sm" id="btn-copy-url">${t('copyLink')}</button>
+      ${navigator.share ? `<button class="btn btn-outline btn-sm" id="btn-share-url">${t('share')}</button>` : ''}
+    </div>`;
+  document.getElementById('btn-copy-url')?.addEventListener('click', () => {
+    navigator.clipboard.writeText(S.qr.url).then(() => {
+      const b = document.getElementById('btn-copy-url');
+      b.textContent = t('copied'); setTimeout(() => b.textContent = t('copyLink'), 2000);
+    });
+  });
+  document.getElementById('btn-share-url')?.addEventListener('click', () => {
+    navigator.share({ url: S.qr.url, title: t('qrShareTitle') }).catch(() => {});
+  });
+}
+
+// ════════════════════════════════════════════════
+// TAB: CLIENTS
+// ════════════════════════════════════════════════
+async function loadClients(force = false) {
+  if (!force && S.clients) { renderClients(); return; }
+  document.getElementById('clients-list').innerHTML = Array(4).fill('<div class="skeleton skeleton-card"></div>').join('');
+  document.getElementById('clients-meta').textContent = '';
+  try {
+    const res = await api('/api/clients');
+    S.clients = await res.json();
+    renderClients();
+  } catch (e) {
+    document.getElementById('clients-list').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+  }
+}
+
+function renderClients(filter = '') {
+  const list = document.getElementById('clients-list');
+  const meta = document.getElementById('clients-meta');
+  if (!S.clients) return;
+  const q = filter.trim().toLowerCase();
+  const shown = q ? S.clients.filter(c => c.prenom.toLowerCase().includes(q)) : S.clients;
+  if (shown.length === 0) {
+    meta.textContent = '';
+    list.innerHTML = `<div class="empty"><div class="empty-icon">👤</div><div class="empty-title">${q ? t('noResults') : t('noClients')}</div><div class="empty-sub">${q ? t('tryAnotherName') : t('clientsWillAppear')}</div></div>`;
+    return;
+  }
+  meta.textContent = t('clientsCount', { n: shown.length, found: !!q });
+  list.innerHTML = shown.map(c => {
+    const pct = Math.min(c.stored_value / S.displayMax * 100, 100);
+    const full = c.stored_value >= S.maxValue;
+    return `<div class="client-card" data-id="${c.id}" style="cursor:pointer">
+      <div class="client-avatar" style="background:${colorFrom(c.prenom)}">${c.prenom.charAt(0).toUpperCase()}</div>
+      <div class="client-info">
+        <div class="client-name">${esc(c.prenom)}</div>
+        <div class="client-progress">
+          <div class="mini-bar-wrap"><div class="mini-bar" style="width:${pct}%"></div></div>
+          <span class="client-pts ${full ? 'client-full' : ''}">${c.stored_value}/${S.displayMax}${full ? ' 🎉' : ''}</span>
+        </div>
+      </div>
+      <span style="color:var(--muted);font-size:20px;flex-shrink:0">›</span>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.client-card').forEach(card => {
+    card.addEventListener('click', () => openClientSheet(card.dataset.id));
+  });
+}
+
+document.getElementById('search-clients').addEventListener('input', e => renderClients(e.target.value));
+document.getElementById('btn-refresh-clients').addEventListener('click', () => { S.clients = null; loadClients(true); });
+
+document.getElementById('btn-export-csv').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-export-csv');
+  btn.disabled = true; btn.textContent = '⏳';
+  try {
+    const res = await api('/api/clients/export');
+    if (!res.ok) {
+      const d = await res.json();
+      alert(d.error || t('exportFailed'));
+      return;
+    }
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = `clients-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert(t('exportError', { msg: e.message }));
+  } finally {
+    btn.disabled = false; btn.textContent = t('csvBtn');
+  }
+});
+
+// ════════════════════════════════════════════════
+// TAB: HISTORIQUE SCANS
+// ════════════════════════════════════════════════
+async function loadScans(force = false) {
+  if (!force && S.scans) { renderScans(); return; }
+  document.getElementById('scans-list').innerHTML = Array(5).fill('<div class="skeleton skeleton-card"></div>').join('');
+  try {
+    const res = await api('/api/scan');
+    const data = await res.json();
+    S.scans = Array.isArray(data) ? data : [];
+    renderScans();
+  } catch (e) {
+    document.getElementById('scans-list').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+  }
+}
+
+function renderScans() {
+  const el = document.getElementById('scans-list');
+  if (!Array.isArray(S.scans) || S.scans.length === 0) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">${t('noScans')}</div><div class="empty-sub">${t('scansWillAppear')}</div></div>`;
+    return;
+  }
+  el.innerHTML = S.scans.map(s => {
+    const prenom = s.clients?.prenom || '?';
+    const avant  = s.stored_value_avant;
+    const apres  = s.stored_value_apres;
+    const reward = apres >= S.maxValue;
+    const reset  = apres === 0 && avant > 0;
+    const delta  = reward
+      ? `<div class="scan-pts" style="color:var(--warning)">${t('rewardBadge')}</div><div style="font-size:11px;color:var(--muted)">${avant} → ${apres}</div>`
+      : reset
+        ? `<div class="scan-pts" style="color:var(--accent)">${t('resetBadge')}</div><div style="font-size:11px;color:var(--muted)">${avant} → 0</div>`
+        : `<div class="scan-pts">${avant} → ${apres}</div>`;
+    const annule = !!s.annule_le;
+    return `<div class="scan-entry"${annule ? ' style="opacity:.5"' : ''}>
+      <div class="scan-avatar" style="background:${colorFrom(prenom)}">${prenom.charAt(0).toUpperCase()}</div>
+      <div class="scan-info"><div class="scan-name"${annule ? ' style="text-decoration:line-through"' : ''}>${esc(prenom)}</div><div class="scan-time">${timeAgo(s.date_scan)}${annule ? ' · ' + t('scanAnnule') : ''}</div></div>
+      <div class="scan-delta">${delta}</div>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('btn-refresh-scans').addEventListener('click', () => { S.scans = null; loadScans(true); });
+
+// ════════════════════════════════════════════════
+// TAB: SCANNER
+// ════════════════════════════════════════════════
+function startScannerTab() {
+  SC.processing = false;
+  document.getElementById('sc-result-sheet').classList.remove('visible');
+  document.getElementById('sc-status').style.display = 'none';
+
+  if (SC.stream) { SC.stream.getTracks().forEach(t => t.stop()); SC.stream = null; }
+  SC.scanning = false;
+  if (SC.rafId) { cancelAnimationFrame(SC.rafId); SC.rafId = null; }
+
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+  }).then(stream => {
+    SC.stream = stream;
+    const video = document.getElementById('sc-video');
+    video.srcObject = stream;
+    video.play();
+    video.addEventListener('loadeddata', () => {
+      SC.scanning = true;
+      scLoop();
+    }, { once: true });
+  }).catch(e => {
+    const sheet = document.getElementById('sc-result-sheet');
+    sheet.classList.add('visible');
+    document.getElementById('sc-progress-section').style.display = 'none';
+    document.getElementById('sc-reward-banner').style.display = 'none';
+    document.getElementById('sc-reset-banner').style.display = 'none';
+    document.getElementById('sc-error').style.display = 'block';
+    document.getElementById('sc-error').textContent = t('cameraError', { msg: e.message });
+    document.getElementById('sc-name').textContent = t('cameraErrorName');
+    document.getElementById('sc-avatar').textContent = '⚠';
+    document.getElementById('sc-avatar').style.background = 'var(--error)';
+    document.getElementById('sc-serial').textContent = '';
+  });
+}
+
+function stopScannerTab() {
+  SC.scanning = false;
+  if (SC.rafId) { cancelAnimationFrame(SC.rafId); SC.rafId = null; }
+  if (SC.stream) { SC.stream.getTracks().forEach(t => t.stop()); SC.stream = null; }
+}
+
+function scLoop() {
+  if (!SC.scanning) return;
+  SC.rafId = requestAnimationFrame(scLoop);
+  if (SC.processing || SC.awaitingPoints) return;
+  const video = document.getElementById('sc-video');
+  if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+  const canvas = document.getElementById('sc-canvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  ctx.drawImage(video, 0, 0);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
+  if (code && code.data) handleScanQR(code.data);
+}
+
+async function handleScanQR(raw) {
+  if (SC.processing || SC.awaitingPoints) return;
+  let serial = raw.trim();
+  try {
+    const url = new URL(serial);
+    const parts = url.pathname.split('/').filter(Boolean);
+    const candidate = parts[parts.length - 1];
+    if (candidate && candidate.length > 4) serial = candidate;
+  } catch {}
+  proceedToScanDashboard(serial);
+}
+
+// Point d'entrée unique après résolution du serial (caméra ou saisie manuelle).
+// Mode points : ouvre le pavé numérique avant tout appel API. Mode tampons :
+// scan immédiat, comportement strictement inchangé.
+function proceedToScanDashboard(serial) {
+  if (S.typeProgramme === 'points') {
+    openPointsPadDashboard(serial);
+  } else {
+    submitScanDashboard(serial);
+  }
+}
+
+async function submitScanDashboard(serial, points) {
+  if (SC.processing) return;
+  SC.processing = true;
+  const statusEl = document.getElementById('sc-status');
+  statusEl.textContent = t('processing'); statusEl.style.display = 'block';
+  try { navigator.vibrate && navigator.vibrate(50); } catch {}
+  try {
+    const body = { serial_number: serial };
+    if (points != null) body.points = points;
+    const res = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.token}` },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    statusEl.style.display = 'none';
+    SC.scanning = false;
+    S.scans = null; // invalidate scan history cache
+    if (res.status === 409 && data.candidates) { showScanCandidates(data.candidates); return; }
+    showScanResult(data, res.ok, serial);
+  } catch (e) {
+    statusEl.textContent = '⚠️ ' + e.message;
+    setTimeout(() => { statusEl.style.display = 'none'; SC.processing = false; }, 3000);
+  }
+}
+
+// Collision backup code : prénoms candidats en boutons. Un tap re-soumet le
+// serial complet du client choisi → match exact, tampon posé.
+function showScanCandidates(candidates) {
+  const sheet = document.getElementById('sc-result-sheet');
+  sheet.classList.add('visible');
+  SC.processing = false;
+  document.getElementById('sc-result-header').style.display = 'none';
+  document.getElementById('sc-progress-section').style.display = 'none';
+  document.getElementById('sc-reward-banner').style.display = 'none';
+  document.getElementById('sc-reset-banner').style.display  = 'none';
+  document.getElementById('sc-error').style.display         = 'none';
+
+  const box   = document.getElementById('sc-candidates');
+  const label = document.getElementById('sc-candidates-label');
+  label.textContent = t('pickClient');
+  [...box.querySelectorAll('button')].forEach(b => b.remove());
+  candidates.forEach(c => {
+    const b = document.createElement('button');
+    b.className = 'btn btn-primary';
+    b.textContent = c.prenom;
+    b.addEventListener('click', () => { box.style.display = 'none'; SC.processing = false; proceedToScanDashboard(c.serial); });
+    box.appendChild(b);
+  });
+  box.style.display = 'flex';
+}
+
+function showScanResult(data, ok, serial) {
+  const sheet = document.getElementById('sc-result-sheet');
+  sheet.classList.add('visible');
+  document.getElementById('sc-result-header').style.display = '';
+  document.getElementById('sc-candidates').style.display = 'none';
+  document.getElementById('sc-reward-banner').style.display = 'none';
+  document.getElementById('sc-reset-banner').style.display  = 'none';
+  document.getElementById('sc-error').style.display         = 'none';
+  document.getElementById('sc-progress-section').style.display = ok ? '' : 'none';
+
+  if (!ok) {
+    document.getElementById('sc-error').textContent = data.error || t('unknownError');
+    document.getElementById('sc-error').style.display = 'block';
+    document.getElementById('sc-name').textContent = t('errorName');
+    document.getElementById('sc-avatar').textContent = '✗';
+    document.getElementById('sc-avatar').style.background = 'var(--error)';
+    document.getElementById('sc-serial').textContent = serial;
+    return;
+  }
+
+  const { prenom, stored_value_apres: val, stored_value_avant, max_value, display_max_value, recompense } = data;
+  const stored = val ?? 0;
+  const displayMax = display_max_value || max_value || S.displayMax;
+  const isReset = stored === 0 && stored_value_avant > 0 && !recompense;
+
+  const av = document.getElementById('sc-avatar');
+  av.textContent = (prenom || '?').charAt(0).toUpperCase();
+  av.style.background = recompense ? '#f59e0b' : 'var(--accent)';
+
+  document.getElementById('sc-name').textContent   = prenom || '–';
+  document.getElementById('sc-serial').textContent = serial;
+
+  // Texte non clampé : un scan points peut franchir le seuil en un coup (ex.
+  // 480 + 50 = 530 pour un seuil à 500) → on affiche la valeur réelle "530/500"
+  // (surplus reporté au scan de redemption, migration_022, jamais perdu).
+  // Seule la BARRE visuelle reste bridée à 100% (pas de débordement du cadre).
+  const pct = Math.min(stored / displayMax * 100, 100);
+  document.getElementById('sc-value').textContent    = stored;
+  document.getElementById('sc-fraction').textContent = `${stored} / ${displayMax}`;
+  document.getElementById('sc-bar').style.width      = pct + '%';
+
+  // Dots — n'a de sens qu'en mode tampons (peu d'unités). En mode points le
+  // seuil peut être élevé ; la barre + la fraction suffisent (compteur simple).
+  const dotsWrap = document.getElementById('sc-dots');
+  dotsWrap.innerHTML = '';
+  if (S.typeProgramme !== 'points') {
+    for (let i = 1; i <= Math.min(displayMax, 20); i++) {
+      const d = document.createElement('div');
+      d.className = 'sc-dot' + (i <= stored ? ' filled' : '');
+      if (!d.classList.contains('filled')) d.textContent = i;
+      dotsWrap.appendChild(d);
+    }
+  }
+
+  if (recompense) {
+    document.getElementById('sc-reward-banner').style.display = 'flex';
+    document.getElementById('sc-reward-sub').textContent = t('rewardSub', { prenom, max: displayMax });
+    try { navigator.vibrate && navigator.vibrate([100, 50, 100, 50, 200]); } catch {}
+  }
+  if (isReset) document.getElementById('sc-reset-banner').style.display = 'block';
+}
+
+document.getElementById('sc-btn-rescan').addEventListener('click', () => {
+  SC.processing = false;
+  document.getElementById('sc-result-sheet').classList.remove('visible');
+  SC.scanning = true;
+  scLoop();
+});
+
+document.getElementById('sc-btn-manual').addEventListener('click', () => openManualScan());
+document.getElementById('sc-btn-manual-after').addEventListener('click', () => {
+  SC.processing = false;
+  document.getElementById('sc-result-sheet').classList.remove('visible');
+  SC.scanning = true; scLoop();
+  openManualScan();
+});
+
+function openManualScan() {
+  document.getElementById('sc-manual-input').value = '';
+  document.getElementById('sc-manual-error').style.display = 'none';
+  document.getElementById('modal-scan-manual').classList.add('open');
+  setTimeout(() => document.getElementById('sc-manual-input').focus(), 150);
+}
+function closeManualScan() { document.getElementById('modal-scan-manual').classList.remove('open'); }
+
+document.getElementById('sc-manual-cancel').addEventListener('click', closeManualScan);
+document.getElementById('modal-scan-manual').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-scan-manual')) closeManualScan();
+});
+document.getElementById('sc-manual-submit').addEventListener('click', async () => {
+  const serial = document.getElementById('sc-manual-input').value.trim();
+  const errEl  = document.getElementById('sc-manual-error');
+  if (!serial) { showErr(errEl, t('enterSerial')); return; }
+  closeManualScan();
+  SC.processing = false;
+  proceedToScanDashboard(serial);
+});
+
+// ════════════════════════════════════════════════
+// POINTS PAD — mode "points" : saisie du montant avant l'incrément
+// ════════════════════════════════════════════════
+let SC_pendingSerial = null;
+
+function openPointsPadDashboard(serial) {
+  SC_pendingSerial = serial;
+  SC.awaitingPoints = true;
+  document.getElementById('sc-points-input').value = '';
+  document.getElementById('sc-points-error').style.display = 'none';
+  document.getElementById('modal-sc-points').classList.add('open');
+  setTimeout(() => document.getElementById('sc-points-input').focus(), 150);
+}
+
+function closePointsPadDashboard() {
+  document.getElementById('modal-sc-points').classList.remove('open');
+  SC_pendingSerial = null;
+  SC.awaitingPoints = false;
+}
+
+document.getElementById('sc-points-cancel').addEventListener('click', closePointsPadDashboard);
+document.getElementById('modal-sc-points').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-sc-points')) closePointsPadDashboard();
+});
+document.getElementById('sc-points-submit').addEventListener('click', async () => {
+  const raw = document.getElementById('sc-points-input').value.trim();
+  const errEl = document.getElementById('sc-points-error');
+  if (!/^[0-9]+$/.test(raw) || parseInt(raw, 10) <= 0) {
+    showErr(errEl, t('invalidPoints'));
+    return;
+  }
+  const n = parseInt(raw, 10);
+  const serial = SC_pendingSerial;
+  closePointsPadDashboard();
+  await submitScanDashboard(serial, n);
+});
+document.getElementById('sc-points-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('sc-points-submit').click();
+});
+
+// ════════════════════════════════════════════════
+// TAB: NOTIFICATIONS
+// ════════════════════════════════════════════════
+document.getElementById('notif-msg').addEventListener('input', function() {
+  const n = this.value.length;
+  const cc = document.getElementById('cc-msg');
+  cc.textContent = `${n} / 500`;
+  cc.classList.toggle('over', n >= 500);
+});
+
+document.getElementById('notif-form').addEventListener('submit', async () => {
+  const msg    = document.getElementById('notif-msg').value.trim();
+  const result = document.getElementById('notif-result');
+  const btn    = document.getElementById('btn-send-notif');
+  result.innerHTML = '';
+  if (!msg) { result.innerHTML = `<div class="alert alert-error">${t('msgRequired')}</div>`; return; }
+  btn.disabled = true; btn.innerHTML = `<span class="spinner"></span> ${t('sending')}`;
+  try {
+    const res  = await api('/api/notifications', { method: 'POST', body: JSON.stringify({ message: msg }) });
+    const data = await res.json();
+    if (!res.ok) {
+      result.innerHTML = `<div class="alert alert-error">${data.error || t('sendError')}</div>`;
+      S.notifLogs = null; setTimeout(() => loadNotifHistory(true), 400);
+      return;
+    }
+    const { apple, google } = data;
+    const totalClients = apple.total + google.total;
+    if (totalClients === 0) {
+      result.innerHTML = `<div class="alert alert-info">${t('noDevices')}</div>`;
+    } else {
+      const lines = [];
+      if (apple.active) {
+        lines.push(t('appleLine', { sent: apple.envoyes, total: apple.total, failed: apple.echecs }));
+      }
+      if (google.active) {
+        lines.push(t('googleLine', { updated: google.envoyes, total: google.total, failed: google.echecs }));
+      }
+      const totalEnvoyes = apple.envoyes + google.envoyes;
+      result.innerHTML = `<div class="alert ${totalEnvoyes > 0 ? 'alert-success' : 'alert-info'}">${lines.join('<br>')}</div>`;
+      if (totalEnvoyes > 0) {
+        document.getElementById('notif-msg').value = '';
+        document.getElementById('cc-msg').textContent = '0 / 500';
+      }
+    }
+    S.notifLogs = null;
+    setTimeout(() => loadNotifHistory(true), 600);
+  } catch (e) {
+    result.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = t('sendNotif');
+  }
+});
+
+async function loadNotifHistory(force = false) {
+  if (!force && S.notifLogs) { renderNotifHistory(); return; }
+  const el = document.getElementById('notif-history-list');
+  el.innerHTML = Array(3).fill('<div class="skeleton skeleton-card" style="height:56px"></div>').join('');
+  try {
+    const res  = await api('/api/notifications');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || t('errLoadHistory'));
+    // Response: { logs: [...], quota: { used, limit, forfait } }
+    S.notifLogs = Array.isArray(data.logs) ? data.logs : (Array.isArray(data) ? data : []);
+
+    const quotaEl   = document.getElementById('notif-quota');
+    const quotaText = document.getElementById('notif-quota-text');
+    const quota     = data.quota;
+    if (quota && quotaEl && quotaText) {
+      const pct = quota.limit > 0 ? quota.used / quota.limit : 0;
+      quotaText.textContent   = t('quotaText', { used: quota.used, limit: quota.limit });
+      quotaEl.style.display   = '';
+      quotaEl.className = 'notif-quota-bar' + (pct >= 1 ? ' overlimit' : pct >= 0.8 ? ' warning' : '');
+    }
+  } catch (e) {
+    S.notifLogs = [];
+    el.innerHTML = `<div class="alert alert-error" style="font-size:12px">${e.message}</div>`;
+    return;
+  }
+  renderNotifHistory();
+}
+
+function renderNotifHistory() {
+  const el = document.getElementById('notif-history-list');
+  if (!S.notifLogs || S.notifLogs.length === 0) {
+    el.innerHTML = `<div class="empty" style="padding:20px 0"><div class="empty-icon">📭</div><div class="empty-sub">${t('noNotifsSent')}</div></div>`;
+    return;
+  }
+  el.innerHTML = S.notifLogs.map(n => {
+    const total   = (n.total_apple || 0) + (n.total_google || 0);
+    const envoyes = (n.envoyes_apple || 0) + (n.envoyes_google || 0);
+    const dest = total > 0 ? t('received', { envoyes, total }) : t('noDevicesShort');
+    return `<div class="notif-log-entry">
+      <div class="notif-log-msg">${esc(n.message)}</div>
+      <div class="notif-log-meta"><span>${timeAgo(n.created_at)}</span><span>${dest}</span></div>
+    </div>`;
+  }).join('');
+}
+
+// ════════════════════════════════════════════════
+// FICHE CLIENT
+// ════════════════════════════════════════════════
+function openClientSheet(id) {
+  S.clientId   = id;
+  S.clientData = null;
+  document.getElementById('modal-client').classList.add('open');
+  document.getElementById('cs-name').textContent  = '…';
+  document.getElementById('cs-since').textContent = '';
+  document.getElementById('cs-pts').textContent   = '–';
+  document.getElementById('cs-pts-max').textContent = '';
+  document.getElementById('cs-reward-badge').style.display = 'none';
+  document.getElementById('cs-prog-bar').style.width = '0%';
+  document.getElementById('cs-prog-dots').innerHTML  = '';
+  document.getElementById('cs-scans-list').innerHTML = Array(3).fill('<div class="skeleton skeleton-card"></div>').join('');
+  api(`/api/clients/${id}`).then(r => r.json()).then(data => {
+    S.clientData = data;
+    renderClientSheet(data);
+  }).catch(e => {
+    document.getElementById('cs-scans-list').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+  });
+}
+
+function closeClientSheet() {
+  document.getElementById('modal-client').classList.remove('open');
+  S.clientId = null; S.clientData = null;
+}
+
+function renderClientSheet({ client, scans }) {
+  const displayMax = S.displayMax;
+  const full       = client.stored_value >= S.maxValue;
+  const pct        = Math.min(client.stored_value / Math.max(displayMax, 1) * 100, 100);
+  const av = document.getElementById('cs-avatar');
+  av.textContent      = client.prenom.charAt(0).toUpperCase();
+  av.style.background = colorFrom(client.prenom);
+  document.getElementById('cs-name').textContent  = client.prenom;
+  document.getElementById('cs-since').textContent = t('memberSince', { date: new Date(client.created_at).toLocaleDateString(dateLocale(), { day:'numeric', month:'long', year:'numeric' }) });
+  document.getElementById('cs-pts').textContent   = client.stored_value;
+  document.getElementById('cs-pts-max').textContent = `/ ${displayMax}`;
+  document.getElementById('cs-reward-badge').style.display = full ? '' : 'none';
+  document.getElementById('cs-prog-bar').style.width = pct + '%';
+  // Pastilles — n'a de sens qu'en mode tampons (peu d'unités). En mode points
+  // le seuil peut être élevé (ex. 500) ; le compteur "X/max" + la barre suffisent
+  // (compteur numérique, cohérent avec les autres surfaces). Bypass identique au
+  // scanner. Mode tampons : strictement inchangé.
+  const dotsEl = document.getElementById('cs-prog-dots');
+  dotsEl.innerHTML = '';
+  if (S.typeProgramme !== 'points') {
+    dotsEl.innerHTML = Array.from({ length: S.maxValue }, (_, i) =>
+      `<div class="cs-dot2${i < client.stored_value ? ' on' : ''}"></div>`
+    ).join('');
+  }
+
+  // Données contact — Pro+ uniquement
+  const contactEl = document.getElementById('cs-contact');
+  if (contactEl) {
+    const hasContact = S.forfait === 'pro_plus' && (client.email || client.telephone || client.date_anniversaire);
+    if (hasContact) {
+      const rows = [];
+      if (client.email)             rows.push(`<div class="cs-contact-row"><span class="cs-contact-icon">✉️</span><a class="cs-contact-link" href="mailto:${esc(client.email)}">${esc(client.email)}</a></div>`);
+      if (client.telephone)         rows.push(`<div class="cs-contact-row"><span class="cs-contact-icon">📞</span><a class="cs-contact-link" href="tel:${esc(client.telephone)}">${esc(client.telephone)}</a></div>`);
+      if (client.date_anniversaire) rows.push(`<div class="cs-contact-row"><span class="cs-contact-icon">🎂</span><span>${new Date(client.date_anniversaire + 'T00:00:00').toLocaleDateString(dateLocale(), { day:'numeric', month:'long' })}</span></div>`);
+      contactEl.innerHTML = `<div class="cs-contact-box">${rows.join('')}</div>`;
+    } else {
+      contactEl.innerHTML = '';
+    }
+  }
+
+  const sl = document.getElementById('cs-scans-list');
+  if (!scans || scans.length === 0) {
+    sl.innerHTML = `<div class="cs-no-scans">${t('noScansClient')}</div>`;
+    return;
+  }
+  sl.innerHTML = scans.map(s => {
+    const isReset  = s.stored_value_apres === 0 && s.stored_value_avant > 0;
+    const isReward = !isReset && s.stored_value_apres >= S.maxValue;
+    const icon = isReset ? '↩️' : isReward ? '🎉' : '✅';
+    const dateStr = new Date(s.date_scan).toLocaleDateString(dateLocale(), { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+    const lieu = s.points_de_vente && s.points_de_vente.nom;  // null pour un scan mono-site
+    const annule = !!s.annule_le;
+    return `<div class="cs-scan-row"${annule ? ' style="opacity:.5"' : ''}>
+      <span class="cs-scan-icon">${annule ? '↩️' : icon}</span>
+      <div style="flex:1">
+        <span class="cs-scan-delta"${annule ? ' style="text-decoration:line-through"' : ''}>${s.stored_value_avant} → ${s.stored_value_apres} pts</span>
+        <span class="cs-scan-date">${dateStr}${lieu ? ' · ' + esc(lieu) : ''}${annule ? ' · ' + t('scanAnnule') : ''}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('cs-close').addEventListener('click', closeClientSheet);
+document.getElementById('modal-client').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-client')) closeClientSheet();
+});
+
+// ── Supprimer depuis la fiche ──
+document.getElementById('cs-btn-delete').addEventListener('click', () => {
+  if (!S.clientData) return;
+  const id  = S.clientId;
+  const nom = S.clientData.client.prenom;
+  closeClientSheet();
+  openDeleteModal(id, nom);
+});
+
+// ── Modifier le prénom ──
+document.getElementById('cs-btn-rename').addEventListener('click', () => {
+  if (!S.clientData) return;
+  document.getElementById('rename-input').value = S.clientData.client.prenom;
+  document.getElementById('rename-err').style.display = 'none';
+  document.getElementById('modal-rename').classList.add('open');
+  setTimeout(() => document.getElementById('rename-input').focus(), 100);
+});
+document.getElementById('rename-cancel').addEventListener('click', () => {
+  document.getElementById('modal-rename').classList.remove('open');
+});
+document.getElementById('modal-rename').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-rename')) document.getElementById('modal-rename').classList.remove('open');
+});
+document.getElementById('rename-confirm').addEventListener('click', async () => {
+  const prenom = document.getElementById('rename-input').value.trim();
+  const errEl  = document.getElementById('rename-err');
+  errEl.style.display = 'none';
+  if (!prenom) { errEl.textContent = t('firstNameRequired'); errEl.style.display = 'block'; return; }
+  const btn = document.getElementById('rename-confirm');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res  = await api(`/api/clients/${S.clientId}`, { method: 'PATCH', body: JSON.stringify({ prenom }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || t('errorGeneric'));
+    if (S.clientData) S.clientData.client = { ...S.clientData.client, ...data };
+    if (S.clients) { const idx = S.clients.findIndex(c => c.id === S.clientId); if (idx >= 0) S.clients[idx].prenom = data.prenom; }
+    document.getElementById('modal-rename').classList.remove('open');
+    renderClientSheet(S.clientData);
+    renderClients(document.getElementById('search-clients').value);
+  } catch (e) {
+    errEl.textContent = e.message; errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = t('save');
+  }
+});
+
+// ── Ajuster les points ──
+document.getElementById('cs-btn-adjust').addEventListener('click', () => {
+  if (!S.clientData) return;
+  document.getElementById('adjust-input').value = S.clientData.client.stored_value;
+  // t('newBalance') rend le libellé complet (valeur du seuil incluse). On écrit
+  // dans adjust-label (élément stable sans enfant) — plus de <span id="adjust-max">
+  // à détruire puis relire (cause du bug « le bouton Points ne répond plus »).
+  document.getElementById('adjust-label').textContent = t('newBalance', { max: S.maxValue });
+  document.getElementById('adjust-err').style.display = 'none';
+  document.getElementById('modal-adjust').classList.add('open');
+  setTimeout(() => document.getElementById('adjust-input').focus(), 100);
+});
+document.getElementById('adjust-cancel').addEventListener('click', () => {
+  document.getElementById('modal-adjust').classList.remove('open');
+});
+document.getElementById('modal-adjust').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-adjust')) document.getElementById('modal-adjust').classList.remove('open');
+});
+document.getElementById('adjust-confirm').addEventListener('click', async () => {
+  const val   = parseInt(document.getElementById('adjust-input').value);
+  const errEl = document.getElementById('adjust-err');
+  errEl.style.display = 'none';
+  if (isNaN(val) || val < 0 || val > S.maxValue) {
+    errEl.textContent = t('valueBetween', { max: S.maxValue }); errEl.style.display = 'block'; return;
+  }
+  const btn = document.getElementById('adjust-confirm');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res  = await api(`/api/clients/${S.clientId}`, { method: 'PATCH', body: JSON.stringify({ stored_value: val }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || t('errorGeneric'));
+    if (S.clientData) S.clientData.client = { ...S.clientData.client, ...data };
+    if (S.clients) { const idx = S.clients.findIndex(c => c.id === S.clientId); if (idx >= 0) S.clients[idx].stored_value = data.stored_value; }
+    document.getElementById('modal-adjust').classList.remove('open');
+    renderClientSheet(S.clientData);
+    renderClients(document.getElementById('search-clients').value);
+  } catch (e) {
+    errEl.textContent = e.message; errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = t('confirm');
+  }
+});
+
+// ════════════════════════════════════════════════
+// MODAL: DELETE CLIENT
+// ════════════════════════════════════════════════
+function openDeleteModal(id, nom) {
+  S.deleteTargetId = id; S.deleteTargetNom = nom;
+  document.getElementById('modal-delete-body').innerHTML = t('deleteBody', { nom: esc(nom) });
+  document.getElementById('modal-delete').classList.add('open');
+}
+
+document.getElementById('btn-cancel-delete').addEventListener('click', () => {
+  document.getElementById('modal-delete').classList.remove('open');
+});
+document.getElementById('modal-delete').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-delete')) document.getElementById('modal-delete').classList.remove('open');
+});
+
+document.getElementById('btn-confirm-delete').addEventListener('click', async () => {
+  const id = S.deleteTargetId;
+  const btn = document.getElementById('btn-confirm-delete');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await api(`/api/clients/${id}`, { method: 'DELETE' });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error || t('errorGeneric')); }
+    document.getElementById('modal-delete').classList.remove('open');
+    if (S.clients) S.clients = S.clients.filter(c => c.id !== id);
+    renderClients(document.getElementById('search-clients').value);
+    if (S.stats) { S.stats.total_clients = Math.max(0, (S.stats.total_clients || 1) - 1); renderOverview(); }
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = t('deletePermanently');
+  }
+});
+
+// ════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════
+function timeAgo(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1)  return t('justNow');
+  if (m < 60) return t('minAgo', { m });
+  const h = Math.floor(m / 60);
+  if (h < 24) return t('hoursAgo', { h });
+  const d = Math.floor(h / 24);
+  if (d === 1) return t('yesterday');
+  if (d < 7)  return t('daysAgo', { d });
+  return new Date(iso).toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short' });
+}
+
+const COLORS = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#f97316'];
+function colorFrom(name) {
+  let h = 0;
+  for (const c of (name || '?')) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
+  return COLORS[h % COLORS.length];
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ════════════════════════════════════════════════
+// SERVICE WORKER + INIT
+// ════════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/dashboard/sw.js').catch(() => {});
+  // Rechargement automatique quand un nouveau SW prend la main
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data?.type === 'SW_UPDATED') window.location.reload();
+  });
+}
+
+// Langue mémorisée (persiste après logout pour garder l'écran de login traduit).
+try { _lang = localStorage.getItem('ww_dash_lang') === 'fr' ? 'fr' : 'en'; } catch {}
+document.documentElement.lang = _lang;
+document.title = t('pageTitle');
+applyI18n();
+
+if (restoreSession()) showDashboard();
+</script>
+</body>
+</html>

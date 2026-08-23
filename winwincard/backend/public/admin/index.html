@@ -1,0 +1,1690 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Admin">
+  <link rel="manifest" href="/admin/manifest.json">
+  <link rel="apple-touch-icon" href="/admin/icon-192.png">
+  <title>WinWin Admin</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f172a;
+      --surface:  #1e293b;
+      --surface2: #273548;
+      --border:   #334155;
+      --accent:   #7c3aed;
+      --accent-d: rgba(124,58,237,.15);
+      --text:     #f1f5f9;
+      --muted:    #94a3b8;
+      --success:  #22c55e;
+      --warning:  #f59e0b;
+      --error:    #ef4444;
+      --r:        12px;
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased; }
+
+    #app { height: 100%; }
+    .screen { display: none; height: 100%; flex-direction: column; }
+    .screen.active { display: flex; }
+
+    /* ═══ LOGIN ═══ */
+    #screen-login { justify-content: center; align-items: center; padding: 28px; gap: 28px; }
+    .login-logo { width: 72px; height: 72px; background: var(--accent); border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 34px; }
+    .login-title { font-size: 24px; font-weight: 800; }
+    .login-sub   { font-size: 13px; color: var(--muted); }
+    .login-form  { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 14px; }
+
+    /* ═══ FORMS ═══ */
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .field label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    .field input, .field textarea, .field select {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      color: var(--text); font-size: 15px; padding: 12px 14px; outline: none;
+      transition: border-color .15s; -webkit-appearance: none; font-family: inherit;
+    }
+    .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--accent); }
+    .field textarea { resize: vertical; min-height: 80px; }
+    .field select option { background: var(--surface); }
+
+    /* Color row */
+    .color-row { display: flex; gap: 8px; align-items: center; }
+    .color-row input[type="color"] { width: 44px; height: 44px; padding: 2px; border-radius: 8px; cursor: pointer; flex-shrink: 0; }
+    .color-row input[type="text"]  { flex: 1; }
+
+    .field-hint { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+    .btn {
+      padding: 13px 18px; border-radius: 10px; font-size: 14px; font-weight: 600;
+      border: none; cursor: pointer; transition: opacity .15s, transform .1s;
+      -webkit-tap-highlight-color: transparent; display: flex; align-items: center; justify-content: center; gap: 7px;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn:disabled { opacity: .5; pointer-events: none; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-ghost   { background: transparent; color: var(--muted); }
+    .btn-danger  { background: rgba(239,68,68,.1); color: var(--error); border: 1px solid rgba(239,68,68,.2); }
+    .btn-success { background: rgba(34,197,94,.1); color: var(--success); border: 1px solid rgba(34,197,94,.2); }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-sm { padding: 7px 12px; font-size: 12px; border-radius: 8px; }
+
+    .alert { border-radius: 10px; padding: 12px 14px; font-size: 13px; }
+    .alert-error   { background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.25); color: var(--error); }
+    .alert-success { background: rgba(34,197,94,.1); border: 1px solid rgba(34,197,94,.25); color: var(--success); }
+
+    /* ═══ DASHBOARD ═══ */
+    .dash-header {
+      flex-shrink: 0; height: 54px; display: flex; align-items: center;
+      padding: 0 16px; gap: 10px; background: var(--surface); border-bottom: 1px solid var(--border);
+    }
+    .dash-brand { font-size: 16px; font-weight: 800; flex: 1; }
+    .badge-admin { background: var(--accent-d); color: #a78bfa; border: 1px solid rgba(124,58,237,.3); font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 20px; }
+    .btn-icon { background: none; border: none; cursor: pointer; color: var(--muted); padding: 6px; border-radius: 8px; font-size: 18px; -webkit-tap-highlight-color: transparent; }
+
+    .dash-content { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px; padding-bottom: 32px; }
+
+    /* Stats */
+    .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+    .stat-card { background: var(--surface); border-radius: var(--r); padding: 14px 12px; }
+    .stat-icon  { font-size: 18px; margin-bottom: 6px; }
+    .stat-val   { font-size: 24px; font-weight: 800; line-height: 1; }
+    .stat-lbl   { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    /* Action bar */
+    .action-bar { display: flex; gap: 10px; margin-bottom: 14px; }
+    .search-wrap { flex: 1; position: relative; }
+    .search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+    .search-input {
+      width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      color: var(--text); font-size: 14px; padding: 10px 12px 10px 34px; outline: none; -webkit-appearance: none;
+    }
+    .search-input:focus { border-color: var(--accent); }
+
+    /* Merchant cards */
+    .merchant-card {
+      background: var(--surface); border-radius: var(--r); padding: 14px;
+      margin-bottom: 10px; display: flex; flex-direction: column; gap: 10px;
+    }
+    .merchant-top { display: flex; align-items: center; gap: 12px; }
+    .merchant-avatar {
+      width: 44px; height: 44px; border-radius: 10px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 800; color: #fff;
+    }
+    .merchant-info { flex: 1; min-width: 0; }
+    .merchant-name { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .merchant-slug { font-size: 11px; color: var(--muted); font-family: monospace; }
+    .badges { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+    .badge {
+      font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 20px; text-transform: uppercase; letter-spacing: .04em;
+    }
+    .badge-actif    { background: rgba(34,197,94,.15);  color: var(--success); }
+    .badge-suspendu { background: rgba(239,68,68,.15);  color: var(--error); }
+    .badge-pro      { background: var(--accent-d);      color: #a78bfa; }
+    .badge-basic    { background: rgba(148,163,184,.1); color: var(--muted); }
+    .badge-pro_plus { background: rgba(245,158,11,.15); color: var(--warning); }
+
+    .merchant-stats { display: flex; gap: 16px; }
+    .merchant-stat  { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+    .merchant-stat strong { color: var(--text); font-weight: 700; }
+
+    .merchant-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    /* Skeleton */
+    .skeleton { background: var(--surface2); border-radius: var(--r); animation: shimmer 1.4s ease-in-out infinite; }
+    @keyframes shimmer { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+    /* ═══ SHEET (Create / Edit) ═══ */
+    .sheet-backdrop {
+      display: none; position: fixed; inset: 0; z-index: 50;
+      background: rgba(0,0,0,.65); align-items: flex-end;
+    }
+    .sheet-backdrop.open { display: flex; }
+
+    .sheet {
+      background: var(--bg); border-radius: 24px 24px 0 0;
+      width: 100%; max-height: 92vh;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .sheet-header {
+      flex-shrink: 0; padding: 16px 20px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px;
+    }
+    .sheet-title { font-size: 17px; font-weight: 800; flex: 1; }
+    .sheet-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+    .sheet-footer { flex-shrink: 0; padding: 14px 20px; border-top: 1px solid var(--border); display: flex; gap: 10px; }
+    .sheet-footer .btn { flex: 1; }
+
+    .form-section { display: flex; flex-direction: column; gap: 12px; }
+    .form-section-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    /* ═══ MISC ═══ */
+    .spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .empty { text-align: center; padding: 40px 20px; color: var(--muted); }
+    .empty-icon { font-size: 36px; margin-bottom: 8px; }
+    .section-meta { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+    .divider { height: 1px; background: var(--border); }
+
+    /* ═══ STRIP TIERS ═══ */
+    .strip-tier-grid { display: flex; flex-direction: column; gap: 8px; }
+    .strip-tier-item { display: flex; align-items: center; gap: 10px; background: var(--surface2); border-radius: 8px; padding: 8px; }
+    .strip-thumb { width: 90px; height: 30px; object-fit: cover; border-radius: 4px; flex-shrink: 0; background: var(--border); }
+    .strip-tier-label { font-size: 13px; font-weight: 600; white-space: nowrap; }
+    .strip-tier-url { font-size: 10px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+    .strip-tiers-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 14px; background: var(--surface2); border-radius: 8px; }
+    .strip-upload-row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════ LOGIN ═══════════ -->
+<div id="screen-login" class="screen active">
+  <div class="login-logo">⚙️</div>
+  <div style="text-align:center">
+    <div class="login-title">WinWin Admin</div>
+    <div class="login-sub">Accès réservé à Yacine</div>
+  </div>
+  <form class="login-form" id="login-form" onsubmit="return false">
+    <div class="field">
+      <label for="in-pwd">Mot de passe admin</label>
+      <input id="in-pwd" type="password" placeholder="••••••••••••" autocomplete="current-password">
+    </div>
+    <div id="login-err" class="alert alert-error" style="display:none"></div>
+    <button type="submit" class="btn btn-primary" id="btn-login">Accéder</button>
+  </form>
+</div>
+
+<!-- ═══════════ DASHBOARD ═══════════ -->
+<div id="screen-dashboard" class="screen">
+
+  <header class="dash-header">
+    <span style="font-size:20px">⚙️</span>
+    <span class="dash-brand">WinWin</span>
+    <span class="badge-admin">Admin</span>
+    <button class="btn-icon" id="btn-logout" title="Déconnexion">⏏</button>
+  </header>
+
+  <div class="dash-content">
+
+    <!-- Stats globales -->
+    <div class="stats-row" id="stats-row">
+      <div class="skeleton" style="height:82px"></div>
+      <div class="skeleton" style="height:82px"></div>
+      <div class="skeleton" style="height:82px"></div>
+    </div>
+
+    <!-- Barre de recherche + bouton créer -->
+    <div class="action-bar">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input class="search-input" id="search-merchants" type="search" placeholder="Rechercher un marchand…">
+      </div>
+      <button class="btn btn-primary btn-sm" id="btn-new-merchant" style="white-space:nowrap">+ Nouveau</button>
+    </div>
+
+    <div id="merchants-meta" class="section-meta"></div>
+    <div id="merchants-list"></div>
+
+  </div>
+</div>
+
+</div><!-- /app -->
+
+<!-- ═══════════ SHEET : CRÉER / MODIFIER ═══════════ -->
+<div class="sheet-backdrop" id="sheet-backdrop">
+  <div class="sheet" id="sheet">
+    <div class="sheet-header">
+      <div class="sheet-title" id="sheet-title">Nouveau marchand</div>
+      <button class="btn-icon" id="btn-close-sheet">✕</button>
+    </div>
+    <div class="sheet-body" id="sheet-body">
+
+      <!-- Section : Identité -->
+      <div class="form-section">
+        <div class="form-section-title">Identité</div>
+        <div class="field">
+          <label for="f-nom">Nom du commerce *</label>
+          <input id="f-nom" type="text" placeholder="Café Le Central">
+        </div>
+        <div class="field">
+          <label for="f-pass-name">Nom court Apple Wallet <span style="color:var(--muted)">(logoText — max 20 caractères)</span></label>
+          <input id="f-pass-name" type="text" placeholder="Café Central" maxlength="20">
+          <div class="field-hint">Affiché à côté du logo sur le pass Apple. Si vide, utilise le nom complet du commerce.</div>
+        </div>
+        <div class="field">
+          <label for="f-slug">Slug (URL) *</label>
+          <input id="f-slug" type="text" placeholder="cafe-le-central" autocorrect="off" autocapitalize="none">
+          <div class="field-hint">Utilisé dans l'URL de la landing page : winwincard.fr/l/<strong id="slug-preview">…</strong></div>
+        </div>
+        <div class="field">
+          <label for="f-email">Email de contact *</label>
+          <input id="f-email" type="email" placeholder="contact@moncommerce.fr">
+        </div>
+        <div class="field">
+          <label for="f-telephone">Téléphone <span style="color:var(--muted)">(affiché au dos du pass)</span></label>
+          <input id="f-telephone" type="tel" placeholder="+33 1 23 45 67 89">
+        </div>
+        <div class="field">
+          <label for="f-adresse">Adresse <span style="color:var(--muted)">(affichée au dos du pass)</span></label>
+          <input id="f-adresse" type="text" placeholder="12 rue de la Paix, Paris 75001">
+        </div>
+        <div class="field" id="field-password">
+          <label for="f-pwd">Mot de passe *</label>
+          <input id="f-pwd" type="password" placeholder="Mot de passe du marchand" autocomplete="new-password">
+        </div>
+        <div class="field" id="field-new-password" style="display:none">
+          <label for="f-new-pwd">Nouveau mot de passe <span style="color:var(--muted)">(laisser vide pour ne pas changer)</span></label>
+          <input id="f-new-pwd" type="password" placeholder="Laisser vide = inchangé" autocomplete="new-password">
+        </div>
+      </div>
+
+      <!-- Section : Programme -->
+      <div class="form-section">
+        <div class="form-section-title">Programme de fidélité</div>
+        <div class="field-row">
+          <div class="field">
+            <label for="f-type-programme">Type de programme</label>
+            <select id="f-type-programme">
+              <option value="stamps">Tampons (visite = +1)</option>
+              <option value="points">Points (montant variable par visite)</option>
+            </select>
+            <div class="field-hint">Détermine si le scan ajoute toujours 1 tampon, ou un nombre de points saisi en caisse.</div>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="f-maxval">Seuil de reset (tampons ou points)</label>
+            <input id="f-maxval" type="number" min="1" max="100000" placeholder="10">
+          </div>
+          <div class="field">
+            <label for="f-displaymax">Affichage dénominateur (X/?) — optionnel</label>
+            <input id="f-displaymax" type="number" min="1" max="100000" placeholder="= seuil de reset par défaut">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="f-forfait">Forfait</label>
+            <select id="f-forfait">
+              <option value="pro">Pro</option>
+              <option value="basic">Basic</option>
+              <option value="pro_plus">Pro+</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="f-langue">Langue</label>
+            <select id="f-langue">
+              <option value="en">English</option>
+              <option value="fr">Français</option>
+            </select>
+            <div class="field-hint">Langue de l'interface, des notifs et du label du strip. Définie à la création.</div>
+          </div>
+          <div class="field">
+            <label for="f-quota-override">Quota notifs/mois (admin override)</label>
+            <input id="f-quota-override" type="number" min="0" max="9999" placeholder="défaut forfait">
+            <div class="field-hint">Si vide → quota par défaut du forfait.</div>
+          </div>
+          <div class="field" style="display:flex;gap:8px">
+            <div style="flex:1">
+              <label for="f-freq-bas">Seuil fréquence bas</label>
+              <input id="f-freq-bas" type="number" min="1" max="1000" placeholder="5">
+            </div>
+            <div style="flex:1">
+              <label for="f-freq-haut">Seuil fréquence haut</label>
+              <input id="f-freq-haut" type="number" min="1" max="1000" placeholder="10">
+            </div>
+          </div>
+          <div class="field-hint" style="margin-top:-6px">Tranches de la distribution du dashboard Réseau : moins de « bas » / entre / plus de « haut » passages par mois. Défauts 5 et 10.</div>
+        </div>
+        <div class="field">
+          <label for="f-texte">Texte landing page</label>
+          <textarea id="f-texte" placeholder="Collectez vos points à chaque visite…&#10;Après **10 visites**, votre récompense est débloquée !"></textarea>
+          <div class="field-hint">Formatage : <code>**texte**</code> pour mettre en gras. Les sauts de ligne sont respectés.</div>
+        </div>
+        <div class="field">
+          <label for="f-how-it-works">Texte "How it works" (dos du pass)</label>
+          <textarea id="f-how-it-works" placeholder="Show your pass at every visit.&#10;After X visits, your reward is automatically unlocked." rows="3"></textarea>
+          <div class="field-hint">Affiché au dos du pass Apple et Google Wallet. Laissez vide pour le texte générique automatique.</div>
+        </div>
+      </div>
+
+      <!-- Section : Workflows (Pro+ uniquement, visible en mode édition) -->
+      <div class="form-section" id="section-workflows" style="display:none">
+        <div class="form-section-title">Workflows automatiques <span style="color:var(--warning);font-size:10px">Pro+</span></div>
+        <div class="field-hint" style="margin-bottom:8px">Envois push automatiques — déclenchés chaque nuit à 12h (heure du Golfe).</div>
+
+        <div style="background:var(--surface2);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:12px">
+          <!-- Inactifs -->
+          <div>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;font-weight:600">
+              <input type="checkbox" id="f-wf-inactive-enabled" style="width:18px;height:18px;accent-color:var(--accent)">
+              Relance clients inactifs
+            </label>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-left:28px">
+              <span style="font-size:13px;color:var(--muted)">Notifier après</span>
+              <input id="f-wf-inactive-days" type="number" min="7" max="365" value="30"
+                style="width:64px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:6px 10px;outline:none">
+              <span style="font-size:13px;color:var(--muted)">jours sans visite</span>
+            </div>
+          </div>
+
+          <div style="padding-left:28px;margin-top:8px">
+            <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Message personnalisé (optionnel)</label>
+            <textarea id="f-wf-inactive-message" rows="2"
+              style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;resize:vertical;box-sizing:border-box"
+              placeholder="Hi {prenom}! Special offer this week — come visit us at {nom}!"></textarea>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">Variables : <code>{prenom}</code> et <code>{nom}</code>. Vide = message standard.</div>
+          </div>
+
+          <div style="height:1px;background:var(--border)"></div>
+
+          <!-- Proche récompense -->
+          <div>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;font-weight:600">
+              <input type="checkbox" id="f-wf-near-enabled" style="width:18px;height:18px;accent-color:var(--accent)">
+              Motivation récompense imminente
+            </label>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-left:28px">
+              <span style="font-size:13px;color:var(--muted)">Notifier à</span>
+              <input id="f-wf-near-threshold" type="number" min="1" max="10" value="2"
+                style="width:52px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:6px 10px;outline:none">
+              <span style="font-size:13px;color:var(--muted)">points de la récompense</span>
+            </div>
+          </div>
+
+          <div style="height:1px;background:var(--border)"></div>
+
+          <!-- Anniversaire -->
+          <div>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;font-weight:600">
+              <input type="checkbox" id="f-wf-birthday-enabled" style="width:18px;height:18px;accent-color:var(--accent)">
+              Message d'anniversaire 🎂
+            </label>
+            <div style="padding-left:28px;margin-top:8px">
+              <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Message personnalisé (optionnel)</label>
+              <textarea id="f-wf-birthday-message" rows="2"
+                style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;resize:vertical;box-sizing:border-box"
+                placeholder="Happy birthday {prenom}! 🎂 A little treat waiting for you at {nom}."></textarea>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">Variables : <code>{prenom}</code> et <code>{nom}</code>. Vide = message standard. Envoyé le jour J, une fois par an.</div>
+              <div style="font-size:11px;color:var(--warning);margin-top:4px">⚠️ Nécessite la landing premium activée (c'est là que le client saisit sa date de naissance).</div>
+            </div>
+          </div>
+        </div>
+        <div class="field-hint">⏱ Déduplication : relance/récompense max une fois par 7 jours ; anniversaire max une fois par an.</div>
+      </div>
+
+      <!-- Section : Landing page premium (Pro+ uniquement, visible en mode édition) -->
+      <div class="form-section" id="section-landing-fields" style="display:none">
+        <div class="form-section-title">Landing page <span style="color:var(--warning);font-size:10px">Pro+</span></div>
+        <div style="background:var(--surface2);border-radius:10px;padding:14px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px">
+            <input type="checkbox" id="f-landing-premium" style="width:18px;height:18px;accent-color:var(--accent)">
+            <div>
+              <div style="font-weight:600">Landing page premium</div>
+              <div style="font-size:12px;color:var(--muted)">Affiche les champs email, téléphone et anniversaire sur le formulaire d'inscription.</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Section : Couleurs -->
+      <div class="form-section">
+        <div class="form-section-title">Couleurs du pass</div>
+        <div class="field">
+          <label>Fond</label>
+          <div class="color-row">
+            <input type="color" id="cp-fond" value="#ffffff">
+            <input type="text"  id="f-fond"  placeholder="#ffffff" maxlength="7">
+          </div>
+        </div>
+        <div class="field">
+          <label>Texte principal</label>
+          <div class="color-row">
+            <input type="color" id="cp-texte" value="#000000">
+            <input type="text"  id="f-texte-c" placeholder="#000000" maxlength="7">
+          </div>
+        </div>
+        <div class="field">
+          <label>Texte secondaire (labels)</label>
+          <div class="color-row">
+            <input type="color" id="cp-label" value="#888888">
+            <input type="text"  id="f-label" placeholder="#888888" maxlength="7">
+          </div>
+        </div>
+        <div class="field">
+          <label>Fond récompense (optionnel — couleur du pass quand reward atteint)</label>
+          <div class="color-row">
+            <input type="color" id="cp-reward" value="#c9a84c">
+            <input type="text"  id="f-reward-color" placeholder="laisser vide = or par défaut" maxlength="7">
+          </div>
+        </div>
+        <div class="field">
+          <label>Texte récompense (optionnel — couleur du texte quand reward atteint)</label>
+          <div class="color-row">
+            <input type="color" id="cp-texte-reward" value="#190f00">
+            <input type="text"  id="f-texte-reward-c" placeholder="laisser vide = auto" maxlength="7">
+          </div>
+        </div>
+        <div class="field">
+          <label for="f-logo-reward">Logo doré URL (optionnel — remplace le logo quand reward atteint)</label>
+          <input id="f-logo-reward" type="url" placeholder="https://… (fallback : Logo URL)">
+        </div>
+      </div>
+
+      <!-- Section : Images -->
+      <div class="form-section">
+        <div class="form-section-title">Images</div>
+        <div class="field">
+          <label for="f-logo">Logo URL (Apple : 320×100 px)</label>
+          <input id="f-logo" type="url" placeholder="https://…">
+        </div>
+        <div class="field">
+          <label for="f-icon">Icon URL — notification Apple (87×87 px @3x)</label>
+          <input id="f-icon" type="url" placeholder="https://… (facultatif — fallback : Logo URL)">
+        </div>
+        <div class="field">
+          <label for="f-strip">Strip URL (Apple : 750×246 px)</label>
+          <input id="f-strip" type="url" placeholder="https://…">
+        </div>
+        <div class="field">
+          <label for="f-glogo">Logo Google Wallet (660×660 px, cercle)</label>
+          <input id="f-glogo" type="url" placeholder="https://… (fallback : Logo URL si vide)">
+        </div>
+        <div class="field">
+          <label for="f-ghero">Hero Google Wallet (1032×336 px)</label>
+          <input id="f-ghero" type="url" placeholder="https://… (fallback : Strip URL si vide)">
+        </div>
+      </div>
+
+      <!-- Section : Design du pass -->
+      <div class="form-section">
+        <div class="form-section-title">Design du pass</div>
+
+        <div class="field">
+          <label for="f-strip-mode">Mode strip</label>
+          <select id="f-strip-mode">
+            <option value="stamps">Tampons générés</option>
+            <option value="">Aucun (couleur unie)</option>
+          </select>
+          <div class="field-hint">En mode tampons, le strip est généré dynamiquement selon l'avancement du client.</div>
+        </div>
+
+        <div id="section-stamp-options">
+          <div class="field" style="margin-bottom:12px">
+            <label for="f-strip-theme">Thème des tampons</label>
+            <select id="f-strip-theme">
+              <option value="icon_metier">Icône métier (cadeau sur le dernier tampon)</option>
+              <option value="logo_stamp">Logo du marchand</option>
+            </select>
+          </div>
+          <div class="field" id="section-stamp-icon" style="margin-bottom:12px">
+            <label>Icône</label>
+            <div id="icon-picker" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px"></div>
+            <input type="hidden" id="f-stamp-icon" value="coffee">
+          </div>
+        </div>
+
+        <!-- Couleurs manuelles des pastilles (optionnel) — écrasent le calcul WCAG auto -->
+        <div id="section-pastille-colors">
+          <div class="field" style="margin-bottom:12px">
+            <label>Pastille — fond du cercle rempli (optionnel)</label>
+            <div class="color-row">
+              <input type="color" id="cp-past-fond" value="#000000">
+              <input type="text"  id="f-past-fond" placeholder="vide = auto · accepte « transparent »">
+            </div>
+          </div>
+          <div class="field" style="margin-bottom:12px">
+            <label>Pastille — contour, vides + remplies (optionnel)</label>
+            <div class="color-row">
+              <input type="color" id="cp-past-contour" value="#c9a84c">
+              <input type="text"  id="f-past-contour" placeholder="vide = auto · accepte « transparent »">
+            </div>
+          </div>
+          <div class="field" style="margin-bottom:8px">
+            <label>Pastille — couleur de l'icône remplie (optionnel)</label>
+            <div class="color-row">
+              <input type="color" id="cp-past-icone" value="#c9a84c">
+              <input type="text"  id="f-past-icone" placeholder="vide = auto">
+            </div>
+          </div>
+          <div id="pastille-contrast-warn" class="field-hint" style="display:none;color:var(--warning)"></div>
+          <div class="field-hint">Vide = couleurs auto (contraste WCAG). Sans effet en mode points, ni sur l'état récompense (doré).</div>
+          <div class="field" style="margin-top:12px;margin-bottom:8px">
+            <label>Texte « LOYALTY CARD » — couleur (optionnel)</label>
+            <div class="color-row">
+              <input type="color" id="cp-label-strip" value="#c9a84c">
+              <input type="text"  id="f-label-strip" placeholder="vide = auto WCAG">
+            </div>
+            <div class="field-hint">Vide = couleur auto. Sans effet en mode points ni sur l'état récompense.</div>
+          </div>
+        </div>
+
+        <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:12px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px">
+            <input type="checkbox" id="f-strip-label" checked style="width:18px;height:18px;accent-color:var(--accent)">
+            <div>
+              <div style="font-weight:600">Afficher « LOYALTY CARD » en haut du strip</div>
+              <div style="font-size:12px;color:var(--muted)">Texte centré, semi-transparent.</div>
+            </div>
+          </label>
+        </div>
+
+        <div class="field">
+          <label>Image statique (override universel)</label>
+          <div class="field-hint">Si une image est uploadée, elle remplace le strip généré sur tous les passes — quel que soit le mode. 750×246 px recommandé.</div>
+          <div id="strip-static-preview" style="display:none;margin:8px 0">
+            <img id="strip-static-img" style="display:block;width:100%;height:auto;border-radius:8px" alt="Strip statique actuel">
+            <button type="button" class="btn btn-danger btn-sm" id="btn-delete-strip-static" style="margin-top:8px">✕ Supprimer l'image statique</button>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px">
+            <div class="field" style="flex:1;margin:0">
+              <label style="font-size:10px" for="f-strip-static-file">PNG / JPEG / WebP</label>
+              <input id="f-strip-static-file" type="file" accept="image/png,image/jpeg,image/webp" style="font-size:13px;padding:10px">
+            </div>
+            <button class="btn btn-outline btn-sm" id="btn-upload-strip-static" type="button" style="white-space:nowrap;align-self:flex-end">⬆ Upload</button>
+          </div>
+          <div id="strip-static-status" class="field-hint" style="margin-top:6px;display:none"></div>
+        </div>
+
+        <div class="field" id="section-strip-live-preview" style="display:none">
+          <label>Aperçu en temps réel</label>
+          <div style="border-radius:8px;overflow:hidden;background:repeating-linear-gradient(45deg,#1a1a2e 0,#1a1a2e 8px,#202035 8px,#202035 16px)">
+            <img id="strip-preview-img" style="display:block;width:100%;height:auto" alt="Aperçu strip">
+          </div>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-refresh-preview" style="margin-top:6px">↺ Rafraîchir l'aperçu</button>
+        </div>
+      </div>
+
+      <!-- Section : Parrainage -->
+      <div class="form-section" id="section-referral">
+        <div class="form-section-title">Parrainage</div>
+        <div style="background:var(--surface2);border-radius:10px;padding:14px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px">
+            <input type="checkbox" id="f-referral-enabled" style="width:18px;height:18px;accent-color:var(--accent)">
+            <div>
+              <div style="font-weight:600">Activer le parrainage</div>
+              <div style="font-size:12px;color:var(--muted)">Lien unique par client. Quand un filleul passe en caisse pour la première fois, le parrain gagne des points bonus.</div>
+            </div>
+          </label>
+          <div class="field" style="margin-top:12px;margin-bottom:0">
+            <label for="f-referral-bonus">Points bonus par parrainage</label>
+            <input id="f-referral-bonus" type="number" min="1" max="10" value="1" style="width:100px">
+          </div>
+        </div>
+      </div>
+
+      <!-- Section : Strip images par tier (visible en mode édition uniquement) -->
+      <div class="form-section" id="section-strip-tiers" style="display:none">
+        <div class="form-section-title">Strip images par tier</div>
+        <div class="field-hint">Images affichées sur le pass selon le nombre de points (750×246 px recommandé). Chaque image est stockée dans Supabase Storage.</div>
+        <div id="strip-tiers-list"></div>
+        <div class="field" style="margin-top:4px">
+          <label>Ajouter / remplacer une image</label>
+          <div class="strip-upload-row">
+            <div class="field" style="flex:0 0 75px;margin:0">
+              <label for="f-tier-num" style="font-size:10px">Tier (pts)</label>
+              <input id="f-tier-num" type="number" min="0" max="99" value="0" style="text-align:center">
+            </div>
+            <div class="field" style="flex:1;min-width:150px;margin:0">
+              <label for="f-tier-file" style="font-size:10px">Fichier PNG / JPEG / WebP</label>
+              <input id="f-tier-file" type="file" accept="image/png,image/jpeg,image/webp" style="font-size:13px;padding:10px">
+            </div>
+            <button class="btn btn-outline btn-sm" id="btn-upload-tier" type="button" style="align-self:flex-end;white-space:nowrap">⬆ Upload</button>
+          </div>
+          <div id="tier-upload-status" class="field-hint" style="margin-top:6px;display:none"></div>
+        </div>
+      </div>
+
+      <!-- Section : Avancé -->
+      <div class="form-section">
+        <div class="form-section-title">Avancé</div>
+        <div class="field">
+          <label for="f-tiers">Images tier (JSON brut)</label>
+          <textarea id="f-tiers" style="font-family:monospace;font-size:12px" placeholder='[{"min":0,"max":4,"url":"…"},{"min":5,"max":9,"url":"…"}]'></textarea>
+          <div class="field-hint">Mis à jour automatiquement via la section ci-dessus. Édition directe possible pour les plages (min ≠ max).</div>
+        </div>
+      </div>
+
+      <div id="sheet-err" class="alert alert-error" style="display:none"></div>
+
+    </div><!-- /sheet-body -->
+    <div class="sheet-footer">
+      <button class="btn btn-primary" id="btn-save-merchant">Enregistrer</button>
+      <button class="btn btn-ghost"   id="btn-cancel-sheet">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- Feuille de gestion des points de vente (boutiques) — ADMIN -->
+<div class="sheet-backdrop" id="pdv-backdrop">
+  <div class="sheet">
+    <div class="sheet-header">
+      <div class="sheet-title" id="pdv-title">Points de vente</div>
+      <button class="btn-icon" id="btn-close-pdv">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="form-section">
+        <div class="form-section-title">Ajouter une boutique</div>
+        <div class="field" style="display:flex;gap:8px;align-items:flex-end">
+          <div style="flex:1">
+            <label for="pdv-nom">Nom de la boutique</label>
+            <input id="pdv-nom" type="text" placeholder="Boutique Lyon Bellecour" maxlength="80">
+          </div>
+          <button class="btn btn-primary" id="btn-pdv-create">Créer</button>
+        </div>
+        <div class="field-hint">Créer une boutique ajoute une unité facturée à ce réseau.</div>
+      </div>
+      <div id="pdv-err" class="alert alert-error" style="display:none"></div>
+      <div class="form-section">
+        <div class="form-section-title">Boutiques actives (<span id="pdv-count">0</span>)</div>
+        <div id="pdv-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════
+// STATE
+// ════════════════════════════════════
+const S = {
+  token:     null,
+  merchants: null,
+  stats:     null,
+  editId:    null,  // null = création, uuid = modification
+};
+
+// ════════════════════════════════════
+// SESSION
+// ════════════════════════════════════
+function saveToken(t) {
+  S.token = t;
+  try { localStorage.setItem('ww_admin_token', t); } catch {}
+}
+function clearToken() {
+  S.token = null;
+  try { localStorage.removeItem('ww_admin_token'); } catch {}
+}
+function restoreToken() {
+  try { const t = localStorage.getItem('ww_admin_token'); if (t) { S.token = t; return true; } } catch {}
+  return false;
+}
+
+// ════════════════════════════════════
+// API WRAPPER
+// ════════════════════════════════════
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${S.token}`,
+      ...(opts.headers || {}),
+    },
+  });
+  if (res.status === 401) { clearToken(); showLogin(); throw new Error('Session expirée'); }
+  return res;
+}
+
+// ════════════════════════════════════
+// LOGIN
+// ════════════════════════════════════
+document.getElementById('login-form').addEventListener('submit', async () => {
+  const pwd = document.getElementById('in-pwd').value;
+  const err = document.getElementById('login-err');
+  const btn = document.getElementById('btn-login');
+  err.style.display = 'none';
+  if (!pwd) { err.textContent = 'Mot de passe requis'; err.style.display = 'block'; return; }
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res  = await fetch('/api/admin/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pwd }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Mot de passe incorrect');
+    saveToken(data.token);
+    showDashboard();
+  } catch (e) {
+    err.textContent = e.message; err.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Accéder';
+  }
+});
+
+function showLogin() {
+  document.getElementById('screen-dashboard').classList.remove('active');
+  document.getElementById('screen-login').classList.add('active');
+}
+
+function showDashboard() {
+  document.getElementById('screen-login').classList.remove('active');
+  document.getElementById('screen-dashboard').classList.add('active');
+  loadAll();
+}
+
+document.getElementById('btn-logout').addEventListener('click', () => {
+  if (!confirm('Se déconnecter ?')) return;
+  clearToken(); S.merchants = null; S.stats = null; showLogin();
+});
+
+// ════════════════════════════════════
+// CHARGEMENT DONNÉES
+// ════════════════════════════════════
+async function loadAll() {
+  await Promise.all([loadStats(), loadMerchants()]);
+}
+
+async function loadStats() {
+  try {
+    const res  = await api('/api/admin/stats');
+    S.stats    = await res.json();
+    renderStats();
+  } catch {}
+}
+
+async function loadMerchants() {
+  document.getElementById('merchants-list').innerHTML =
+    Array(3).fill('<div class="skeleton" style="height:120px;margin-bottom:10px"></div>').join('');
+  try {
+    const res   = await api('/api/admin/marchands');
+    S.merchants = await res.json();
+    renderMerchants();
+  } catch (e) {
+    document.getElementById('merchants-list').innerHTML =
+      `<div class="alert alert-error">${e.message}</div>`;
+  }
+}
+
+// ════════════════════════════════════
+// RENDER STATS
+// ════════════════════════════════════
+function renderStats() {
+  document.getElementById('stats-row').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-icon">🏪</div>
+      <div class="stat-val">${S.stats?.marchands_actifs ?? '–'}</div>
+      <div class="stat-lbl">marchands actifs</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">👥</div>
+      <div class="stat-val">${S.stats?.total_clients ?? '–'}</div>
+      <div class="stat-lbl">clients totaux</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">✅</div>
+      <div class="stat-val">${S.stats?.total_scans ?? '–'}</div>
+      <div class="stat-lbl">scans cumulés</div>
+    </div>`;
+}
+
+// ════════════════════════════════════
+// RENDER MERCHANTS
+// ════════════════════════════════════
+function renderMerchants(filter = '') {
+  const list = document.getElementById('merchants-list');
+  const meta = document.getElementById('merchants-meta');
+  if (!S.merchants) return;
+  const q     = filter.toLowerCase().trim();
+  const shown = q
+    ? S.merchants.filter(m => m.nom.toLowerCase().includes(q) || m.slug.includes(q))
+    : S.merchants;
+
+  meta.textContent = `${shown.length} marchand${shown.length > 1 ? 's' : ''}`;
+
+  if (shown.length === 0) {
+    list.innerHTML = `<div class="empty"><div class="empty-icon">🏪</div><div>Aucun résultat</div></div>`;
+    return;
+  }
+
+  list.innerHTML = shown.map(m => {
+    const bg  = m.couleur_fond || '#6366f1';
+    const ini = (m.nom || '?').charAt(0).toUpperCase();
+    const statusBadge = m.actif
+      ? '<span class="badge badge-actif">Actif</span>'
+      : '<span class="badge badge-suspendu">Suspendu</span>';
+    const forfaitBadge = `<span class="badge badge-${m.forfait}">${m.forfait.replace('_', '+')}</span>`;
+    const toggleLabel  = m.actif ? 'Suspendre' : 'Activer';
+    const toggleClass  = m.actif ? 'btn-danger' : 'btn-success';
+
+    return `<div class="merchant-card" data-id="${m.id}">
+      <div class="merchant-top">
+        <div class="merchant-avatar" style="background:${esc(bg)}">${esc(ini)}</div>
+        <div class="merchant-info">
+          <div class="merchant-name">${esc(m.nom)}</div>
+          <div class="merchant-slug">${esc(m.slug)}</div>
+          <div class="badges">${statusBadge}${forfaitBadge}</div>
+        </div>
+      </div>
+      <div class="merchant-stats">
+        <div class="merchant-stat">👥 <strong>${m.total_clients}</strong> clients</div>
+        <div class="merchant-stat">✅ <strong>${m.scans_aujourdhui}</strong> scans aujourd'hui</div>
+        <div class="merchant-stat">🎯 <strong>${m.max_value}</strong> ${m.type_programme === 'points' ? 'points' : 'tampons'}</div>
+        ${m.boutiques_actives > 0 ? `<div class="merchant-stat">🏪 <strong>${m.boutiques_actives}</strong> boutiques</div>` : ''}
+      </div>
+      <div class="merchant-actions">
+        <button class="btn btn-outline btn-sm btn-edit" data-id="${m.id}">✏️ Modifier</button>
+        <button class="btn btn-outline btn-sm btn-pdv" data-id="${m.id}" data-nom="${esc(m.nom)}">🏪 Boutiques</button>
+        <button class="btn ${toggleClass} btn-sm btn-toggle" data-id="${m.id}" data-actif="${m.actif}">${toggleLabel}</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.btn-edit').forEach(b => b.addEventListener('click', () => openEditSheet(b.dataset.id)));
+  list.querySelectorAll('.btn-pdv').forEach(b => b.addEventListener('click', () => openPdvSheet(b.dataset.id, b.dataset.nom)));
+  list.querySelectorAll('.btn-toggle').forEach(b => {
+    b.addEventListener('click', () => toggleSuspension(b.dataset.id, b.dataset.actif === 'true'));
+  });
+}
+
+document.getElementById('search-merchants').addEventListener('input', e => renderMerchants(e.target.value));
+
+// ════════════════════════════════════
+// SUSPENSION
+// ════════════════════════════════════
+async function toggleSuspension(id, estActif) {
+  const action = estActif ? 'suspendre' : 'activer';
+  const m = S.merchants?.find(m => m.id === id);
+  if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} "${m?.nom || id}" ?`)) return;
+
+  try {
+    const res = await api(`/api/admin/marchands/${id}/suspension`, {
+      method: 'PATCH',
+      body: JSON.stringify({ actif: !estActif }),
+    });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+    if (S.merchants) {
+      const idx = S.merchants.findIndex(m => m.id === id);
+      if (idx >= 0) S.merchants[idx].actif = !estActif;
+    }
+    renderMerchants(document.getElementById('search-merchants').value);
+    // Mettre à jour le compteur stats
+    if (S.stats) {
+      S.stats.marchands_actifs += estActif ? -1 : 1;
+      renderStats();
+    }
+  } catch (e) {
+    alert('Erreur : ' + e.message);
+  }
+}
+
+// ════════════════════════════════════
+// SHEET : OUVRIR / FERMER
+// ════════════════════════════════════
+function openCreateSheet() {
+  S.editId = null;
+  resetForm();
+  document.getElementById('sheet-title').textContent = 'Nouveau marchand';
+  document.getElementById('field-password').style.display    = '';
+  document.getElementById('field-new-password').style.display = 'none';
+  document.getElementById('btn-save-merchant').textContent = 'Créer le marchand';
+  openSheet();
+}
+
+async function openEditSheet(id) {
+  S.editId = id;
+  resetForm();
+  document.getElementById('sheet-title').textContent         = 'Modifier le marchand';
+  document.getElementById('field-password').style.display    = 'none';
+  document.getElementById('field-new-password').style.display = '';
+  document.getElementById('btn-save-merchant').textContent   = 'Enregistrer les modifications';
+
+  // Charger les données complètes du marchand
+  try {
+    const res  = await api(`/api/admin/marchands/${id}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
+    fillForm(data);
+  } catch (e) {
+    alert('Impossible de charger le marchand : ' + e.message);
+    return;
+  }
+  openSheet();
+}
+
+function openSheet()  { document.getElementById('sheet-backdrop').classList.add('open'); }
+function closeSheet() { document.getElementById('sheet-backdrop').classList.remove('open'); }
+
+// ════════════════════════════════════
+// POINTS DE VENTE (boutiques) — admin
+// ════════════════════════════════════
+function openPdvSheet(marchandId, marchandNom) {
+  S.pdvMarchandId = marchandId;
+  document.getElementById('pdv-title').textContent = `Points de vente — ${marchandNom || ''}`;
+  document.getElementById('pdv-nom').value = '';
+  document.getElementById('pdv-err').style.display = 'none';
+  document.getElementById('pdv-backdrop').classList.add('open');
+  loadPdvList();
+}
+function closePdvSheet() { document.getElementById('pdv-backdrop').classList.remove('open'); }
+
+async function loadPdvList() {
+  const listEl = document.getElementById('pdv-list');
+  listEl.innerHTML = '<div class="field-hint">Chargement…</div>';
+  try {
+    const res  = await api(`/api/admin/marchands/${S.pdvMarchandId}/points-de-vente`);
+    const list = await res.json();
+    document.getElementById('pdv-count').textContent = list.length;
+    if (!list.length) { listEl.innerHTML = '<div class="field-hint">Aucune boutique.</div>'; return; }
+    listEl.innerHTML = list.map(b =>
+      `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--border,#eee)">
+        <div style="min-width:0">
+          <div>${esc(b.nom)}</div>
+          <div class="field-hint" style="margin:0">${b.scanner_login ? '🔑 ' + esc(b.scanner_login) : '— aucun identifiant scanner —'}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn btn-outline btn-sm btn-pdv-cred" data-id="${esc(b.id)}" data-nom="${esc(b.nom)}" data-login="${esc(b.scanner_login || '')}">Identifiants</button>
+          <button class="btn btn-danger btn-sm btn-pdv-archive" data-id="${esc(b.id)}" data-nom="${esc(b.nom)}">Archiver</button>
+        </div>
+      </div>`).join('');
+    listEl.querySelectorAll('.btn-pdv-archive').forEach(b =>
+      b.addEventListener('click', () => archivePdv(b.dataset.id, b.dataset.nom)));
+    listEl.querySelectorAll('.btn-pdv-cred').forEach(b =>
+      b.addEventListener('click', () => setPdvCredentials(b.dataset.id, b.dataset.nom, b.dataset.login)));
+  } catch (e) { listEl.innerHTML = '<div class="alert alert-error">Erreur de chargement</div>'; }
+}
+
+// Provisioning des identifiants scanner d'une boutique (étape 3b, admin).
+async function setPdvCredentials(id, nom, currentLogin) {
+  const login = prompt(`Login scanner pour « ${nom} » (min 3 caractères) :`, currentLogin || '');
+  if (login === null) return;
+  const password = prompt('Mot de passe scanner (min 6 caractères) :', '');
+  if (password === null) return;
+  const res  = await api(`/api/admin/points-de-vente/${id}/scanner`, {
+    method: 'PATCH', body: JSON.stringify({ scanner_login: login.trim(), password }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { alert(data.error || 'Erreur'); return; }
+  alert(`Identifiants enregistrés pour « ${nom} ».\nLogin : ${data.scanner_login}\nÀ transmettre au point de vente.`);
+  await loadPdvList();
+}
+
+async function createPdv() {
+  const err = document.getElementById('pdv-err');
+  const nom = document.getElementById('pdv-nom').value.trim();
+  err.style.display = 'none';
+  if (!nom) { err.textContent = 'Nom requis'; err.style.display = 'block'; return; }
+  const btn = document.getElementById('btn-pdv-create');
+  btn.disabled = true;
+  try {
+    const res  = await api(`/api/admin/marchands/${S.pdvMarchandId}/points-de-vente`, {
+      method: 'POST', body: JSON.stringify({ nom }),
+    });
+    const data = await res.json();
+    if (!res.ok) { err.textContent = data.error || 'Erreur'; err.style.display = 'block'; return; }
+    document.getElementById('pdv-nom').value = '';
+    await loadPdvList();
+    await loadMerchants();  // rafraîchit le compteur de facturation sur les cartes
+  } finally { btn.disabled = false; }
+}
+
+async function archivePdv(id, nom) {
+  if (!confirm(`Archiver la boutique "${nom}" ? Son historique est conservé, mais elle ne sera plus facturée.`)) return;
+  const res = await api(`/api/admin/points-de-vente/${id}`, { method: 'DELETE' });
+  if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || 'Erreur'); return; }
+  await loadPdvList();
+  await loadMerchants();
+}
+
+document.getElementById('btn-close-pdv').addEventListener('click', closePdvSheet);
+document.getElementById('btn-pdv-create').addEventListener('click', createPdv);
+document.getElementById('pdv-backdrop').addEventListener('click', e => {
+  if (e.target === document.getElementById('pdv-backdrop')) closePdvSheet();
+});
+
+document.getElementById('btn-new-merchant').addEventListener('click', openCreateSheet);
+document.getElementById('btn-close-sheet').addEventListener('click', closeSheet);
+document.getElementById('btn-cancel-sheet').addEventListener('click', closeSheet);
+document.getElementById('sheet-backdrop').addEventListener('click', e => {
+  if (e.target === document.getElementById('sheet-backdrop')) closeSheet();
+});
+
+// ════════════════════════════════════
+// FORM : REMPLIR / VIDER
+// ════════════════════════════════════
+function resetForm() {
+  ['f-nom','f-pass-name','f-slug','f-email','f-telephone','f-adresse','f-pwd','f-new-pwd','f-quota-override','f-logo','f-logo-reward','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-how-it-works','f-tiers','f-wf-inactive-message','f-wf-birthday-message'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.getElementById('f-type-programme').value = 'stamps';
+  document.getElementById('f-strip-mode').value  = 'stamps';
+  document.getElementById('f-strip-theme').value = 'icon_metier';
+  document.getElementById('f-stamp-icon').value  = 'coffee';
+  document.getElementById('f-strip-label').checked = true;
+  document.getElementById('strip-static-preview').style.display = 'none';
+  document.getElementById('strip-static-status').style.display  = 'none';
+  document.getElementById('f-strip-static-file').value = '';
+  document.getElementById('section-strip-live-preview').style.display = 'none';
+  renderIconPicker('coffee');
+  setColor('cp-fond',   'f-fond',         '#ffffff');
+  setColor('cp-texte',  'f-texte-c',      '#000000');
+  setColor('cp-label',  'f-label',        '#888888');
+  document.getElementById('cp-reward').value = '#c9a84c';
+  document.getElementById('f-reward-color').value = '';
+  document.getElementById('cp-texte-reward').value = '#190f00';
+  document.getElementById('f-texte-reward-c').value = '';
+  document.getElementById('cp-past-fond').value = '#000000';
+  document.getElementById('f-past-fond').value = '';
+  document.getElementById('cp-past-contour').value = '#c9a84c';
+  document.getElementById('f-past-contour').value = '';
+  document.getElementById('cp-past-icone').value = '#c9a84c';
+  document.getElementById('f-past-icone').value = '';
+  document.getElementById('cp-label-strip').value = '#c9a84c';
+  document.getElementById('f-label-strip').value = '';
+  const pcw = document.getElementById('pastille-contrast-warn'); if (pcw) pcw.style.display = 'none';
+  document.getElementById('f-maxval').value     = '10';
+  document.getElementById('f-displaymax').value = '';
+  document.getElementById('f-forfait').value    = 'pro';
+  document.getElementById('f-langue').value      = 'en';
+  document.getElementById('slug-preview').textContent = '…';
+  document.getElementById('sheet-err').style.display = 'none';
+  document.getElementById('section-strip-tiers').style.display = 'none';
+  document.getElementById('section-workflows').style.display     = 'none';
+  document.getElementById('section-landing-fields').style.display = 'none';
+  document.getElementById('strip-tiers-list').innerHTML = '';
+  document.getElementById('tier-upload-status').style.display = 'none';
+  document.getElementById('f-tier-num').value = '0';
+  document.getElementById('f-tier-file').value = '';
+  document.getElementById('f-wf-inactive-enabled').checked = false;
+  document.getElementById('f-wf-inactive-days').value       = '30';
+  document.getElementById('f-wf-near-enabled').checked      = false;
+  document.getElementById('f-wf-near-threshold').value      = '2';
+  document.getElementById('f-wf-birthday-enabled').checked  = false;
+  document.getElementById('f-landing-premium').checked  = false;
+  document.getElementById('f-referral-enabled').checked = false;
+  document.getElementById('f-referral-bonus').value     = '1';
+}
+
+function fillForm(m) {
+  v('f-nom',       m.nom);
+  v('f-pass-name', m.pass_display_name);
+  v('f-slug',      m.slug);
+  v('f-email',     m.email_contact);
+  v('f-telephone', m.telephone);
+  v('f-adresse',   m.adresse);
+  v('f-texte',  m.texte_landing);
+  v('f-logo',        m.logo_url);
+  v('f-logo-reward', m.logo_reward_url);
+  v('f-icon',        m.icon_url);
+  v('f-strip',  m.image_strip_url);
+  v('f-glogo',  m.google_logo_url);
+  v('f-ghero',  m.google_hero_url);
+  v('f-maxval', m.max_value);
+  v('f-displaymax', m.display_max_value);
+  if (['basic','pro','pro_plus'].includes(m.forfait)) document.getElementById('f-forfait').value = m.forfait;
+  if (['fr','en'].includes(m.langue)) document.getElementById('f-langue').value = m.langue;
+  if (['stamps','points'].includes(m.type_programme)) document.getElementById('f-type-programme').value = m.type_programme;
+  v('f-quota-override', m.notification_quota_override);
+  v('f-freq-bas',  m.freq_seuil_bas);
+  v('f-freq-haut', m.freq_seuil_haut);
+  if (m.couleur_fond)         setColor('cp-fond',   'f-fond',         m.couleur_fond);
+  if (m.couleur_texte)        setColor('cp-texte',  'f-texte-c',      m.couleur_texte);
+  if (m.couleur_label)        setColor('cp-label',  'f-label',        m.couleur_label);
+  if (m.couleur_fond_reward)  setColor('cp-reward', 'f-reward-color', m.couleur_fond_reward);
+  else { document.getElementById('cp-reward').value = '#c9a84c'; document.getElementById('f-reward-color').value = ''; }
+  if (m.couleur_texte_reward) setColor('cp-texte-reward', 'f-texte-reward-c', m.couleur_texte_reward);
+  else { document.getElementById('cp-texte-reward').value = '#190f00'; document.getElementById('f-texte-reward-c').value = ''; }
+  if (m.couleur_pastille_fond)    setColor('cp-past-fond', 'f-past-fond', m.couleur_pastille_fond);
+  else { document.getElementById('cp-past-fond').value = '#000000'; document.getElementById('f-past-fond').value = ''; }
+  if (m.couleur_pastille_contour) setColor('cp-past-contour', 'f-past-contour', m.couleur_pastille_contour);
+  else { document.getElementById('cp-past-contour').value = '#c9a84c'; document.getElementById('f-past-contour').value = ''; }
+  if (m.couleur_pastille_icone)   setColor('cp-past-icone', 'f-past-icone', m.couleur_pastille_icone);
+  else { document.getElementById('cp-past-icone').value = '#c9a84c'; document.getElementById('f-past-icone').value = ''; }
+  if (m.couleur_label_strip)      setColor('cp-label-strip', 'f-label-strip', m.couleur_label_strip);
+  else { document.getElementById('cp-label-strip').value = '#c9a84c'; document.getElementById('f-label-strip').value = ''; }
+  updatePastilleContrastWarn();
+  if (m.images_tiers)  document.getElementById('f-tiers').value = JSON.stringify(m.images_tiers, null, 2);
+  document.getElementById('slug-preview').textContent = m.slug || '…';
+  // Section strip tiers — visible en mode édition uniquement
+  document.getElementById('section-strip-tiers').style.display = '';
+  renderStripTiers(m.images_tiers);
+  // Sections Pro+ — visibles en édition pour les Pro+
+  if (m.forfait === 'pro_plus') {
+    document.getElementById('section-workflows').style.display     = 'flex';
+    document.getElementById('section-landing-fields').style.display = 'flex';
+    document.getElementById('f-wf-inactive-enabled').checked = !!m.workflow_inactive_enabled;
+    document.getElementById('f-wf-inactive-days').value       = m.workflow_inactive_days || 30;
+    v('f-wf-inactive-message', m.workflow_inactive_message);
+    document.getElementById('f-wf-near-enabled').checked      = !!m.workflow_near_reward_enabled;
+    document.getElementById('f-wf-near-threshold').value      = m.workflow_near_reward_threshold || 2;
+    document.getElementById('f-wf-birthday-enabled').checked  = !!m.workflow_birthday_enabled;
+    v('f-wf-birthday-message', m.workflow_birthday_message);
+    document.getElementById('f-landing-premium').checked = !!m.landing_premium;
+  }
+  document.getElementById('f-referral-enabled').checked = !!m.referral_enabled;
+  document.getElementById('f-referral-bonus').value     = m.referral_bonus_points || 1;
+  v('f-how-it-works', m.how_it_works);
+
+  // Design du pass
+  document.getElementById('f-strip-mode').value  = m.strip_mode || '';
+  document.getElementById('f-strip-theme').value = m.strip_theme || 'icon_metier';
+  const savedIcon = m.stamp_icon || 'coffee';
+  document.getElementById('f-stamp-icon').value  = savedIcon;
+  renderIconPicker(savedIcon);
+  document.getElementById('f-strip-label').checked = m.strip_label !== 'off';
+  toggleStampOptions(m.strip_mode);
+
+  // Image statique (si image_strip_url est un upload Storage, afficher la miniature)
+  const stripUrl = m.image_strip_url || '';
+  const staticPreview = document.getElementById('strip-static-preview');
+  if (stripUrl) {
+    document.getElementById('strip-static-img').src = stripUrl + '?t=' + Date.now();
+    staticPreview.style.display = '';
+  } else {
+    staticPreview.style.display = 'none';
+  }
+
+  // Aperçu inline (visible uniquement en édition)
+  loadStripPreview(m.id, m.strip_mode, m.strip_theme, m.stamp_icon, m.strip_label, m.max_value);
+}
+
+function v(id, val) { const el = document.getElementById(id); if (el && val != null) el.value = val; }
+
+function setColor(cpId, txtId, hex) {
+  const cp  = document.getElementById(cpId);
+  const txt = document.getElementById(txtId);
+  if (cp && isHex(hex))  cp.value  = hex;
+  if (txt) txt.value = hex || '';
+}
+
+function isHex(s) { return /^#[0-9a-fA-F]{6}$/.test(s); }
+
+// Synchronisation color picker ↔ champ texte
+[['cp-fond','f-fond'],['cp-texte','f-texte-c'],['cp-label','f-label'],['cp-reward','f-reward-color'],['cp-texte-reward','f-texte-reward-c'],['cp-past-fond','f-past-fond'],['cp-past-contour','f-past-contour'],['cp-past-icone','f-past-icone'],['cp-label-strip','f-label-strip']].forEach(([cpId, txtId]) => {
+  document.getElementById(cpId).addEventListener('input', e => {
+    document.getElementById(txtId).value = e.target.value;
+    updatePastilleContrastWarn();
+  });
+  document.getElementById(txtId).addEventListener('input', e => {
+    if (isHex(e.target.value)) document.getElementById(cpId).value = e.target.value;
+    updatePastilleContrastWarn();
+  });
+});
+
+// ── Garde-fou contraste pastille (non bloquant) ───────────────────────────
+// Réplique relativeLuminance de strip-generator.js (WCAG 2.1). Retourne null
+// si la couleur n'est pas un hex #rrggbb (ex. « transparent », rgba, vide) →
+// on ne peut alors pas calculer, on n'avertit pas.
+function _hexLum(hex) {
+  const h = (hex || '').replace('#', '');
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
+  return [0, 2, 4].reduce((L, i, j) => {
+    const c = parseInt(h.slice(i, i + 2), 16) / 255;
+    const lin = c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    return L + lin * [0.2126, 0.7152, 0.0722][j];
+  }, 0);
+}
+function updatePastilleContrastWarn() {
+  const warn = document.getElementById('pastille-contrast-warn');
+  if (!warn) return;
+  const iconV = document.getElementById('f-past-icone').value.trim();
+  const fondV = document.getElementById('f-past-fond').value.trim();
+  // Fond effectif de l'icône : le fond de pastille s'il est un hex, sinon
+  // (transparent/vide) le fond du pass (couleur_fond) sur lequel l'icône repose.
+  const bgV = isHex(fondV) ? fondV : document.getElementById('f-fond').value.trim();
+  const li = _hexLum(iconV), lb = _hexLum(bgV);
+  if (li == null || lb == null) { warn.style.display = 'none'; return; }
+  const ratio = (Math.max(li, lb) + 0.05) / (Math.min(li, lb) + 0.05);
+  if (ratio < 3) {
+    warn.textContent = `⚠️ Contraste icône/cercle faible (${ratio.toFixed(1)}:1) — vérifie sur un vrai téléphone.`;
+    warn.style.display = '';
+  } else {
+    warn.style.display = 'none';
+  }
+}
+// Recalcul aussi quand le fond du pass change (il sert de fond effectif si la
+// pastille est transparente).
+document.getElementById('f-fond').addEventListener('input', updatePastilleContrastWarn);
+document.getElementById('cp-fond').addEventListener('input', updatePastilleContrastWarn);
+
+// Toggle sections Pro+ quand le forfait change en mode édition
+document.getElementById('f-forfait').addEventListener('change', function() {
+  if (!S.editId) return;
+  const isProPlus = this.value === 'pro_plus';
+  document.getElementById('section-workflows').style.display     = isProPlus ? 'flex' : 'none';
+  document.getElementById('section-landing-fields').style.display = isProPlus ? 'flex' : 'none';
+});
+
+// Auto-génération slug depuis le nom (création uniquement)
+document.getElementById('f-nom').addEventListener('input', e => {
+  if (S.editId) return;
+  const slug = toSlug(e.target.value);
+  document.getElementById('f-slug').value = slug;
+  document.getElementById('slug-preview').textContent = slug || '…';
+});
+document.getElementById('f-slug').addEventListener('input', e => {
+  document.getElementById('slug-preview').textContent = e.target.value || '…';
+});
+
+// ════════════════════════════════════
+// SAUVEGARDE
+// ════════════════════════════════════
+document.getElementById('btn-save-merchant').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-save-merchant');
+  const err = document.getElementById('sheet-err');
+  err.style.display = 'none';
+
+  const body = collectForm();
+  if (!body) return;
+
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Enregistrement…';
+
+  try {
+    const url    = S.editId ? `/api/admin/marchands/${S.editId}` : '/api/admin/marchands';
+    const method = S.editId ? 'PATCH' : 'POST';
+    const res    = await api(url, { method, body: JSON.stringify(body) });
+    const data   = await res.json();
+
+    if (!res.ok) throw new Error(data.error || 'Erreur serveur');
+
+    closeSheet();
+    S.merchants = null; // forcer le rechargement
+    await loadAll();
+  } catch (e) {
+    err.textContent = e.message; err.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = S.editId ? 'Enregistrer les modifications' : 'Créer le marchand';
+  }
+});
+
+function collectForm() {
+  const err  = document.getElementById('sheet-err');
+  const nom  = document.getElementById('f-nom').value.trim();
+  const slug = document.getElementById('f-slug').value.trim();
+  const email= document.getElementById('f-email').value.trim();
+  const pwd  = S.editId
+    ? document.getElementById('f-new-pwd').value
+    : document.getElementById('f-pwd').value;
+
+  if (!nom)   { showSheetErr('Le nom est requis'); return null; }
+  if (!slug)  { showSheetErr('Le slug est requis'); return null; }
+  if (!email) { showSheetErr('L\'email est requis'); return null; }
+  if (!S.editId && !pwd) { showSheetErr('Le mot de passe est requis'); return null; }
+
+  const fondHex   = document.getElementById('f-fond').value.trim()         || '#ffffff';
+  const texteHex  = document.getElementById('f-texte-c').value.trim()      || '#000000';
+  const labelHex  = document.getElementById('f-label').value.trim()        || '#888888';
+  const rewardHex      = document.getElementById('f-reward-color').value.trim()   || null;
+  const texteRewardHex = document.getElementById('f-texte-reward-c').value.trim() || null;
+
+  // Valider images_tiers JSON si renseigné
+  const tiersRaw = document.getElementById('f-tiers').value.trim();
+  let images_tiers = undefined;
+  if (tiersRaw) {
+    try { images_tiers = JSON.parse(tiersRaw); }
+    catch { showSheetErr('images_tiers : JSON invalide'); return null; }
+  }
+
+  const body = {
+    nom, slug, email_contact: email,
+    couleur_fond:         fondHex,
+    couleur_texte:        texteHex,
+    couleur_label:        labelHex,
+    couleur_fond_reward:  rewardHex,
+    couleur_texte_reward: texteRewardHex,
+    max_value:       parseInt(document.getElementById('f-maxval').value) || 10,
+    display_max_value: parseInt(document.getElementById('f-displaymax').value) || undefined,
+    forfait:         document.getElementById('f-forfait').value,
+    langue:          document.getElementById('f-langue').value,
+    type_programme:  document.getElementById('f-type-programme').value,
+    notification_quota_override: parseInt(document.getElementById('f-quota-override').value) || null,
+    freq_seuil_bas:  parseInt(document.getElementById('f-freq-bas').value)  || 5,
+    freq_seuil_haut: parseInt(document.getElementById('f-freq-haut').value) || 10,
+    texte_landing:    document.getElementById('f-texte').value.trim()          || undefined,
+    pass_display_name: document.getElementById('f-pass-name').value.trim()    || undefined,
+    how_it_works:     document.getElementById('f-how-it-works').value.trim()  || null,
+    logo_url:         document.getElementById('f-logo').value.trim()        || undefined,
+    logo_reward_url:  document.getElementById('f-logo-reward').value.trim() || null,
+    icon_url:         document.getElementById('f-icon').value.trim()        || null,
+    image_strip_url:  document.getElementById('f-strip').value.trim()     || null,
+    google_logo_url:  document.getElementById('f-glogo').value.trim()     || null,
+    google_hero_url:  document.getElementById('f-ghero').value.trim()     || null,
+    telephone:        document.getElementById('f-telephone').value.trim() || null,
+    adresse:          document.getElementById('f-adresse').value.trim()   || null,
+    images_tiers,
+  };
+
+  if (!S.editId && pwd) body.password = pwd;
+  if (S.editId  && pwd) body.new_password = pwd;
+
+  // Champs Pro+ (édition Pro+ uniquement)
+  if (S.editId && document.getElementById('section-workflows').style.display === 'flex') {
+    body.workflow_inactive_enabled      = document.getElementById('f-wf-inactive-enabled').checked;
+    body.workflow_inactive_days         = parseInt(document.getElementById('f-wf-inactive-days').value) || 30;
+    body.workflow_inactive_message      = document.getElementById('f-wf-inactive-message').value.trim() || null;
+    body.workflow_near_reward_enabled   = document.getElementById('f-wf-near-enabled').checked;
+    body.workflow_near_reward_threshold = parseInt(document.getElementById('f-wf-near-threshold').value) || 2;
+    body.workflow_birthday_enabled      = document.getElementById('f-wf-birthday-enabled').checked;
+    body.workflow_birthday_message      = document.getElementById('f-wf-birthday-message').value.trim() || null;
+    body.landing_premium = document.getElementById('f-landing-premium').checked;
+  }
+
+  body.referral_enabled      = document.getElementById('f-referral-enabled').checked;
+  body.referral_bonus_points = parseInt(document.getElementById('f-referral-bonus').value) || 1;
+
+  // Design du pass
+  body.strip_mode  = document.getElementById('f-strip-mode').value  || null;
+  body.strip_theme = document.getElementById('f-strip-theme').value || 'icon_metier';
+  body.stamp_icon  = document.getElementById('f-stamp-icon').value  || 'coffee';
+  body.strip_label = document.getElementById('f-strip-label').checked ? 'on' : 'off';
+  // Couleurs manuelles des pastilles (optionnel) — vide → null → repli WCAG auto.
+  // Champ texte : accepte hex, rgba() ou « transparent ».
+  body.couleur_pastille_fond    = document.getElementById('f-past-fond').value.trim()    || null;
+  body.couleur_pastille_contour = document.getElementById('f-past-contour').value.trim() || null;
+  body.couleur_pastille_icone   = document.getElementById('f-past-icone').value.trim()   || null;
+  body.couleur_label_strip      = document.getElementById('f-label-strip').value.trim()  || null;
+
+  return body;
+}
+
+function showSheetErr(msg) {
+  const el = document.getElementById('sheet-err');
+  el.textContent = msg; el.style.display = 'block';
+}
+
+// ════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════
+function toSlug(s) {
+  return s.toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ════════════════════════════════════
+// STRIP TIER IMAGES
+// ════════════════════════════════════
+
+async function apiUpload(path, formData) {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${S.token}` },
+    body: formData,
+  });
+  if (res.status === 401) { clearToken(); showLogin(); throw new Error('Session expirée'); }
+  return res;
+}
+
+function renderStripTiers(imagesTiers) {
+  const list = document.getElementById('strip-tiers-list');
+  if (!Array.isArray(imagesTiers) || imagesTiers.length === 0) {
+    list.innerHTML = '<div class="strip-tiers-empty">Aucune image configurée — le pass utilisera la couleur de fond du marchand.</div>';
+    return;
+  }
+  list.innerHTML = `<div class="strip-tier-grid">${
+    imagesTiers.map(t => {
+      const label = t.min === t.max ? `Tier ${t.min} pt${t.min > 1 ? 's' : ''}` : `Tiers ${t.min}–${t.max} pts`;
+      const canDelete = t.min === t.max;
+      return `<div class="strip-tier-item">
+        <img class="strip-thumb" src="${esc(t.url)}" alt="${esc(label)}" loading="lazy" onerror="this.style.background='#ef4444'">
+        <div style="flex:1;overflow:hidden">
+          <div class="strip-tier-label">${esc(label)}</div>
+          <div class="strip-tier-url">${esc(t.url)}</div>
+        </div>
+        ${canDelete
+          ? `<button class="btn btn-danger btn-sm" type="button" onclick="deleteStripTier(${t.min})">✕</button>`
+          : `<span style="font-size:11px;color:var(--muted)">plage</span>`}
+      </div>`;
+    }).join('')
+  }</div>`;
+}
+
+document.getElementById('btn-upload-tier').addEventListener('click', async () => {
+  if (!S.editId) return;
+  const tier   = parseInt(document.getElementById('f-tier-num').value);
+  const file   = document.getElementById('f-tier-file').files[0];
+  const status = document.getElementById('tier-upload-status');
+  const btn    = document.getElementById('btn-upload-tier');
+
+  status.style.display = 'none';
+  if (isNaN(tier) || tier < 0) {
+    status.textContent = 'Numéro de tier invalide.';
+    status.style.color = 'var(--error)'; status.style.display = 'block'; return;
+  }
+  if (!file) {
+    status.textContent = 'Sélectionnez un fichier image.';
+    status.style.color = 'var(--error)'; status.style.display = 'block'; return;
+  }
+
+  btn.disabled = true; btn.textContent = '⏳…';
+  try {
+    const fd = new FormData();
+    fd.append('image', file);
+    fd.append('tier', String(tier));
+    const res  = await apiUpload(`/api/admin/marchands/${S.editId}/assets`, fd);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur upload');
+
+    // Sync état local
+    const m = S.merchants?.find(m => m.id === S.editId);
+    if (m) m.images_tiers = data.images_tiers;
+    renderStripTiers(data.images_tiers);
+    document.getElementById('f-tiers').value = JSON.stringify(data.images_tiers, null, 2);
+    document.getElementById('f-tier-file').value = '';
+    status.textContent = `✓ Tier ${tier} uploadé avec succès.`;
+    status.style.color = 'var(--success)'; status.style.display = 'block';
+  } catch (e) {
+    status.textContent = e.message;
+    status.style.color = 'var(--error)'; status.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = '⬆ Upload';
+  }
+});
+
+async function deleteStripTier(tier) {
+  if (!S.editId) return;
+  if (!confirm(`Supprimer l'image de tier ${tier} ?`)) return;
+  try {
+    const res  = await api(`/api/admin/marchands/${S.editId}/assets/${tier}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur suppression');
+
+    const m = S.merchants?.find(m => m.id === S.editId);
+    if (m) m.images_tiers = data.images_tiers;
+    renderStripTiers(data.images_tiers);
+    document.getElementById('f-tiers').value = data.images_tiers ? JSON.stringify(data.images_tiers, null, 2) : '';
+  } catch (e) {
+    alert('Erreur : ' + e.message);
+  }
+}
+
+// ════════════════════════════════════
+// DESIGN DU PASS
+// ════════════════════════════════════
+const ICON_NAMES = ['coffee','scissors','hamburger','shopping-bag','heart','star','gift','hair-dryer','barbell','fork-knife','flower','check','flower-tulip','game-controller','sneaker'];
+const ICON_LABELS = { coffee:'Café', scissors:'Coiffure', hamburger:'Burger', 'shopping-bag':'Boutique', heart:'Bien-être', star:'Beauté', gift:'Cadeau', 'hair-dryer':'Coiffure', barbell:'Sport', 'fork-knife':'Restaurant', flower:'Fleur', check:'Générique', 'flower-tulip':'Tulipe', 'game-controller':'Gaming', sneaker:'Sneakers' };
+
+function renderIconPicker(selected) {
+  const container = document.getElementById('icon-picker');
+  if (!container) return;
+  container.innerHTML = ICON_NAMES.map(name => {
+    const active = name === selected;
+    return `<button type="button" onclick="selectIcon('${name}')" title="${ICON_LABELS[name]}"
+      style="width:44px;height:44px;border-radius:10px;border:2px solid ${active ? 'var(--accent)' : 'var(--border)'};
+             background:${active ? 'var(--accent-d)' : 'var(--surface)'};cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;transition:.15s"
+      id="icon-btn-${name}">${iconEmoji(name)}</button>`;
+  }).join('');
+  toggleIconPickerVisibility();
+}
+
+function iconEmoji(name) {
+  const map = { coffee:'☕', scissors:'✂️', hamburger:'🍔', 'shopping-bag':'🛍️', heart:'❤️', star:'⭐', gift:'🎁', 'hair-dryer':'💇', barbell:'🏋️', 'fork-knife':'🍽️', flower:'🌸', check:'✓', 'flower-tulip':'🌷', 'game-controller':'🎮', sneaker:'👟' };
+  return map[name] || '●';
+}
+
+function selectIcon(name) {
+  document.getElementById('f-stamp-icon').value = name;
+  renderIconPicker(name);
+}
+
+function toggleIconPickerVisibility() {
+  const theme = document.getElementById('f-strip-theme').value;
+  const el = document.getElementById('section-stamp-icon');
+  if (el) el.style.display = (theme === 'logo_stamp') ? 'none' : '';
+}
+
+function toggleStampOptions(mode) {
+  const el = document.getElementById('section-stamp-options');
+  if (el) el.style.display = mode === 'stamps' ? '' : 'none';
+}
+
+document.getElementById('f-strip-mode').addEventListener('change', function() {
+  toggleStampOptions(this.value);
+});
+
+document.getElementById('f-strip-theme').addEventListener('change', function() {
+  toggleIconPickerVisibility();
+});
+
+// Upload image statique
+document.getElementById('btn-upload-strip-static').addEventListener('click', async () => {
+  if (!S.editId) return;
+  const file   = document.getElementById('f-strip-static-file').files[0];
+  const status = document.getElementById('strip-static-status');
+  const btn    = document.getElementById('btn-upload-strip-static');
+  status.style.display = 'none';
+  if (!file) {
+    status.textContent = 'Sélectionnez un fichier image.';
+    status.style.color = 'var(--error)'; status.style.display = 'block'; return;
+  }
+  btn.disabled = true; btn.textContent = '⏳…';
+  try {
+    const fd = new FormData();
+    fd.append('image', file);
+    const res  = await apiUpload(`/api/admin/marchands/${S.editId}/strip-static`, fd);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur upload');
+
+    document.getElementById('f-strip').value = data.url;
+    document.getElementById('strip-static-img').src = data.url + '?t=' + Date.now();
+    document.getElementById('strip-static-preview').style.display = '';
+    document.getElementById('f-strip-static-file').value = '';
+    const m = S.merchants?.find(m => m.id === S.editId);
+    if (m) m.image_strip_url = data.url;
+    status.textContent = '✓ Image uploadée. Elle remplace le strip généré sur tous les passes.';
+    status.style.color = 'var(--success)'; status.style.display = 'block';
+  } catch (e) {
+    status.textContent = e.message;
+    status.style.color = 'var(--error)'; status.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = '⬆ Upload';
+  }
+});
+
+// Supprimer image statique
+document.getElementById('btn-delete-strip-static').addEventListener('click', async () => {
+  if (!S.editId || !confirm('Supprimer l\'image statique ? Le strip généré reprendra.')) return;
+  try {
+    const res  = await api(`/api/admin/marchands/${S.editId}/strip-static`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur');
+    document.getElementById('strip-static-preview').style.display = 'none';
+    document.getElementById('f-strip').value = '';
+    const m = S.merchants?.find(m => m.id === S.editId);
+    if (m) m.image_strip_url = null;
+    const status = document.getElementById('strip-static-status');
+    status.textContent = '✓ Image supprimée.';
+    status.style.color = 'var(--success)'; status.style.display = 'block';
+  } catch (e) {
+    alert('Erreur : ' + e.message);
+  }
+});
+
+// Aperçu live
+function loadStripPreview(id, mode, theme, icon, label, maxVal) {
+  if (!id) return;
+  const section = document.getElementById('section-strip-live-preview');
+  const img     = document.getElementById('strip-preview-img');
+  section.style.display = '';
+  img.style.opacity = '0.4';
+
+  const params = new URLSearchParams({
+    mode:    mode  || 'stamps',
+    theme:   theme || 'icon_metier',
+    icon:    icon  || 'coffee',
+    label:   label !== 'off' ? 'on' : 'off',
+    filled:  Math.ceil((maxVal || 10) / 2),
+    variant: 'strip2x',
+  });
+
+  // <img src> ne transmet pas le header Authorization → fetch authentifié + blob URL
+  fetch(`/api/admin/marchands/${id}/strip-preview?${params}`, {
+    headers: { Authorization: 'Bearer ' + S.token },
+  }).then(r => {
+    if (!r.ok) throw new Error(r.status);
+    return r.blob();
+  }).then(blob => {
+    const prev = img.dataset.blobUrl;
+    if (prev) URL.revokeObjectURL(prev);
+    const url = URL.createObjectURL(blob);
+    img.dataset.blobUrl = url;
+    img.src = url;
+    img.style.display  = 'block';
+    img.style.opacity  = '1';
+  }).catch(() => {
+    img.style.opacity = '1';
+  });
+}
+
+document.getElementById('btn-refresh-preview').addEventListener('click', () => {
+  if (!S.editId) return;
+  const m = S.merchants?.find(m => m.id === S.editId);
+  loadStripPreview(
+    S.editId,
+    document.getElementById('f-strip-mode').value,
+    document.getElementById('f-strip-theme').value,
+    document.getElementById('f-stamp-icon').value,
+    document.getElementById('f-strip-label').checked ? 'on' : 'off',
+    m?.max_value || parseInt(document.getElementById('f-maxval').value) || 10,
+  );
+});
+
+// Rafraîchir l'aperçu après sauvegarde réussie
+const _origSaveBtn = document.getElementById('btn-save-merchant');
+_origSaveBtn.addEventListener('click', () => {
+  setTimeout(() => {
+    if (S.editId && document.getElementById('section-strip-live-preview').style.display !== 'none') {
+      const m = S.merchants?.find(m => m.id === S.editId);
+      loadStripPreview(
+        S.editId,
+        document.getElementById('f-strip-mode').value,
+        document.getElementById('f-strip-theme').value,
+        document.getElementById('f-stamp-icon').value,
+        document.getElementById('f-strip-label').checked ? 'on' : 'off',
+        m?.max_value || parseInt(document.getElementById('f-maxval').value) || 10,
+      );
+    }
+  }, 1500);
+});
+
+// ════════════════════════════════════
+// SERVICE WORKER
+// ════════════════════════════════════
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/admin/sw.js').catch(() => {});
+
+// ════════════════════════════════════
+// INIT
+// ════════════════════════════════════
+renderIconPicker('coffee');
+toggleStampOptions('stamps');
+if (restoreToken()) showDashboard();
+</script>
+</body>
+</html>

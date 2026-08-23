@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="theme-color" content="#1a1a2e">
+  <title>Loyalty Card</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --brand:      #1a1a2e;
+      --brand-text: #ffffff;
+      --bg1:        #1a1a2e;
+      --bg2:        #0a0a14;
+    }
+
+    html, body {
+      min-height: 100dvh;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(160deg, var(--bg1) 0%, var(--bg2) 100%);
+      background-attachment: fixed;
+      color: #fff;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Page wrapper ── */
+    .page {
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 20px 60px;
+      gap: 28px;
+    }
+
+    /* ── Hero (logo + nom) ── */
+    .hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      width: 100%;
+      max-width: 420px;
+    }
+    .hero-logo {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.15);
+      border: 2px solid rgba(255,255,255,.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      font-weight: 800;
+      color: #fff;
+      overflow: hidden;
+      flex-shrink: 0;
+      box-shadow: 0 0 0 8px rgba(255,255,255,.06), 0 8px 32px rgba(0,0,0,.35);
+    }
+    .hero-logo img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+    .hero-name {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -.3px;
+      text-align: center;
+      color: #fff;
+    }
+
+    /* ── Mockup carte Wallet ── */
+    .card-mockup {
+      width: 100%;
+      max-width: 420px;
+      aspect-ratio: 375 / 140;
+      background: var(--brand);
+      border-radius: 18px;
+      padding: 16px 20px 14px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.45), 0 2px 8px rgba(0,0,0,.3);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+      transform: perspective(900px) rotateX(2.5deg);
+    }
+    /* Reflet vitré */
+    .card-mockup::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,.14) 0%, transparent 55%);
+      border-radius: inherit;
+      pointer-events: none;
+    }
+    .mockup-top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .mockup-logo-wrap {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .mockup-logo-wrap img { width: 100%; height: 100%; object-fit: cover; }
+    .mockup-name-wrap {
+      display: flex;
+      flex-direction: column;
+    }
+    .mockup-merchant { font-size: 13px; font-weight: 700; color: var(--mockup-text,     rgba(255,255,255,.95)); }
+    .mockup-label    { font-size: 10px; color: var(--mockup-text-sub, rgba(255,255,255,.55)); text-transform: uppercase; letter-spacing: .08em; }
+    .mockup-stamps {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .mockup-stamp {
+      flex: 1;
+      aspect-ratio: 1;
+      max-width: 28px;
+      border-radius: 50%;
+      background: var(--stamp-empty-bg,    rgba(255,255,255,.12));
+      border: 1.5px solid var(--stamp-empty-border, rgba(255,255,255,.35));
+    }
+    .mockup-stamp.filled {
+      background: var(--stamp-filled-bg, rgba(255,255,255,.90));
+      border-color: transparent;
+    }
+
+    /* ── Carte verre (formulaire + succès) ── */
+    .content-card {
+      width: 100%;
+      max-width: 420px;
+      background: rgba(255,255,255,.10);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 24px;
+      padding: 28px 24px 32px;
+    }
+
+    /* ── Description ── */
+    .description {
+      font-size: 15px;
+      line-height: 1.6;
+      color: rgba(255,255,255,.75);
+      margin-bottom: 24px;
+      text-align: center;
+    }
+    .description strong { font-weight: 700; color: #fff; }
+
+    /* ── Formulaire ── */
+    .field { margin-bottom: 14px; }
+    .field label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      color: rgba(255,255,255,.6);
+      margin-bottom: 6px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+    .field input {
+      width: 100%;
+      padding: 14px 16px;
+      font-size: 16px;
+      border: 1.5px solid rgba(255,255,255,.2);
+      border-radius: 14px;
+      background: rgba(255,255,255,.1);
+      color: #fff;
+      outline: none;
+      transition: border-color .2s, background .2s;
+      -webkit-appearance: none;
+      font-family: inherit;
+    }
+    .field input:focus {
+      border-color: rgba(255,255,255,.55);
+      background: rgba(255,255,255,.16);
+    }
+    .field input::placeholder { color: rgba(255,255,255,.35); }
+    /* date input — les navigateurs appliquent leur propre couleur */
+    .field input[type="date"] { color-scheme: dark; }
+
+    /* Champs V2 — présents en DOM mais invisibles en V1 */
+    .field-v2 { display: none; }
+    .field-hint-v2 {
+      font-size: 12px;
+      color: rgba(255,255,255,.4);
+      margin-top: 5px;
+      line-height: 1.4;
+    }
+
+    .btn-submit {
+      width: 100%;
+      padding: 16px;
+      margin-top: 10px;
+      background: var(--brand);
+      color: var(--brand-text);
+      border: none;
+      border-radius: 16px;
+      font-size: 18px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity .2s, transform .1s;
+      position: relative;
+      min-height: 56px;
+      letter-spacing: -.1px;
+    }
+    .btn-submit:active { transform: scale(.98); }
+    .btn-submit:disabled { opacity: .6; cursor: default; }
+    .btn-submit .spinner {
+      display: none;
+      width: 22px; height: 22px;
+      border: 2.5px solid rgba(255,255,255,.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      position: absolute;
+      left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .btn-submit.loading .btn-label { visibility: hidden; }
+    .btn-submit.loading .spinner { display: block; }
+
+    @keyframes spin { to { transform: translate(-50%,-50%) rotate(360deg); } }
+
+    .rgpd-note {
+      margin-top: 14px;
+      font-size: 12px;
+      color: rgba(255,255,255,.4);
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    /* ── Message d'erreur ── */
+    .error-msg {
+      display: none;
+      background: rgba(239,68,68,.15);
+      border: 1px solid rgba(239,68,68,.4);
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-size: 14px;
+      color: #fca5a5;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+    .error-msg.show { display: block; }
+
+    /* ── Écran succès ── */
+    .success-screen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+    .success-screen.show { display: flex; }
+
+    .success-icon {
+      width: 64px; height: 64px;
+      background: rgba(34,197,94,.15);
+      border: 1.5px solid rgba(34,197,94,.4);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 18px;
+    }
+    .success-icon svg { width: 32px; height: 32px; }
+    .success-title { font-size: 22px; font-weight: 800; margin-bottom: 8px; }
+    .success-sub {
+      font-size: 15px;
+      color: rgba(255,255,255,.65);
+      line-height: 1.5;
+      margin-bottom: 28px;
+    }
+
+    /* ── Boutons Wallet ── */
+    .wallet-buttons {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .btn-wallet {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      padding: 15px 20px;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: opacity .2s, transform .1s;
+      cursor: pointer;
+      border: none;
+    }
+    .btn-wallet:active { transform: scale(.98); opacity: .85; }
+    .btn-apple  { background: #000; color: #fff; }
+    .btn-google { background: #fff; color: #1a73e8; border: 1.5px solid #dadce0; }
+    .btn-wallet svg { flex-shrink: 0; }
+    .btn-wallet.unavailable {
+      background: rgba(255,255,255,.08);
+      color: rgba(255,255,255,.4);
+      border: 1.5px solid rgba(255,255,255,.12);
+      cursor: default;
+      font-size: 14px;
+    }
+
+    /* ── Écran "Welcome back" (localStorage) ── */
+    .welcome-back {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+    .welcome-back.show { display: flex; }
+    .wb-title { font-size: 22px; font-weight: 800; margin: 18px 0 8px; }
+    .wb-sub   { font-size: 15px; color: rgba(255,255,255,.65); line-height: 1.5; margin-bottom: 28px; }
+    .btn-reset-card {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,.38);
+      font-size: 13px;
+      cursor: pointer;
+      margin-top: 22px;
+      text-decoration: underline;
+      font-family: inherit;
+      padding: 4px;
+    }
+
+    /* ── Écran de redirection auto (iOS / Android) — texte seul, sobre ── */
+    .redirect-screen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 14px;
+      padding: 24px 0;
+    }
+    .redirect-screen.show { display: flex; }
+    .redirect-title { font-size: 20px; font-weight: 700; }
+    .btn-fallback {
+      display: none;
+      margin-top: 6px;
+      padding: 15px 20px;
+      background: rgba(255,255,255,.12);
+      border: 1.5px solid rgba(255,255,255,.25);
+      color: #fff;
+      border-radius: 14px;
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration: none;
+      width: 100%;
+      text-align: center;
+    }
+    .btn-fallback.show { display: block; }
+
+    /* ── Squelette chargement ── */
+    .skeleton { display: flex; flex-direction: column; gap: 12px; }
+    .skel {
+      background: linear-gradient(90deg, rgba(255,255,255,.07) 25%, rgba(255,255,255,.13) 50%, rgba(255,255,255,.07) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.2s infinite;
+      border-radius: 10px;
+    }
+    @keyframes shimmer { to { background-position: -200% 0; } }
+    .skel-text  { height: 16px; width: 80%; }
+    .skel-input { height: 52px; }
+    .skel-btn   { height: 56px; }
+
+    /* ── Erreur marchand introuvable ── */
+    .not-found {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 10px;
+    }
+    .not-found.show { display: flex; }
+    .not-found-icon { font-size: 48px; }
+    .not-found h2 { font-size: 20px; font-weight: 700; }
+    .not-found p  { font-size: 15px; color: rgba(255,255,255,.6); }
+
+    /* ── États globaux ── */
+    .form-area.hidden { display: none; }
+  </style>
+</head>
+<body>
+
+  <div class="page">
+
+    <!-- Hero : logo + nom du marchand -->
+    <div class="hero">
+      <div class="hero-logo" id="hero-logo">
+        <span id="logo-initial"></span>
+      </div>
+      <div class="hero-name" id="hero-name" data-i18n="loading">Loading…</div>
+    </div>
+
+    <!-- Mockup de la carte Wallet -->
+    <div class="card-mockup" id="card-mockup">
+      <div class="mockup-top">
+        <div class="mockup-logo-wrap" id="mockup-logo-wrap">
+          <span id="mockup-initial"></span>
+        </div>
+        <div class="mockup-name-wrap">
+          <div class="mockup-merchant" id="mockup-merchant"></div>
+          <div class="mockup-label" data-i18n="mockupLabel">Loyalty Card</div>
+        </div>
+      </div>
+      <div class="mockup-stamps">
+        <div class="mockup-stamp filled"></div>
+        <div class="mockup-stamp filled"></div>
+        <div class="mockup-stamp filled"></div>
+        <div class="mockup-stamp"></div>
+        <div class="mockup-stamp"></div>
+        <div class="mockup-stamp"></div>
+        <div class="mockup-stamp"></div>
+        <div class="mockup-stamp"></div>
+      </div>
+    </div>
+
+    <!-- Carte principale (glass) -->
+    <div class="content-card">
+
+      <!-- Squelette pendant le chargement -->
+      <div class="skeleton" id="skeleton">
+        <div class="skel skel-text"></div>
+        <div class="skel skel-text" style="width:60%"></div>
+        <br>
+        <div class="skel skel-input"></div>
+        <div class="skel skel-btn"></div>
+      </div>
+
+      <!-- Marchand introuvable / suspendu -->
+      <div class="not-found" id="not-found">
+        <div class="not-found-icon">🔒</div>
+        <h2 id="not-found-title" data-i18n="notFoundTitle">Program not found</h2>
+        <p id="not-found-msg" data-i18n="notFoundMsg">This loyalty program is not available.</p>
+      </div>
+
+      <!-- Écran "Welcome back" — affiché si localStorage contient un pass pour ce marchand -->
+      <div class="welcome-back" id="welcome-back">
+        <div class="success-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/>
+          </svg>
+        </div>
+        <div class="wb-title" id="wb-title" data-i18n="wbTitle">Welcome back!</div>
+        <div class="wb-sub"   id="wb-sub" data-i18n="wbSub">You already have your loyalty card.</div>
+        <div class="wallet-buttons" id="wb-wallet-buttons">
+          <a class="btn-wallet btn-apple" id="wb-btn-apple" href="#" target="_self">
+            <svg width="22" height="22" viewBox="0 0 22 22" fill="white"><path d="M15.05 1C14.1 1.87 13.5 3.17 13.7 4.5c1.2.1 2.4-.6 3.2-1.5.8-.9 1.3-2.2 1.1-3.5-1.1.1-2.2.7-2.95 1.5zM16 6.3c-1.65-.1-3.05.93-3.83.93-.78 0-2-.88-3.3-.85C7.1 6.42 5.3 7.4 4.32 9.05c-1.98 3.35-.5 8.3 1.4 11.02.96 1.36 2.1 2.88 3.6 2.83 1.42-.06 1.98-.92 3.7-.92 1.74 0 2.24.92 3.76.89 1.56-.04 2.54-1.4 3.5-2.76a12.2 12.2 0 0 0 1.56-3.12c-3.1-1.18-3.6-5.55-.53-7.3A4.73 4.73 0 0 0 16 6.3z"/></svg>
+            <span data-i18n="addApple">Add to Apple Wallet</span>
+          </a>
+          <a class="btn-wallet btn-google" id="wb-btn-google" href="#" target="_blank" rel="noopener">
+            <svg width="20" height="20" viewBox="0 0 20 20"><path d="M19.6 10.23c0-.68-.06-1.36-.18-2H10v3.77h5.38a4.6 4.6 0 0 1-2 3.02v2.5h3.23c1.9-1.74 2.99-4.3 2.99-7.3z" fill="#4285F4"/><path d="M10 20c2.7 0 4.96-.9 6.62-2.43l-3.23-2.5c-.9.6-2.04.95-3.39.95-2.6 0-4.81-1.76-5.6-4.12H1.06v2.58A10 10 0 0 0 10 20z" fill="#34A853"/><path d="M4.4 11.9A6 6 0 0 1 4.08 10c0-.66.12-1.3.32-1.9V5.52H1.06A10 10 0 0 0 0 10c0 1.62.39 3.15 1.06 4.48L4.4 11.9z" fill="#FBBC05"/><path d="M10 3.96c1.46 0 2.78.5 3.81 1.49l2.86-2.86C14.96.99 12.7 0 10 0A10 10 0 0 0 1.06 5.52L4.4 8.1C5.19 5.72 7.4 3.96 10 3.96z" fill="#EA4335"/></svg>
+            <span data-i18n="addGoogle">Add to Google Wallet</span>
+          </a>
+        </div>
+        <button class="btn-reset-card" onclick="resetCard()" data-i18n="resetCard">Not you? Create a new card →</button>
+      </div>
+
+      <!-- Formulaire d'inscription -->
+      <div class="form-area hidden" id="form-area">
+        <p class="description" id="description"></p>
+
+        <div class="error-msg" id="error-msg"></div>
+
+        <form id="form" novalidate>
+
+          <!-- Prénom — V1 -->
+          <div class="field">
+            <label for="prenom" data-i18n="firstName">First name</label>
+            <input type="text" id="prenom" name="prenom"
+              placeholder="Your first name" data-i18n-ph="firstNamePh"
+              autocomplete="given-name"
+              autocapitalize="words"
+              maxlength="50"
+              required>
+          </div>
+
+          <!-- Email — V2 (masqué en V1) -->
+          <div class="field field-v2" id="field-email">
+            <label for="email" data-i18n="email">Email</label>
+            <input type="email" id="email" name="email"
+              placeholder="your@email.com"
+              autocomplete="email">
+            <p class="field-hint-v2" data-i18n="emailHint">So you never lose your points 🔒</p>
+          </div>
+
+          <!-- Téléphone — V2 (masqué en V1) -->
+          <div class="field field-v2" id="field-telephone">
+            <label for="telephone" data-i18n="phone">Phone</label>
+            <input type="tel" id="telephone" name="telephone"
+              placeholder="+971 50 000 0000" data-i18n-ph="phonePh"
+              autocomplete="tel">
+            <p class="field-hint-v2" data-i18n="phoneHint">To receive exclusive flash offers 📱</p>
+          </div>
+
+          <!-- Date anniversaire — V2 (masqué en V1) -->
+          <div class="field field-v2" id="field-anniversaire">
+            <label for="date_anniversaire" data-i18n="birthday">Date of birth</label>
+            <input type="date" id="date_anniversaire" name="date_anniversaire">
+            <p class="field-hint-v2" data-i18n="birthdayHint">For a special surprise on your big day 🎂</p>
+          </div>
+
+          <button type="submit" class="btn-submit" id="btn-submit">
+            <span class="btn-label" data-i18n="getCard">Get my card</span>
+            <span class="spinner"></span>
+          </button>
+        </form>
+
+        <p class="rgpd-note" id="rgpd-note" data-i18n="rgpdNote">
+          Only your first name is stored. You can request data deletion in-store at any time.
+        </p>
+      </div>
+
+      <!-- Écran succès + boutons Wallet -->
+      <div class="success-screen" id="success-screen">
+
+        <div class="success-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="9 12 11 14 15 10"/>
+          </svg>
+        </div>
+
+        <div class="success-title" id="success-title" data-i18n="cardReady">Your card is ready!</div>
+        <div class="success-sub" id="success-sub"></div>
+
+        <div class="wallet-buttons" id="wallet-buttons">
+
+          <a class="btn-wallet btn-apple" id="btn-apple" href="#" target="_self">
+            <svg width="22" height="22" viewBox="0 0 22 22" fill="white">
+              <path d="M15.05 1C14.1 1.87 13.5 3.17 13.7 4.5c1.2.1 2.4-.6 3.2-1.5.8-.9 1.3-2.2 1.1-3.5-1.1.1-2.2.7-2.95 1.5zM16 6.3c-1.65-.1-3.05.93-3.83.93-.78 0-2-.88-3.3-.85C7.1 6.42 5.3 7.4 4.32 9.05c-1.98 3.35-.5 8.3 1.4 11.02.96 1.36 2.1 2.88 3.6 2.83 1.42-.06 1.98-.92 3.7-.92 1.74 0 2.24.92 3.76.89 1.56-.04 2.54-1.4 3.5-2.76a12.2 12.2 0 0 0 1.56-3.12c-3.1-1.18-3.6-5.55-.53-7.3A4.73 4.73 0 0 0 16 6.3z"/>
+            </svg>
+            <span data-i18n="addApple">Add to Apple Wallet</span>
+          </a>
+
+          <a class="btn-wallet btn-google" id="btn-google" href="#" target="_blank" rel="noopener">
+            <svg width="20" height="20" viewBox="0 0 20 20">
+              <path d="M19.6 10.23c0-.68-.06-1.36-.18-2H10v3.77h5.38a4.6 4.6 0 0 1-2 3.02v2.5h3.23c1.9-1.74 2.99-4.3 2.99-7.3z" fill="#4285F4"/>
+              <path d="M10 20c2.7 0 4.96-.9 6.62-2.43l-3.23-2.5c-.9.6-2.04.95-3.39.95-2.6 0-4.81-1.76-5.6-4.12H1.06v2.58A10 10 0 0 0 10 20z" fill="#34A853"/>
+              <path d="M4.4 11.9A6 6 0 0 1 4.08 10c0-.66.12-1.3.32-1.9V5.52H1.06A10 10 0 0 0 0 10c0 1.62.39 3.15 1.06 4.48L4.4 11.9z" fill="#FBBC05"/>
+              <path d="M10 3.96c1.46 0 2.78.5 3.81 1.49l2.86-2.86C14.96.99 12.7 0 10 0A10 10 0 0 0 1.06 5.52L4.4 8.1C5.19 5.72 7.4 3.96 10 3.96z" fill="#EA4335"/>
+            </svg>
+            <span data-i18n="addGoogle">Add to Google Wallet</span>
+          </a>
+
+        </div>
+
+        <!-- Fallback post-redirection — même URL de pass, jamais de re-POST -->
+        <a class="btn-fallback" id="btn-fallback-success" href="#" data-i18n="fallbackOpen">Your card didn't open? Tap here →</a>
+
+        <!-- Referral share — shown only when referral_enabled -->
+        <div id="referral-share" style="display:none;margin-top:24px;width:100%;padding:16px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:16px;text-align:center">
+          <div style="font-weight:700;margin-bottom:6px" data-i18n="referralTitle">🎁 Refer a Friend</div>
+          <div style="font-size:13px;color:rgba(255,255,255,.65);margin-bottom:12px" id="referral-earn">Earn 1 point when they make their first visit</div>
+          <div style="background:rgba(0,0,0,.25);border-radius:10px;padding:10px;font-size:11px;font-family:monospace;word-break:break-all;margin-bottom:12px;user-select:all;color:rgba(255,255,255,.75)" id="referral-link-text"></div>
+          <button onclick="shareReferral()" style="background:rgba(255,255,255,.9);color:#1a1a2e;border:none;border-radius:10px;padding:10px 20px;font-weight:700;cursor:pointer;width:100%;font-size:14px" data-i18n="shareLink">Share my link</button>
+        </div>
+
+      </div>
+
+      <!-- Écran de redirection automatique (iOS / Android) — bascule vers succès après ~2 s -->
+      <div class="redirect-screen" id="redirect-screen">
+        <div class="redirect-title" data-i18n="creatingCard">Creating your card…</div>
+      </div>
+
+    </div><!-- /content-card -->
+
+  </div><!-- /page -->
+
+  <script>
+    // ── localStorage — helpers silencieux ───────────────────
+    // Clé par marchand pour ne jamais mélanger les données entre commerces.
+    // Toutes les opérations sont dans try/catch : mode privé strict, Safari ITP,
+    // quota dépassé → fallback transparent vers le flow normal.
+    function lsKey(slug)  { return `ww_pass_${slug}`; }
+    function lsGet(slug)  { try { return JSON.parse(localStorage.getItem(lsKey(slug)) || 'null'); } catch { return null; } }
+    function lsSet(slug, v){ try { localStorage.setItem(lsKey(slug), JSON.stringify(v)); } catch {} }
+    function lsClear(slug) { try { localStorage.removeItem(lsKey(slug)); } catch {} }
+
+    // ── Détection plateforme ─────────────────────────────────
+    const ua        = navigator.userAgent;
+    const isIOS     = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+    const isAndroid = /Android/.test(ua);
+    // In-app browsers (Instagram, Facebook, Messenger) bloquent les .pkpass
+    const isInApp   = /Instagram|FBAN|FBAV|FB_IAB|Messenger/.test(ua);
+
+    // ── État de l'application ────────────────────────────────
+    const $ = id => document.getElementById(id);
+
+    // ── i18n FR/EN — langue définie par le marchand (m.langue), défaut 'en' ──
+    // Textes statiques : attribut data-i18n / data-i18n-ph, remplacés par applyI18n().
+    // Textes injectés en JS : appel t('cle', {vars}). Valeurs fonction pour le pluriel.
+    let _lang = 'en';
+    const I18N = {
+      en: {
+        loading:            'Loading…',
+        mockupLabel:        'Loyalty Card',
+        notFoundTitle:      'Program not found',
+        notFoundMsg:        'This loyalty program is not available.',
+        wbTitle:            'Welcome back!',
+        wbSub:              'You already have your loyalty card.',
+        addApple:           'Add to Apple Wallet',
+        addGoogle:          'Add to Google Wallet',
+        resetCard:          'Not you? Create a new card →',
+        firstName:          'First name',
+        firstNamePh:        'Your first name',
+        email:              'Email',
+        emailHint:          'So you never lose your points 🔒',
+        phone:              'Phone',
+        phonePh:            '+971 50 000 0000',
+        phoneHint:          'To receive exclusive flash offers 📱',
+        birthday:           'Date of birth',
+        birthdayHint:       'For a special surprise on your big day 🎂',
+        getCard:            'Get my card',
+        rgpdNote:           'Only your first name is stored. You can request data deletion in-store at any time.',
+        cardReady:          'Your card is ready!',
+        fallbackOpen:       "Your card didn't open? Tap here →",
+        referralTitle:      '🎁 Refer a Friend',
+        referralEarn:       ({ pts }) => `Earn ${pts} point${pts > 1 ? 's' : ''} when they make their first visit`,
+        shareLink:          'Share my link',
+        creatingCard:       'Creating your card…',
+        invalidLinkTitle:   'Invalid link',
+        invalidLinkMsg:     'This URL does not match any loyalty program.',
+        unavailable:        'Unavailable',
+        suspendedMsg:       'This loyalty program is currently suspended.',
+        notFoundMsg2:       'Loyalty program not found.',
+        connErrorTitle:     'Connection error',
+        connErrorMsg:       'Unable to load the page. Check your connection and try again.',
+        pageTitle:          ({ nom }) => `${nom} Loyalty`,
+        descriptionFallback:({ nom }) => `Welcome to **${nom}**'s loyalty program!`,
+        rgpdNotePremium:    'Optional fields are used only to personalise your loyalty experience. You may request deletion in-store at any time.',
+        errNoFirstName:     'Please enter your first name.',
+        errGeneric:         'An error occurred. Please try again.',
+        errConnection:      'Connection failed. Check your network and try again.',
+        successAdded:       ({ prenom }) => `Hi ${prenom}, your loyalty card has been added to your wallet.`,
+        tapToReceive:       'Tap Add to Wallet to receive your card.',
+        successManual:      ({ prenom }) => `Hi ${prenom}, add your loyalty card to your wallet to always have it with you.`,
+        appleIphoneOnly:    'Apple Wallet (iPhone only)',
+        welcomeBack:        ({ prenom }) => `Welcome back, ${prenom}!`,
+        shareTitle:         'Join my loyalty program!',
+        linkCopied:         'Link copied!',
+        copyThisLink:       'Copy this link:',
+      },
+      fr: {
+        loading:            'Chargement…',
+        mockupLabel:        'Carte de fidélité',
+        notFoundTitle:      'Programme introuvable',
+        notFoundMsg:        "Ce programme de fidélité n'est pas disponible.",
+        wbTitle:            'Content de te revoir !',
+        wbSub:              'Tu as déjà ta carte de fidélité.',
+        addApple:           'Ajouter à Apple Wallet',
+        addGoogle:          'Ajouter à Google Wallet',
+        resetCard:          'Pas toi ? Créer une nouvelle carte →',
+        firstName:          'Prénom',
+        firstNamePh:        'Ton prénom',
+        email:              'Email',
+        emailHint:          'Pour ne jamais perdre tes points 🔒',
+        phone:              'Téléphone',
+        phonePh:            '+33 6 00 00 00 00',
+        phoneHint:          'Pour recevoir des offres flash exclusives 📱',
+        birthday:           'Date de naissance',
+        birthdayHint:       'Pour une surprise spéciale le jour J 🎂',
+        getCard:            'Obtenir ma carte',
+        rgpdNote:           'Seul ton prénom est conservé. Tu peux demander la suppression de tes données en boutique à tout moment.',
+        cardReady:          'Ta carte est prête !',
+        fallbackOpen:       "Ta carte ne s'est pas ouverte ? Appuie ici →",
+        referralTitle:      '🎁 Parraine un ami',
+        referralEarn:       ({ pts }) => `Gagne ${pts} point${pts > 1 ? 's' : ''} quand ton ami fait sa première visite`,
+        shareLink:          'Partager mon lien',
+        creatingCard:       'Création de ta carte…',
+        invalidLinkTitle:   'Lien invalide',
+        invalidLinkMsg:     'Cette URL ne correspond à aucun programme de fidélité.',
+        unavailable:        'Indisponible',
+        suspendedMsg:       'Ce programme de fidélité est actuellement suspendu.',
+        notFoundMsg2:       'Programme de fidélité introuvable.',
+        connErrorTitle:     'Erreur de connexion',
+        connErrorMsg:       'Impossible de charger la page. Vérifie ta connexion et réessaie.',
+        pageTitle:          ({ nom }) => `${nom} — Fidélité`,
+        descriptionFallback:({ nom }) => `Bienvenue dans le programme de fidélité de **${nom}** !`,
+        rgpdNotePremium:    'Les champs optionnels servent uniquement à personnaliser ton expérience de fidélité. Tu peux demander leur suppression en boutique à tout moment.',
+        errNoFirstName:     'Merci de saisir ton prénom.',
+        errGeneric:         "Une erreur s'est produite. Réessaie.",
+        errConnection:      'Échec de connexion. Vérifie ton réseau et réessaie.',
+        successAdded:       ({ prenom }) => `Salut ${prenom}, ta carte de fidélité a été ajoutée à ton wallet.`,
+        tapToReceive:       'Appuie sur Ajouter au Wallet pour recevoir ta carte.',
+        successManual:      ({ prenom }) => `Salut ${prenom}, ajoute ta carte de fidélité à ton wallet pour l'avoir toujours avec toi.`,
+        appleIphoneOnly:    'Apple Wallet (iPhone uniquement)',
+        welcomeBack:        ({ prenom }) => `Content de te revoir, ${prenom} !`,
+        shareTitle:         'Rejoins mon programme de fidélité !',
+        linkCopied:         'Lien copié !',
+        copyThisLink:       'Copie ce lien :',
+      },
+    };
+
+    function t(key, vars) {
+      const dict = I18N[_lang] || I18N.en;
+      let s = dict[key] != null ? dict[key] : (I18N.en[key] != null ? I18N.en[key] : key);
+      if (typeof s === 'function') return s(vars || {});
+      if (vars) s = s.replace(/\{(\w+)\}/g, (_, k) => (vars[k] != null ? vars[k] : ''));
+      return s;
+    }
+
+    // Applique les traductions sur tout le markup statique marqué data-i18n(-ph).
+    function applyI18n() {
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        el.textContent = t(el.getAttribute('data-i18n'));
+      });
+      document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+        el.setAttribute('placeholder', t(el.getAttribute('data-i18n-ph')));
+      });
+    }
+
+    function showSkeleton()  { $('skeleton').style.display = 'flex'; }
+    function hideSkeleton()  { $('skeleton').style.display = 'none'; }
+    function showForm()      { $('form-area').classList.remove('hidden'); }
+    function showNotFound(title, msg) {
+      hideSkeleton();
+      $('card-mockup').style.display = 'none';
+      $('not-found').classList.add('show');
+      $('not-found-title').textContent = title;
+      $('not-found-msg').textContent   = msg;
+    }
+    function showError(msg)  {
+      const el = $('error-msg');
+      el.textContent = msg;
+      el.classList.add('show');
+    }
+    function hideError()     { $('error-msg').classList.remove('show'); }
+    function setSubmitting(yes) {
+      const btn = $('btn-submit');
+      btn.disabled = yes;
+      btn.classList.toggle('loading', yes);
+    }
+
+    // ── Slug depuis l'URL ────────────────────────────────────
+    const slug = location.pathname.split('/l/')[1]?.split('/')[0];
+    if (!slug) showNotFound(t('invalidLinkTitle'), t('invalidLinkMsg'));
+    window._refSerial = new URLSearchParams(location.search).get('ref') || null;
+
+    // ── Chargement des données marchand ──────────────────────
+    const API = '';
+
+    async function loadMarchand() {
+      try {
+        const res  = await fetch(`${API}/api/merchants/${encodeURIComponent(slug)}/public`);
+        const data = await res.json();
+
+        if (!res.ok) {
+          if (data.langue === 'fr' || data.langue === 'en') _lang = data.langue;
+          const msg = res.status === 403 ? t('suspendedMsg') : t('notFoundMsg2');
+          return showNotFound(t('unavailable'), msg);
+        }
+
+        applyBranding(data);
+        hideSkeleton();
+
+        // Retour client : si un pass est déjà enregistré pour ce marchand, afficher
+        // directement l'écran "Welcome back" sans formulaire.
+        const saved = lsGet(data.slug);
+        if (saved) { showWelcomeBack(saved); } else { showForm(); }
+      } catch {
+        showNotFound(t('connErrorTitle'), t('connErrorMsg'));
+      }
+    }
+
+    // Assombrit une couleur hex d'un facteur [0,1]
+    function darken(hex, f) {
+      const h = (hex || '#1a1a2e').replace('#', '');
+      const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
+      return '#' + [r, g, b].map(c => Math.max(0, Math.round(c * (1 - f))).toString(16).padStart(2, '0')).join('');
+    }
+
+    function lighten(hex, f) {
+      const h = (hex || '#1a1a2e').replace('#', '');
+      const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
+      return '#' + [r, g, b].map(c => Math.min(255, Math.round(c + (255 - c) * f)).toString(16).padStart(2, '0')).join('');
+    }
+
+    // Luminance relative WCAG 2.1 — même logique que strip-generator.js
+    function relativeLuminance(hex) {
+      const h = (hex || '#1a1a2e').replace('#', '');
+      return [0, 2, 4].reduce((lum, i, j) => {
+        const c = parseInt(h.slice(i, i + 2), 16) / 255;
+        const lin = c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+        return lum + lin * [0.2126, 0.7152, 0.0722][j];
+      }, 0);
+    }
+
+    function applyBranding(m) {
+      // Langue du marchand (figée à la création) — appliquée avant tout affichage.
+      if (m.langue === 'fr' || m.langue === 'en') _lang = m.langue;
+      document.documentElement.lang = _lang;
+      applyI18n();
+
+      const brand     = m.couleur_fond  || '#1a1a2e';
+      const textColor = m.couleur_texte || '#ffffff';
+
+      // Dégradé de fond basé sur la couleur marchand
+      const dark1 = darken(brand, 0.18);
+      const dark2 = darken(brand, 0.58);
+      document.documentElement.style.setProperty('--brand',      brand);
+      document.documentElement.style.setProperty('--brand-text', textColor);
+      document.documentElement.style.setProperty('--bg1',        dark1);
+      document.documentElement.style.setProperty('--bg2',        dark2);
+
+      // Tampons et textes du mockup — adaptatifs selon luminance (même logique que strip-generator.js)
+      const lum = relativeLuminance(brand);
+      if (lum >= 0.18) {
+        // Fond clair → tampons et textes foncés contrastés
+        const dark = darken(brand, 0.62);
+        document.documentElement.style.setProperty('--stamp-empty-bg',     'rgba(0,0,0,0.05)');
+        document.documentElement.style.setProperty('--stamp-empty-border',  'rgba(0,0,0,0.40)');
+        document.documentElement.style.setProperty('--stamp-filled-bg',    dark);
+        document.documentElement.style.setProperty('--mockup-text',        dark);
+        document.documentElement.style.setProperty('--mockup-text-sub',    darken(brand, 0.48));
+      } else {
+        // Fond sombre → tampons et textes clairs (comportement historique)
+        document.documentElement.style.setProperty('--stamp-empty-bg',     'rgba(255,255,255,.12)');
+        document.documentElement.style.setProperty('--stamp-empty-border',  'rgba(255,255,255,.35)');
+        document.documentElement.style.setProperty('--stamp-filled-bg',    'rgba(255,255,255,.90)');
+        document.documentElement.style.setProperty('--mockup-text',        'rgba(255,255,255,.95)');
+        document.documentElement.style.setProperty('--mockup-text-sub',    'rgba(255,255,255,.55)');
+      }
+      document.querySelector('meta[name=theme-color]').content = dark2;
+
+      // Titre de page
+      document.title = t('pageTitle', { nom: m.nom });
+
+      // Hero : nom
+      $('hero-name').textContent    = m.nom;
+      $('mockup-merchant').textContent = m.nom;
+
+      // Logo — icon_url en priorité, fallback logo_url puis initiale
+      const logoSrc = m.icon_url || m.logo_url;
+      const initial = m.nom.charAt(0).toUpperCase();
+      $('logo-initial').textContent   = initial;
+      $('mockup-initial').textContent = initial;
+
+      if (logoSrc) {
+        // Hero logo
+        const img1 = document.createElement('img');
+        img1.alt = m.nom;
+        img1.onerror = () => { $('hero-logo').innerHTML = `<span>${initial}</span>`; };
+        img1.src = logoSrc;
+        $('hero-logo').innerHTML = '';
+        $('hero-logo').appendChild(img1);
+
+        // Mockup logo
+        const img2 = document.createElement('img');
+        img2.alt = m.nom;
+        img2.onerror = () => { $('mockup-logo-wrap').innerHTML = `<span>${initial}</span>`; };
+        img2.src = logoSrc;
+        $('mockup-logo-wrap').innerHTML = '';
+        $('mockup-logo-wrap').appendChild(img2);
+      }
+
+      // Texte descriptif
+      $('description').innerHTML = renderText(m.texte_landing || t('descriptionFallback', { nom: m.nom }));
+
+      // Stocker les flags pour le submit
+      window._marchandSlug    = m.slug;
+      window._premiumLanding  = m.forfait === 'pro_plus' && !!m.landing_premium;
+      window._referralEnabled = !!m.referral_enabled;
+      window._referralBonus   = m.referral_bonus_points || 1;
+
+      // Champs Pro+ premium
+      if (window._premiumLanding) {
+        $('field-email').style.display        = 'block';
+        $('field-telephone').style.display    = 'block';
+        $('field-anniversaire').style.display = 'block';
+        $('rgpd-note').textContent = t('rgpdNotePremium');
+      }
+    }
+
+    // ── Soumission du formulaire ─────────────────────────────
+    $('form').addEventListener('submit', async e => {
+      e.preventDefault();
+      hideError();
+
+      const prenom = $('prenom').value.trim();
+      if (!prenom) {
+        showError(t('errNoFirstName'));
+        $('prenom').focus();
+        return;
+      }
+
+      setSubmitting(true);
+
+      try {
+        const body = { prenom, marchand_slug: window._marchandSlug };
+        if (window._refSerial) body.ref = window._refSerial;
+        if (window._premiumLanding) {
+          const emailVal = $('email').value.trim();
+          const phoneVal = $('telephone').value.trim();
+          const bdayVal  = $('date_anniversaire').value;
+          if (emailVal) body.email             = emailVal;
+          if (phoneVal) body.telephone         = phoneVal;
+          if (bdayVal)  body.date_anniversaire = bdayVal;
+        }
+        const res  = await fetch(`${API}/api/clients`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(body),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          setSubmitting(false);
+          showError(data.error || t('errGeneric'));
+          return;
+        }
+
+        // Persister localement pour le prochain scan du QR code
+        lsSet(window._marchandSlug, {
+          serial:            data.serial_number,
+          apple_pass_url:    data.apple_pass_url,
+          google_wallet_url: data.google_wallet_url,
+          prenom,
+        });
+        showSuccess(prenom, data);
+      } catch {
+        setSubmitting(false);
+        showError(t('errConnection'));
+      }
+    });
+
+    // ── Écran succès ─────────────────────────────────────────
+    function showSuccess(prenom, data) {
+      $('form-area').classList.add('hidden');
+      $('card-mockup').style.display = 'none';
+
+      // iOS natif (Safari / Chrome iOS, hors in-app) → redirection directe vers .pkpass
+      // La feuille Wallet s'ouvre par-dessus la page ; ~2 s plus tard on bascule
+      // vers l'écran succès complet (fallback + referral) pour le retour du client.
+      if (isIOS && !isInApp && data.apple_pass_url) {
+        autoRedirect(prenom, data, data.apple_pass_url);
+        return;
+      }
+
+      // Android → redirection vers Google Wallet (si disponible)
+      if (isAndroid && data.google_wallet_url) {
+        autoRedirect(prenom, data, data.google_wallet_url);
+        return;
+      }
+
+      // Desktop, in-app browser, ou cas sans URL → écran boutons manuel
+      showButtonScreen(prenom, data);
+    }
+
+    // Redirection auto + bascule différée vers l'écran succès.
+    // Le fallback réutilise la même URL de pass (même serial) — jamais de re-POST.
+    function autoRedirect(prenom, data, url) {
+      $('redirect-screen').classList.add('show');
+      window.location.href = url;
+      setTimeout(() => {
+        $('redirect-screen').classList.remove('show');
+        showPostRedirectScreen(prenom, data, url);
+      }, 2000);
+    }
+
+    // Écran succès post-redirection : message + fallback + referral (sans boutons Wallet)
+    function showPostRedirectScreen(prenom, data, url) {
+      $('success-title').textContent = t('cardReady');
+      $('success-sub').textContent   = t('successAdded', { prenom });
+
+      $('wallet-buttons').style.display = 'none';
+      const fb = $('btn-fallback-success');
+      fb.href = url;
+      fb.classList.add('show');
+
+      showReferral(data);
+      $('success-screen').classList.add('show');
+    }
+
+    function showButtonScreen(prenom, data) {
+      $('success-title').textContent = t('cardReady');
+      // In-app (Instagram / FB / Messenger) : les webviews ouvrent bien le .pkpass —
+      // texte court et neutre, pas d'avertissement.
+      $('success-sub').textContent = (isIOS && isInApp && data.apple_pass_url)
+        ? t('tapToReceive')
+        : t('successManual', { prenom });
+
+      const btnApple  = $('btn-apple');
+      const btnGoogle = $('btn-google');
+
+      if (data.apple_pass_url) {
+        btnApple.href = data.apple_pass_url;
+        if (!isIOS) {
+          btnApple.classList.add('unavailable');
+          btnApple.querySelector('span').textContent = t('appleIphoneOnly');
+          btnApple.removeAttribute('href');
+          btnApple.style.pointerEvents = 'none';
+        }
+      } else {
+        btnApple.style.display = 'none';
+      }
+
+      if (data.google_wallet_url) {
+        btnGoogle.href = data.google_wallet_url;
+        if (isIOS) {
+          $('wallet-buttons').appendChild(btnGoogle);
+        }
+      } else {
+        btnGoogle.style.display = 'none';
+      }
+
+      showReferral(data);
+      $('success-screen').classList.add('show');
+    }
+
+    // Lien de parrainage — uniquement si activé pour ce marchand
+    function showReferral(data) {
+      if (!window._referralEnabled || !data.serial_number) return;
+      const referralUrl = `${location.origin}/l/${window._marchandSlug}?ref=${data.serial_number}`;
+      $('referral-link-text').textContent = referralUrl;
+      $('referral-earn').textContent      = t('referralEarn', { pts: window._referralBonus });
+      $('referral-share').style.display   = 'block';
+      window._referralUrl = referralUrl;
+    }
+
+    // ── Écran "Welcome back" (client connu via localStorage) ────
+    function showWelcomeBack(saved) {
+      $('card-mockup').style.display = 'none';
+      $('wb-title').textContent = t('welcomeBack', { prenom: saved.prenom });
+      $('wb-sub').textContent   = t('wbSub');
+
+      const btnApple  = $('wb-btn-apple');
+      const btnGoogle = $('wb-btn-google');
+
+      if (saved.apple_pass_url) {
+        btnApple.href = saved.apple_pass_url;
+        if (!isIOS) {
+          btnApple.classList.add('unavailable');
+          btnApple.querySelector('span').textContent = t('appleIphoneOnly');
+          btnApple.removeAttribute('href');
+          btnApple.style.pointerEvents = 'none';
+        }
+      } else {
+        btnApple.style.display = 'none';
+      }
+
+      if (saved.google_wallet_url) {
+        btnGoogle.href = saved.google_wallet_url;
+        if (isIOS) $('wb-wallet-buttons').appendChild(btnGoogle);
+      } else {
+        btnGoogle.style.display = 'none';
+      }
+
+      $('welcome-back').classList.add('show');
+    }
+
+    // "Not you?" — efface l'entrée locale et affiche le formulaire
+    function resetCard() {
+      lsClear(window._marchandSlug);
+      $('welcome-back').classList.remove('show');
+      $('card-mockup').style.display = '';
+      showForm();
+    }
+
+    function shareReferral() {
+      const url = window._referralUrl;
+      if (!url) return;
+      if (navigator.share) {
+        navigator.share({ title: t('shareTitle'), url }).catch(() => {});
+      } else {
+        navigator.clipboard.writeText(url)
+          .then(() => alert(t('linkCopied')))
+          .catch(() => { prompt(t('copyThisLink'), url); });
+      }
+    }
+
+    // ── Formatage texte (markdown minimal) ──────────────────
+    function renderText(raw) {
+      const safe = raw
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      return safe
+        .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n/g, '<br>');
+    }
+
+    // ── Init ─────────────────────────────────────────────────
+    if (slug) loadMarchand();
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "name": "WinWin Scanner",
+  "short_name": "Scanner",
+  "description": "Scanner QR WinWin Card",
+  "start_url": "/scanner/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/scanner/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/scanner/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

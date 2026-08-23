@@ -1,0 +1,1213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Scanner">
+  <link rel="manifest" href="/scanner/manifest.json">
+  <link rel="apple-touch-icon" href="/scanner/icon-192.png">
+  <title>WinWin Scanner</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --border: #334155;
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --error: #ef4444;
+      --radius: 16px;
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+    /* ── Layout ── */
+    #app { height: 100%; display: flex; flex-direction: column; }
+
+    .screen { display: none; flex-direction: column; height: 100%; overflow-y: auto; }
+    .screen.active { display: flex; }
+
+    /* ── Login ── */
+    #screen-login {
+      justify-content: center;
+      align-items: center;
+      padding: 24px;
+      gap: 32px;
+    }
+
+    .login-logo {
+      width: 72px; height: 72px;
+      background: var(--accent);
+      border-radius: 20px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 36px;
+    }
+
+    .login-title { font-size: 24px; font-weight: 700; text-align: center; }
+    .login-sub   { font-size: 14px; color: var(--muted); text-align: center; }
+
+    .login-form { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 16px; }
+
+    .field-group { display: flex; flex-direction: column; gap: 6px; }
+    .field-group label { font-size: 13px; font-weight: 500; color: var(--muted); }
+    .field-group input {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      font-size: 16px;
+      padding: 14px 16px;
+      outline: none;
+      transition: border-color .15s;
+      -webkit-appearance: none;
+    }
+    .field-group input:focus { border-color: var(--accent); }
+
+    .btn {
+      padding: 15px;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: opacity .15s, transform .1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn:active { transform: scale(.97); opacity: .9; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-ghost { background: transparent; color: var(--muted); font-size: 14px; }
+
+    #login-error {
+      background: rgba(239,68,68,.12);
+      border: 1px solid rgba(239,68,68,.3);
+      color: var(--error);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 14px;
+      display: none;
+    }
+
+    /* ── Scanner ── */
+    #screen-scanner {
+      position: relative;
+      background: #000;
+    }
+
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    /* Overlay cadre + UI */
+    .scan-overlay {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      pointer-events: none;
+    }
+
+    .scan-header {
+      pointer-events: all;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px;
+      padding-top: max(16px, env(safe-area-inset-top));
+      background: linear-gradient(to bottom, rgba(0,0,0,.7), transparent);
+    }
+
+    .scan-header-title {
+      font-size: 16px; font-weight: 600;
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    .scan-merchant-badge {
+      font-size: 12px;
+      background: rgba(99,102,241,.3);
+      border: 1px solid rgba(99,102,241,.5);
+      color: #a5b4fc;
+      padding: 3px 8px;
+      border-radius: 20px;
+    }
+
+    .btn-logout {
+      pointer-events: all;
+      background: rgba(255,255,255,.1);
+      border: none;
+      color: #fff;
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Viewfinder */
+    .scan-frame-wrap {
+      flex: 1;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .scan-frame {
+      width: 240px; height: 240px;
+      position: relative;
+    }
+
+    .scan-frame::before,
+    .scan-frame::after,
+    .scan-frame > span::before,
+    .scan-frame > span::after {
+      content: '';
+      position: absolute;
+      width: 32px; height: 32px;
+      border-color: #fff;
+      border-style: solid;
+    }
+    .scan-frame::before  { top: 0;    left: 0;   border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
+    .scan-frame::after   { top: 0;    right: 0;  border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
+    .scan-frame > span::before { bottom: 0; left: 0;   border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
+    .scan-frame > span::after  { bottom: 0; right: 0;  border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
+
+    .scan-line {
+      position: absolute;
+      left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(to right, transparent, var(--accent), transparent);
+      animation: scan-move 2s ease-in-out infinite;
+    }
+
+    @keyframes scan-move {
+      0%, 100% { top: 10%; }
+      50%       { top: 86%; }
+    }
+
+    .scan-hint {
+      font-size: 13px;
+      color: rgba(255,255,255,.6);
+      text-align: center;
+      padding: 12px;
+    }
+
+    .scan-footer {
+      padding: 16px;
+      padding-bottom: max(16px, env(safe-area-inset-bottom));
+      background: linear-gradient(to top, rgba(0,0,0,.7), transparent);
+      display: flex; justify-content: center;
+    }
+
+    .btn-manual {
+      pointer-events: all;
+      background: rgba(255,255,255,.12);
+      border: 1px solid rgba(255,255,255,.2);
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 14px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Status badge while scanning */
+    .scan-status {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,.75);
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 14px;
+      display: none;
+      white-space: nowrap;
+    }
+
+    /* ── Result card ── */
+    #screen-result {
+      justify-content: flex-end;
+      background: rgba(0,0,0,.5);
+      position: relative;
+    }
+
+    /* Keep camera behind result */
+    #screen-result .result-bg {
+      position: absolute; inset: 0; z-index: 0;
+    }
+
+    .result-sheet {
+      position: relative; z-index: 1;
+      background: var(--surface);
+      border-radius: 24px 24px 0 0;
+      padding: 0 24px 40px;
+      padding-bottom: max(40px, env(safe-area-inset-bottom));
+      display: flex; flex-direction: column; gap: 20px;
+    }
+
+    .result-handle {
+      width: 36px; height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      margin: 12px auto 4px;
+    }
+
+    .result-header {
+      display: flex; align-items: center; gap: 14px;
+    }
+
+    .result-avatar {
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      background: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .result-name { font-size: 22px; font-weight: 700; }
+    .result-serial { font-size: 12px; color: var(--muted); font-family: monospace; }
+
+    /* Progress */
+    .progress-section { display: flex; flex-direction: column; gap: 10px; }
+    .progress-label {
+      display: flex; justify-content: space-between;
+      font-size: 13px; color: var(--muted);
+    }
+    .progress-value { font-size: 28px; font-weight: 800; }
+    .progress-bar-wrap {
+      background: var(--border);
+      border-radius: 8px;
+      height: 10px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%; border-radius: 8px;
+      background: var(--accent);
+      transition: width .5s ease;
+    }
+
+    .dots-wrap {
+      display: flex; gap: 8px; flex-wrap: wrap;
+    }
+    .dot {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px;
+      transition: background .3s, border-color .3s;
+    }
+    .dot.filled { background: var(--accent); border-color: var(--accent); }
+    .dot.filled::after { content: '✓'; color: #fff; font-size: 11px; }
+
+    /* Reward banner */
+    .reward-banner {
+      background: linear-gradient(135deg, #f59e0b, #ef4444);
+      border-radius: 14px;
+      padding: 16px;
+      display: flex; align-items: center; gap: 12px;
+      animation: pop .4s cubic-bezier(.175,.885,.32,1.275);
+    }
+    .reward-icon { font-size: 32px; }
+    .reward-text { flex: 1; }
+    .reward-title { font-size: 16px; font-weight: 700; }
+    .reward-sub   { font-size: 13px; opacity: .85; }
+
+    @keyframes pop {
+      0%   { transform: scale(.8); opacity: 0; }
+      100% { transform: scale(1);  opacity: 1; }
+    }
+
+    /* Reset banner */
+    .reset-banner {
+      background: rgba(99,102,241,.15);
+      border: 1px solid rgba(99,102,241,.3);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 13px; color: #a5b4fc;
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    .result-actions { display: flex; flex-direction: column; gap: 10px; }
+
+    /* ── Error result ── */
+    .result-error {
+      background: rgba(239,68,68,.1);
+      border: 1px solid rgba(239,68,68,.2);
+      border-radius: 12px;
+      padding: 16px;
+      color: var(--error);
+      font-size: 14px;
+    }
+
+    /* ── Manual input modal ── */
+    #modal-manual {
+      display: none;
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,.7);
+      align-items: flex-end;
+    }
+    #modal-manual.open { display: flex; }
+
+    /* ── Points pad modal (mode "points") ── */
+    #modal-points {
+      display: none;
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,.7);
+      align-items: flex-end;
+    }
+    #modal-points.open { display: flex; }
+    #points-input { font-size: 28px; text-align: center; letter-spacing: .02em; }
+
+    /* ── Confirmation modal (mode "stamps") ── */
+    #modal-confirm {
+      display: none;
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,.7);
+      align-items: flex-end;
+    }
+    #modal-confirm.open { display: flex; }
+    #confirm-scan-btn { font-size: 18px; padding: 20px; }
+
+    .modal-sheet {
+      background: var(--surface);
+      border-radius: 24px 24px 0 0;
+      padding: 20px 24px 40px;
+      padding-bottom: max(40px, env(safe-area-inset-bottom));
+      width: 100%;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .modal-title { font-size: 18px; font-weight: 700; }
+    .modal-sub   { font-size: 13px; color: var(--muted); }
+
+    /* ── Misc ── */
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2px solid rgba(255,255,255,.2);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    canvas#qr-canvas { display: none; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ═══════════════════ LOGIN ═══════════════════ -->
+  <div id="screen-login" class="screen active">
+    <div class="login-logo">🎯</div>
+    <div>
+      <div class="login-title" data-i18n="appTitle">WinWin Scanner</div>
+      <div class="login-sub" data-i18n="loginSub">Sign in to scan</div>
+    </div>
+    <form class="login-form" id="login-form" onsubmit="return false">
+      <div class="field-group">
+        <label for="input-slug" data-i18n="merchantId">Merchant ID (slug)</label>
+        <input id="input-slug" type="text" placeholder="identifiant" autocomplete="username"
+               autocorrect="off" autocapitalize="none" spellcheck="false">
+      </div>
+      <div class="field-group">
+        <label for="input-password" data-i18n="password">Password</label>
+        <input id="input-password" type="password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <div id="login-error"></div>
+      <button type="submit" class="btn btn-primary" id="btn-login" data-i18n="signIn">Sign in</button>
+    </form>
+  </div>
+
+  <!-- ═══════════════════ SCANNER ═══════════════════ -->
+  <div id="screen-scanner" class="screen">
+    <video id="video" playsinline autoplay muted></video>
+    <canvas id="qr-canvas"></canvas>
+    <div class="scan-overlay">
+      <div class="scan-header">
+        <div class="scan-header-title">
+          <span data-i18n="scannerTitle">Scanner</span>
+          <span class="scan-merchant-badge" id="merchant-badge">–</span>
+        </div>
+        <button class="btn-logout" id="btn-logout" data-i18n="signOut">Sign out</button>
+      </div>
+      <div class="scan-frame-wrap">
+        <div class="scan-frame">
+          <span></span>
+          <div class="scan-line"></div>
+        </div>
+      </div>
+      <div class="scan-hint" data-i18n="scanHint">Point at the pass QR code</div>
+      <div id="scan-status" class="scan-status"></div>
+      <div class="scan-footer">
+        <button class="btn-manual" id="btn-open-history" data-i18n="history">History</button>
+        <button class="btn-manual" id="btn-open-manual" data-i18n="manualEntry">Manual entry</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ RESULT ═══════════════════ -->
+  <div id="screen-result" class="screen">
+    <div class="result-sheet" id="result-sheet">
+      <div class="result-handle"></div>
+
+      <!-- Header -->
+      <div class="result-header" id="result-header">
+        <div class="result-avatar" id="result-avatar">?</div>
+        <div>
+          <div class="result-name" id="result-name">–</div>
+          <div class="result-serial" id="result-serial"></div>
+        </div>
+      </div>
+
+      <!-- Progression -->
+      <div class="progress-section" id="progress-section">
+        <div class="progress-label">
+          <span data-i18n="points">Points</span>
+          <span id="progress-fraction">0 / 10</span>
+        </div>
+        <div class="progress-value" id="progress-value">0</div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+        </div>
+        <div class="dots-wrap" id="dots-wrap"></div>
+      </div>
+
+      <!-- Reward -->
+      <div class="reward-banner" id="reward-banner" style="display:none">
+        <div class="reward-icon">🎉</div>
+        <div class="reward-text">
+          <div class="reward-title" data-i18n="rewardUnlocked">Reward unlocked!</div>
+          <div class="reward-sub" id="reward-sub" data-i18n="rewardSubDefault">Client reached their goal</div>
+        </div>
+      </div>
+
+      <!-- Reset notice -->
+      <div class="reset-banner" id="reset-banner" style="display:none" data-i18n="counterReset">
+        ↩️ Counter reset after reward
+      </div>
+
+      <!-- Error -->
+      <div class="result-error" id="result-error" style="display:none"></div>
+
+      <!-- Désambiguïsation collision backup code : boutons prénom cliquables -->
+      <div id="result-candidates" style="display:none;flex-direction:column;gap:10px;width:100%">
+        <div id="result-candidates-label" style="font-size:14px;color:var(--muted);text-align:center"></div>
+      </div>
+
+      <div class="result-actions">
+        <button class="btn btn-primary" id="btn-rescan" data-i18n="nextScan">Next scan</button>
+        <button class="btn btn-ghost"   id="btn-manual-after" data-i18n="manualEntry">Manual entry</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ HISTORIQUE ═══════════════════ -->
+  <div id="screen-history" class="screen">
+    <div style="display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)">
+      <button class="btn-logout" id="btn-history-back" data-i18n="back">Back</button>
+      <div style="font-size:17px;font-weight:700" data-i18n="history">History</div>
+    </div>
+    <div id="history-list" style="flex:1;overflow-y:auto;padding:12px 16px"></div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════ MODAL SAISIE MANUELLE ═══════════════════ -->
+<div id="modal-manual">
+  <div class="modal-sheet">
+    <div class="modal-title" data-i18n="manualEntry">Manual entry</div>
+    <div class="modal-sub" data-i18n="enterSerialSub">Enter the pass serial number</div>
+    <div class="field-group">
+      <label for="input-serial" data-i18n="serialNumber">Serial number</label>
+      <input id="input-serial" type="text" placeholder="serial-xxxxx" autocorrect="off" autocapitalize="none">
+    </div>
+    <div id="manual-error" style="color:var(--error);font-size:13px;display:none"></div>
+    <button class="btn btn-primary" id="btn-manual-submit" data-i18n="submit">Submit</button>
+    <button class="btn btn-ghost"   id="btn-manual-cancel" data-i18n="cancel">Cancel</button>
+  </div>
+</div>
+
+<!-- ═══════════════════ MODAL POINTS (mode "points") ═══════════════════ -->
+<div id="modal-points">
+  <div class="modal-sheet">
+    <div class="modal-title" data-i18n="pointsToAdd">Points to add</div>
+    <div class="modal-sub" data-i18n="pointsToAddSub">Enter the number of points for this visit</div>
+    <div class="field-group">
+      <label for="points-input" data-i18n="points">Points</label>
+      <input id="points-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" autocomplete="off">
+    </div>
+    <div id="points-error" style="color:var(--error);font-size:13px;display:none"></div>
+    <button class="btn btn-primary" id="points-submit" data-i18n="submit">Submit</button>
+    <button class="btn btn-ghost"   id="points-cancel" data-i18n="cancel">Cancel</button>
+  </div>
+</div>
+
+<!-- ═══════════════════ MODAL CONFIRMATION (mode "stamps") ═══════════════════ -->
+<div id="modal-confirm">
+  <div class="modal-sheet">
+    <div class="modal-title" data-i18n="confirmScanTitle">Confirm this scan?</div>
+    <div class="modal-sub" data-i18n="confirmScanSub">Only the tap below records the scan.</div>
+    <button class="btn btn-primary" id="confirm-scan-btn" data-i18n="confirmScanValidate">Confirm scan</button>
+    <button class="btn btn-ghost"   id="confirm-scan-cancel" data-i18n="cancel">Cancel</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+const state = {
+  token: null,
+  marchandNom: null,
+  marchandSlug: null,
+  typeProgramme: 'stamps',
+  scanning: false,
+  processing: false,
+  awaitingPoints: false,
+  awaitingConfirm: false,
+  stream: null,
+  rafId: null,
+};
+
+// ═══════════════════════════════════════════════════════
+// i18n FR/EN — langue du marchand (via /api/merchants/login), persistée.
+// Statique : data-i18n / data-i18n-ph. JS : t('cle', {vars}).
+// ═══════════════════════════════════════════════════════
+let _lang = 'en';
+const I18N = {
+  en: {
+    appTitle:'WinWin Scanner', loginSub:'Sign in to scan',
+    merchantId:'Login or merchant ID', password:'Password', signIn:'Sign in',
+    scannerTitle:'Scanner', signOut:'Sign out', scanHint:'Point at the pass QR code',
+    manualEntry:'Manual entry', points:'Points', rewardUnlocked:'Reward unlocked!',
+    rewardSubDefault:'Client reached their goal',
+    rewardSub:({prenom,max})=>`${prenom} reached ${max} points — give the reward!`,
+    counterReset:'↩️ Counter reset after reward', nextScan:'Next scan',
+    enterSerialSub:'Paste the full pass ID, or type the 6-character backup code from the back of the pass',
+    serialNumber:'Pass ID or backup code', pickClient:'Multiple matches — tap the right client:',
+    submit:'Submit', cancel:'Cancel',
+    fillAllFields:'Please fill in all fields', invalidCreds:'Invalid credentials',
+    accessDisabled:'Access disabled — contact head office',
+    useBoutiqueLogin:'Log in with your store credentials',
+    cameraError:({msg})=>'Cannot access camera: '+msg, processing:'⏳ Processing…',
+    networkError:({msg})=>'Network error: '+msg, unknownError:'Unknown error', errorName:'Error',
+    enterSerial:'Enter a serial number',
+    history:'History', back:'Back', noScansYet:'No scans yet', ptsShort:'pts',
+    annuler:'Undo', annule:'undone',
+    annulConfirm:'Undo this visit? The point will be removed.',
+    annulImpossible:'Cannot undo — screen refreshed.',
+    justNow:'just now', minAgo:({m})=>`${m} min ago`, hoursAgo:({h})=>`${h}h ago`,
+    yesterday:'yesterday', daysAgo:({d})=>`${d} days ago`,
+    pointsToAdd:'Points to add', pointsToAddSub:'Enter the number of points for this visit',
+    invalidPoints:'Enter a positive whole number',
+    confirmScanTitle:'Confirm this scan?', confirmScanSub:'Only the tap below records the scan.',
+    confirmScanValidate:'Confirm scan',
+  },
+  fr: {
+    appTitle:'Scanner WinWin', loginSub:'Connectez-vous pour scanner',
+    merchantId:'Identifiant (boutique ou marchand)', password:'Mot de passe', signIn:'Se connecter',
+    scannerTitle:'Scanner', signOut:'Se déconnecter', scanHint:'Visez le QR code du pass',
+    manualEntry:'Saisie manuelle', points:'Points', rewardUnlocked:'Récompense débloquée !',
+    rewardSubDefault:'Le client a atteint son objectif',
+    rewardSub:({prenom,max})=>`${prenom} a atteint ${max} points — remettez la récompense !`,
+    counterReset:'↩️ Compteur remis à zéro après la récompense', nextScan:'Scan suivant',
+    enterSerialSub:'Collez l’ID complet du pass, ou tapez le code de secours à 6 caractères au dos du pass',
+    serialNumber:'ID du pass ou code de secours', pickClient:'Plusieurs clients — appuyez sur le bon :',
+    submit:'Valider', cancel:'Annuler',
+    fillAllFields:'Veuillez remplir tous les champs', invalidCreds:'Identifiants invalides',
+    accessDisabled:'Accès désactivé — contactez le siège',
+    useBoutiqueLogin:"Connectez-vous avec l'identifiant de votre boutique",
+    cameraError:({msg})=>"Impossible d'accéder à la caméra : "+msg, processing:'⏳ Traitement…',
+    networkError:({msg})=>'Erreur réseau : '+msg, unknownError:'Erreur inconnue', errorName:'Erreur',
+    enterSerial:'Saisissez un numéro de série',
+    history:'Historique', back:'Retour', noScansYet:'Aucun scan pour le moment', ptsShort:'pts',
+    annuler:'Annuler', annule:'annulé',
+    annulConfirm:'Annuler ce passage ? Le point sera retiré.',
+    annulImpossible:'Annulation impossible — écran actualisé.',
+    justNow:"à l'instant", minAgo:({m})=>`il y a ${m} min`, hoursAgo:({h})=>`il y a ${h} h`,
+    yesterday:'hier', daysAgo:({d})=>`il y a ${d} jours`,
+    pointsToAdd:'Points à ajouter', pointsToAddSub:'Saisis le nombre de points pour cette visite',
+    invalidPoints:'Saisis un nombre entier positif',
+    confirmScanTitle:'Valider ce scan ?', confirmScanSub:'Seul l\'appui ci-dessous enregistre le scan.',
+    confirmScanValidate:'Valider le scan',
+  },
+};
+
+function t(key, vars) {
+  const dict = I18N[_lang] || I18N.en;
+  let s = dict[key] != null ? dict[key] : (I18N.en[key] != null ? I18N.en[key] : key);
+  if (typeof s === 'function') return s(vars || {});
+  if (vars) s = s.replace(/\{(\w+)\}/g, (_, k) => (vars[k] != null ? vars[k] : ''));
+  return s;
+}
+
+function applyI18n() {
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.setAttribute('placeholder', t(el.getAttribute('data-i18n-ph'))); });
+}
+
+function setLang(l) {
+  _lang = (l === 'fr' || l === 'en') ? l : 'en';
+  document.documentElement.lang = _lang;
+  document.title = t('appTitle');
+  try { localStorage.setItem('ww_scanner_lang', _lang); } catch {}
+  applyI18n();
+}
+
+const dateLocale = () => (_lang === 'fr' ? 'fr-FR' : 'en-GB');
+function timeAgo(iso) {
+  const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (m < 1)  return t('justNow');
+  if (m < 60) return t('minAgo', { m });
+  const h = Math.floor(m / 60);
+  if (h < 24) return t('hoursAgo', { h });
+  const d = Math.floor(h / 24);
+  if (d === 1) return t('yesterday');
+  if (d < 7)  return t('daysAgo', { d });
+  return new Date(iso).toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short' });
+}
+
+// ═══════════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════════
+function show(id)  { document.getElementById(id).classList.add('active'); }
+function hide(id)  { document.getElementById(id).classList.remove('active'); }
+function setScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function saveSession(token, slug, nom, langue, typeProgramme) {
+  state.token = token; state.marchandSlug = slug; state.marchandNom = nom;
+  state.typeProgramme = (typeProgramme === 'points') ? 'points' : 'stamps';
+  try {
+    localStorage.setItem('ww_token', token); localStorage.setItem('ww_slug', slug); localStorage.setItem('ww_nom', nom);
+    localStorage.setItem('ww_type_programme', state.typeProgramme);
+  } catch {}
+  setLang(langue);
+}
+
+function clearSession() {
+  state.token = null; state.marchandSlug = null; state.marchandNom = null; state.typeProgramme = 'stamps';
+  try { localStorage.removeItem('ww_token'); localStorage.removeItem('ww_slug'); localStorage.removeItem('ww_nom'); localStorage.removeItem('ww_type_programme'); } catch {}
+}
+
+function restoreSession() {
+  try {
+    const t = localStorage.getItem('ww_token');
+    const s = localStorage.getItem('ww_slug');
+    const n = localStorage.getItem('ww_nom');
+    const tp = localStorage.getItem('ww_type_programme');
+    if (t && s) {
+      state.token = t; state.marchandSlug = s; state.marchandNom = n || s;
+      state.typeProgramme = (tp === 'points') ? 'points' : 'stamps';
+      return true;
+    }
+  } catch {}
+  return false;
+}
+
+// ═══════════════════════════════════════════════════════
+// LOGIN
+// ═══════════════════════════════════════════════════════
+document.getElementById('login-form').addEventListener('submit', async () => {
+  const slug = document.getElementById('input-slug').value.trim();
+  const password = document.getElementById('input-password').value;
+  const errEl = document.getElementById('login-error');
+  const btn = document.getElementById('btn-login');
+
+  errEl.style.display = 'none';
+  if (!slug || !password) { showLoginError(t('fillAllFields')); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+
+  try {
+    // Login unifié (multi-boutiques 3c) : l'identifiant est soit un login
+    // boutique, soit un slug marchand (mono-site). Le backend tranche.
+    const res = await fetch('/api/scanner/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifiant: slug, password, remember_device: true })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      if (data.error === 'access_disabled')    throw new Error(t('accessDisabled'));
+      if (data.error === 'use_boutique_login') throw new Error(t('useBoutiqueLogin'));
+      throw new Error(data.error || t('invalidCreds'));
+    }
+    saveSession(data.token, data.slug || slug, data.nom || slug, data.langue, data.type_programme);
+    startScanner();
+  } catch (e) {
+    showLoginError(e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = t('signIn');
+  }
+});
+
+function showLoginError(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+// ═══════════════════════════════════════════════════════
+// SCANNER
+// ═══════════════════════════════════════════════════════
+async function startScanner() {
+  document.getElementById('merchant-badge').textContent = state.marchandNom || state.marchandSlug;
+  setScreen('screen-scanner');
+
+  // Stop any previous stream
+  if (state.stream) state.stream.getTracks().forEach(t => t.stop());
+
+  try {
+    state.stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    const video = document.getElementById('video');
+    video.srcObject = state.stream;
+    video.play();
+    video.addEventListener('loadeddata', () => {
+      state.scanning = true;
+      requestAnimationFrame(scanLoop);
+    }, { once: true });
+  } catch (e) {
+    alert(t('cameraError', { msg: e.message }));
+  }
+}
+
+function stopScanner() {
+  state.scanning = false;
+  if (state.rafId) cancelAnimationFrame(state.rafId);
+  if (state.stream) state.stream.getTracks().forEach(t => t.stop());
+  state.stream = null;
+}
+
+function scanLoop() {
+  if (!state.scanning) return;
+  state.rafId = requestAnimationFrame(scanLoop);
+  if (state.processing || state.awaitingPoints || state.awaitingConfirm) return;
+
+  const video = document.getElementById('video');
+  if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+
+  const canvas = document.getElementById('qr-canvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.drawImage(video, 0, 0);
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
+
+  if (code && code.data) {
+    handleScannedData(code.data);
+  }
+}
+
+async function handleScannedData(raw) {
+  if (state.processing || state.awaitingPoints || state.awaitingConfirm) return;
+  // Extract serial number from URL or raw string
+  // Expected formats: serial-xxx, or https://api.example.com/... (ignore URLs without serial)
+  let serial = raw.trim();
+
+  // If it's a URL, try extracting serial from path/query
+  try {
+    const url = new URL(serial);
+    const parts = url.pathname.split('/').filter(Boolean);
+    // Look for "serial" segment pattern
+    const candidate = parts[parts.length - 1];
+    if (candidate && candidate.length > 4) serial = candidate;
+  } catch {}
+
+  proceedToScan(serial);
+}
+
+// Point d'entrée unique après résolution du serial (caméra ou saisie manuelle).
+// Mode points : ouvre le pavé numérique (qui fait office de validation) avant
+// tout appel API. Mode tampons : écran de confirmation avant écriture — l'appel
+// POST ne part QUE sur le tap « Valider », jamais sur la détection caméra
+// (anti double-scan involontaire). Le POST d'écriture est strictement inchangé.
+function proceedToScan(serial) {
+  if (state.typeProgramme === 'points') {
+    openPointsPad(serial);
+  } else {
+    openConfirm(serial);
+  }
+}
+
+// ── Confirmation avant écriture (mode tampons) ──────────────────────────────
+// awaitingConfirm met scanLoop en pause (caméra allumée mais aucune détection)
+// tant que la confirmation est ouverte. Réinitialisé sur TOUS les chemins de
+// sortie (valider, annuler, next-scan, logout, erreur) — un flag bloqué figerait
+// le scan. Filet de sécurité : le flag n'est jamais persisté (localStorage), donc
+// un simple reload (réflexe caissier fermer/rouvrir) le remet à zéro.
+let _pendingConfirmSerial = null;
+
+function openConfirm(serial) {
+  _pendingConfirmSerial = serial;
+  state.awaitingConfirm = true;
+  document.getElementById('confirm-scan-btn').disabled = false; // ré-armer (debounce du tour précédent)
+  document.getElementById('modal-confirm').classList.add('open');
+}
+
+function closeConfirm() {
+  document.getElementById('modal-confirm').classList.remove('open');
+  _pendingConfirmSerial = null;
+  state.awaitingConfirm = false;
+}
+
+document.getElementById('confirm-scan-btn').addEventListener('click', () => {
+  const serial = _pendingConfirmSerial;
+  if (!serial) return;
+  document.getElementById('confirm-scan-btn').disabled = true; // debounce anti double-tap réflexe
+  document.getElementById('modal-confirm').classList.remove('open');
+  _pendingConfirmSerial = null;
+  state.awaitingConfirm = false;
+  submitScan(serial); // POST d'écriture inchangé
+});
+
+document.getElementById('confirm-scan-cancel').addEventListener('click', closeConfirm);
+
+async function submitScan(serial, points) {
+  if (state.processing) return;
+  state.processing = true;
+
+  const statusEl = document.getElementById('scan-status');
+  statusEl.textContent = t('processing');
+  statusEl.style.display = 'block';
+
+  // Vibrate on mobile
+  try { navigator.vibrate && navigator.vibrate(50); } catch {}
+
+  try {
+    const body = { serial_number: serial };
+    if (points != null) body.points = points;
+    const res = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${state.token}` },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+
+    statusEl.style.display = 'none';
+    state.scanning = false;
+    stopScanner();
+    // Refus multi-boutiques (3c) : boutique coupée/archivée, ou réseau exigeant
+    // le login boutique. use_boutique_login → le token courant n'est plus valable
+    // pour scanner : on déconnecte pour forcer une reconnexion avec le bon login.
+    if (res.status === 403 && (data.error === 'access_disabled' || data.error === 'use_boutique_login')) {
+      if (data.error === 'use_boutique_login') {
+        showScanError(t('useBoutiqueLogin'));
+        setTimeout(() => { clearSession(); location.reload(); }, 3500);
+      } else {
+        showScanError(t('accessDisabled'));
+      }
+      return;
+    }
+    if (res.status === 409 && data.candidates) { showCandidates(data.candidates); return; }
+    showResult(data, res.ok, serial);
+  } catch (e) {
+    statusEl.style.display = 'none';
+    state.processing = false;
+    showScanError(t('networkError', { msg: e.message }));
+  }
+}
+
+function showScanError(msg) {
+  const statusEl = document.getElementById('scan-status');
+  statusEl.textContent = '⚠️ ' + msg;
+  statusEl.style.display = 'block';
+  setTimeout(() => { statusEl.style.display = 'none'; state.processing = false; state.awaitingConfirm = false; }, 3000);
+}
+
+// ═══════════════════════════════════════════════════════
+// RESULT
+// ═══════════════════════════════════════════════════════
+// Collision backup code : affiche les prénoms candidats en boutons.
+// Un tap re-soumet le serial complet du client choisi → match exact, tampon.
+function showCandidates(candidates) {
+  setScreen('screen-result');
+  state.processing = false;
+  document.getElementById('result-header').style.display = 'none';
+  document.getElementById('progress-section').style.display = 'none';
+  document.getElementById('reward-banner').style.display = 'none';
+  document.getElementById('reset-banner').style.display = 'none';
+  document.getElementById('result-error').style.display = 'none';
+
+  const box   = document.getElementById('result-candidates');
+  const label = document.getElementById('result-candidates-label');
+  label.textContent = t('pickClient');
+  // Purge les anciens boutons (garde le label)
+  [...box.querySelectorAll('button')].forEach(b => b.remove());
+  candidates.forEach(c => {
+    const b = document.createElement('button');
+    b.className = 'btn btn-primary';
+    b.textContent = c.prenom;
+    b.addEventListener('click', () => { box.style.display = 'none'; state.processing = false; proceedToScan(c.serial); });
+    box.appendChild(b);
+  });
+  box.style.display = 'flex';
+}
+
+function showResult(data, ok, serial) {
+  setScreen('screen-result');
+
+  // Reset UI
+  document.getElementById('result-header').style.display = '';
+  document.getElementById('result-candidates').style.display = 'none';
+  document.getElementById('reward-banner').style.display = 'none';
+  document.getElementById('reset-banner').style.display = 'none';
+  document.getElementById('result-error').style.display = 'none';
+  document.getElementById('progress-section').style.display = ok ? '' : 'none';
+
+  if (!ok) {
+    const errEl = document.getElementById('result-error');
+    errEl.textContent = data.error || t('unknownError');
+    errEl.style.display = 'block';
+    document.getElementById('result-name').textContent = t('errorName');
+    document.getElementById('result-avatar').textContent = '✗';
+    document.getElementById('result-avatar').style.background = 'var(--error)';
+    document.getElementById('result-serial').textContent = serial;
+    return;
+  }
+
+  const { prenom, stored_value_apres: val, stored_value_avant, max_value, display_max_value, recompense } = data;
+  const stored_value = val ?? data.stored_value ?? 0;
+  const displayMax = display_max_value || max_value;
+
+  // Avatar
+  const avatarEl = document.getElementById('result-avatar');
+  avatarEl.textContent = (prenom || '?').charAt(0).toUpperCase();
+  avatarEl.style.background = 'var(--accent)';
+
+  document.getElementById('result-name').textContent = prenom || '–';
+  document.getElementById('result-serial').textContent = serial;
+
+  // Texte non clampé : un scan points peut franchir le seuil en un coup (ex.
+  // 480 + 50 = 530 pour un seuil à 500) → on affiche la valeur réelle "530/500"
+  // (surplus reporté au scan de redemption, migration_022, jamais perdu).
+  // Seule la BARRE visuelle reste bridée à 100% (pas de débordement du cadre).
+  const pct = Math.min(stored_value / displayMax * 100, 100);
+  document.getElementById('progress-value').textContent = stored_value;
+  document.getElementById('progress-fraction').textContent = `${stored_value} / ${displayMax}`;
+  document.getElementById('progress-bar').style.width = pct + '%';
+
+  // Dots — un point visuel par unité. N'a de sens qu'en mode tampons (peu
+  // d'unités) ; en mode points le seuil peut être élevé (ex. 500), la barre
+  // de progression + la fraction suffisent (compteur numérique simple).
+  const dotsWrap = document.getElementById('dots-wrap');
+  dotsWrap.innerHTML = '';
+  if (state.typeProgramme !== 'points') {
+    for (let i = 1; i <= displayMax; i++) {
+      const d = document.createElement('div');
+      d.className = 'dot' + (i <= stored_value ? ' filled' : '');
+      if (!d.classList.contains('filled')) d.textContent = i;
+      dotsWrap.appendChild(d);
+    }
+  }
+
+  // Reward
+  if (recompense) {
+    document.getElementById('reward-banner').style.display = 'flex';
+    document.getElementById('reward-sub').textContent = t('rewardSub', { prenom, max: displayMax });
+    document.getElementById('reset-banner').style.display = 'flex';
+    try { navigator.vibrate && navigator.vibrate([100, 50, 100, 50, 200]); } catch {}
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// MANUAL INPUT
+// ═══════════════════════════════════════════════════════
+function openManual() {
+  document.getElementById('modal-manual').classList.add('open');
+  document.getElementById('input-serial').value = '';
+  document.getElementById('manual-error').style.display = 'none';
+  setTimeout(() => document.getElementById('input-serial').focus(), 100);
+}
+
+function closeManual() {
+  document.getElementById('modal-manual').classList.remove('open');
+}
+
+document.getElementById('btn-open-manual').addEventListener('click', openManual);
+document.getElementById('btn-manual-after').addEventListener('click', () => {
+  openManual();
+  setScreen('screen-scanner');
+  startScanner();
+});
+document.getElementById('btn-manual-cancel').addEventListener('click', closeManual);
+
+document.getElementById('btn-manual-submit').addEventListener('click', async () => {
+  const serial = document.getElementById('input-serial').value.trim();
+  if (!serial) {
+    document.getElementById('manual-error').textContent = t('enterSerial');
+    document.getElementById('manual-error').style.display = 'block';
+    return;
+  }
+  closeManual();
+  state.processing = false;
+  proceedToScan(serial);
+});
+
+// ═══════════════════════════════════════════════════════
+// POINTS PAD — mode "points" : saisie du montant avant l'incrément
+// ═══════════════════════════════════════════════════════
+let _pendingSerial = null;
+
+function openPointsPad(serial) {
+  _pendingSerial = serial;
+  state.awaitingPoints = true;
+  document.getElementById('points-input').value = '';
+  document.getElementById('points-error').style.display = 'none';
+  document.getElementById('modal-points').classList.add('open');
+  setTimeout(() => document.getElementById('points-input').focus(), 100);
+}
+
+function closePointsPad() {
+  document.getElementById('modal-points').classList.remove('open');
+  _pendingSerial = null;
+  state.awaitingPoints = false;
+}
+
+document.getElementById('points-cancel').addEventListener('click', closePointsPad);
+
+document.getElementById('points-submit').addEventListener('click', async () => {
+  const raw = document.getElementById('points-input').value.trim();
+  const errEl = document.getElementById('points-error');
+  if (!/^[0-9]+$/.test(raw) || parseInt(raw, 10) <= 0) {
+    errEl.textContent = t('invalidPoints');
+    errEl.style.display = 'block';
+    return;
+  }
+  const n = parseInt(raw, 10);
+  const serial = _pendingSerial;
+  closePointsPad();
+  await submitScan(serial, n);
+});
+
+document.getElementById('points-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('points-submit').click();
+});
+
+// ═══════════════════════════════════════════════════════
+// HISTORIQUE — derniers scans (réutilise GET /api/scan)
+// ═══════════════════════════════════════════════════════
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+}
+
+async function openHistory() {
+  stopScanner();
+  setScreen('screen-history');
+  const el = document.getElementById('history-list');
+  el.innerHTML = `<div style="color:var(--muted);text-align:center;padding:24px">…</div>`;
+  try {
+    const res = await fetch('/api/scan?limit=100', { headers: { 'Authorization': `Bearer ${state.token}` } });
+    const data = await res.json();
+    renderHistory(Array.isArray(data) ? data : []);
+  } catch {
+    renderHistory([]);
+  }
+}
+
+function renderHistory(scans) {
+  const el = document.getElementById('history-list');
+  if (!scans.length) {
+    el.innerHTML = `<div style="color:var(--muted);text-align:center;padding:32px">${t('noScansYet')}</div>`;
+    return;
+  }
+  // Le bouton « Annuler » n'apparaît que sur le scan actif LE PLUS RÉCENT de
+  // chaque client (le 1er non-annulé rencontré en descendant, la liste étant
+  // triée par date décroissante). Le serveur revalide de toute façon.
+  const vus = new Set();
+  el.innerHTML = scans.map(s => {
+    const prenom  = (s.clients && s.clients.prenom) || '?';
+    const initial = prenom.charAt(0).toUpperCase();
+    const exact = new Date(s.date_scan).toLocaleString(dateLocale(), { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const annule = !!s.annule_le;
+    const cid = s.clients && s.clients.id;
+    let peutAnnuler = false;
+    if (!annule && cid && !vus.has(cid)) { vus.add(cid); peutAnnuler = true; }
+    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--border)${annule ? ';opacity:.5' : ''}">
+      <div style="width:40px;height:40px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">${initial}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600${annule ? ';text-decoration:line-through' : ''}">${escapeHtml(prenom)}</div>
+        <div style="font-size:12px;color:var(--muted)">${exact}${annule ? ' · ' + t('annule') : ''}</div>
+      </div>
+      <div style="font-weight:700;flex-shrink:0">${s.stored_value_avant} → ${s.stored_value_apres}</div>
+      ${peutAnnuler ? `<button class="btn-undo" data-id="${s.id}" style="flex-shrink:0;background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:6px 10px;font-size:12px">${t('annuler')}</button>` : ''}
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.btn-undo').forEach(b => b.addEventListener('click', () => annulerScan(b.dataset.id)));
+}
+
+async function annulerScan(scanId) {
+  if (!confirm(t('annulConfirm'))) return;
+  try {
+    const res = await fetch(`/api/scan/${scanId}/annuler`, {
+      method: 'POST', headers: { 'Authorization': `Bearer ${state.token}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) { alert(t('annulImpossible')); }
+  } catch { alert(t('annulImpossible')); }
+  openHistory(); // recharge : solde restauré, scan marqué, bouton passé au suivant
+}
+
+function backFromHistory() {
+  setScreen('screen-scanner');
+  startScanner();
+}
+
+document.getElementById('btn-open-history').addEventListener('click', openHistory);
+document.getElementById('btn-history-back').addEventListener('click', backFromHistory);
+
+// ═══════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════
+document.getElementById('btn-rescan').addEventListener('click', () => {
+  state.processing = false;
+  state.awaitingConfirm = false;
+  startScanner();
+});
+
+document.getElementById('btn-logout').addEventListener('click', () => {
+  stopScanner();
+  clearSession();
+  state.processing = false;
+  state.awaitingConfirm = false;
+  setScreen('screen-login');
+});
+
+// ═══════════════════════════════════════════════════════
+// SERVICE WORKER
+// ═══════════════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/scanner/sw.js').catch(() => {});
+}
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+// Langue mémorisée (persiste après logout pour garder l'écran de login traduit).
+try { _lang = localStorage.getItem('ww_scanner_lang') === 'fr' ? 'fr' : 'en'; } catch {}
+document.documentElement.lang = _lang;
+document.title = t('appTitle');
+applyI18n();
+
+if (restoreSession()) {
+  startScanner();
+}
+</script>
+</body>
+</html>

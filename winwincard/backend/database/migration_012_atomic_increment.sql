@@ -1,0 +1,28 @@
+-- ⚠️⚠️⚠️ NEUTRALISÉE — CE FICHIER NE CRÉE PLUS AUCUNE FONCTION ⚠️⚠️⚠️
+--
+-- La définition d'increment_stored_value a été DÉLIBÉRÉMENT retirée de ce
+-- fichier. La SEULE source de vérité de cette fonction est désormais :
+--     database/migration_023_drop_legacy_overloads.sql
+--
+-- Pourquoi ce fichier ne crée plus rien : le CREATE 2-arg qu'il contenait
+-- (uuid, integer) a fini par cohabiter avec des surcharges à paramètre DEFAULT
+-- ajoutées plus tard (p_amount, puis p_type_programme). Cette cohabitation a
+-- provoqué une ambiguïté "42725: function is not unique" qui menaçait tout
+-- scan de production (voir l'en-tête de migration_023 pour le récit complet et
+-- la leçon). Tant que ce fichier recréait la 2-arg, un rejeu — même partiel —
+-- pouvait réintroduire l'ambiguïté. On l'a donc vidé de son CREATE : rejouer
+-- ce fichier est maintenant un no-op total, incapable de recréer un doublon.
+--
+-- Rejeu depuis zéro dans l'ordre : 012 (no-op) → … → 022 (no-op) → 023 pose
+-- l'unique fonction canonique. Une seule fonction en base, quel que soit le
+-- chemin. NE RÉINTRODUIS JAMAIS de CREATE increment_stored_value ici.
+--
+-- ── Contenu original (historique, pour mémoire uniquement — NE PAS exécuter) ─
+-- Migration 012 : incrément atomique des points de fidélité.
+-- Remplaçait le pattern read-then-write (lecture de stored_value puis écriture)
+-- qui pouvait perdre des points en cas de scans simultanés (deux caisses qui
+-- scannent le même pass au même instant lisent 4, écrivent 5 → un point perdu).
+-- SELECT ... FOR UPDATE pose un verrou ligne : le second scan attend la fin du
+-- premier et lit la valeur à jour. La logique de reset (atteinte du seuil → 0)
+-- était exécutée dans la même transaction, donc atomiquement. Cette logique
+-- vit désormais, étendue (p_amount, p_type_programme), dans migration_023.
