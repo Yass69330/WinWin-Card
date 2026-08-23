@@ -611,3 +611,190 @@ consignées : #12 fiabilité notifs à l'échelle (410-cleanup/observabilité/ch
 d'abord), #13 anti-rafale push (parké), #14 couleur du label strip (demandé, non fait).
 LIFO/annulation caissier explicitement écartée (rattrapage sur dashboard). Dernier
 commit : `25cd3cf`.*
+
+---
+---
+
+# PARTIE II — CHANTIER FRANCHISE / MULTI-BOUTIQUES (migrations 028→039)
+
+*Cette partie couvre tout ce qui a été livré après le commit `25cd3cf` : les
+corrections de grants, le chantier multi-boutiques (5 étapes), l'annulation de
+scan, et la dette à jour. La Partie I ci-dessus reste valable — pièges §3,
+zones dangereuses §5, contrat §7 s'appliquent toujours.*
+
+## 8. LES MIGRATIONS 028 → 039
+
+| # | Objet | Note |
+|---|---|---|
+| 028 | `GRANT … workflow_executions TO service_role` | La dédup workflows ne marchait pas (table sans grant DML → inserts muets). **Leçon clé : toute table créée par migration doit recevoir son GRANT service_role explicite** (seul migration_006 l'avait). |
+| 029 | `couleur_label_strip` | Résout la dette #14 (couleur manuelle du label « LOYALTY CARD »). |
+| 030 | `GRANT … referral_credits TO service_role` | Même bug que 028 : le parrain n'était jamais crédité (ticket insert muet). |
+| 031 | `scans.montant_credite` + `recompense_distribuee` | Colonnes de mesure, remplies **côté JS** (scan.js), RPC non touchée. |
+| 032 | Table `points_de_vente` | Boutiques enfants du marchand. Soft-delete `deleted_at`, nom unique insensible casse sur actives. |
+| 033 | `scans.point_de_vente_id` (FK **ON DELETE RESTRICT**) + `points_de_vente.actif` + `scanner_login`/`scanner_password_hash` | FK RESTRICT (jamais CASCADE) protège l'historique. |
+| 034 | Index partiel `(marchand_id) WHERE deleted_at IS NULL AND scanner_login IS NOT NULL` | Soutient le durcissement du token marchand au scan. |
+| 035 | `marchands.freq_seuil_bas`/`freq_seuil_haut` (déf. 5/10, CHECK bas≤haut) | Seuils de distribution de fréquence, réglables admin. |
+| 036 | **Fonction `group_stats(uuid) RETURNS jsonb`** | Agrégation dashboard groupe, LECTURE SEULE. |
+| 037 | Index composite `scans(marchand_id, date_scan)` | group_stats lit la tranche 90 j sans parcourir tout l'historique. |
+| 038 | `scans.annule_le` + **fonction `annuler_scan(uuid,uuid) RETURNS jsonb`** | Annulation atomique du dernier scan d'un client. |
+| 039 | `group_stats` re-CREATE OR REPLACE + filtre `annule_le IS NULL` | Exclut les scans annulés de tous les indicateurs réseau. |
+
+## 9. LE MODÈLE MULTI-BOUTIQUES
+
+**Invariant central (argument de vente) :** un réseau = **UN SEUL `marchand`**. Les
+`points_de_vente` sont ses **enfants purement analytiques**. Le solde
+(`clients.stored_value`) reste **unique et partagé** sur tout le réseau — jamais
+fragmenté par boutique. Une boutique « produit de l'activité », elle ne « possède »
+aucun client.
+
+**Deux leviers distincts, à ne jamais confondre :**
+- **`points_de_vente.actif`** = COUPURE de l'accès scanner. Levier du **franchiseur**
+  (dashboard, `PATCH /me/points-de-vente/:id/actif`), **réversible**, **neutre pour la
+  facturation**. Effet immédiat (relu au scan).
+- **`points_de_vente.deleted_at`** = ARCHIVAGE. Levier de l'**admin**, retire de la
+  **facturation** + gestion, **conserve l'historique**.
+- Le scan bloque si `actif = false` **OU** `deleted_at IS NOT NULL`.
+
+**Facturation :** le nombre de **boutiques actives** par marchand est la base facturée
+→ **création et archivage réservés à l'admin** ; le franchiseur ne fait que lister +
+renommer + couper/rétablir.
+
+## 10. AUTH SCANNER PAR BOUTIQUE (le lot le plus sensible)
+
+- **Rôles JWT** : `marchand`, `admin`, `scanner` (les trois existent dans `auth.js`).
+- **Login unifié** `POST /api/scanner/login` (`scanner-auth.js`, rate-limité) : essaie
+  d'abord un **login boutique** (`scanner_login`, match `.eq(lower())`, **jamais ilike**),
+  puis retombe sur le **login marchand** (mono-site). `authScanner` pose `req.marchandId`,
+  `req.scannerRole`, `req.pointDeVenteId`.
+- **Durcissement** : dès qu'un marchand a **≥1 boutique provisionnée** (login posé, non
+  archivée), le **token marchand est refusé au scan** (`use_boutique_login`). Garantit
+  qu'un mot de passe marchand ayant pu circuler n'est pas une porte d'entrée sur un réseau.
+  **Zéro fenêtre morte** : le blocage n'est conditionné qu'à l'existence d'un login
+  boutique utilisable (la création de boutique pose les identifiants dans la foulée).
+- **Coupure immédiate** : le scan **relit `actif`/`deleted_at` EN BASE à chaque passage**
+  (`scan.js`, avant toute écriture), **jamais depuis le JWT** → couper une boutique bloque
+  le scan suivant, sans attendre l'expiration du token 1 an.
+- **Provisioning** : `PATCH /api/admin/points-de-vente/:id/scanner` (admin) pose
+  login + mot de passe (hash via `hashPassword`, **jamais renvoyé**, login stocké en
+  minuscules). Une boutique = un login (partagé par les tablettes du comptoir).
+- **Mono-site : byte-identique** — pas de boutique → token marchand, scan `point_de_vente_id`
+  NULL, comportement d'origine.
+
+## 11. ATTRIBUTION + COLONNES DE MESURE DU SCAN
+
+Écrites **côté JS** dans `scan.js` à l'insertion (RPC `increment_stored_value` **non
+touchée**) :
+- **`montant_credite`** : points/tampons réellement ajoutés, jamais négatif. `amount`
+  sur un scan normal/gagnant ; **0** sur une redemption tampons ; `amount` sur une
+  redemption points. (Résout le `après−avant` négatif des resets.)
+- **`recompense_distribuee`** : `TRUE` sur le scan de **redemption** (`is_reset`) — la
+  boutique qui **remet** le cadeau (≠ « débloquée »/franchissement de seuil).
+- **`point_de_vente_id`** : boutique du token scanner (NULL pour un token marchand).
+
+## 12. DASHBOARD GROUPE (`group_stats`)
+
+- `GET /me/group-stats` (`merchants.js`) → **fonction SQL `group_stats(uuid)`** qui fait
+  le `GROUP BY` côté Postgres et renvoie un jsonb. **Pourquoi une fonction et pas du JS :**
+  PostgREST tronque toute lecture de lignes à **1 000** → une agrégation JS fausserait
+  silencieusement un réseau. La fonction agrège en base (immunisée).
+- **Bloc réseau** (jamais ventilé) : porteurs, actifs 30 j, nouveaux ce mois, taux de
+  retour (ce mois ∩ mois précédent), mobilité (>1 boutique / 90 j).
+- **Bloc boutiques** (une ligne, archivées incluses SI activité récente) : scans, clients
+  distincts, récompenses distribuées, **évolution % vs mois précédent** (tiret si mois
+  précédent = 0), triable, tri défaut scans desc.
+- **Compteur de scans non attribués** (token marchand sur un réseau = tablette non enrôlée).
+- **Distribution de fréquence** : 3 tranches selon `freq_seuil_bas`/`haut`, barre HTML/CSS
+  (aucune bibliothèque). Onglet « Réseau » **visible seulement si ≥1 boutique** (mono-site
+  intact).
+- **RÈGLE :** ne **jamais** netter `montant_credite` et `recompense_distribuee` en un seul
+  chiffre (ce serait la balance inter-boutiques, hors périmètre volontaire).
+
+## 13. ANNULATION DU DERNIER SCAN (étape 5)
+
+- **`POST /api/scan/:id/annuler`** (authScanner) → **fonction `annuler_scan(uuid,uuid)`**.
+  Cible le scan actif **le plus récent DU CLIENT** (pas de la boutique — le solde est par
+  client). **Répétable** (déroule plusieurs scans). Restaure `stored_value` à
+  `stored_value_avant`, marque `annule_le`. **Verrou par carte** (`FOR UPDATE`), atomique.
+- **3 garde-fous serveur** (refus 409, rien modifié) : pas le dernier actif du client
+  (`pas_le_dernier`), solde ≠ `apres` (`solde_incoherent`), déjà annulé / autre boutique.
+- **Resync du pass** après coup (réutilise `syncPassAfterAdjustment` de `clients.js`,
+  exporté).
+- **Principe qui réduit le risque :** l'annulation **restaure le solde**, donc tout ce
+  qui **dérive du solde** (pass, near_reward, points fiche client) est **auto-corrigé,
+  sans filtre**. Seul ce qui **compte des scans** doit filtrer `annule_le IS NULL`.
+- **Surfaces de comptage filtrées** (inventaire validé, ne pas en oublier) : `group_stats`
+  (via 039, un seul point), `/me/stats` ×2 (`merchants.js`), admin `/marchands` +
+  `/stats` (`admin.js`). **Affichage marqué (pas filtré)** : historique scanner + onglet
+  Scans + fiche client. **Workflow inactifs (`cron.js`) : PAS de filtre** — un scan annulé
+  reste une **visite physique** (arbitrage fondateur : ne pas relancer « tu nous manques »
+  quelqu'un qui était là).
+
+## 14. NOUVELLES ZONES DANGEREUSES (compléter §5)
+
+- 🔴 **`annuler_scan`** — écrit le solde (l'argent). **Signature unique et définitive**
+  `(uuid, uuid)`, `FOR UPDATE` par carte, **ne touche PAS `increment_stored_value`**.
+  Même discipline §3.3 que le RPC de scan.
+- 🔴 **`group_stats`** — **signature unique** `(uuid) RETURNS jsonb`. Toute métrique future
+  vit **dans le json**, jamais dans la signature (évite le piège juillet). Toujours
+  `CREATE OR REPLACE`, jamais une variante de longueur.
+- 🟠 **Le chemin chaud du scan** (`scan.js`) fait désormais, avant écriture : relecture
+  boutique (token scanner) OU test de durcissement (token marchand, index partiel 034).
+  Un `const { data } = …` sans lire `error` y interpréterait une panne DB comme « boutique
+  coupée » (§3.9) — connu, faible probabilité.
+
+## 15. LES DEUX INCOHÉRENCES GOOGLE HERO (image de palier)
+
+`images_tiers` (JSON `{min,max,url}` par palier de solde) alimente **les deux wallets**,
+image **poussée brute** (aucun redim./crop serveur ; aspects Apple ~3.05:1 et Google
+~3.07:1 compatibles ; seule la résolution diffère). MAIS Google a **deux chemins
+divergents** :
+1. **À la création** de l'objet (`googleHeroUrl`, `google-pass.js:60`) : `google_hero_url`
+   → strip généré → `image_strip_url`. **`images_tiers` ignoré** → une image de palier
+   n'apparaît sur Google **qu'après le premier scan** (mise à jour).
+2. **À la mise à jour** (`google-pass.js:380`) : `images_tiers` → `image_strip_url` →
+   strip généré. **`google_hero_url` ignoré** → si le marchand règle les deux, le hero
+   Google **change après le 1er scan**.
+Côté Apple (`apple-pass.js:429`) la précédence est cohérente à chaque génération :
+`images_tiers → image_strip_url → strip généré → uni`. Les champs strip Apple/Google
+**coexistent en chaîne de repli** (ne s'excluent pas) : `image_strip_url` = repli
+universel, `google_hero_url` = override Google, `images_tiers` court-circuite le reste
+là où il est consulté. **Statut : dette cosmétique documentée, non corrigée.**
+
+## 16. DETTE — MISE À JOUR (compléter §4)
+
+**Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
+#2 (rôle caissier — réseaux OK via login boutique refusé sur le dashboard ; mono-site
+encore token complet) et #3 (révocation — boutique coupable immédiatement via `actif` ;
+token marchand mono-site toujours non révocable).
+
+**Monté en gravité (réseaux = mode points = argent) :**
+- **#9 idempotence `/api/scan`** — TOUJOURS OUVERT. Un double-tap/retry = double crédit
+  (le `FOR UPDATE` sérialise mais ne dédoublonne pas). **La condition « avant plusieurs
+  marchands en points » que le fondateur avait posée est atteinte.** *(L'annulation
+  caissier mitige — on peut annuler un doublon — mais ne remplace pas l'idempotence :
+  un double-crédit non remarqué passe.)*
+- **#1 scanner 401** — pas de redirection login sur token expiré ; rayon ×15 sur un
+  réseau (15 caisses mortes un matin).
+- **#12 observabilité notifs** — 410 non purgés, échecs auto non tracés ; angle mort sur
+  le canal vendu aux réseaux.
+
+**Nouvelle dette :**
+- **`/me/stats` tronqué à 1 000 lignes** — un mono-site > ~1 000 scans/30 j voit
+  actifs/rétention/fréquence **sous-estimés sans erreur** (bug PRÉSENT). `group_stats`
+  est immunisé ; `/me/stats` non. Correctif = même motif `COUNT`/RPC.
+- **Incohérences Google hero** (§15).
+
+**Toujours reportés (raison valable) :** #4 (re-sync Google, arbitrage), #5, #6, #8,
+#10, #11 (corriger listing+horloge ENSEMBLE, jamais séparément), #13 (parké).
+
+---
+
+*Mis à jour ~2026-08 par la session « chantier franchise » : migrations 028→039 ;
+multi-boutiques complet (étape 1 mesure, 2 boutiques+gestion, 3 scanner par boutique
+[login unifié + durcissement + coupure + provisioning], 4 dashboard groupe `group_stats`,
+5 annulation du dernier scan `annuler_scan`) ; fix bug historique (authScanner + scope
+boutique) ; audit de dette complet (Partie II §16). Deux corrections de grants (028/030,
+même classe que le bug parrainage). Dette #9 (idempotence) escaladée, `/me/stats`
+truncation et incohérences Google hero documentées. Contrat §7 respecté de bout en bout :
+migrations exécutées par le fondateur AVANT le code, diff avant push, feu vert par
+déploiement.*
