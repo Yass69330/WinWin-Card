@@ -1428,10 +1428,15 @@ function scIsLocked(serial) {
   return a.length >= 6 && b.length >= 6 && (a.endsWith(b) || b.endsWith(a));
 }
 
+// Carte pour laquelle le bandeau est rendu (anti-réécriture, voir scShowLock).
+// Déclaré AVANT ses usages : scSetLock/scClearLock y touchent.
+let _scLockedShownFor = null;
+
 function scSetLock(serial, prenom) {
   SC.lockedSerial   = serial || null;
   SC.lockedPrenom   = prenom || null;
   SC.lockClearSince = null;
+  _scLockedShownFor = null;
   document.getElementById('sc-locked').classList.remove('open');
 }
 
@@ -1439,16 +1444,22 @@ function scClearLock() {
   SC.lockedSerial   = null;
   SC.lockedPrenom   = null;
   SC.lockClearSince = null;
+  _scLockedShownFor = null;
   document.getElementById('sc-locked').classList.remove('open');
 }
 
+// Même précaution que la PWA : appelée à chaque image, elle ne touche au DOM que
+// si le bandeau n'est pas déjà affiché pour cette carte.
 function scShowLock() {
+  const el = document.getElementById('sc-locked');
+  if (_scLockedShownFor === SC.lockedSerial && el.classList.contains('open')) return;
+  _scLockedShownFor = SC.lockedSerial;
   document.getElementById('sc-locked-title').textContent =
     SC.lockedPrenom ? t('lockedScanned', { prenom: SC.lockedPrenom }) : t('lockedScannedAnon');
   document.getElementById('sc-locked-hint').textContent = t('lockedHint');
   document.getElementById('sc-locked-add').textContent =
     S.typeProgramme === 'points' ? t('addPoints') : t('addStamp');
-  document.getElementById('sc-locked').classList.add('open');
+  el.classList.add('open');
 }
 
 // Geste explicite sur une carte connue (cas « 3 pizzas »). En tampons ce tap VAUT

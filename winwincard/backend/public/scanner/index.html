@@ -232,6 +232,11 @@
     /* Bandeau « carte déjà scannée » (verrou A). Posé au-dessus du pied
        d'écran pour rester sous le pouce du caissier. */
     .locked-card {
+      /* ⚠️ .scan-overlay porte pointer-events:none (les taps traversent vers la
+         caméra). TOUT élément cliquable de cet overlay DOIT ré-activer
+         pointer-events, comme .scan-header / .btn-logout / .btn-manual. Sans
+         cette ligne le bandeau s'affiche mais le bouton est intappable. */
+      pointer-events: all;
       position: absolute;
       left: 16px; right: 16px; bottom: 88px;
       background: rgba(0,0,0,.82);
@@ -891,10 +896,15 @@ function isLockedSerial(serial) {
   return a.length >= 6 && b.length >= 6 && (a.endsWith(b) || b.endsWith(a));
 }
 
+// Carte pour laquelle le bandeau est actuellement rendu (anti-réécriture, voir
+// showCardLock). Déclaré AVANT ses usages : setCardLock/clearCardLock y touchent.
+let _lockedShownFor = null;
+
 function setCardLock(serial, prenom) {
   state.lockedSerial   = serial || null;
   state.lockedPrenom   = prenom || null;
   state.lockClearSince = null;
+  _lockedShownFor = null;
   document.getElementById('locked-card').classList.remove('open');
 }
 
@@ -902,16 +912,24 @@ function clearCardLock() {
   state.lockedSerial   = null;
   state.lockedPrenom   = null;
   state.lockClearSince = null;
+  _lockedShownFor = null;
   document.getElementById('locked-card').classList.remove('open');
 }
 
+// Appelée à CHAQUE image où la carte verrouillée est vue (~60×/s) : on ne touche
+// au DOM que si le bandeau n'est pas déjà affiché pour cette carte. Réécrire le
+// nœud texte du bouton en continu peut faire perdre l'appui sur mobile (le tap
+// se joue entre touchstart et touchend).
 function showCardLock() {
+  const el = document.getElementById('locked-card');
+  if (_lockedShownFor === state.lockedSerial && el.classList.contains('open')) return;
+  _lockedShownFor = state.lockedSerial;
   document.getElementById('locked-card-title').textContent =
     state.lockedPrenom ? t('lockedScanned', { prenom: state.lockedPrenom }) : t('lockedScannedAnon');
   document.getElementById('locked-card-hint').textContent = t('lockedHint');
   document.getElementById('locked-card-add').textContent =
     state.typeProgramme === 'points' ? t('addPoints') : t('addStamp');
-  document.getElementById('locked-card').classList.add('open');
+  el.classList.add('open');
 }
 
 // Geste explicite du caissier sur une carte qu'il a sous les yeux (« 3 pizzas »).
