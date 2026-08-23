@@ -229,6 +229,23 @@
       white-space: nowrap;
     }
 
+    /* Bandeau « carte déjà scannée » (verrou A). Posé au-dessus du pied
+       d'écran pour rester sous le pouce du caissier. */
+    .locked-card {
+      position: absolute;
+      left: 16px; right: 16px; bottom: 88px;
+      background: rgba(0,0,0,.82);
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 16px;
+      padding: 14px 16px;
+      display: none;
+      flex-direction: column; gap: 10px;
+      text-align: center;
+    }
+    .locked-card.open { display: flex; }
+    .locked-card-title { font-size: 15px; font-weight: 700; color: #fff; }
+    .locked-card-hint  { font-size: 12px; color: rgba(255,255,255,.65); }
+
     /* ── Result card ── */
     #screen-result {
       justify-content: flex-end;
@@ -445,6 +462,16 @@
       </div>
       <div class="scan-hint" data-i18n="scanHint">Point at the pass QR code</div>
       <div id="scan-status" class="scan-status"></div>
+      <!-- Verrou de carte (A). La carte qu'on vient de traiter est ignorée par
+           la détection automatique ; ce bandeau est le SEUL chemin pour lui
+           ajouter un tampon / des points de plus (cas « 3 pizzas »). Le tap sur
+           le bouton VAUT confirmation : c'est un geste explicite du caissier sur
+           une carte qu'il a sous les yeux, inutile de redemander « Valider ? ». -->
+      <div id="locked-card" class="locked-card">
+        <div class="locked-card-title" id="locked-card-title"></div>
+        <div class="locked-card-hint"  id="locked-card-hint"></div>
+        <button class="btn btn-primary" id="locked-card-add"></button>
+      </div>
       <div class="scan-footer">
         <button class="btn-manual" id="btn-open-history" data-i18n="history">History</button>
         <button class="btn-manual" id="btn-open-manual" data-i18n="manualEntry">Manual entry</button>
@@ -575,7 +602,24 @@ const state = {
   awaitingConfirm: false,
   stream: null,
   rafId: null,
+  // ── Verrou de carte (A) + réarmement par sortie du champ (B) ──────────
+  // lockedSerial : carte que le caissier VIENT de traiter (validée OU refusée).
+  // Tant qu'elle est verrouillée, la détection caméra l'ignore — sinon elle se
+  // re-déclenche en boucle tant que le client garde sa carte devant l'objectif
+  // (le client n'a ni son ni lumière pour savoir que c'est fini). Toute AUTRE
+  // carte passe normalement : le client suivant n'attend jamais.
+  // JAMAIS persisté (pas de localStorage) : un reload lève tout — le réflexe
+  // caissier « fermer/rouvrir » reste auto-réparateur (même filet que awaitingConfirm).
+  lockedSerial: null,
+  lockedPrenom: null,
+  lockClearSince: null,   // 1ʳᵉ image sans QR depuis la pose du verrou (ms)
 };
+
+// Le verrou se lève tout seul après ce délai SANS aucun QR dans le champ (B).
+// Pas « une seule image vide » : jsQR rate régulièrement une image (flou de
+// mouvement, reflet) alors que la carte est toujours là — une levée sur une
+// image isolée ferait revenir le problème par intermittence.
+const LOCK_CLEAR_MS = 600;
 
 // ═══════════════════════════════════════════════════════
 // i18n FR/EN — langue du marchand (via /api/merchants/login), persistée.
@@ -610,6 +654,10 @@ const I18N = {
     invalidPoints:'Enter a positive whole number',
     confirmScanTitle:'Confirm this scan?', confirmScanSub:'Only the tap below records the scan.',
     confirmScanValidate:'Confirm scan',
+    lockedScanned:({prenom})=>`✓ ${prenom} — already scanned`,
+    lockedScannedAnon:'✓ Card already scanned',
+    lockedHint:'Move the card away to scan the next client',
+    addStamp:'+ Add a stamp', addPoints:'+ Add points',
   },
   fr: {
     appTitle:'Scanner WinWin', loginSub:'Connectez-vous pour scanner',
@@ -638,6 +686,10 @@ const I18N = {
     invalidPoints:'Saisis un nombre entier positif',
     confirmScanTitle:'Valider ce scan ?', confirmScanSub:'Seul l\'appui ci-dessous enregistre le scan.',
     confirmScanValidate:'Valider le scan',
+    lockedScanned:({prenom})=>`✓ ${prenom} — déjà scanné`,
+    lockedScannedAnon:'✓ Carte déjà scannée',
+    lockedHint:'Écartez la carte pour scanner le client suivant',
+    addStamp:'+ Ajouter un tampon', addPoints:'+ Ajouter des points',
   },
 };
 
@@ -811,9 +863,68 @@ function scanLoop() {
   const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
 
   if (code && code.data) {
+    state.lockClearSince = null;   // un QR est dans le champ → le compte à rebours B repart de zéro
     handleScannedData(code.data);
+  } else if (state.lockedSerial) {
+    // (B) Plus aucun QR dans le champ : le client a rangé sa carte. Au bout de
+    // LOCK_CLEAR_MS ININTERROMPUES, le verrou tombe et le scanner est réarmé —
+    // sans que le caissier ait eu à taper quoi que ce soit. C'est le geste
+    // physique du client qui déverrouille, pas un appui de plus en caisse.
+    const now = performance.now();
+    if (state.lockClearSince === null) state.lockClearSince = now;
+    else if (now - state.lockClearSince >= LOCK_CLEAR_MS) clearCardLock();
   }
 }
+
+// ═══════════════════════════════════════════════════════
+// VERROU DE CARTE (A) — voir state.lockedSerial
+// ═══════════════════════════════════════════════════════
+// Comparaison tolérante aux DEUX formats d'entrée : la caméra rend le serial
+// complet (UUID 36), la saisie manuelle peut rendre le backup code (6 derniers
+// caractères). Sans ça, un scan fait au code de secours ne verrouillerait pas la
+// carte que la caméra voit ensuite. On compare donc aussi par suffixe.
+function isLockedSerial(serial) {
+  const a = String(state.lockedSerial || '').toLowerCase();
+  const b = String(serial || '').toLowerCase();
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return a.length >= 6 && b.length >= 6 && (a.endsWith(b) || b.endsWith(a));
+}
+
+function setCardLock(serial, prenom) {
+  state.lockedSerial   = serial || null;
+  state.lockedPrenom   = prenom || null;
+  state.lockClearSince = null;
+  document.getElementById('locked-card').classList.remove('open');
+}
+
+function clearCardLock() {
+  state.lockedSerial   = null;
+  state.lockedPrenom   = null;
+  state.lockClearSince = null;
+  document.getElementById('locked-card').classList.remove('open');
+}
+
+function showCardLock() {
+  document.getElementById('locked-card-title').textContent =
+    state.lockedPrenom ? t('lockedScanned', { prenom: state.lockedPrenom }) : t('lockedScannedAnon');
+  document.getElementById('locked-card-hint').textContent = t('lockedHint');
+  document.getElementById('locked-card-add').textContent =
+    state.typeProgramme === 'points' ? t('addPoints') : t('addStamp');
+  document.getElementById('locked-card').classList.add('open');
+}
+
+// Geste explicite du caissier sur une carte qu'il a sous les yeux (« 3 pizzas »).
+// En tampons ce tap VAUT confirmation : on écrit directement, sans repasser par
+// « Valider ce scan ? » — sinon la 2ᵉ pizza coûterait un appui de plus
+// qu'aujourd'hui. En points, le pavé de saisie fait déjà office de validation.
+document.getElementById('locked-card-add').addEventListener('click', () => {
+  const serial = state.lockedSerial;
+  if (!serial) return;
+  clearCardLock();
+  if (state.typeProgramme === 'points') openPointsPad(serial);
+  else submitScan(serial);
+});
 
 async function handleScannedData(raw) {
   if (state.processing || state.awaitingPoints || state.awaitingConfirm) return;
@@ -829,6 +940,13 @@ async function handleScannedData(raw) {
     const candidate = parts[parts.length - 1];
     if (candidate && candidate.length > 4) serial = candidate;
   } catch {}
+
+  // (A) Carte verrouillée = celle que le caissier vient de traiter et que le
+  // client garde levée (rien ne l'avertit que c'est fini : ni son, ni voyant).
+  // On ne relance NI la confirmation, NI le pavé points : on affiche le bandeau
+  // et on attend un geste explicite. Toute AUTRE carte passe normalement — le
+  // client suivant n'attend jamais.
+  if (isLockedSerial(serial)) { showCardLock(); return; }
 
   proceedToScan(serial);
 }
@@ -877,7 +995,15 @@ document.getElementById('confirm-scan-btn').addEventListener('click', () => {
   submitScan(serial); // POST d'écriture inchangé
 });
 
-document.getElementById('confirm-scan-cancel').addEventListener('click', closeConfirm);
+// Refus explicite : on VERROUILLE la carte refusée. Sans ça, la boucle de
+// détection la re-capte à l'image suivante (~16 ms) et rouvre la modale
+// immédiatement — le caissier tape « Annuler » en boucle sans jamais s'en
+// débarrasser tant que le client ne retire pas sa carte.
+document.getElementById('confirm-scan-cancel').addEventListener('click', () => {
+  const serial = _pendingConfirmSerial;
+  closeConfirm();
+  if (serial) setCardLock(serial, null);
+});
 
 async function submitScan(serial, points) {
   if (state.processing) return;
@@ -916,6 +1042,10 @@ async function submitScan(serial, points) {
       return;
     }
     if (res.status === 409 && data.candidates) { showCandidates(data.candidates); return; }
+    // Réponse définitive du serveur (succès OU refus) : la carte est traitée, on
+    // la verrouille. Le prénom vient de la réponse — aucune lecture supplémentaire
+    // n'est faite pour l'afficher (le QR ne contient toujours que le serial).
+    setCardLock(serial, res.ok ? data.prenom : null);
     showResult(data, res.ok, serial);
   } catch (e) {
     statusEl.style.display = 'none';
@@ -1080,7 +1210,13 @@ function closePointsPad() {
   state.awaitingPoints = false;
 }
 
-document.getElementById('points-cancel').addEventListener('click', closePointsPad);
+// Même raison qu'au-dessus : sans verrou, le pavé points se rouvre en boucle
+// sur le client précédent tant que sa carte reste dans le champ.
+document.getElementById('points-cancel').addEventListener('click', () => {
+  const serial = _pendingSerial;
+  closePointsPad();
+  if (serial) setCardLock(serial, null);
+});
 
 document.getElementById('points-submit').addEventListener('click', async () => {
   const raw = document.getElementById('points-input').value.trim();
@@ -1184,6 +1320,7 @@ document.getElementById('btn-rescan').addEventListener('click', () => {
 document.getElementById('btn-logout').addEventListener('click', () => {
   stopScanner();
   clearSession();
+  clearCardLock();
   state.processing = false;
   state.awaitingConfirm = false;
   setScreen('screen-login');

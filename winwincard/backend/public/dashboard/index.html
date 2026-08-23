@@ -239,6 +239,23 @@
     }
     .sc-result-sheet.visible { display: flex; }
 
+    /* Bandeau « carte déjà scannée » (verrou A) — calque de la PWA scanner. */
+    .sc-locked {
+      position: absolute;
+      left: 16px; right: 16px; bottom: 76px;
+      background: rgba(0,0,0,.82);
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 16px;
+      padding: 14px 16px;
+      display: none;
+      flex-direction: column; gap: 10px;
+      text-align: center;
+      z-index: 5;
+    }
+    .sc-locked.open { display: flex; }
+    .sc-locked-title { font-size: 15px; font-weight: 700; color: #fff; }
+    .sc-locked-hint  { font-size: 12px; color: rgba(255,255,255,.65); }
+
     .sc-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 4px; flex-shrink: 0; }
     .sc-result-header { display: flex; align-items: center; gap: 12px; }
     .sc-result-avatar { width: 44px; height: 44px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; flex-shrink: 0; color: #fff; }
@@ -417,6 +434,14 @@
           <div id="sc-status" class="sc-status"></div>
         </div>
         <button class="sc-btn-manual" id="sc-btn-manual" data-i18n="manualEntry">Manual entry</button>
+        <!-- Verrou de carte (A) — voir SC.lockedSerial. Seul chemin pour ajouter
+             un tampon/des points de plus à la carte qu'on vient de traiter. Le
+             tap VAUT confirmation (geste explicite sur une carte sous les yeux). -->
+        <div id="sc-locked" class="sc-locked">
+          <div class="sc-locked-title" id="sc-locked-title"></div>
+          <div class="sc-locked-hint"  id="sc-locked-hint"></div>
+          <button class="btn btn-primary" id="sc-locked-add"></button>
+        </div>
       </div>
 
       <!-- Result sheet -->
@@ -538,6 +563,20 @@
 </div>
 
 <!-- ── Modal: points à ajouter (mode "points") ── -->
+<!-- Confirmation avant écriture — calque exact de public/scanner/index.html.
+     Sans elle, une carte détectée déclenchait un POST immédiat en mode tampons
+     (aucun point d'arrêt humain). Volontairement SANS prénom : le QR ne contient
+     que le serial, l'afficher exigerait une lecture serveur supplémentaire. -->
+<div id="modal-sc-confirm" class="modal-overlay">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" data-i18n="confirmScanTitle">Confirm this scan?</div>
+    <div style="font-size:13px;color:var(--muted)" data-i18n="confirmScanSub">Only the tap below records the scan.</div>
+    <button class="btn btn-primary" id="sc-confirm-btn"    data-i18n="confirmScanValidate">Confirm scan</button>
+    <button class="btn btn-ghost"   id="sc-confirm-cancel" data-i18n="cancel">Cancel</button>
+  </div>
+</div>
+
 <div id="modal-sc-points" class="modal-overlay">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
@@ -634,7 +673,23 @@ const S = {
   clientId: null, clientData: null,
 };
 
-const SC = { stream: null, rafId: null, scanning: false, processing: false, awaitingPoints: false };
+// awaitingConfirm : le dashboard reçoit la MÊME confirmation avant écriture que
+// la PWA scanner (elle n'existait que côté PWA — asymétrie qui, ici, produisait
+// un vrai tampon non désiré et pas seulement une modale à fermer).
+// lockedSerial/lockedPrenom/lockClearSince : verrou de carte (A) + réarmement par
+// sortie du champ (B). Identiques à la PWA — voir scanner/index.html.
+// Jamais persistés : un rechargement lève tout.
+const SC = {
+  stream: null, rafId: null, scanning: false, processing: false,
+  awaitingPoints: false, awaitingConfirm: false,
+  lockedSerial: null, lockedPrenom: null, lockClearSince: null,
+};
+
+// Délai SANS aucun QR dans le champ avant que le verrou tombe tout seul (B).
+// Pas « une seule image vide » : jsQR rate régulièrement une image alors que la
+// carte est toujours là (flou, reflet) — une levée sur image isolée ferait
+// revenir le problème par intermittence.
+const SC_LOCK_CLEAR_MS = 600;
 
 // ════════════════════════════════════════════════
 // i18n FR/EN — langue du marchand (via /me), persistée en localStorage.
@@ -668,6 +723,12 @@ const I18N = {
     rewardUnlocked:'Reward unlocked!',
     rewardSub:({prenom,max})=>`${prenom} reached ${max} points — give the reward!`,
     counterReset:'↩️ Counter reset', nextScan:'Next scan', processing:'⏳ Processing…',
+    confirmScanTitle:'Confirm this scan?', confirmScanSub:'Only the tap below records the scan.',
+    confirmScanValidate:'Confirm scan',
+    lockedScanned:({prenom})=>`✓ ${prenom} — already scanned`,
+    lockedScannedAnon:'✓ Card already scanned',
+    lockedHint:'Move the card away to scan the next client',
+    addStamp:'+ Add a stamp', addPoints:'+ Add points',
     cameraError:({msg})=>'Cannot access camera: '+msg, cameraErrorName:'Camera error',
     unknownError:'Unknown error', errorName:'Error',
     pushNotifs:'Push notifications',
@@ -735,6 +796,12 @@ const I18N = {
     rewardUnlocked:'Récompense débloquée !',
     rewardSub:({prenom,max})=>`${prenom} a atteint ${max} points — remettez la récompense !`,
     counterReset:'↩️ Compteur remis à zéro', nextScan:'Scan suivant', processing:'⏳ Traitement…',
+    confirmScanTitle:'Valider ce scan ?', confirmScanSub:'Seul l\'appui ci-dessous enregistre le scan.',
+    confirmScanValidate:'Valider le scan',
+    lockedScanned:({prenom})=>`✓ ${prenom} — déjà scanné`,
+    lockedScannedAnon:'✓ Carte déjà scannée',
+    lockedHint:'Écartez la carte pour scanner le client suivant',
+    addStamp:'+ Ajouter un tampon', addPoints:'+ Ajouter des points',
     cameraError:({msg})=>"Impossible d'accéder à la caméra : "+msg, cameraErrorName:'Erreur caméra',
     unknownError:'Erreur inconnue', errorName:'Erreur',
     pushNotifs:'Notifications push',
@@ -1278,6 +1345,8 @@ document.getElementById('btn-refresh-scans').addEventListener('click', () => { S
 // ════════════════════════════════════════════════
 function startScannerTab() {
   SC.processing = false;
+  SC.awaitingConfirm = false;
+  scClearLock();
   document.getElementById('sc-result-sheet').classList.remove('visible');
   document.getElementById('sc-status').style.display = 'none';
 
@@ -1312,6 +1381,8 @@ function startScannerTab() {
 }
 
 function stopScannerTab() {
+  scClearLock();
+  SC.awaitingConfirm = false;
   SC.scanning = false;
   if (SC.rafId) { cancelAnimationFrame(SC.rafId); SC.rafId = null; }
   if (SC.stream) { SC.stream.getTracks().forEach(t => t.stop()); SC.stream = null; }
@@ -1320,7 +1391,7 @@ function stopScannerTab() {
 function scLoop() {
   if (!SC.scanning) return;
   SC.rafId = requestAnimationFrame(scLoop);
-  if (SC.processing || SC.awaitingPoints) return;
+  if (SC.processing || SC.awaitingPoints || SC.awaitingConfirm) return;
   const video = document.getElementById('sc-video');
   if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
   const canvas = document.getElementById('sc-canvas');
@@ -1329,11 +1400,70 @@ function scLoop() {
   ctx.drawImage(video, 0, 0);
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
-  if (code && code.data) handleScanQR(code.data);
+  if (code && code.data) {
+    SC.lockClearSince = null;   // un QR est dans le champ → le compte à rebours B repart de zéro
+    handleScanQR(code.data);
+  } else if (SC.lockedSerial) {
+    // (B) Plus aucun QR dans le champ : le client a rangé sa carte. Au bout de
+    // SC_LOCK_CLEAR_MS ininterrompues, le verrou tombe et le scanner est réarmé
+    // sans le moindre appui en caisse.
+    const now = performance.now();
+    if (SC.lockClearSince === null) SC.lockClearSince = now;
+    else if (now - SC.lockClearSince >= SC_LOCK_CLEAR_MS) scClearLock();
+  }
 }
 
+// ════════════════════════════════════════════════
+// VERROU DE CARTE (A) — jumeau de scanner/index.html
+// ════════════════════════════════════════════════
+// Comparaison tolérante aux deux formats d'entrée : caméra = serial complet,
+// saisie manuelle = backup code 6 caractères. On compare donc aussi par suffixe,
+// sinon un scan fait au code de secours ne verrouillerait pas la carte que la
+// caméra voit juste après.
+function scIsLocked(serial) {
+  const a = String(SC.lockedSerial || '').toLowerCase();
+  const b = String(serial || '').toLowerCase();
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return a.length >= 6 && b.length >= 6 && (a.endsWith(b) || b.endsWith(a));
+}
+
+function scSetLock(serial, prenom) {
+  SC.lockedSerial   = serial || null;
+  SC.lockedPrenom   = prenom || null;
+  SC.lockClearSince = null;
+  document.getElementById('sc-locked').classList.remove('open');
+}
+
+function scClearLock() {
+  SC.lockedSerial   = null;
+  SC.lockedPrenom   = null;
+  SC.lockClearSince = null;
+  document.getElementById('sc-locked').classList.remove('open');
+}
+
+function scShowLock() {
+  document.getElementById('sc-locked-title').textContent =
+    SC.lockedPrenom ? t('lockedScanned', { prenom: SC.lockedPrenom }) : t('lockedScannedAnon');
+  document.getElementById('sc-locked-hint').textContent = t('lockedHint');
+  document.getElementById('sc-locked-add').textContent =
+    S.typeProgramme === 'points' ? t('addPoints') : t('addStamp');
+  document.getElementById('sc-locked').classList.add('open');
+}
+
+// Geste explicite sur une carte connue (cas « 3 pizzas »). En tampons ce tap VAUT
+// confirmation : écriture directe, sans repasser par la modale — sinon la 2ᵉ pizza
+// coûterait un appui de plus qu'aujourd'hui. En points, le pavé valide déjà.
+document.getElementById('sc-locked-add').addEventListener('click', () => {
+  const serial = SC.lockedSerial;
+  if (!serial) return;
+  scClearLock();
+  if (S.typeProgramme === 'points') openPointsPadDashboard(serial);
+  else submitScanDashboard(serial);
+});
+
 async function handleScanQR(raw) {
-  if (SC.processing || SC.awaitingPoints) return;
+  if (SC.processing || SC.awaitingPoints || SC.awaitingConfirm) return;
   let serial = raw.trim();
   try {
     const url = new URL(serial);
@@ -1341,6 +1471,10 @@ async function handleScanQR(raw) {
     const candidate = parts[parts.length - 1];
     if (candidate && candidate.length > 4) serial = candidate;
   } catch {}
+  // (A) Carte que le caissier vient de traiter et que le client garde levée
+  // (rien ne l'avertit que c'est fini). On ne relance rien automatiquement ;
+  // toute AUTRE carte passe normalement.
+  if (scIsLocked(serial)) { scShowLock(); return; }
   proceedToScanDashboard(serial);
 }
 
@@ -1351,9 +1485,57 @@ function proceedToScanDashboard(serial) {
   if (S.typeProgramme === 'points') {
     openPointsPadDashboard(serial);
   } else {
-    submitScanDashboard(serial);
+    // Mode tampons : plus jamais d'écriture directe sur simple détection. Le POST
+    // ne part QUE sur le tap « Valider » — parité stricte avec la PWA scanner.
+    openConfirmDashboard(serial);
   }
 }
+
+// ════════════════════════════════════════════════
+// CONFIRMATION AVANT ÉCRITURE (tampons) — calque de la PWA
+// ════════════════════════════════════════════════
+// awaitingConfirm met scLoop en pause (caméra allumée, aucune détection) tant que
+// la modale est ouverte. Réinitialisé sur TOUS les chemins de sortie ; jamais
+// persisté (un rechargement le remet à zéro).
+let SC_pendingConfirmSerial = null;
+
+function openConfirmDashboard(serial) {
+  SC_pendingConfirmSerial = serial;
+  SC.awaitingConfirm = true;
+  document.getElementById('sc-confirm-btn').disabled = false; // ré-armer (debounce du tour précédent)
+  document.getElementById('modal-sc-confirm').classList.add('open');
+}
+
+function closeConfirmDashboard() {
+  document.getElementById('modal-sc-confirm').classList.remove('open');
+  SC_pendingConfirmSerial = null;
+  SC.awaitingConfirm = false;
+}
+
+document.getElementById('sc-confirm-btn').addEventListener('click', () => {
+  const serial = SC_pendingConfirmSerial;
+  if (!serial) return;
+  document.getElementById('sc-confirm-btn').disabled = true; // debounce anti double-tap réflexe
+  closeConfirmDashboard();
+  submitScanDashboard(serial);
+});
+
+// Refus explicite : on VERROUILLE la carte refusée. Sans ça, la boucle de
+// détection la re-capte à l'image suivante et rouvre la modale aussitôt — le
+// caissier taperait « Annuler » sans jamais s'en débarrasser.
+document.getElementById('sc-confirm-cancel').addEventListener('click', () => {
+  const serial = SC_pendingConfirmSerial;
+  closeConfirmDashboard();
+  if (serial) scSetLock(serial, null);
+});
+
+document.getElementById('modal-sc-confirm').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-sc-confirm')) {
+    const serial = SC_pendingConfirmSerial;
+    closeConfirmDashboard();
+    if (serial) scSetLock(serial, null);
+  }
+});
 
 async function submitScanDashboard(serial, points) {
   if (SC.processing) return;
@@ -1374,6 +1556,9 @@ async function submitScanDashboard(serial, points) {
     SC.scanning = false;
     S.scans = null; // invalidate scan history cache
     if (res.status === 409 && data.candidates) { showScanCandidates(data.candidates); return; }
+    // Réponse définitive du serveur (succès OU refus) : la carte est traitée, on la
+    // verrouille. Le prénom vient de la réponse — aucune lecture supplémentaire.
+    scSetLock(serial, res.ok ? data.prenom : null);
     showScanResult(data, res.ok, serial);
   } catch (e) {
     statusEl.textContent = '⚠️ ' + e.message;
@@ -1525,7 +1710,13 @@ function closePointsPadDashboard() {
   SC.awaitingPoints = false;
 }
 
-document.getElementById('sc-points-cancel').addEventListener('click', closePointsPadDashboard);
+// Même raison que la modale de confirmation : sans verrou, le pavé se rouvre en
+// boucle sur le client précédent tant que sa carte reste dans le champ.
+document.getElementById('sc-points-cancel').addEventListener('click', () => {
+  const serial = SC_pendingSerial;
+  closePointsPadDashboard();
+  if (serial) scSetLock(serial, null);
+});
 document.getElementById('modal-sc-points').addEventListener('click', e => {
   if (e.target === document.getElementById('modal-sc-points')) closePointsPadDashboard();
 });

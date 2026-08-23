@@ -14,7 +14,7 @@
 // Bumper CACHE force le cycle install/activate (le navigateur détecte que sw.js
 // a changé d'octets → réinstalle → purge l'ancien cache dans 'activate').
 
-const CACHE = 'winwin-scanner-v2';
+const CACHE = 'winwin-scanner-v3';
 
 // Coquille pré-cachée, uniquement pour le repli hors-ligne.
 const SHELL = [
