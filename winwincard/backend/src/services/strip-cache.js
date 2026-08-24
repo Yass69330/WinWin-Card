@@ -30,7 +30,19 @@ const _pending = new Map(); // key → Promise<Buffer>
 function storageKey(marchand, filledCount, variant) {
   const slug    = marchand.slug;
   const version = marchand.strip_config_version || 1;
-  const mode    = marchand.strip_mode === 'stamps' ? `stamps_${filledCount}` : 'static';
+  // 'stamps'     → une image par nombre de tampons remplis (seuil 10 → 11 images).
+  // 'points_bar' → une image par PALIER de 5 % (21 images max), jamais par solde
+  //   exact : un seuil à 500 produirait sinon 500+ images par marchand. Le palier
+  //   vient de pointsBucket(), la MÊME fonction que celle qui dessine la barre —
+  //   sinon on servirait une image ne correspondant pas à l'avancement.
+  // autre/NULL  → une seule image statique.
+  let mode = 'static';
+  if (marchand.strip_mode === 'stamps') {
+    mode = `stamps_${filledCount}`;
+  } else if (marchand.strip_mode === 'points_bar') {
+    const { pointsBucket } = require('./strip-generator');
+    mode = `points_${pointsBucket(filledCount, marchand.max_value)}`;
+  }
   return `marchands/${slug}/gen/v${version}/${mode}_${variant}.png`;
 }
 

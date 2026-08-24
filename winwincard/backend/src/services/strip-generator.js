@@ -318,12 +318,84 @@ function labelSvg({ w, h, couleurFond, langue, labelColor }) {
     text-anchor="middle">${text}</text>`;
 }
 
+// ── Mode points : quantification de l'avancement ──────────────────────────
+// Le solde d'un marchand en points peut prendre des centaines de valeurs
+// (seuil 500 → 500+ soldes distincts). La clé de cache des strips inclut cette
+// valeur : dessiner l'avancement exact ferait exploser le cache (500+ images par
+// marchand, une génération neuve à chaque montant inédit).
+// On quantifie donc en 20 intervalles = paliers de 5 % → 21 images au maximum
+// par marchand, le même ordre de grandeur que les 11 d'un seuil à 10 tampons.
+//
+// Règles :
+//   • solde >= seuil            → palier plein (20). Couvre le dépassement du
+//     mode points (530/500 → barre pleine, jamais > 100 %).
+//   • solde > 0 mais < 1 palier → palier 1 (5 %) plutôt que 0 : un client qui
+//     vient de commencer doit VOIR que son passage a compté. Léger arrondi par
+//     excès assumé — le solde exact figure dans les champs du pass.
+//   • sinon                     → arrondi PAR DÉFAUT (floor) : la barre n'est
+//     jamais pleine avant que le seuil soit réellement atteint.
+//
+// ⚠️ Cette fonction est LA source de vérité partagée avec strip-cache.js : la
+// clé de cache et le dessin DOIVENT utiliser le même palier, sinon une image
+// serait servie pour un avancement qu'elle ne représente pas.
+const POINTS_BUCKETS = 20;
+
+function pointsBucket(filledCount, maxValue) {
+  if (!maxValue || maxValue <= 0) return 0;
+  const v = Number(filledCount) || 0;
+  if (v <= 0) return 0;
+  if (v >= maxValue) return POINTS_BUCKETS;
+  return Math.max(1, Math.floor((v / maxValue) * POINTS_BUCKETS));
+}
+
+// ── Barre de progression (mode points) ────────────────────────────────────
+// Aucun chiffre dessiné : le solde exact est déjà affiché dans les champs du
+// pass (Apple ET Google). L'écrire ici le dupliquerait — et surtout, un nombre
+// exact rendrait le cache ingérable (voir pointsBucket).
+// Réutilise la palette des pastilles : piste = pastille vide, remplissage =
+// pastille pleine. Les couleurs manuelles du marchand (couleur_pastille_*)
+// s'appliquent donc aussi à la barre ; NULL → calcul WCAG automatique, comme
+// pour les tampons.
+// Zone sûre Apple Wallet : les 630 px centraux (marge de 60 px de chaque côté).
+function pointsBarSvg({ w, h, bucket, showLabel, emptyFill, emptyStroke, filledFill }) {
+  const scaleX = w / 750, scaleY = h / 246;
+  const x      = 60 * scaleX;
+  const trackW = 630 * scaleX;
+  const barH   = 30 * scaleY;
+
+  // Centrage vertical : sous le label s'il est affiché, sinon dans toute la
+  // hauteur utile. Mêmes bornes que computeLayout pour rester cohérent.
+  const areaTop = (showLabel ? 82 : 20) * scaleY;
+  const areaBot = 226 * scaleY;
+  const y       = (areaTop + areaBot) / 2 - barH / 2;
+  const r       = barH / 2;
+
+  const ratio  = Math.min(Math.max(bucket / POINTS_BUCKETS, 0), 1);
+  const fillW  = trackW * ratio;
+  const clipId = 'pbclip';
+
+  // Le remplissage est DÉCOUPÉ à la forme de la piste : sans ce clip, un rect
+  // arrondi plus étroit que sa propre hauteur se déforme en lentille.
+  const fill = fillW > 0
+    ? `<g clip-path="url(#${clipId})"><rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${fillW.toFixed(1)}" height="${barH.toFixed(1)}" fill="${filledFill}"/></g>`
+    : '';
+
+  return `
+    <defs><clipPath id="${clipId}"><rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${trackW.toFixed(1)}" height="${barH.toFixed(1)}" rx="${r.toFixed(1)}"/></clipPath></defs>
+    <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${trackW.toFixed(1)}" height="${barH.toFixed(1)}" rx="${r.toFixed(1)}"
+      fill="${emptyFill}" stroke="${emptyStroke}" stroke-width="2.5"/>
+    ${fill}`;
+}
+
 // ── Constructeur SVG principal ─────────────────────────────────────────────
 // Contenu (tampons, label) dans la zone sûre Apple (630px centraux en espace
 // 750) ; le décor de fond couvre toute la largeur. Pas de nom marchand, pas
 // de compteur, aucune signature WinWin : le strip est 100% au marchand.
 function buildSvg({ marchand, filledCount, logoB64, customBgB64, w = 750, h = 246 }) {
   const iStamps   = marchand.strip_mode === 'stamps';
+  // Mode points : barre de progression au lieu des pastilles (migration 040).
+  // Valeur opt-in — aucun marchand ne l'a tant qu'elle n'est pas choisie en admin.
+  const iPointsBar = marchand.strip_mode === 'points_bar';
   const theme     = marchand.strip_theme || 'icon_metier';
   const iconName  = marchand.stamp_icon || 'coffee';
   const maxValue  = marchand.max_value || 10;
@@ -349,11 +421,13 @@ function buildSvg({ marchand, filledCount, logoB64, customBgB64, w = 750, h = 24
   const scaleY = h / 246;
   const scaleX = w / 750;
 
-  let stampsHtml = '';
+  // Contenu du strip : pastilles (tampons) OU barre (points). Jamais les deux —
+  // strip_mode ne peut valoir qu'une seule valeur.
+  let contentHtml = '';
   if (iStamps && maxValue > 0) {
     // Calcul du layout dans l'espace 750×246, puis scale
     const positions = computeLayout(maxValue, { showLabel });
-    stampsHtml = positions.map((pos, i) => {
+    contentHtml = positions.map((pos, i) => {
       const filled = i < filledCount;
       const sx = +(pos.x * scaleX).toFixed(1);
       const sy = +(pos.y * scaleY).toFixed(1);
@@ -364,12 +438,21 @@ function buildSvg({ marchand, filledCount, logoB64, customBgB64, w = 750, h = 24
       }
       return stampSvg({ x: sx, y: sy, r: sr, filled, iconName, isLast: i === maxValue - 1, ...colors });
     }).join('');
+  } else if (iPointsBar && maxValue > 0) {
+    contentHtml = pointsBarSvg({
+      w, h,
+      bucket: pointsBucket(filledCount, maxValue),
+      showLabel,
+      emptyFill:   colors.emptyFill,
+      emptyStroke: colors.emptyStroke,
+      filledFill:  colors.filledFill,
+    });
   }
 
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${w}" height="${h}">
   ${bgSvg({ w, h, couleurFond: bgColor, customBgB64 })}
   ${showLabel ? labelSvg({ w, h, couleurFond: bgColor, langue: marchand.langue, labelColor: isReward ? null : marchand.couleur_label_strip }) : ''}
-  ${stampsHtml}
+  ${contentHtml}
 </svg>`;
 }
 
@@ -451,4 +534,4 @@ async function render({ marchand, filledCount, logoBuffer, customBgBuffer, stati
   return { strip2x, strip3x, hero };
 }
 
-module.exports = { render, buildSvg, computeLayout, normalizeLogoForStamp, VARIANTS, ICONS };
+module.exports = { render, buildSvg, computeLayout, normalizeLogoForStamp, pointsBucket, POINTS_BUCKETS, VARIANTS, ICONS };
