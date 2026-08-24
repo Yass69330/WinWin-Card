@@ -1,0 +1,866 @@
+<title>WinWin Réseau</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  /* ══════════════════════════════════════════════════════════════════
+     COUCHE 1 — page de présentation (celle-ci). Thème clair/sombre du
+     viewer. Palette dérivée de l'accent produit (#6366f1) pour rester
+     cohérente avec la marque, sans le dupliquer bêtement.
+     ══════════════════════════════════════════════════════════════════ */
+  :root {
+    --p-bg:        #f2f3f9;
+    --p-surface:   #ffffff;
+    --p-surface-2: #eaecf9;
+    --p-border:    #dde0ee;
+    --p-text:      #1b1e2e;
+    --p-muted:     #656a80;
+    --p-accent:    #6366f1;
+    --p-accent-ink:#3f3fb8;
+    --radius-p: 16px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --p-bg:        #0a0b12;
+      --p-surface:   #13141f;
+      --p-surface-2: #171a29;
+      --p-border:    #262a3d;
+      --p-text:      #eef0f9;
+      --p-muted:     #9297b3;
+      --p-accent:    #8b8ef8;
+      --p-accent-ink:#c2c4ff;
+    }
+  }
+  :root[data-theme="dark"] {
+    --p-bg:        #0a0b12;
+    --p-surface:   #13141f;
+    --p-surface-2: #171a29;
+    --p-border:    #262a3d;
+    --p-text:      #eef0f9;
+    --p-muted:     #9297b3;
+    --p-accent:    #8b8ef8;
+    --p-accent-ink:#c2c4ff;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--p-bg);
+    color: var(--p-text);
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    padding: 56px 20px 72px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 44px;
+  }
+
+  .wrap { width: 100%; max-width: 900px; display: flex; flex-direction: column; gap: 28px; }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11.5px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--p-accent-ink);
+  }
+  h1 { font-size: 32px; font-weight: 700; letter-spacing: -.01em; margin: 8px 0 0; text-wrap: balance; max-width: 20ch; }
+  .lede { font-size: 16px; line-height: 1.65; color: var(--p-muted); max-width: 62ch; margin-top: 12px; }
+
+  .features {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
+  }
+  @media (max-width: 640px) { .features { grid-template-columns: 1fr; } }
+  .feature {
+    background: var(--p-surface); border: 1px solid var(--p-border); border-radius: var(--radius-p);
+    padding: 18px 20px; display: flex; gap: 14px; align-items: flex-start;
+  }
+  .feature-icon { font-size: 22px; line-height: 1; flex-shrink: 0; margin-top: 1px; }
+  .feature h3 { font-size: 14.5px; font-weight: 700; margin: 0 0 4px; }
+  .feature p { font-size: 13.5px; line-height: 1.55; color: var(--p-muted); margin: 0; }
+
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+  .stage-note {
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--p-muted);
+    display: flex; align-items: center; gap: 8px; text-align: center;
+  }
+  .demo-chip {
+    font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; font-weight: 500;
+    letter-spacing: .08em; text-transform: uppercase;
+    background: var(--p-surface-2); color: var(--p-accent-ink);
+    border: 1px solid var(--p-border); border-radius: 20px; padding: 3px 10px; flex-shrink: 0;
+  }
+
+  .phone {
+    width: 390px; max-width: 92vw;
+    border-radius: 40px;
+    padding: 12px;
+    background: linear-gradient(160deg, #2a2d3d, #14151e);
+    box-shadow: 0 30px 60px -20px rgba(10,10,20,.45), 0 2px 8px rgba(10,10,20,.15);
+  }
+  .phone-notch {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    width: 120px; height: 22px; background: #14151e; border-radius: 0 0 16px 16px; z-index: 20;
+  }
+  .phone-screen-outer { position: relative; border-radius: 30px; overflow: hidden; }
+
+  footer { font-size: 12.5px; color: var(--p-muted); text-align: center; max-width: 56ch; line-height: 1.6; }
+
+  /* ══════════════════════════════════════════════════════════════════
+     COUCHE 2 — réplique du produit réel (public/dashboard/index.html).
+     Thème unique et volontaire : c'est une appli mono-thème sombre en
+     production, reproduite telle quelle, couleurs peintes en dur,
+     indépendamment du thème du viewer. Tokens et sélecteurs copiés
+     depuis le fichier source à l'identique.
+     ══════════════════════════════════════════════════════════════════ */
+  .app-shell {
+    --bg:         #0f172a;
+    --surface:    #1e293b;
+    --surface2:   #273548;
+    --border:     #334155;
+    --accent:     #6366f1;
+    --accent-dim: rgba(99,102,241,.15);
+    --text:       #f1f5f9;
+    --muted:      #94a3b8;
+    --success:    #22c55e;
+    --warning:    #f59e0b;
+    --error:      #ef4444;
+    --radius:     14px;
+    --nav-h:      64px;
+    --header-h:   56px;
+
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    height: 800px; max-height: 84vh;
+    display: flex; flex-direction: column;
+    font-size: 15px;
+    position: relative;
+  }
+
+  .dash-header {
+    height: var(--header-h); flex-shrink: 0;
+    display: flex; align-items: center; padding: 0 16px;
+    background: var(--surface); border-bottom: 1px solid var(--border); gap: 10px;
+  }
+  .dash-header-brand { font-size: 16px; font-weight: 700; flex: 1; }
+  .dash-header-nom   { font-size: 13px; color: var(--muted); max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .forfait-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; letter-spacing: .05em; text-transform: uppercase; flex-shrink: 0; background: rgba(251,191,36,.15); color: #fbbf24; }
+  .btn-icon { background: none; border: none; cursor: pointer; color: var(--muted); padding: 6px; border-radius: 8px; font-size: 18px; }
+
+  .dash-content { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px; padding-bottom: calc(var(--nav-h) + 8px); }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .tab-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .tab-header h2 { font-size: 19px; font-weight: 700; margin: 0; }
+  .btn-refresh { background: none; border: none; color: var(--muted); font-size: 16px; cursor: pointer; padding: 4px; }
+
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+  .stat-card { background: var(--surface); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 4px; }
+  .stat-icon  { font-size: 22px; margin-bottom: 4px; }
+  .stat-value { font-size: 28px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+  .stat-label { font-size: 12px; color: var(--muted); }
+
+  .field-hint { font-size: 12px; color: var(--muted); }
+
+  .section-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 20px 0 10px; }
+  .section-title:first-of-type { margin-top: 6px; }
+
+  .qr-card { background: var(--surface); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
+  .qr-card.qr-center { align-items: center; }
+  .qr-placeholder {
+    width: 168px; height: 168px; border-radius: 12px;
+    background: repeating-linear-gradient(45deg, #fff 0 6px, #f1f1f4 6px 12px);
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    color: #1b1e2e; font-size: 11px; padding: 10px; line-height: 1.4;
+  }
+  .qr-url { font-size: 12px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; word-break: break-all; text-align: center; }
+  .qr-actions { display: flex; gap: 8px; width: 100%; }
+  .qr-actions .btn { flex: 1; }
+
+  .btn {
+    padding: 12px 18px; border-radius: 11px; font-size: 14px; font-weight: 600;
+    border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn:active { transform: scale(.97); }
+  .btn-primary  { background: var(--accent); color: #fff; }
+  .btn-danger   { background: rgba(239,68,68,.1); color: var(--error); border: 1px solid rgba(239,68,68,.2); }
+  .btn-outline  { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .btn-sm       { padding: 8px 14px; font-size: 13px; border-radius: 8px; }
+
+  .search-wrap { position: relative; margin-bottom: 12px; }
+  .search-input { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 11px; color: var(--text); font-size: 15px; padding: 11px 14px 11px 38px; outline: none; }
+  .search-input:focus { border-color: var(--accent); }
+  .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 16px; }
+  .list-meta { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+
+  .client-card { background: var(--surface); border-radius: var(--radius); padding: 14px; display: flex; align-items: center; gap: 12px; margin-bottom: 8px; cursor: pointer; }
+  .client-avatar { width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; flex-shrink: 0; color: #fff; }
+  .client-info { flex: 1; min-width: 0; }
+  .client-name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .client-progress { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+  .mini-bar-wrap { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .mini-bar { height: 100%; background: var(--accent); border-radius: 2px; }
+  .client-pts { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .client-full { color: var(--warning); font-weight: 600; }
+  .chevron { color: var(--muted); font-size: 20px; flex-shrink: 0; }
+
+  .scan-entry { background: var(--surface); border-radius: var(--radius); padding: 12px 14px; display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .scan-avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; flex-shrink: 0; color: #fff; }
+  .scan-info { flex: 1; min-width: 0; }
+  .scan-name { font-size: 14px; font-weight: 600; }
+  .scan-time { font-size: 11px; color: var(--muted); }
+  .scan-delta { flex-shrink: 0; text-align: right; }
+  .scan-pts { font-size: 14px; font-weight: 700; }
+
+  .alert { border-radius: 10px; padding: 12px 14px; font-size: 13.5px; }
+  .alert-info { background: var(--accent-dim); border: 1px solid rgba(99,102,241,.25); color: #a5b4fc; }
+
+  .notif-form { display: flex; flex-direction: column; gap: 12px; }
+  .field label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; display: block; margin-bottom: 6px; }
+  .field textarea {
+    width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 11px;
+    color: var(--text); font-size: 14px; padding: 12px 14px; font-family: inherit; resize: vertical; min-height: 76px; outline: none;
+  }
+  .field textarea:focus { border-color: var(--accent); }
+  .char-count { font-size: 11px; color: var(--muted); text-align: right; margin-top: 4px; }
+  .char-count.over { color: var(--error); }
+  .divider { height: 1px; background: var(--border); margin: 18px 0 12px; }
+  .notif-log-entry { background: var(--surface); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 8px; }
+  .notif-log-msg { font-size: 13.5px; line-height: 1.5; margin-bottom: 6px; }
+  .notif-log-meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+
+  .empty { text-align: center; padding: 40px 20px; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .empty-icon  { font-size: 36px; }
+  .empty-title { font-size: 16px; font-weight: 600; color: var(--text); }
+  .empty-sub   { font-size: 13px; }
+
+  .scanner-static { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px; padding: 28px 8px; }
+  .scanner-static .glyph { font-size: 44px; }
+  .scanner-static h3 { font-size: 17px; font-weight: 700; margin: 0; }
+  .scanner-static p { font-size: 13.5px; color: var(--muted); line-height: 1.6; max-width: 34ch; margin: 0; }
+  .scanner-perks { display: flex; flex-direction: column; gap: 10px; width: 100%; margin-top: 4px; }
+  .scanner-perk { background: var(--surface); border-radius: var(--radius); padding: 12px 14px; display: flex; gap: 10px; align-items: flex-start; text-align: left; }
+  .scanner-perk span:first-child { font-size: 17px; flex-shrink: 0; }
+  .scanner-perk span:last-child { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+
+  .rs-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .rs-table th, .rs-table td { padding: 8px 10px; text-align: right; border-bottom: 1px solid rgba(255,255,255,.06); font-variant-numeric: tabular-nums; }
+  .rs-table th:first-child, .rs-table td:first-child { text-align: left; }
+  .rs-table th { cursor: pointer; user-select: none; color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .rs-table th:hover { color: var(--accent); }
+  .rs-table tbody tr:last-child td { border-bottom: none; }
+
+  .pdv-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+  .pdv-row:last-of-type { border-bottom: none; }
+  .pdv-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+  .dash-nav {
+    height: var(--nav-h); flex-shrink: 0;
+    display: flex; background: var(--surface); border-top: 1px solid var(--border);
+  }
+  .nav-btn {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; background: none; border: none; cursor: pointer; color: var(--muted);
+    font-size: 10px; font-weight: 500;
+  }
+  .nav-btn .nav-icon { font-size: 18px; line-height: 1; }
+  .nav-btn.active { color: var(--accent); }
+
+  /* Fiche client — sheet ancrée AU CADRE DU TÉLÉPHONE (absolute dans
+     phone-screen-outer), pas plein écran navigateur : ça reste un mockup
+     d'app, pas une modale de site web. */
+  .modal-overlay {
+    display: none; position: absolute; inset: 0; z-index: 50;
+    background: rgba(0,0,0,.65); align-items: flex-end;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-sheet-client { background: var(--surface); border-radius: 22px 22px 0 0; width: 100%; max-height: 82%; display: flex; flex-direction: column; overflow: hidden; }
+  .modal-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 12px auto 0; flex-shrink: 0; }
+  .cs-header { display: flex; align-items: center; gap: 12px; padding: 14px 16px 12px; flex-shrink: 0; border-bottom: 1px solid var(--border); }
+  .cs-avatar-lg { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; flex-shrink: 0; color: #fff; }
+  .cs-name { font-size: 17px; font-weight: 700; }
+  .cs-since { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .cs-body { flex: 1; overflow-y: auto; padding: 14px 16px 8px; display: flex; flex-direction: column; gap: 14px; }
+  .cs-pts-box { background: var(--surface2); border-radius: 12px; padding: 14px; }
+  .cs-pts-row { display: flex; align-items: baseline; gap: 6px; margin-bottom: 10px; }
+  .cs-pts-val { font-size: 36px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+  .cs-pts-denom { font-size: 15px; color: var(--muted); }
+  .cs-bar-wrap2 { height: 6px; background: var(--border); border-radius: 3px; margin-bottom: 8px; overflow: hidden; }
+  .cs-bar2 { height: 100%; background: var(--accent); border-radius: 3px; }
+  .cs-dots2 { display: flex; gap: 5px; flex-wrap: wrap; }
+  .cs-dot2 { width: 20px; height: 20px; border-radius: 50%; background: var(--border); }
+  .cs-dot2.on { background: var(--accent); }
+  .cs-actions2 { display: flex; gap: 8px; }
+  .cs-actions2 .btn { flex: 1; }
+  .cs-contact-box { background: var(--surface2); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .cs-contact-row { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
+  .cs-contact-icon { font-size: 15px; width: 20px; flex-shrink: 0; }
+  .cs-section-lbl { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .cs-scan-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+  .cs-scan-row:last-child { border-bottom: none; }
+  .cs-scan-icon { font-size: 14px; width: 24px; text-align: center; flex-shrink: 0; }
+  .cs-scan-delta { font-size: 13.5px; font-weight: 600; display: block; }
+  .cs-scan-date { font-size: 11.5px; color: var(--muted); display: block; }
+  .cs-footer { flex-shrink: 0; padding: 12px 16px; border-top: 1px solid var(--border); }
+
+  /* Toast — pour toute action visible mais volontairement non simulée
+     (renommer une boutique, exporter un CSV…) : jamais un clic muet. */
+  .toast {
+    position: absolute; left: 16px; right: 16px; bottom: 80px; z-index: 60;
+    background: #0b0d16; color: #f1f5f9; border: 1px solid rgba(255,255,255,.12);
+    border-radius: 12px; padding: 12px 14px; font-size: 12.5px; line-height: 1.5;
+    box-shadow: 0 12px 30px rgba(0,0,0,.35);
+    opacity: 0; transform: translateY(8px); pointer-events: none;
+    transition: opacity .2s ease, transform .2s ease;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+</style>
+
+<div class="wrap">
+  <div>
+    <div class="eyebrow">WinWin Card · Dashboard franchise</div>
+    <h1>Un dashboard pensé pour piloter un réseau</h1>
+    <p class="lede">
+      Cartes de fidélité Apple &amp; Google Wallet, sans application à télécharger. Ci-dessous,
+      une démonstration interactive du dashboard que verrait votre équipe — explorez les
+      onglets, ouvrez une fiche client, essayez d'envoyer une notification. Les données
+      affichées sont fictives, générées pour cette présentation.
+    </p>
+  </div>
+
+  <div class="features">
+    <div class="feature">
+      <div class="feature-icon">💳</div>
+      <div><h3>Carte sans application</h3><p>Le client ajoute sa carte à Apple ou Google Wallet en un scan de QR code. Zéro téléchargement, zéro friction à l'inscription.</p></div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">👥</div>
+      <div><h3>Base clients centralisée</h3><p>Historique de visite, solde de points, coordonnées et anniversaire : toute la fiche client accessible en un tap.</p></div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🔔</div>
+      <div><h3>Notifications ciblées</h3><p>Un message poussé directement sur la carte de chaque client — sans app tierce, sans coût de SMS.</p></div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🏪</div>
+      <div><h3>Vision réseau</h3><p>Comparez vos boutiques, repérez les clients qui circulent entre elles, suivez la fréquentation mois par mois.</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="stage-note"><span class="demo-chip">Démo interactive</span> Café Verdier — franchise fictive, données de démonstration</div>
+  <div class="phone">
+    <div style="position:relative">
+      <div class="phone-notch"></div>
+      <div class="phone-screen-outer">
+        <div class="app-shell">
+          <header class="dash-header">
+            <span style="font-size:20px">🎯</span>
+            <span class="dash-header-brand">WinWin</span>
+            <span class="dash-header-nom">Café Verdier</span>
+            <span class="forfait-badge">PRO+</span>
+            <button class="btn-icon" id="btn-toast-logout">⏏</button>
+          </header>
+
+          <div class="dash-content">
+            <div class="tab-panel active" id="tab-overview"></div>
+            <div class="tab-panel" id="tab-reseau"></div>
+            <div class="tab-panel" id="tab-clients">
+              <div class="tab-header"><h2>Clients</h2><button class="btn-refresh" id="btn-toast-refresh">↺</button></div>
+              <div class="search-wrap">
+                <span class="search-icon">🔍</span>
+                <input class="search-input" id="client-search" type="search" placeholder="Rechercher par prénom…">
+              </div>
+              <div id="clients-meta" class="list-meta"></div>
+              <div id="clients-list"></div>
+            </div>
+            <div class="tab-panel" id="tab-scans">
+              <div class="tab-header"><h2>Historique</h2><button class="btn-refresh" id="btn-toast-refresh2">↺</button></div>
+              <div id="scans-list"></div>
+            </div>
+            <div class="tab-panel" id="tab-notifs"></div>
+            <div class="tab-panel" id="tab-scanner"></div>
+          </div>
+
+          <nav class="dash-nav">
+            <button class="nav-btn active" data-tab="overview"><span class="nav-icon">📊</span><span>Aperçu</span></button>
+            <button class="nav-btn" data-tab="reseau"><span class="nav-icon">🏪</span><span>Réseau</span></button>
+            <button class="nav-btn" data-tab="clients"><span class="nav-icon">👥</span><span>Clients</span></button>
+            <button class="nav-btn" data-tab="scans"><span class="nav-icon">📋</span><span>Scans</span></button>
+            <button class="nav-btn" data-tab="notifs"><span class="nav-icon">🔔</span><span>Notifs</span></button>
+            <button class="nav-btn" data-tab="scanner"><span class="nav-icon">📷</span><span>Scanner</span></button>
+          </nav>
+
+          <!-- Fiche client -->
+          <div id="modal-client" class="modal-overlay">
+            <div class="modal-sheet-client">
+              <div class="modal-handle"></div>
+              <div class="cs-header">
+                <div class="cs-avatar-lg" id="cs-avatar">?</div>
+                <div style="flex:1;min-width:0">
+                  <div class="cs-name" id="cs-name">–</div>
+                  <div class="cs-since" id="cs-since"></div>
+                </div>
+                <button class="btn-icon" id="cs-close">✕</button>
+              </div>
+              <div class="cs-body">
+                <div class="cs-pts-box">
+                  <div class="cs-pts-row">
+                    <span class="cs-pts-val" id="cs-pts">–</span>
+                    <span class="cs-pts-denom" id="cs-pts-max">/ –</span>
+                    <span id="cs-reward-badge" style="display:none;font-size:20px;margin-left:2px">🎉</span>
+                  </div>
+                  <div class="cs-bar-wrap2"><div class="cs-bar2" id="cs-prog-bar"></div></div>
+                  <div class="cs-dots2" id="cs-prog-dots"></div>
+                </div>
+                <div class="cs-actions2">
+                  <button class="btn btn-outline btn-sm" id="btn-toast-rename">✏️ Nom</button>
+                  <button class="btn btn-outline btn-sm" id="btn-toast-points">⚖️ Points</button>
+                </div>
+                <div id="cs-contact"></div>
+                <div>
+                  <div class="cs-section-lbl" style="margin-bottom:8px">Scans récents</div>
+                  <div id="cs-scans-list"></div>
+                </div>
+              </div>
+              <div class="cs-footer">
+                <button class="btn btn-danger btn-sm" id="btn-toast-delete" style="width:100%">🗑 Supprimer le client (RGPD)</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="toast" id="toast"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="stage-note">Les 5 onglets et la fiche client sont cliquables — comme en production.</div>
+</div>
+
+<footer>
+  Aperçu de démonstration — les données affichées (franchise, boutiques, clients, notifications)
+  sont fictives. Ce qui est réel : la structure, la mise en page et les calculs du dashboard
+  livré.
+</footer>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════
+// JEU DE DONNÉES DE DÉMO — la FORME suit celle des vraies réponses API
+// (group-stats, /api/clients, /api/scan, notification_logs) ; seules les
+// VALEURS sont inventées pour cette présentation.
+// ══════════════════════════════════════════════════════════════════════
+const S = { typeProgramme: 'stamps', maxValue: 10, displayMax: 10, forfait: 'pro_plus' };
+
+const DEMO_STATS = {
+  total_clients: 1284, scans_aujourdhui: 47, active_clients_30d: 512,
+  retention_rate: 61, avg_frequency: 3.4,
+};
+
+const DEMO_RESEAU = {
+  reseau: { porteurs: 1284, actifs_30j: 512, nouveaux_ce_mois: 96, taux_retour_reseau: 61, mobilite: 143 },
+  distribution: { seuil_bas: 5, seuil_haut: 10, bas: 487, milieu: 411, haut: 386 },
+  boutiques: [
+    { nom: 'Café Verdier — Bastille',            scans: 612, evolution_pct: 14,   clients_distincts: 233, recompenses: 41, archivee: false, actif: true },
+    { nom: 'Café Verdier — Nation',               scans: 489, evolution_pct: 6,    clients_distincts: 198, recompenses: 29, archivee: false, actif: true },
+    { nom: 'Café Verdier — Montorgueil',          scans: 355, evolution_pct: -3,   clients_distincts: 151, recompenses: 18, archivee: false, actif: true },
+    { nom: 'Café Verdier — Lyon Presqu’île',      scans: 240, evolution_pct: 21,   clients_distincts: 104, recompenses: 12, archivee: false, actif: true },
+    { nom: 'Café Verdier — Marseille Vieux-Port', scans: 74,  evolution_pct: null, clients_distincts: 31,  recompenses: 3,  archivee: true,  actif: false },
+  ],
+};
+
+// Même source que "porteurs" côté Réseau — un seul total, jamais deux
+// chiffres différents pour la même chose. On ne fabrique PAS 1284 fiches :
+// seulement 14 exemples, présentés explicitement comme un échantillon.
+const TOTAL_CLIENTS_DEMO = DEMO_RESEAU.reseau.porteurs;
+
+const PRENOMS = ['Sarah','Karim','Léa','Yanis','Emma','Nadia','Hugo','Camille','Amine','Chloé','Rayan','Manon','Sofiane','Julie'];
+const DEMO_CLIENTS = PRENOMS.map((prenom, i) => ({
+  id: 'demo-' + i,
+  prenom,
+  stored_value: [10,3,7,10,1,6,9,4,10,2,5,8,0,6][i],
+  created_at: new Date(Date.now() - (30 + i * 37) * 86400000).toISOString(),
+  email: i % 3 === 0 ? prenom.toLowerCase() + '@example.com' : null,
+  telephone: i % 4 === 0 ? '+33 6 12 34 56 ' + (10 + i) : null,
+  date_anniversaire: i % 5 === 0 ? '1994-06-' + String(10 + (i % 15)).padStart(2, '0') : null,
+}));
+
+function demoScansFor(clientId) {
+  // 3-4 scans plausibles par client, dont un état "reward" pour celles/ceux au max.
+  const c = DEMO_CLIENTS.find(x => x.id === clientId);
+  const n = 4;
+  return Array.from({ length: n }, (_, i) => {
+    const apres = i === 0 ? c.stored_value : Math.max(0, c.stored_value - i);
+    const avant = i === n - 1 ? Math.max(0, apres - 1) : Math.max(0, apres - 1);
+    return {
+      stored_value_avant: avant, stored_value_apres: apres,
+      date_scan: new Date(Date.now() - (i + 1) * 5 * 86400000).toISOString(),
+      points_de_vente: i % 2 === 0 ? { nom: 'Bastille' } : { nom: 'Nation' },
+      annule_le: null,
+    };
+  });
+}
+
+const DEMO_SCANS_GLOBAL = [
+  { clients: { prenom: 'Sarah' },   stored_value_avant: 9, stored_value_apres: 10, date_scan: new Date(Date.now() - 12 * 60000).toISOString(), annule_le: null },
+  { clients: { prenom: 'Amine' },   stored_value_avant: 10, stored_value_apres: 0, date_scan: new Date(Date.now() - 40 * 60000).toISOString(), annule_le: null },
+  { clients: { prenom: 'Léa' },     stored_value_avant: 6, stored_value_apres: 7, date_scan: new Date(Date.now() - 3 * 3600000).toISOString(), annule_le: null },
+  { clients: { prenom: 'Hugo' },    stored_value_avant: 8, stored_value_apres: 9, date_scan: new Date(Date.now() - 5 * 3600000).toISOString(), annule_le: null },
+  { clients: { prenom: 'Nadia' },   stored_value_avant: 0, stored_value_apres: 1, date_scan: new Date(Date.now() - 26 * 3600000).toISOString(), annule_le: null },
+  { clients: { prenom: 'Karim' },   stored_value_avant: 2, stored_value_apres: 3, date_scan: new Date(Date.now() - 26 * 3600000).toISOString(), annule_le: new Date(Date.now() - 25 * 3600000).toISOString() },
+  { clients: { prenom: 'Camille' }, stored_value_avant: 3, stored_value_apres: 4, date_scan: new Date(Date.now() - 2 * 86400000).toISOString(), annule_le: null },
+  { clients: { prenom: 'Rayan' },   stored_value_avant: 4, stored_value_apres: 5, date_scan: new Date(Date.now() - 3 * 86400000).toISOString(), annule_le: null },
+];
+
+const DEMO_NOTIFS = [
+  { message: "Café Verdier fête ses 3 ans ce samedi — un café offert pour toute visite entre 9h et 12h ☕", created_at: new Date(Date.now() - 4 * 86400000).toISOString(), total_apple: 210, total_google: 96, envoyes_apple: 206, envoyes_google: 93 },
+  { message: "Nouveau : le comptoir Montorgueil ouvre le dimanche matin dès ce week-end.", created_at: new Date(Date.now() - 11 * 86400000).toISOString(), total_apple: 205, total_google: 94, envoyes_apple: 201, envoyes_google: 90 },
+  { message: "Il vous manque 2 tampons pour votre prochaine récompense — à très vite !", created_at: new Date(Date.now() - 20 * 86400000).toISOString(), total_apple: 58, total_google: 24, envoyes_apple: 57, envoyes_google: 23 },
+];
+
+// ══════════════════════════════════════════════════════════════════════
+// HELPERS — portés depuis public/dashboard/index.html (mêmes noms,
+// mêmes implémentations).
+// ══════════════════════════════════════════════════════════════════════
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+const COLORS = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#f97316'];
+function colorFrom(name) {
+  let h = 0;
+  for (const c of (name || '?')) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
+  return COLORS[h % COLORS.length];
+}
+
+function timeAgo(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1)  return 'à l’instant';
+  if (m < 60) return `il y a ${m} min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `il y a ${h} h`;
+  const d = Math.floor(h / 24);
+  if (d === 1) return 'hier';
+  if (d < 7)  return `il y a ${d} jours`;
+  return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+}
+
+// Toute action visible mais volontairement non simulée dans cette démo
+// (renommer une boutique, exporter un CSV, ajuster un solde…) déclenche
+// CE toast plutôt qu'un clic silencieux — c'est le bug signalé la dernière
+// fois : rien ne doit sembler cassé.
+let toastTimer = null;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+}
+document.querySelectorAll('[id^="btn-toast-"]').forEach(btn => {
+  btn.addEventListener('click', () => toast('Fonctionnalité réelle du dashboard — désactivée dans cet aperçu de démonstration.'));
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// NAVIGATION — bascule d'onglet + rendu à la demande (une fois par onglet).
+// ══════════════════════════════════════════════════════════════════════
+const rendered = {};
+function showTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  const panel = document.getElementById('tab-' + name);
+  panel.classList.add('active');
+  if (!rendered[name]) { renderTab(name); rendered[name] = true; }
+}
+function renderTab(name) {
+  if (name === 'overview') renderOverview();
+  else if (name === 'reseau') renderReseau();
+  else if (name === 'clients') renderClients();
+  else if (name === 'scans') renderScans();
+  else if (name === 'notifs') renderNotifs();
+  else if (name === 'scanner') document.getElementById('tab-scanner').innerHTML = renderScannerStatic();
+}
+document.querySelectorAll('.nav-btn').forEach(btn => btn.addEventListener('click', () => showTab(btn.dataset.tab)));
+
+// ── APERÇU ──────────────────────────────────────────────────────────────
+function renderOverview() {
+  const st = DEMO_STATS;
+  document.getElementById('tab-overview').innerHTML = `
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-value">${st.total_clients}</div><div class="stat-label">Clients au total</div></div>
+      <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-value">${st.scans_aujourdhui}</div><div class="stat-label">Scans aujourd'hui</div></div>
+      <div class="stat-card"><div class="stat-icon">🔥</div><div class="stat-value">${st.active_clients_30d}</div><div class="stat-label">Actifs (30 j)</div></div>
+      <div class="stat-card"><div class="stat-icon">🔄</div><div class="stat-value">${st.retention_rate}%</div><div class="stat-label">Taux de rétention</div></div>
+      <div class="stat-card" style="grid-column:1/-1;flex-direction:row;align-items:center;gap:14px"><div class="stat-icon" style="margin:0">📈</div><div><div class="stat-value" style="font-size:22px">${st.avg_frequency}x</div><div class="stat-label">Visites moyennes / client</div></div></div>
+    </div>
+    <p class="section-title">QR code de la page d'inscription</p>
+    <div class="qr-card qr-center">
+      <div class="qr-placeholder">QR à afficher en boutique — scanné, il ouvre la page d'inscription du client</div>
+      <div class="qr-url">winwin-card.com/l/cafe-verdier</div>
+      <div class="qr-actions">
+        <button class="btn btn-outline btn-sm" id="btn-toast-copy">Copier le lien</button>
+        <button class="btn btn-outline btn-sm" id="btn-toast-share">Partager</button>
+      </div>
+    </div>
+    <p class="section-title">Points de vente</p>
+    <div class="qr-card" style="gap:6px">
+      ${DEMO_RESEAU.boutiques.map((b, i) => `<div class="pdv-row">
+        <span style="font-weight:600">${esc(b.nom.replace('Café Verdier — ',''))}${!b.actif ? ' <span style="color:var(--error);font-size:12px;font-weight:600">• coupée</span>' : ''}</span>
+        <span class="pdv-row-actions">
+          <button class="btn btn-outline btn-sm" id="btn-toast-rename-${i}">Renommer</button>
+          <button class="btn btn-outline btn-sm" id="btn-toast-cut-${i}">${b.actif ? 'Couper' : 'Rétablir'}</button>
+        </span>
+      </div>`).join('')}
+      <div class="field-hint" style="margin-top:6px">Créées et archivées depuis le panel WinWin, à votre demande.</div>
+    </div>`;
+  document.getElementById('btn-toast-copy').addEventListener('click', () => toast('Fonctionnalité réelle du dashboard — désactivée dans cet aperçu de démonstration.'));
+  document.getElementById('btn-toast-share').addEventListener('click', () => toast('Fonctionnalité réelle du dashboard — désactivée dans cet aperçu de démonstration.'));
+  DEMO_RESEAU.boutiques.forEach((b, i) => {
+    document.getElementById('btn-toast-rename-' + i)?.addEventListener('click', () => toast('Fonctionnalité réelle du dashboard — désactivée dans cet aperçu de démonstration.'));
+    document.getElementById('btn-toast-cut-' + i)?.addEventListener('click', () => toast('Fonctionnalité réelle du dashboard — désactivée dans cet aperçu de démonstration.'));
+  });
+}
+
+// ── RÉSEAU — port à l'identique de renderReseau()/rsEvolCell() ─────────
+function rsEvolCell(v) {
+  if (v == null) return '<span style="opacity:.45">—</span>';
+  const c = v > 0 ? '#4ea672' : v < 0 ? '#ef4444' : 'inherit';
+  return `<span style="color:${c};font-weight:600">${v > 0 ? '+' : ''}${v}%</span>`;
+}
+const reseauSort = { col: 'scans', dir: -1 };
+function renderReseau() {
+  const d = DEMO_RESEAU;
+  const el = document.getElementById('tab-reseau');
+  const r = d.reseau || {};
+  const dist = d.distribution || {};
+  const total = (dist.bas || 0) + (dist.milieu || 0) + (dist.haut || 0);
+  const pc = n => total > 0 ? Math.round((n || 0) / total * 100) : 0;
+  const boutiques = (d.boutiques || []).slice().sort((a, b) => {
+    let va = a[reseauSort.col], vb = b[reseauSort.col];
+    if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    return (va < vb ? -1 : va > vb ? 1 : 0) * reseauSort.dir;
+  });
+  el.innerHTML = `
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-value">${r.porteurs ?? '–'}</div><div class="stat-label">Porteurs</div></div>
+      <div class="stat-card"><div class="stat-icon">🔥</div><div class="stat-value">${r.actifs_30j ?? '–'}</div><div class="stat-label">Actifs (30 j)</div></div>
+      <div class="stat-card"><div class="stat-icon">✨</div><div class="stat-value">${r.nouveaux_ce_mois ?? '–'}</div><div class="stat-label">Nouveaux ce mois</div></div>
+      <div class="stat-card"><div class="stat-icon">🔄</div><div class="stat-value">${r.taux_retour_reseau != null ? r.taux_retour_reseau + '%' : '–'}</div><div class="stat-label">Taux de retour</div></div>
+    </div>
+    <div class="field-hint" style="margin:6px 2px 0">Porteurs fréquentant plusieurs boutiques : <strong>${r.mobilite ?? 0}</strong></div>
+
+    <p class="section-title">Répartition des passages mensuels</p>
+    <div class="qr-card" style="align-items:stretch">
+      <div style="display:flex;height:26px;border-radius:6px;overflow:hidden;background:rgba(255,255,255,.06)">
+        <div style="width:${pc(dist.bas)}%;background:#e0a458"></div>
+        <div style="width:${pc(dist.milieu)}%;background:#8b90ff"></div>
+        <div style="width:${pc(dist.haut)}%;background:#4ea672"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-top:8px;flex-wrap:wrap">
+        <span><span style="color:#e0a458">■</span> moins de ${dist.seuil_bas} — <strong>${pc(dist.bas)}%</strong> (${dist.bas || 0})</span>
+        <span><span style="color:#8b90ff">■</span> ${dist.seuil_bas}–${dist.seuil_haut} — <strong>${pc(dist.milieu)}%</strong> (${dist.milieu || 0})</span>
+        <span><span style="color:#4ea672">■</span> plus de ${dist.seuil_haut} — <strong>${pc(dist.haut)}%</strong> (${dist.haut || 0})</span>
+      </div>
+      <div class="field-hint" style="margin-top:4px">passages par mois</div>
+    </div>
+
+    <p class="section-title">Boutiques</p>
+    <div style="overflow-x:auto">
+      <table class="rs-table">
+        <thead><tr>
+          <th data-sort="nom">Boutique</th>
+          <th data-sort="scans">Scans</th>
+          <th data-sort="evolution_pct">vs mois préc.</th>
+          <th data-sort="clients_distincts">Clients servis</th>
+          <th data-sort="recompenses">Récompenses</th>
+        </tr></thead>
+        <tbody>
+          ${boutiques.map(b => `<tr>
+            <td>${esc(b.nom)}${b.archivee ? ` <span style="color:var(--error);font-size:11px">(archivée)</span>` : ''}</td>
+            <td>${b.scans}</td>
+            <td>${rsEvolCell(b.evolution_pct)}</td>
+            <td>${b.clients_distincts}</td>
+            <td>${b.recompenses}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  el.querySelectorAll('th[data-sort]').forEach(th => th.addEventListener('click', () => {
+    const col = th.dataset.sort;
+    const newDir = reseauSort.col === col ? -reseauSort.dir : (col === 'nom' ? 1 : -1);
+    reseauSort.col = col; reseauSort.dir = newDir;
+    renderReseau();
+  }));
+}
+
+// ── CLIENTS ──────────────────────────────────────────────────────────────
+function renderClients(filter = '') {
+  const list = document.getElementById('clients-list');
+  const meta = document.getElementById('clients-meta');
+  const q = filter.trim().toLowerCase();
+  const shown = q ? DEMO_CLIENTS.filter(c => c.prenom.toLowerCase().includes(q)) : DEMO_CLIENTS;
+  if (shown.length === 0) {
+    meta.textContent = '';
+    list.innerHTML = `<div class="empty"><div class="empty-icon">👤</div><div class="empty-title">Aucun résultat</div><div class="empty-sub">Cette démo ne contient que ${DEMO_CLIENTS.length} profils d'exemple.</div></div>`;
+    return;
+  }
+  // Le compteur reprend le total réseau (identique à "Porteurs" dans l'onglet
+  // Réseau) tant qu'aucune recherche n'est active ; dès qu'on filtre, on est
+  // honnête : la recherche ne porte que sur l'échantillon affiché, pas sur
+  // les 1 284 porteurs réels (qui n'existent pas dans cette démo).
+  meta.textContent = q
+    ? `${shown.length} résultat${shown.length > 1 ? 's' : ''} dans l'échantillon de démonstration`
+    : `${TOTAL_CLIENTS_DEMO.toLocaleString('fr-FR')} clients au total — ${DEMO_CLIENTS.length} en exemple ci-dessous`;
+  list.innerHTML = shown.map(c => {
+    const pct = Math.min(c.stored_value / S.displayMax * 100, 100);
+    const full = c.stored_value >= S.maxValue;
+    return `<div class="client-card" data-id="${c.id}">
+      <div class="client-avatar" style="background:${colorFrom(c.prenom)}">${c.prenom.charAt(0).toUpperCase()}</div>
+      <div class="client-info">
+        <div class="client-name">${esc(c.prenom)}</div>
+        <div class="client-progress">
+          <div class="mini-bar-wrap"><div class="mini-bar" style="width:${pct}%"></div></div>
+          <span class="client-pts ${full ? 'client-full' : ''}">${c.stored_value}/${S.displayMax}${full ? ' 🎉' : ''}</span>
+        </div>
+      </div>
+      <span class="chevron">›</span>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.client-card').forEach(card => card.addEventListener('click', () => openClientSheet(card.dataset.id)));
+}
+document.getElementById('client-search').addEventListener('input', e => renderClients(e.target.value));
+
+function openClientSheet(id) {
+  const client = DEMO_CLIENTS.find(c => c.id === id);
+  const scans = demoScansFor(id);
+  const displayMax = S.displayMax;
+  const full = client.stored_value >= S.maxValue;
+  const pct  = Math.min(client.stored_value / Math.max(displayMax, 1) * 100, 100);
+  const av = document.getElementById('cs-avatar');
+  av.textContent = client.prenom.charAt(0).toUpperCase();
+  av.style.background = colorFrom(client.prenom);
+  document.getElementById('cs-name').textContent  = client.prenom;
+  document.getElementById('cs-since').textContent = 'Membre depuis le ' + new Date(client.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  document.getElementById('cs-pts').textContent = client.stored_value;
+  document.getElementById('cs-pts-max').textContent = `/ ${displayMax}`;
+  document.getElementById('cs-reward-badge').style.display = full ? '' : 'none';
+  document.getElementById('cs-prog-bar').style.width = pct + '%';
+  document.getElementById('cs-prog-dots').innerHTML = Array.from({ length: S.maxValue }, (_, i) =>
+    `<div class="cs-dot2${i < client.stored_value ? ' on' : ''}"></div>`).join('');
+
+  const contactEl = document.getElementById('cs-contact');
+  const rows = [];
+  if (client.email)             rows.push(`<div class="cs-contact-row"><span class="cs-contact-icon">✉️</span><span>${esc(client.email)}</span></div>`);
+  if (client.telephone)         rows.push(`<div class="cs-contact-row"><span class="cs-contact-icon">📞</span><span>${esc(client.telephone)}</span></div>`);
+  if (client.date_anniversaire) rows.push(`<div class="cs-contact-row"><span class="cs-contact-icon">🎂</span><span>${new Date(client.date_anniversaire + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}</span></div>`);
+  contactEl.innerHTML = rows.length ? `<div class="cs-contact-box">${rows.join('')}</div>` : '';
+
+  document.getElementById('cs-scans-list').innerHTML = scans.map(s => {
+    const isReset  = s.stored_value_apres === 0 && s.stored_value_avant > 0;
+    const isReward = !isReset && s.stored_value_apres >= S.maxValue;
+    const icon = isReset ? '↩️' : isReward ? '🎉' : '✅';
+    const dateStr = new Date(s.date_scan).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const lieu = s.points_de_vente && s.points_de_vente.nom;
+    return `<div class="cs-scan-row">
+      <span class="cs-scan-icon">${icon}</span>
+      <div style="flex:1">
+        <span class="cs-scan-delta">${s.stored_value_avant} → ${s.stored_value_apres} pts</span>
+        <span class="cs-scan-date">${dateStr}${lieu ? ' · ' + esc(lieu) : ''}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('modal-client').classList.add('open');
+}
+document.getElementById('cs-close').addEventListener('click', () => document.getElementById('modal-client').classList.remove('open'));
+document.getElementById('modal-client').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-client')) document.getElementById('modal-client').classList.remove('open');
+});
+
+// ── SCANS (historique global) — port de renderScans() ────────────────────
+function renderScans() {
+  const el = document.getElementById('scans-list');
+  el.innerHTML = DEMO_SCANS_GLOBAL.map(s => {
+    const prenom = s.clients?.prenom || '?';
+    const avant = s.stored_value_avant, apres = s.stored_value_apres;
+    const reward = apres >= S.maxValue;
+    const reset  = apres === 0 && avant > 0;
+    const delta = reward
+      ? `<div class="scan-pts" style="color:var(--warning)">🎉 Récompense</div><div style="font-size:11px;color:var(--muted)">${avant} → ${apres}</div>`
+      : reset
+        ? `<div class="scan-pts" style="color:var(--accent)">↩️ Remise à zéro</div><div style="font-size:11px;color:var(--muted)">${avant} → 0</div>`
+        : `<div class="scan-pts">${avant} → ${apres}</div>`;
+    const annule = !!s.annule_le;
+    return `<div class="scan-entry"${annule ? ' style="opacity:.5"' : ''}>
+      <div class="scan-avatar" style="background:${colorFrom(prenom)}">${prenom.charAt(0).toUpperCase()}</div>
+      <div class="scan-info"><div class="scan-name"${annule ? ' style="text-decoration:line-through"' : ''}>${esc(prenom)}</div><div class="scan-time">${timeAgo(s.date_scan)}${annule ? ' · annulé' : ''}</div></div>
+      <div class="scan-delta">${delta}</div>
+    </div>`;
+  }).join('');
+}
+// ── NOTIFICATIONS — formulaire réellement fonctionnel (compteur de
+// caractères), envoi simulé de façon honnête (pas de vrai push possible
+// depuis une page de démo statique). ─────────────────────────────────────
+function renderNotifs() {
+  const el = document.getElementById('tab-notifs');
+  el.innerHTML = `
+    <div class="tab-header"><h2>Notifications push</h2></div>
+    <div class="alert alert-info" style="margin-bottom:16px">📱 Envoyées via Apple &amp; Google Wallet aux appareils enregistrés.</div>
+    <form class="notif-form" id="notif-form">
+      <div class="field">
+        <label for="notif-msg">Message</label>
+        <textarea id="notif-msg" maxlength="500" placeholder="Ex. : Venez profiter de -20% sur toute la carte ce week-end !"></textarea>
+        <div class="char-count" id="cc-msg">0 / 500</div>
+      </div>
+      <button type="submit" class="btn btn-primary" id="btn-send-notif">Envoyer la notification</button>
+    </form>
+    <div class="divider"></div>
+    <div class="tab-header" style="margin-bottom:10px"><h2 style="font-size:15px;color:var(--muted)">Historique</h2></div>
+    <div id="notif-history-list"></div>`;
+
+  const ta = document.getElementById('notif-msg');
+  const cc = document.getElementById('cc-msg');
+  ta.addEventListener('input', () => {
+    cc.textContent = `${ta.value.length} / 500`;
+    cc.classList.toggle('over', ta.value.length > 500);
+  });
+  document.getElementById('notif-form').addEventListener('submit', e => {
+    e.preventDefault();
+    if (!ta.value.trim()) return;
+    toast('Aperçu de démo : dans le vrai dashboard, ce message partirait à l’instant vers Apple & Google Wallet.');
+    ta.value = ''; cc.textContent = '0 / 500';
+  });
+
+  const hist = document.getElementById('notif-history-list');
+  hist.innerHTML = DEMO_NOTIFS.map(n => {
+    const total = (n.total_apple || 0) + (n.total_google || 0);
+    const envoyes = (n.envoyes_apple || 0) + (n.envoyes_google || 0);
+    return `<div class="notif-log-entry">
+      <div class="notif-log-msg">${esc(n.message)}</div>
+      <div class="notif-log-meta"><span>${timeAgo(n.created_at)}</span><span>Reçu par ${envoyes}/${total}</span></div>
+    </div>`;
+  }).join('');
+}
+
+// ── SCANNER — pas de fausse caméra : un aperçu honnête de ce que le
+// caissier utilise en boutique, avec les fonctionnalités clés annotées.
+function renderScannerStatic() {
+  return `<div class="scanner-static">
+    <div class="glyph">📷</div>
+    <h3>S'utilise en caisse, sur téléphone ou tablette</h3>
+    <p>Le caissier scanne le QR du pass client — la caméra de l'appareil suffit, aucun matériel spécifique.</p>
+    <div class="scanner-perks">
+      <div class="scanner-perk"><span>✅</span><span><strong>Double confirmation</strong> avant chaque écriture — impossible d'ajouter un tampon par erreur.</span></div>
+      <div class="scanner-perk"><span>🔢</span><span><strong>Code de secours</strong> à 6 caractères si la caméra ne capte pas le pass.</span></div>
+      <div class="scanner-perk"><span>↩️</span><span><strong>Annulation</strong> du dernier scan en un tap, en cas d'erreur de caisse.</span></div>
+    </div>
+  </div>`;
+}
+
+// ── Init ──────────────────────────────────────────────────────────────
+renderTab('overview'); rendered.overview = true;
+</script>
