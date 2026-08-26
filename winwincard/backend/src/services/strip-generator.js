@@ -384,7 +384,7 @@ function barColors(bgColor, marchand, isReward) {
 // Zone sûre Apple Wallet : les 630 px centraux (marge de 60 px de chaque côté).
 function pointsBarSvg({ w, h, valeur, maxValue, langue, showLabel, principale, secondaire }) {
   const sx = w / 750, sy = h / 246;
-  const x = 60 * sx, trackW = 630 * sx;
+  const x = 115 * sx, trackW = 520 * sx;
   const ratio = maxValue > 0 ? Math.min(Math.max(valeur / maxValue, 0), 1) : 0;
 
   // Sans label, tout remonte pour rester centré dans la hauteur utile.
