@@ -1343,9 +1343,13 @@ function collectForm() {
   const rewardHex      = document.getElementById('f-reward-color').value.trim()   || null;
   const texteRewardHex = document.getElementById('f-texte-reward-c').value.trim() || null;
 
-  // Valider images_tiers JSON si renseigné
+  // images_tiers — champ VIDÉ = suppression explicite.
+  // Il valait `undefined` : JSON.stringify supprime les propriétés undefined du
+  // payload, et le serveur ignore ce qu'il ne reçoit pas. Vider le champ
+  // n'envoyait donc RIEN, et l'override restait en base indéfiniment — on
+  // pouvait écrire, jamais effacer. `null` est un ordre d'effacement réel.
   const tiersRaw = document.getElementById('f-tiers').value.trim();
-  let images_tiers = undefined;
+  let images_tiers = null;
   if (tiersRaw) {
     try { images_tiers = JSON.parse(tiersRaw); }
     catch { showSheetErr('images_tiers : JSON invalide'); return null; }
@@ -1454,19 +1458,22 @@ function renderStripTiers(imagesTiers) {
     list.innerHTML = '<div class="strip-tiers-empty">Aucune image configurée — le pass utilisera la couleur de fond du marchand.</div>';
     return;
   }
+  // Bouton de suppression sur CHAQUE entrée. Il était réservé aux tiers à valeur
+  // unique (min === max) ; les PLAGES — c'est-à-dire toute entrée saisie par le
+  // champ JSON brut — n'affichaient qu'un libellé « plage » et restaient donc
+  // impossibles à retirer depuis le formulaire.
+  // On désigne l'entrée par son INDEX : une plage n'a pas de « valeur de tier »
+  // qui l'identifie sans ambiguïté.
   list.innerHTML = `<div class="strip-tier-grid">${
-    imagesTiers.map(t => {
+    imagesTiers.map((t, i) => {
       const label = t.min === t.max ? `Tier ${t.min} pt${t.min > 1 ? 's' : ''}` : `Tiers ${t.min}–${t.max} pts`;
-      const canDelete = t.min === t.max;
       return `<div class="strip-tier-item">
         <img class="strip-thumb" src="${esc(t.url)}" alt="${esc(label)}" loading="lazy" onerror="this.style.background='#ef4444'">
         <div style="flex:1;overflow:hidden">
           <div class="strip-tier-label">${esc(label)}</div>
           <div class="strip-tier-url">${esc(t.url)}</div>
         </div>
-        ${canDelete
-          ? `<button class="btn btn-danger btn-sm" type="button" onclick="deleteStripTier(${t.min})">✕</button>`
-          : `<span style="font-size:11px;color:var(--muted)">plage</span>`}
+        <button class="btn btn-danger btn-sm" type="button" onclick="deleteStripTier(${i}, ${JSON.stringify(label)})">✕</button>
       </div>`;
     }).join('')
   }</div>`;
@@ -1514,11 +1521,11 @@ document.getElementById('btn-upload-tier').addEventListener('click', async () =>
   }
 });
 
-async function deleteStripTier(tier) {
+async function deleteStripTier(index, label) {
   if (!S.editId) return;
-  if (!confirm(`Supprimer l'image de tier ${tier} ?`)) return;
+  if (!confirm(`Supprimer « ${label} » ?\n\nTant qu'un override existe, il prime sur le strip généré.`)) return;
   try {
-    const res  = await api(`/api/admin/marchands/${S.editId}/assets/${tier}`, { method: 'DELETE' });
+    const res  = await api(`/api/admin/marchands/${S.editId}/tiers/${index}`, { method: 'DELETE' });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Erreur suppression');
 

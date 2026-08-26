@@ -607,38 +607,78 @@ router.post('/marchands/:id/assets', authAdmin, (req, res, next) => {
   else tiers.push(entry);
   tiers.sort((a, b) => a.min - b.min);
 
-  const { data: updated, error: errU } = await supabase
-    .from('marchands').update({ images_tiers: tiers }).eq('id', req.params.id)
-    .select('id, images_tiers').single();
+  const { data: updated, error: errU } = await ecrireTiers(req.params.id, tiers);
   if (errU) return res.status(500).json({ error: errU.message });
 
   res.json({ tier, url: publicUrl, images_tiers: updated.images_tiers });
 }));
 
-// DELETE /api/admin/marchands/:id/assets/:tier — supprime la strip image du tier exact
-router.delete('/marchands/:id/assets/:tier', authAdmin, asyncHandler(async (req, res) => {
-  const tier = parseInt(req.params.tier);
-  if (isNaN(tier)) return res.status(400).json({ error: 'tier invalide' });
+// ── Écriture d'images_tiers : le SEUL chemin autorisé ─────────────────────
+// Les endpoints tiers faisaient un .update() direct, sans bump de
+// strip_config_version ni re-sync de la classe Google. Conséquences (§3.4, §3.8) :
+// le cache continuait de servir l'ancienne image, et la classe Google restait
+// périmée — exactement le mode d'échec de l'incident Pizza Sabbioni.
+// Toute modification d'images_tiers passe désormais par ici.
+async function ecrireTiers(marchandId, tiers) {
+  const { data: cur } = await supabase
+    .from('marchands').select('strip_config_version').eq('id', marchandId).single();
+
+  const { data, error } = await supabase
+    .from('marchands')
+    .update({
+      // Tableau vide → null : c'est l'absence d'override qui rend la main au
+      // strip généré, pas un tableau vide (que la précédence traiterait comme
+      // « configuré mais sans correspondance »).
+      images_tiers: (Array.isArray(tiers) && tiers.length) ? tiers : null,
+      strip_config_version: (cur?.strip_config_version || 1) + 1,
+    })
+    .eq('id', marchandId)
+    .select('*')
+    .single();
+  if (error) return { error };
+
+  const { createOrUpdateLoyaltyClass } = require('../services/google-pass');
+  createOrUpdateLoyaltyClass(data).catch(e => console.error('[Google Wallet] classe:', e.message));
+  return { data };
+}
+
+// DELETE /api/admin/marchands/:id/tiers/:index — supprime UNE entrée d'images_tiers
+// REMPLACE l'ancienne route /assets/:tier, qui désignait l'entrée par sa VALEUR
+// de tier et ne filtrait que `min === max === tier`. Elle était donc
+// structurellement incapable de supprimer une PLAGE ({min:0,max:1999}) — le cas
+// de toute entrée saisie par le champ JSON brut. L'index est la seule façon de
+// désigner une entrée sans ambiguïté, plage comprise.
+router.delete('/marchands/:id/tiers/:index', authAdmin, asyncHandler(async (req, res) => {
+  const index = parseInt(req.params.index);
+  if (isNaN(index) || index < 0) return res.status(400).json({ error: 'index invalide' });
 
   const { data: marchand, error: errM } = await supabase
     .from('marchands').select('id, slug, images_tiers').eq('id', req.params.id).single();
   if (errM || !marchand) return res.status(404).json({ error: 'Marchand introuvable' });
 
-  // Suppression fichier Storage — fire-and-forget (ne bloque pas si déjà absent)
-  supabase.storage.from('passes')
-    .remove([`marchands/${marchand.slug}/strip_tier_${tier}.png`])
-    .catch(() => {});
+  const tiers = Array.isArray(marchand.images_tiers) ? [...marchand.images_tiers] : [];
+  if (index >= tiers.length) return res.status(404).json({ error: 'Entrée introuvable' });
 
-  const tiers = Array.isArray(marchand.images_tiers)
-    ? marchand.images_tiers.filter(t => !(t.min === tier && t.max === tier))
-    : [];
+  const [supprime] = tiers.splice(index, 1);
 
-  const { data: updated, error: errU } = await supabase
-    .from('marchands').update({ images_tiers: tiers.length ? tiers : null })
-    .eq('id', req.params.id).select('id, images_tiers').single();
+  // Fichier Storage : on ne supprime QUE ce qu'on a créé nous-mêmes, c'est-à-dire
+  // une entrée issue de l'upload (min === max, fichier nommé strip_tier_<n>.png).
+  // Une plage saisie à la main pointe vers une URL qu'on n'a pas déposée : on ne
+  // touche pas au fichier, seulement à l'entrée JSON.
+  if (supprime && supprime.min === supprime.max) {
+    const attendu = `marchands/${marchand.slug}/strip_tier_${supprime.min}.png`;
+    if (typeof supprime.url === 'string' && supprime.url.includes(attendu)) {
+      const { error } = await supabase.storage.from('passes').remove([attendu]);
+      // supabase-js ne rejette jamais (§3.9) : on LIT l'erreur. Non bloquant —
+      // l'entrée JSON doit disparaître même si le fichier était déjà absent.
+      if (error) console.warn('[admin] suppression fichier tier:', error.message);
+    }
+  }
+
+  const { data: updated, error: errU } = await ecrireTiers(req.params.id, tiers);
   if (errU) return res.status(500).json({ error: errU.message });
 
-  res.json({ tier, images_tiers: updated.images_tiers });
+  res.json({ supprime, images_tiers: updated.images_tiers });
 }));
 
 // POST /api/admin/marchands/:id/strip-static — upload image statique universelle
