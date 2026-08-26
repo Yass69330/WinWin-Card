@@ -62,9 +62,13 @@ async function googleHeroUrl(marchand) {
   // strip_config_version, même mécanisme que l'Apple Wallet) → image_strip_url (legacy).
   if (marchand.google_hero_url) return marchand.google_hero_url;
 
-  // Mode points : jamais de tampons générés (seuil potentiellement élevé) —
-  // retombe directement sur l'image fixe (ou aucune hero image).
-  if (marchand.strip_mode && marchand.type_programme !== 'points') {
+  // // Génération autorisée si :
+  //   • 'points_bar' → le SEUL mode de génération ouvert aux marchands points
+  //     (migration 040). Les tampons leur restent interdits : dessiner 2000
+  //     pastilles n'a aucun sens, c'était la raison d'origine du bypass.
+  //   • sinon → comportement historique, strictement inchangé.
+  if (marchand.strip_mode === 'points_bar'
+      || (marchand.strip_mode && marchand.type_programme !== 'points')) {
     const { getPublicUrl } = require('./strip-cache');
     const url = await getPublicUrl({ marchand, filledCount: 0, variant: 'hero' }).catch(() => null);
     if (url) return url;
@@ -385,7 +389,8 @@ async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, 
       sourceUri: { uri: tierUrl || staticUrl },
       contentDescription: { defaultValue: { language: 'en', value: 'loyalty progress' } },
     };
-  } else if (marchand?.strip_mode && marchand?.type_programme !== 'points') {
+  } else if (marchand?.strip_mode === 'points_bar'
+             || (marchand?.strip_mode && marchand?.type_programme !== 'points')) {
     const { getPublicUrl } = require('./strip-cache');
     const heroUrl = await getPublicUrl({ marchand, filledCount: storedValue, variant: 'hero' })
       .catch(e => { console.error('[google-pass] hero gen:', e.message); return null; });

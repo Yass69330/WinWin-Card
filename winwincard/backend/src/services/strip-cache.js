@@ -40,34 +40,86 @@ function storageKey(marchand, filledCount, variant) {
   if (marchand.strip_mode === 'stamps') {
     mode = `stamps_${filledCount}`;
   } else if (marchand.strip_mode === 'points_bar') {
-    const { pointsBucket } = require('./strip-generator');
-    mode = `points_${pointsBucket(filledCount, marchand.max_value)}`;
+    // La clé DOIT utiliser la même valeur que celle dessinée dans l'image,
+    // sinon on servirait une image affichant un solde différent de celui du
+    // client. valeurAffichee() est la source de vérité unique et applique le
+    // plafond anti-dérapage.
+    const { valeurAffichee } = require('./strip-generator');
+    mode = `points_${valeurAffichee(filledCount)}`;
   }
   return `marchands/${slug}/gen/v${version}/${mode}_${variant}.png`;
 }
 
-// ── Purge fire-and-forget des anciennes versions ──────────────────────────
-function purgeOldVersions(marchand, variant) {
+// ── Purge des anciennes versions ──────────────────────────────────────────
+// RÉÉCRITE. L'ancienne version DEVINAIT les noms de fichiers en énumérant
+// `stamps_0..max_value`, ce qui posait trois problèmes :
+//   • elle ignorait totalement les clés `points_*` → aucune image de barre
+//     n'aurait jamais été supprimée ;
+//   • sur un marchand points (seuil 2000) elle fabriquait ~4000 chemins et
+//     tirait ~40 requêtes HTTP SIMULTANÉES, pour des fichiers inexistants,
+//     à CHAQUE image générée — la rafale qui menaçait la production ;
+//   • son `.catch()` était du code mort (§3.9 : supabase-js ne rejette jamais)
+//     et son `.then()` vide jetait l'erreur : un échec était invisible partout.
+//
+// La nouvelle version LIT le dossier au lieu de deviner. Deux pièges, tous
+// deux attrapés par les tests avant livraison :
+//   1. NE JAMAIS paginer en supprimant au fil de l'eau — chaque suppression
+//      décale la liste côté serveur, donc avancer l'offset saute autant de
+//      fichiers qu'on vient d'effacer. On lit TOUT, puis on supprime.
+//   2. NE JAMAIS déduire la fin de la pagination de la taille de page demandée
+//      — Supabase peut renvoyer moins que `limit`. Seule fin fiable : page vide.
+const PAGE_LIST   = 1000;  // taille de page demandée à list()
+const LOT_REMOVE  = 100;   // taille de lot pour remove()
+const MAX_PAGES   = 1000;  // garde-fou anti-boucle infinie
+
+// Marchands déjà purgés pour une version donnée, dans CE process. Sans ce
+// garde, purgeOldVersions était rappelée à chaque image générée alors qu'il
+// n'y a rien de neuf à nettoyer entre deux : sur un marchand points, une purge
+// par scan. Avec : une purge par changement de configuration.
+const _purges = new Set();
+
+async function purgeOldVersions(marchand, variant) {
   const version = marchand.strip_config_version || 1;
   if (version <= 1) return;
   const slug = marchand.slug;
-  const maxValue = marchand.max_value || 10;
 
-  const toDelete = [];
+  const marqueur = `${slug}@v${version}`;
+  if (_purges.has(marqueur)) return;
+  _purges.add(marqueur);
+
+  const erreurs = [];
+  let supprimes = 0;
+
   for (let v = 1; v < version; v++) {
-    for (let n = 0; n <= maxValue; n++) {
-      toDelete.push(
-        `marchands/${slug}/gen/v${v}/stamps_${n}_${variant}.png`,
-        `marchands/${slug}/gen/v${v}/static_${variant}.png`,
-      );
+    const dossier = `marchands/${slug}/gen/v${v}`;
+
+    // PHASE 1 — tout lister, sans rien supprimer.
+    const chemins = [];
+    let offset = 0;
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const { data, error } = await supabase.storage.from(BUCKET)
+        .list(dossier, { limit: PAGE_LIST, offset });
+      if (error) { erreurs.push(`list ${dossier}@${offset}: ${error.message}`); break; }
+      if (!data || data.length === 0) break;
+      chemins.push(...data.map(f => `${dossier}/${f.name}`));
+      offset += data.length;
+    }
+
+    // PHASE 2 — supprimer par lots, SÉQUENTIELLEMENT (fin de la rafale).
+    for (let i = 0; i < chemins.length; i += LOT_REMOVE) {
+      const lot = chemins.slice(i, i + LOT_REMOVE);
+      const { error } = await supabase.storage.from(BUCKET).remove(lot);
+      // On LIT l'erreur : supabase-js ne rejette jamais (§3.9).
+      if (error) erreurs.push(`remove ${dossier}: ${error.message}`);
+      else supprimes += lot.length;
     }
   }
 
-  // Chunks de 100 (limite API Supabase Storage)
-  for (let i = 0; i < toDelete.length; i += 100) {
-    supabase.storage.from(BUCKET).remove(toDelete.slice(i, i + 100))
-      .then(() => {})
-      .catch(e => console.warn('[strip-cache] purge warning:', e.message));
+  if (erreurs.length) {
+    console.error(`[strip-cache] purge ${slug} v${version} : ${erreurs.length} erreur(s)`, erreurs.slice(0, 3));
+    _purges.delete(marqueur); // échec → on réessaiera au prochain passage
+  } else if (supprimes > 0) {
+    console.log(`[strip-cache] purge ${slug} : ${supprimes} fichier(s) d'anciennes versions supprimé(s)`);
   }
 }
 
@@ -136,7 +188,8 @@ async function getOrGenerate({ marchand, filledCount, variant }) {
     }));
 
     // 6. Purge ancienne version en fire-and-forget
-    purgeOldVersions(marchand, variant);
+    purgeOldVersions(marchand, variant)
+      .catch(e => console.error('[strip-cache] purge:', e.message));
 
     return buffers[variant];
   })();
@@ -180,4 +233,9 @@ async function _fetchCustomBg(marchand) {
   return fetchImage(url).catch(() => null);
 }
 
-module.exports = { getOrGenerate, getPublicUrl, storageKey, publicUrl };
+module.exports = {
+  getOrGenerate, getPublicUrl, storageKey, publicUrl,
+  // Exposée pour les tests : la purge est le seul chemin qui parle à Storage
+  // en écriture massive, elle doit être vérifiable sans réseau.
+  __purgeOldVersionsForTest: purgeOldVersions,
+};

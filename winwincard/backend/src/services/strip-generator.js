@@ -318,72 +318,102 @@ function labelSvg({ w, h, couleurFond, langue, labelColor }) {
     text-anchor="middle">${text}</text>`;
 }
 
-// ── Mode points : quantification de l'avancement ──────────────────────────
-// Le solde d'un marchand en points peut prendre des centaines de valeurs
-// (seuil 500 → 500+ soldes distincts). La clé de cache des strips inclut cette
-// valeur : dessiner l'avancement exact ferait exploser le cache (500+ images par
-// marchand, une génération neuve à chaque montant inédit).
-// On quantifie donc en 20 intervalles = paliers de 5 % → 21 images au maximum
-// par marchand, le même ordre de grandeur que les 11 d'un seuil à 10 tampons.
+// ── Mode points : valeur dessinée dans l'image ────────────────────────────
+// Le solde exact est dessiné dans le strip (décision fondateur : le rendu
+// premium prime, et les mesures ont montré que le coût est absorbable).
 //
-// Règles :
-//   • solde >= seuil            → palier plein (20). Couvre le dépassement du
-//     mode points (530/500 → barre pleine, jamais > 100 %).
-//   • solde > 0 mais < 1 palier → palier 1 (5 %) plutôt que 0 : un client qui
-//     vient de commencer doit VOIR que son passage a compté. Léger arrondi par
-//     excès assumé — le solde exact figure dans les champs du pass.
-//   • sinon                     → arrondi PAR DÉFAUT (floor) : la barre n'est
-//     jamais pleine avant que le seuil soit réellement atteint.
+// Conséquence assumée : une image par valeur distincte. Mesuré sur un seuil de
+// 2000 avec report du surplus → ~2400 images, soit ~80 Mo par marchand, contre
+// 100 Go disponibles. Chaque scan produit une valeur inédite, donc une
+// génération : 24 ms de blocage serveur, négligeable jusqu'à ~10 scans/seconde.
 //
-// ⚠️ Cette fonction est LA source de vérité partagée avec strip-cache.js : la
-// clé de cache et le dessin DOIVENT utiliser le même palier, sinon une image
-// serait servie pour un avancement qu'elle ne représente pas.
-const POINTS_BUCKETS = 20;
+// LE PLAFOND. `max_value` ne borne PAS le solde : en points le surplus est
+// reporté (2300/2000 est un état normal), et un scan accepte jusqu'à 100 000
+// points. Borner le seuil ne bornerait donc rien — c'est la VALEUR DESSINÉE
+// qu'on plafonne. Au-delà de PLAFOND_EXACT le nombre affiché est arrondi à la
+// centaine, ce qui borne le total d'images à ~6000 dans le pire cas. Aucun
+// marchand réaliste n'atteint ce plafond (Wam N Fade est à 2000) : c'est une
+// ceinture contre une configuration absurde, pas une contrainte produit.
+//
+// ⚠️ SOURCE DE VÉRITÉ PARTAGÉE avec strip-cache.js : la clé de cache et le
+// dessin DOIVENT appeler cette fonction, sinon une image serait servie pour un
+// solde qu'elle n'affiche pas.
+const PLAFOND_EXACT = 5000;
 
-function pointsBucket(filledCount, maxValue) {
-  if (!maxValue || maxValue <= 0) return 0;
-  const v = Number(filledCount) || 0;
-  if (v <= 0) return 0;
-  if (v >= maxValue) return POINTS_BUCKETS;
-  return Math.max(1, Math.floor((v / maxValue) * POINTS_BUCKETS));
+function valeurAffichee(storedValue) {
+  const v = Math.max(0, Math.floor(Number(storedValue) || 0));
+  if (v <= PLAFOND_EXACT) return v;
+  return Math.round(v / 100) * 100;
 }
 
-// ── Barre de progression (mode points) ────────────────────────────────────
-// Aucun chiffre dessiné : le solde exact est déjà affiché dans les champs du
-// pass (Apple ET Google). L'écrire ici le dupliquerait — et surtout, un nombre
-// exact rendrait le cache ingérable (voir pointsBucket).
-// Réutilise la palette des pastilles : piste = pastille vide, remplissage =
-// pastille pleine. Les couleurs manuelles du marchand (couleur_pastille_*)
-// s'appliquent donc aussi à la barre ; NULL → calcul WCAG automatique, comme
-// pour les tampons.
+// Échappement des valeurs marchand injectées dans un attribut SVG. La base
+// interdit déjà " < > sur les colonnes couleur_barre_* (migration 041) ; ceci
+// est la seconde ceinture, côté code, et couvre le cas d'une valeur arrivée
+// autrement que par l'admin.
+function escAttr(v) {
+  return String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+                  .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ── Couleurs de la barre ──────────────────────────────────────────────────
+// DEUX réglages seulement (arbitrage fondateur) : ce qui a progressé contre ce
+// qui reste à parcourir.
+//   principale → remplissage de la barre ET chiffre du solde
+//   secondaire → piste (creux) ET libellé « SUR <seuil> »
+// NULL → calcul WCAG automatique depuis le fond, même seuil de luminance 0.18
+// que stampColors/labelSvg : cohérence garantie avec le mode tampons.
+function barColors(bgColor, marchand, isReward) {
+  const lum = relativeLuminance(bgColor || '#1a1a2e');
+  const auto = lum < 0.18
+    ? { principale: '#ffffff',                secondaire: 'rgba(255,255,255,0.38)' }
+    : { principale: darken(bgColor, 0.70),    secondaire: 'rgba(0,0,0,0.32)' };
+  // En reward le fond passe au doré : les couleurs manuelles ne s'appliquent
+  // PAS (une couleur choisie pour un fond sombre serait illisible sur doré).
+  // Même décision que pour les pastilles — voir buildSvg, décision C.
+  if (isReward) return auto;
+  return {
+    principale: marchand.couleur_barre_principale || auto.principale,
+    secondaire: marchand.couleur_barre_secondaire || auto.secondaire,
+  };
+}
+
+// ── Barre de progression + solde (mode points) ────────────────────────────
+// Chiffre dominant, « SUR <seuil> » en dessous, barre fine en pied. La barre
+// est bridée à 100 % visuellement même quand le solde dépasse le seuil
+// (2300/2000) : le chiffre dit la vérité, la barre ne déborde pas de son cadre.
 // Zone sûre Apple Wallet : les 630 px centraux (marge de 60 px de chaque côté).
-function pointsBarSvg({ w, h, bucket, showLabel, emptyFill, emptyStroke, filledFill }) {
-  const scaleX = w / 750, scaleY = h / 246;
-  const x      = 60 * scaleX;
-  const trackW = 630 * scaleX;
-  const barH   = 30 * scaleY;
+function pointsBarSvg({ w, h, valeur, maxValue, langue, showLabel, principale, secondaire }) {
+  const sx = w / 750, sy = h / 246;
+  const x = 60 * sx, trackW = 630 * sx;
+  const ratio = maxValue > 0 ? Math.min(Math.max(valeur / maxValue, 0), 1) : 0;
 
-  // Centrage vertical : sous le label s'il est affiché, sinon dans toute la
-  // hauteur utile. Mêmes bornes que computeLayout pour rester cohérent.
-  const areaTop = (showLabel ? 82 : 20) * scaleY;
-  const areaBot = 226 * scaleY;
-  const y       = (areaTop + areaBot) / 2 - barH / 2;
-  const r       = barH / 2;
+  // Sans label, tout remonte pour rester centré dans la hauteur utile.
+  const dy = showLabel ? 0 : -26 * sy;
+  const yNombre = 152 * sy + dy;
+  const ySur    = 180 * sy + dy;
+  const yBarre  = 198 * sy + dy;
+  const hBarre  = 11 * sy;
+  const r       = hBarre / 2;
+  const fillW   = trackW * ratio;
 
-  const ratio  = Math.min(Math.max(bucket / POINTS_BUCKETS, 0), 1);
-  const fillW  = trackW * ratio;
-  const clipId = 'pbclip';
+  const p = escAttr(principale), sec = escAttr(secondaire);
+  const sur = (langue === 'fr' ? 'SUR ' : 'OF ') + maxValue;
 
-  // Le remplissage est DÉCOUPÉ à la forme de la piste : sans ce clip, un rect
-  // arrondi plus étroit que sa propre hauteur se déforme en lentille.
+  // Remplissage découpé à la forme de la piste : sans ce clip, un rect arrondi
+  // plus étroit que sa hauteur se déforme en lentille.
   const fill = fillW > 0
-    ? `<g clip-path="url(#${clipId})"><rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${fillW.toFixed(1)}" height="${barH.toFixed(1)}" fill="${filledFill}"/></g>`
+    ? `<g clip-path="url(#pbclip)"><rect x="${x.toFixed(1)}" y="${yBarre.toFixed(1)}" width="${fillW.toFixed(1)}" height="${hBarre.toFixed(1)}" fill="${p}"/></g>`
     : '';
 
   return `
-    <defs><clipPath id="${clipId}"><rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${trackW.toFixed(1)}" height="${barH.toFixed(1)}" rx="${r.toFixed(1)}"/></clipPath></defs>
-    <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${trackW.toFixed(1)}" height="${barH.toFixed(1)}" rx="${r.toFixed(1)}"
-      fill="${emptyFill}" stroke="${emptyStroke}" stroke-width="2.5"/>
+    <text x="${w / 2}" y="${yNombre.toFixed(1)}" font-family="DM Sans, sans-serif" font-weight="700"
+      font-size="${(80 * sy).toFixed(1)}" letter-spacing="${(-1 * sx).toFixed(2)}"
+      fill="${p}" text-anchor="middle">${valeur}</text>
+    <text x="${w / 2}" y="${ySur.toFixed(1)}" font-family="DM Sans, sans-serif" font-weight="700"
+      font-size="${(21 * sy).toFixed(1)}" letter-spacing="${(2.5 * sx).toFixed(2)}"
+      fill="${sec}" text-anchor="middle">${sur}</text>
+    <defs><clipPath id="pbclip"><rect x="${x.toFixed(1)}" y="${yBarre.toFixed(1)}" width="${trackW.toFixed(1)}" height="${hBarre.toFixed(1)}" rx="${r.toFixed(1)}"/></clipPath></defs>
+    <rect x="${x.toFixed(1)}" y="${yBarre.toFixed(1)}" width="${trackW.toFixed(1)}" height="${hBarre.toFixed(1)}" rx="${r.toFixed(1)}" fill="${sec}" opacity="0.30"/>
     ${fill}`;
 }
 
@@ -439,13 +469,15 @@ function buildSvg({ marchand, filledCount, logoB64, customBgB64, w = 750, h = 24
       return stampSvg({ x: sx, y: sy, r: sr, filled, iconName, isLast: i === maxValue - 1, ...colors });
     }).join('');
   } else if (iPointsBar && maxValue > 0) {
+    const bc = barColors(bgColor, marchand, isReward);
     contentHtml = pointsBarSvg({
       w, h,
-      bucket: pointsBucket(filledCount, maxValue),
+      valeur:   valeurAffichee(filledCount),
+      maxValue: marchand.display_max_value || maxValue,
+      langue:   marchand.langue,
       showLabel,
-      emptyFill:   colors.emptyFill,
-      emptyStroke: colors.emptyStroke,
-      filledFill:  colors.filledFill,
+      principale: bc.principale,
+      secondaire: bc.secondaire,
     });
   }
 
@@ -534,4 +566,4 @@ async function render({ marchand, filledCount, logoBuffer, customBgBuffer, stati
   return { strip2x, strip3x, hero };
 }
 
-module.exports = { render, buildSvg, computeLayout, normalizeLogoForStamp, pointsBucket, POINTS_BUCKETS, VARIANTS, ICONS };
+module.exports = { render, buildSvg, computeLayout, normalizeLogoForStamp, valeurAffichee, PLAFOND_EXACT, VARIANTS, ICONS };

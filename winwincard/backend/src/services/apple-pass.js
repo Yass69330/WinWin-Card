@@ -438,10 +438,15 @@ async function generateApplePass({ client, marchand, serialNumber, passNotificat
     return null;
   })();
 
-  // Mode points : jamais de tampons générés (le seuil peut être élevé, ex. 500
-  // — dessiner autant de pastilles n'a aucun sens). Précédence inchangée :
-  // image fixe (images_tiers / image_strip_url) → sinon strip uni.
-  const canGenerateStamps = marchand.strip_mode && marchand.type_programme !== 'points';
+  // // Génération autorisée si :
+  //   • 'points_bar' → le SEUL mode de génération ouvert aux marchands points
+  //     (migration 040). Les tampons leur restent interdits : dessiner 2000
+  //     pastilles n'a aucun sens, c'était la raison d'origine du bypass.
+  //   • sinon → comportement historique, strictement inchangé.
+  // Précédence inchangée : image fixe (images_tiers / image_strip_url) → strip
+  // généré → strip uni.
+  const canGenerateStamps = marchand.strip_mode === 'points_bar'
+    || (marchand.strip_mode && marchand.type_programme !== 'points');
 
   let strip2xBuf, strip3xBuf;
   if (manualStripUrl) {
