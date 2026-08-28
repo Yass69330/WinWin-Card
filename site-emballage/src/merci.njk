@@ -1,0 +1,24 @@
+---
+layout: layouts/base.njk
+permalink: /merci/
+titre: "Message envoyé"
+description: "Votre message a bien été envoyé. Notre équipe vous répond sous 24 heures ouvrées."
+noindex: true      # page exclue des résultats Google
+---
+{#
+  ─── PAGE DE CONFIRMATION ──────────────────────────────────────────────────
+  Le visiteur arrive ici après avoir envoyé le formulaire de contact.
+#}
+<section class="conteneur section section--centree">
+  <h1 class="page-entete__titre">Merci, votre message est parti</h1>
+  <p class="page-entete__texte">
+    Nous avons bien reçu votre demande et vous répondrons sous 24 heures ouvrées.
+    Si votre besoin est urgent, appelez-nous directement.
+  </p>
+  <div class="hero__actions hero__actions--centrees">
+    <a class="bouton bouton--principal bouton--grand" href="tel:{{ site.telephoneLien }}">
+      Appeler le {{ site.telephone }}
+    </a>
+    <a class="bouton bouton--secondaire bouton--grand" href="/produits/">Voir le catalogue</a>
+  </div>
+</section>

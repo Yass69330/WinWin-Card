@@ -1,0 +1,664 @@
+/* ==========================================================================
+   FEUILLE DE STYLE DU SITE
+   --------------------------------------------------------------------------
+   Organisation du fichier :
+     1. Variables (couleurs, espacements) ....... à modifier pour changer le look
+     2. Bases (texte, titres, liens)
+     3. Éléments réutilisables (boutons, conteneur)
+     4. En-tête et menu
+     5. Page d'accueil
+     6. Cartes et grilles de produits
+     7. Catalogue et filtres
+     8. Fiche produit
+     9. Page contact et formulaire
+    10. Bloc « Contactez-nous »
+    11. Pied de page
+    12. Adaptation mobile et tablette
+   ========================================================================== */
+
+
+/* ==========================================================================
+   1. VARIABLES — LE PLUS SIMPLE POUR CHANGER L'APPARENCE DU SITE
+   Modifiez une couleur ici, elle change partout.
+   ========================================================================== */
+:root {
+  /* Couleurs */
+  --couleur-principale:       #1c4f7c;  /* bleu marine : boutons, liens, accents */
+  --couleur-principale-foncee:#143a5c;  /* version foncée : survol des boutons */
+  --couleur-texte:            #16202b;  /* texte courant et titres */
+  --couleur-texte-doux:       #5b6672;  /* textes secondaires, légendes */
+  --couleur-bordure:          #e3e8ed;  /* traits fins, contours des cartes */
+  --couleur-fond:             #ffffff;  /* fond du site */
+  --couleur-fond-doux:        #f6f8fa;  /* fonds de section légers */
+  --couleur-fond-sombre:      #16202b;  /* pied de page */
+
+  /* Largeur maximale du contenu (le site reste lisible sur grand écran) */
+  --largeur-max: 1140px;
+
+  /* Arrondis et ombres : volontairement discrets pour un rendu sérieux */
+  --arrondi: 6px;
+  --ombre: 0 1px 2px rgba(22, 32, 43, .05);
+  --ombre-survol: 0 6px 20px rgba(22, 32, 43, .09);
+
+  /* Police : polices déjà présentes sur l'ordinateur du visiteur.
+     Résultat : chargement instantané et rendu propre sur tous les appareils. */
+  --police: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+            "Helvetica Neue", Arial, sans-serif;
+}
+
+
+/* ==========================================================================
+   2. BASES
+   ========================================================================== */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--police);
+  font-size: 17px;
+  line-height: 1.65;
+  color: var(--couleur-texte);
+  background: var(--couleur-fond);
+  -webkit-font-smoothing: antialiased;
+}
+
+img { max-width: 100%; height: auto; display: block; }
+
+h1, h2, h3 {
+  line-height: 1.25;
+  letter-spacing: -.01em;
+  margin: 0 0 .5em;
+  font-weight: 650;
+}
+
+p { margin: 0 0 1em; }
+
+a { color: var(--couleur-principale); }
+a:hover { color: var(--couleur-principale-foncee); }
+
+/* Contour visible au clavier : indispensable pour l'accessibilité */
+:focus-visible {
+  outline: 3px solid var(--couleur-principale);
+  outline-offset: 2px;
+}
+
+/* Texte réservé aux lecteurs d'écran (invisible à l'écran) */
+.sr-only, .cache {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* Lien « aller au contenu » : apparaît uniquement à la navigation clavier */
+.lien-evitement {
+  position: absolute; left: -9999px; top: 0;
+  background: var(--couleur-principale); color: #fff;
+  padding: .75rem 1.25rem; z-index: 100;
+}
+.lien-evitement:focus { left: 0; color: #fff; }
+
+
+/* ==========================================================================
+   3. ÉLÉMENTS RÉUTILISABLES
+   ========================================================================== */
+
+/* Le conteneur centre le contenu et crée les marges latérales */
+.conteneur {
+  width: 100%;
+  max-width: var(--largeur-max);
+  margin-inline: auto;
+  padding-inline: 24px;
+}
+
+/* Espacement vertical généreux entre les sections : c'est ce qui aère la page */
+.section { padding-block: 72px; }
+.section--centree { text-align: center; max-width: 680px; }
+
+.section__entete {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  margin-bottom: 36px;
+}
+.section__titre { font-size: 1.75rem; margin-bottom: .25em; }
+.section__sous-titre { color: var(--couleur-texte-doux); margin: 0; }
+
+/* Petite étiquette en majuscules au-dessus des titres */
+.etiquette {
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--couleur-principale);
+  margin: 0 0 .75em;
+}
+
+/* ── Boutons ────────────────────────────────────────────────────────────── */
+.bouton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  padding: .7rem 1.4rem;
+  border: 1px solid transparent;
+  border-radius: var(--arrondi);
+  font-size: .97rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+.bouton--principal {
+  background: var(--couleur-principale);
+  color: #fff;
+}
+.bouton--principal:hover { background: var(--couleur-principale-foncee); color: #fff; }
+
+.bouton--secondaire {
+  background: #fff;
+  color: var(--couleur-texte);
+  border-color: var(--couleur-bordure);
+}
+.bouton--secondaire:hover {
+  border-color: var(--couleur-principale);
+  color: var(--couleur-principale);
+}
+.bouton--grand { padding: .9rem 1.8rem; font-size: 1.02rem; }
+.bouton--large { width: 100%; padding: .9rem 1.5rem; }
+
+/* Lien avec une flèche, style discret */
+.lien-fleche {
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.lien-fleche::after { content: " →"; }
+.lien-fleche:hover { text-decoration: underline; }
+
+
+/* ==========================================================================
+   4. EN-TÊTE ET MENU
+   ========================================================================== */
+.entete {
+  position: sticky;      /* le menu reste visible au défilement */
+  top: 0;
+  z-index: 50;
+  background: rgba(255, 255, 255, .96);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--couleur-bordure);
+}
+.entete__interieur {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 74px;
+}
+
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: .65rem;
+  text-decoration: none;
+  color: var(--couleur-texte);
+}
+.logo__texte { font-size: 1.2rem; font-weight: 700; letter-spacing: -.02em; }
+
+.navigation { display: flex; align-items: center; gap: 32px; }
+.navigation__liste {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.navigation__liste a {
+  color: var(--couleur-texte);
+  text-decoration: none;
+  font-size: .97rem;
+  font-weight: 500;
+  padding-block: .4rem;
+  border-bottom: 2px solid transparent;
+}
+.navigation__liste a:hover { color: var(--couleur-principale); }
+/* Souligne la page en cours de consultation */
+.navigation__liste a[aria-current="page"] {
+  color: var(--couleur-principale);
+  border-bottom-color: var(--couleur-principale);
+}
+
+/* Bouton hamburger : caché sur ordinateur, affiché sur mobile (voir §12) */
+.bouton-menu {
+  display: none;
+  width: 44px; height: 44px;
+  background: none;
+  border: 1px solid var(--couleur-bordure);
+  border-radius: var(--arrondi);
+  cursor: pointer;
+  position: relative;
+}
+.bouton-menu__barres,
+.bouton-menu__barres::before,
+.bouton-menu__barres::after {
+  position: absolute;
+  left: 12px;
+  width: 18px; height: 2px;
+  background: var(--couleur-texte);
+  content: "";
+}
+.bouton-menu__barres { top: 21px; }
+.bouton-menu__barres::before { top: -6px; left: 0; }
+.bouton-menu__barres::after  { top: 6px;  left: 0; }
+
+
+/* ==========================================================================
+   5. PAGE D'ACCUEIL
+   ========================================================================== */
+.hero {
+  background: var(--couleur-fond-doux);
+  border-bottom: 1px solid var(--couleur-bordure);
+}
+.hero__interieur {
+  display: grid;
+  grid-template-columns: 1.05fr .95fr;
+  gap: 56px;
+  align-items: center;
+  padding-block: 80px;
+}
+.hero__titre {
+  font-size: clamp(2rem, 4.2vw, 2.9rem);  /* s'adapte à la largeur de l'écran */
+  margin-bottom: .45em;
+}
+.hero__accroche {
+  font-size: 1.1rem;
+  color: var(--couleur-texte-doux);
+  max-width: 48ch;
+}
+.hero__actions { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 32px; }
+.hero__actions--centrees { justify-content: center; }
+.hero__rappel { margin-top: 24px; color: var(--couleur-texte-doux); font-size: .95rem; }
+.hero__media img {
+  width: 100%;
+  border-radius: var(--arrondi);
+  border: 1px solid var(--couleur-bordure);
+}
+
+/* Les trois arguments sous le bandeau */
+.grille-atouts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+}
+.atout { padding-top: 20px; border-top: 3px solid var(--couleur-principale); }
+.atout__titre { font-size: 1.12rem; margin-bottom: .4em; }
+.atout p { color: var(--couleur-texte-doux); margin: 0; font-size: .97rem; }
+
+
+/* ==========================================================================
+   6. CARTES ET GRILLES DE PRODUITS
+   ========================================================================== */
+.grille-produits {
+  display: grid;
+  /* Les colonnes s'ajustent seules : 3 sur ordinateur, 2 sur tablette, 1 sur mobile */
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 28px;
+}
+
+.carte {
+  border: 1px solid var(--couleur-bordure);
+  border-radius: var(--arrondi);
+  background: #fff;
+  overflow: hidden;
+  transition: box-shadow .18s ease, border-color .18s ease, transform .18s ease;
+}
+.carte:hover {
+  border-color: #c9d3dc;
+  box-shadow: var(--ombre-survol);
+  transform: translateY(-2px);
+}
+/* Toute la carte est cliquable.
+   L'affichage en colonne permet d'aligner le lien « Voir la fiche produit »
+   en bas de chaque carte, même si les descriptions sont de longueurs différentes. */
+.carte__lien {
+  text-decoration: none;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.carte__image {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: var(--couleur-fond-doux);
+  border-bottom: 1px solid var(--couleur-bordure);
+}
+.carte__corps {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 22px 22px 24px;
+}
+.carte__categorie {
+  font-size: .74rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--couleur-texte-doux);
+  margin: 0 0 .5em;
+}
+.carte__titre { font-size: 1.08rem; margin-bottom: .4em; }
+.carte__texte {
+  font-size: .93rem;
+  color: var(--couleur-texte-doux);
+  margin-bottom: 1em;
+}
+.carte__suite {
+  margin-top: auto;   /* pousse le lien tout en bas de la carte */
+  font-size: .9rem;
+  font-weight: 600;
+  color: var(--couleur-principale);
+}
+.carte__suite::after { content: " →"; }
+
+
+/* ==========================================================================
+   7. CATALOGUE ET FILTRES
+   ========================================================================== */
+.page-entete { max-width: 700px; margin-bottom: 44px; }
+.page-entete__titre { font-size: clamp(1.9rem, 3.6vw, 2.5rem); }
+.page-entete__texte { font-size: 1.08rem; color: var(--couleur-texte-doux); margin: 0; }
+
+.filtres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 40px;
+  padding-bottom: 28px;
+  border-bottom: 1px solid var(--couleur-bordure);
+}
+.filtre {
+  padding: .5rem 1.05rem;
+  font-family: inherit;
+  font-size: .9rem;
+  font-weight: 500;
+  color: var(--couleur-texte);
+  background: #fff;
+  border: 1px solid var(--couleur-bordure);
+  border-radius: 100px;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.filtre:hover { border-color: var(--couleur-principale); color: var(--couleur-principale); }
+/* Catégorie sélectionnée */
+.filtre.est-actif {
+  background: var(--couleur-principale);
+  border-color: var(--couleur-principale);
+  color: #fff;
+}
+.aucun-resultat { color: var(--couleur-texte-doux); padding-block: 40px; }
+
+
+/* ==========================================================================
+   8. FICHE PRODUIT
+   ========================================================================== */
+.fil-ariane { padding-top: 28px; font-size: .88rem; }
+.fil-ariane ol { display: flex; flex-wrap: wrap; gap: .5rem; list-style: none; margin: 0; padding: 0; }
+.fil-ariane li + li::before { content: "/"; margin-right: .5rem; color: var(--couleur-bordure); }
+.fil-ariane a { color: var(--couleur-texte-doux); text-decoration: none; }
+.fil-ariane a:hover { color: var(--couleur-principale); text-decoration: underline; }
+.fil-ariane [aria-current="page"] { color: var(--couleur-texte-doux); }
+
+.fiche {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 56px;
+  padding-block: 40px 72px;
+  align-items: start;
+}
+.fiche__media img {
+  width: 100%;
+  border: 1px solid var(--couleur-bordure);
+  border-radius: var(--arrondi);
+  background: var(--couleur-fond-doux);
+}
+.fiche__titre { font-size: clamp(1.7rem, 3.2vw, 2.2rem); }
+.fiche__accroche { font-size: 1.08rem; color: var(--couleur-texte-doux); }
+.fiche__description { color: var(--couleur-texte); }
+.fiche__sous-titre {
+  font-size: 1.05rem;
+  margin-top: 1.8em;
+  padding-top: 1.4em;
+  border-top: 1px solid var(--couleur-bordure);
+}
+.liste-caracteristiques { list-style: none; margin: 0 0 2em; padding: 0; }
+.liste-caracteristiques li {
+  position: relative;
+  padding-left: 1.6rem;
+  margin-bottom: .55em;
+  color: var(--couleur-texte);
+}
+/* Petite coche bleue devant chaque caractéristique */
+.liste-caracteristiques li::before {
+  content: "";
+  position: absolute;
+  left: 0; top: .52em;
+  width: 8px; height: 8px;
+  background: var(--couleur-principale);
+  border-radius: 2px;
+}
+.fiche__actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.fiche__mention { margin-top: 1em; font-size: .88rem; color: var(--couleur-texte-doux); }
+
+
+/* ==========================================================================
+   9. PAGE CONTACT ET FORMULAIRE
+   ========================================================================== */
+.grille-contact {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  gap: 56px;
+  align-items: start;
+}
+.coordonnees__bloc {
+  padding-bottom: 26px;
+  margin-bottom: 26px;
+  border-bottom: 1px solid var(--couleur-bordure);
+}
+.coordonnees__bloc:last-child { border-bottom: 0; margin-bottom: 0; }
+.coordonnees__titre {
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--couleur-texte-doux);
+  margin-bottom: .7em;
+}
+/* Le téléphone, mis en avant : c'est l'objectif principal du site */
+.coordonnees__phare {
+  display: inline-block;
+  font-size: 1.65rem;
+  font-weight: 700;
+  text-decoration: none;
+  letter-spacing: -.01em;
+}
+.coordonnees__phare:hover { text-decoration: underline; }
+.coordonnees__note { font-size: .9rem; color: var(--couleur-texte-doux); margin: .4em 0 0; }
+.coordonnees__lien { font-size: 1.05rem; font-weight: 500; }
+.coordonnees__adresse { font-style: normal; color: var(--couleur-texte); }
+
+.tableau-horaires { border-collapse: collapse; width: 100%; max-width: 340px; }
+.tableau-horaires th,
+.tableau-horaires td { padding: .35rem 0; text-align: left; font-weight: 400; }
+.tableau-horaires th { color: var(--couleur-texte-doux); font-weight: 500; }
+.tableau-horaires td { text-align: right; }
+
+.bloc-formulaire {
+  background: var(--couleur-fond-doux);
+  border: 1px solid var(--couleur-bordure);
+  border-radius: var(--arrondi);
+  padding: 34px;
+}
+.bloc-formulaire__titre { font-size: 1.3rem; }
+.bloc-formulaire__intro { color: var(--couleur-texte-doux); font-size: .95rem; margin-bottom: 1.6em; }
+
+.champ { margin-bottom: 18px; }
+.champ label {
+  display: block;
+  margin-bottom: .35rem;
+  font-size: .9rem;
+  font-weight: 600;
+}
+.champ input,
+.champ textarea {
+  width: 100%;
+  padding: .7rem .85rem;
+  font-family: inherit;
+  font-size: .97rem;
+  color: var(--couleur-texte);
+  background: #fff;
+  border: 1px solid var(--couleur-bordure);
+  border-radius: var(--arrondi);
+}
+.champ input:focus,
+.champ textarea:focus {
+  outline: none;
+  border-color: var(--couleur-principale);
+  box-shadow: 0 0 0 3px rgba(28, 79, 124, .13);
+}
+.champ textarea { resize: vertical; }
+.champ-double { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.formulaire__mention {
+  margin: 1em 0 0;
+  font-size: .84rem;
+  color: var(--couleur-texte-doux);
+  text-align: center;
+}
+
+
+/* ==========================================================================
+   10. BLOC « CONTACTEZ-NOUS » (bas de chaque page)
+   ========================================================================== */
+.bloc-contact {
+  background: var(--couleur-fond-doux);
+  border-top: 1px solid var(--couleur-bordure);
+  border-bottom: 1px solid var(--couleur-bordure);
+}
+.bloc-contact__interieur {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  padding-block: 56px;
+}
+.bloc-contact__titre { font-size: 1.55rem; margin-bottom: .3em; }
+.bloc-contact__texte { color: var(--couleur-texte-doux); margin: 0; max-width: 52ch; }
+.bloc-contact__actions { display: flex; flex-wrap: wrap; gap: 12px; }
+
+
+/* ==========================================================================
+   11. PIED DE PAGE
+   ========================================================================== */
+.pied {
+  background: var(--couleur-fond-sombre);
+  color: #c3cbd4;
+  padding-top: 56px;
+  font-size: .93rem;
+}
+.pied__grille {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  gap: 40px;
+  padding-bottom: 44px;
+}
+.logo--pied { color: #fff; margin-bottom: .8rem; }
+/* Si votre logo est sombre et devient illisible sur le pied de page foncé,
+   retirez les barres obliques de la ligne ci-dessous pour lui ajouter
+   un fond blanc arrondi :
+.logo--pied img { background: #fff; padding: 4px; border-radius: 8px; }
+*/
+.pied__texte { color: #97a3af; margin: 0; max-width: 32ch; }
+.pied__titre {
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: #fff;
+  margin-bottom: 1em;
+}
+.pied__liste { list-style: none; margin: 0; padding: 0; }
+.pied__liste li { margin-bottom: .5em; }
+.pied__liste a { color: #c3cbd4; text-decoration: none; }
+.pied__liste a:hover { color: #fff; text-decoration: underline; }
+.pied__jour { display: block; color: #97a3af; font-size: .85rem; }
+.pied__bas {
+  border-top: 1px solid rgba(255, 255, 255, .1);
+  padding-block: 22px;
+  color: #8a96a3;
+  font-size: .87rem;
+}
+.pied__bas p { margin: 0; }
+
+
+/* ==========================================================================
+   12. ADAPTATION TABLETTE ET MOBILE
+   Ces blocs ne s'appliquent qu'en dessous d'une certaine largeur d'écran.
+   ========================================================================== */
+
+/* ── Tablette (moins de 900 px) ─────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .hero__interieur { grid-template-columns: 1fr; gap: 40px; padding-block: 56px; }
+  .hero__media { order: -1; }         /* l'image passe au-dessus du texte */
+  .grille-atouts { grid-template-columns: 1fr; gap: 24px; }
+  .fiche { grid-template-columns: 1fr; gap: 32px; }
+  .grille-contact { grid-template-columns: 1fr; gap: 40px; }
+  .pied__grille { grid-template-columns: 1fr 1fr; gap: 32px; }
+  .section { padding-block: 56px; }
+}
+
+/* ── Mobile (moins de 760 px) : le menu devient un menu déroulant ──────── */
+@media (max-width: 760px) {
+  .bouton-menu { display: block; }
+
+  .navigation {
+    display: none;                 /* caché par défaut */
+    position: absolute;
+    top: 100%; left: 0; right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 12px 24px 20px;
+    background: #fff;
+    border-bottom: 1px solid var(--couleur-bordure);
+    box-shadow: var(--ombre-survol);
+  }
+  /* Classe ajoutée par le fichier menu.js au clic sur le hamburger */
+  .navigation.est-ouvert { display: flex; }
+
+  .entete__interieur { position: relative; }
+  .navigation__liste { flex-direction: column; align-items: stretch; gap: 0; }
+  .navigation__liste a {
+    display: block;
+    padding: .8rem 0;
+    border-bottom: 1px solid var(--couleur-bordure);
+  }
+  .navigation__cta { margin-top: 16px; }
+
+  .section__entete { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .bloc-contact__interieur { flex-direction: column; align-items: flex-start; }
+  .bloc-contact__actions,
+  .hero__actions { width: 100%; }
+  .bouton--grand, .bloc-contact__actions .bouton { flex: 1 1 auto; }
+}
+
+/* ── Petit mobile (moins de 520 px) ─────────────────────────────────────── */
+@media (max-width: 520px) {
+  body { font-size: 16px; }
+  .champ-double { grid-template-columns: 1fr; }
+  .pied__grille { grid-template-columns: 1fr; }
+  .bloc-formulaire { padding: 24px 20px; }
+  .hero__actions .bouton { width: 100%; }
+}

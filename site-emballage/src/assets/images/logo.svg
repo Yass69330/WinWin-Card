@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="Logo">
+  <rect width="48" height="48" rx="9" fill="#1c4f7c"/>
+  <g fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M24 11 37 18v13l-13 7-13-7V18z"/>
+    <path d="M11 18l13 7 13-7M24 25v13"/>
+  </g>
+</svg>

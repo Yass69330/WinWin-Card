@@ -1,0 +1,77 @@
+---
+layout: layouts/base.njk
+permalink: /
+titre: false
+description: "Embalpro, fournisseur B2B d'emballages alimentaires : barquettes, gobelets carton, sachets kraft, films et boîtes à emporter. Devis sous 24 h, livraison en 48 h."
+---
+{#
+  ─── PAGE D'ACCUEIL ────────────────────────────────────────────────────────
+  Pour modifier les textes de cette page, éditez directement ci-dessous.
+  Les produits affichés sont ceux dont « miseEnAvant » vaut true dans
+  le fichier src/_data/produits.js.
+#}
+
+{# ── Bandeau principal ── #}
+<section class="hero">
+  <div class="conteneur hero__interieur">
+    <div class="hero__texte">
+      <p class="etiquette">Fournisseur professionnel depuis 2008</p>
+      <h1 class="hero__titre">Vos emballages alimentaires, livrés en 48 heures</h1>
+      <p class="hero__accroche">
+        Barquettes, gobelets, sachets kraft, films et boîtes à emporter :
+        nous fournissons les restaurateurs, boulangers, traiteurs et commerces
+        alimentaires en emballages conformes au contact alimentaire.
+      </p>
+      <div class="hero__actions">
+        <a class="bouton bouton--principal bouton--grand" href="/contact/">Contactez-nous</a>
+        <a class="bouton bouton--secondaire bouton--grand" href="/produits/">Voir le catalogue</a>
+      </div>
+      <p class="hero__rappel">
+        Une question ? Appelez-nous au
+        <a href="tel:{{ site.telephoneLien }}"><strong>{{ site.telephone }}</strong></a>
+      </p>
+    </div>
+    <div class="hero__media">
+      <img src="/assets/images/illustration-entrepot.svg"
+           alt="Entrepôt de stockage d'emballages alimentaires"
+           width="600" height="450">
+    </div>
+  </div>
+</section>
+
+{# ── Trois arguments courts ── #}
+<section class="conteneur section">
+  <div class="grille-atouts">
+    <div class="atout">
+      <h2 class="atout__titre">Devis sous 24 h</h2>
+      <p>Un interlocuteur unique étudie votre besoin et vous répond avec un tarif ferme sous 24 heures ouvrées.</p>
+    </div>
+    <div class="atout">
+      <h2 class="atout__titre">Stock permanent</h2>
+      <p>Plus de 400 références en stock dans notre entrepôt, expédiées sous 48 heures partout en France.</p>
+    </div>
+    <div class="atout">
+      <h2 class="atout__titre">Conformité garantie</h2>
+      <p>Tous nos emballages respectent la réglementation européenne sur le contact alimentaire.</p>
+    </div>
+  </div>
+</section>
+
+{# ── Produits mis en avant ── #}
+<section class="conteneur section">
+  <div class="section__entete">
+    <div>
+      <h2 class="section__titre">Nos produits phares</h2>
+      <p class="section__sous-titre">Une sélection parmi nos références les plus demandées.</p>
+    </div>
+    <a class="lien-fleche" href="/produits/">Voir tout le catalogue</a>
+  </div>
+
+  <div class="grille-produits">
+    {% for produit in produits | misEnAvant %}
+      {% include "partials/carte-produit.njk" %}
+    {% endfor %}
+  </div>
+</section>
+
+{% include "partials/bloc-contact.njk" %}

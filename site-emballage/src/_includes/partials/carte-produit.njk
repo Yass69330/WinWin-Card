@@ -1,0 +1,20 @@
+{#
+  ─── CARTE PRODUIT ─────────────────────────────────────────────────────────
+  Vignette utilisée sur l'accueil et sur le catalogue.
+  Elle attend une variable « produit » (fournie par la boucle qui l'appelle).
+  L'attribut data-categorie sert au filtre du catalogue.
+#}
+<article class="carte" data-categorie="{{ produit.categorie }}">
+  <a class="carte__lien" href="/produits/{{ produit.id }}/">
+    <img class="carte__image"
+         src="{{ produit.image }}"
+         alt="{{ produit.imageAlt }}"
+         width="400" height="300" loading="lazy">
+    <div class="carte__corps">
+      <p class="carte__categorie">{{ produit.categorie }}</p>
+      <h3 class="carte__titre">{{ produit.nom }}</h3>
+      <p class="carte__texte">{{ produit.descriptionCourte }}</p>
+      <span class="carte__suite">Voir la fiche produit</span>
+    </div>
+  </a>
+</article>

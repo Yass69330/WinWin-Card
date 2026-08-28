@@ -1,0 +1,78 @@
+---
+layout: layouts/base.njk
+permalink: /a-propos/
+titre: "À propos"
+description: "Embalpro fournit depuis 2008 les professionnels de l'alimentaire en emballages conformes, avec conseil personnalisé et livraison rapide."
+---
+{#
+  ─── PAGE À PROPOS ─────────────────────────────────────────────────────────
+  ⚠️ TEXTES D'EXEMPLE : remplacez-les par votre véritable histoire.
+#}
+
+<section class="conteneur section">
+  <header class="page-entete">
+    <h1 class="page-entete__titre">À propos d'{{ site.nom }}</h1>
+    <p class="page-entete__texte">
+      Un fournisseur d'emballages alimentaires à taille humaine, au service
+      des professionnels qui veulent des produits fiables et un interlocuteur
+      qui répond.
+    </p>
+  </header>
+
+  <div class="texte-riche">
+    <h2>Notre histoire</h2>
+    <p>
+      {{ site.nom }} est née en 2008 d'un constat simple : les professionnels de
+      l'alimentaire perdaient un temps considérable à commander leurs emballages
+      auprès de fournisseurs qui ne connaissaient pas leur métier. Nous avons
+      construit l'inverse : un catalogue resserré de références éprouvées, et
+      une équipe capable de vous dire quel emballage convient réellement à votre
+      produit.
+    </p>
+
+    <h2>Ce que nous faisons</h2>
+    <p>
+      Nous approvisionnons les restaurants, boulangeries, traiteurs, boucheries,
+      épiceries et cuisines centrales en emballages à usage unique : barquettes,
+      gobelets, sachets, films, boîtes à emporter et couverts. Notre entrepôt de
+      {{ site.adresse.ville }} conserve un stock permanent de plus de 400 références,
+      ce qui nous permet d'expédier la majorité des commandes sous 48 heures.
+    </p>
+
+    <h2>Nos engagements</h2>
+    <ul>
+      <li>
+        <strong>Conformité.</strong> Chaque référence est accompagnée de son
+        attestation de conformité au contact alimentaire, disponible sur simple demande.
+      </li>
+      <li>
+        <strong>Conseil.</strong> Un interlocuteur unique suit votre compte et
+        connaît vos habitudes de commande.
+      </li>
+      <li>
+        <strong>Transition écologique.</strong> Nous élargissons chaque année notre
+        gamme de produits recyclables et sans plastique, en anticipation des
+        évolutions réglementaires.
+      </li>
+      <li>
+        <strong>Transparence tarifaire.</strong> Des tarifs dégressifs annoncés
+        clairement, sans frais cachés.
+      </li>
+    </ul>
+
+    <h2>En quelques chiffres</h2>
+    <p>
+      Plus de 900 clients professionnels nous font confiance en France
+      métropolitaine, pour un délai de livraison moyen de 48 heures et un taux
+      de commandes livrées complètes de 98 %.
+    </p>
+    <p class="mention">
+      Ces textes sont des exemples fournis avec le site. Remplacez-les par votre
+      véritable présentation dans le fichier <code>src/a-propos.njk</code>.
+    </p>
+  </div>
+</section>
+
+{% set titreContact = "Parlons de vos besoins en emballage" %}
+{% set texteContact = "Décrivez-nous votre activité et vos volumes : nous vous orientons vers les références adaptées." %}
+{% include "partials/bloc-contact.njk" %}

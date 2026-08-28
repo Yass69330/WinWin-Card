@@ -1,0 +1,127 @@
+---
+layout: layouts/base.njk
+permalink: /contact/
+titre: "Contact"
+description: "Contactez Embalpro pour un devis d'emballages alimentaires : téléphone, email, formulaire, adresse et horaires d'ouverture."
+---
+{#
+  ─── PAGE CONTACT ──────────────────────────────────────────────────────────
+  Toutes les coordonnées viennent de src/_data/site.js.
+  Pour les modifier, éditez ce fichier — pas cette page.
+#}
+
+<section class="conteneur section">
+  <header class="page-entete">
+    <h1 class="page-entete__titre">Contactez-nous</h1>
+    <p class="page-entete__texte">
+      Une question, un besoin d'échantillon ou une demande de devis ?
+      Nous répondons sous 24 heures ouvrées.
+    </p>
+  </header>
+
+  <div class="grille-contact">
+
+    {# ── Colonne de gauche : coordonnées directes ── #}
+    <div class="coordonnees">
+
+      <div class="coordonnees__bloc coordonnees__bloc--phare">
+        <h2 class="coordonnees__titre">Par téléphone</h2>
+        <a class="coordonnees__phare" href="tel:{{ site.telephoneLien }}">{{ site.telephone }}</a>
+        <p class="coordonnees__note">Le moyen le plus rapide d'obtenir une réponse.</p>
+      </div>
+
+      <div class="coordonnees__bloc">
+        <h2 class="coordonnees__titre">Par email</h2>
+        <a class="coordonnees__lien" href="mailto:{{ site.email }}">{{ site.email }}</a>
+      </div>
+
+      <div class="coordonnees__bloc">
+        <h2 class="coordonnees__titre">Adresse</h2>
+        <address class="coordonnees__adresse">
+          {{ site.adresse.rue }}<br>
+          {% if site.adresse.complement %}{{ site.adresse.complement }}<br>{% endif %}
+          {{ site.adresse.codePostal }} {{ site.adresse.ville }}<br>
+          {{ site.adresse.pays }}
+        </address>
+      </div>
+
+      <div class="coordonnees__bloc">
+        <h2 class="coordonnees__titre">Horaires d'ouverture</h2>
+        <table class="tableau-horaires">
+          <tbody>
+            {% for h in site.horaires %}
+              <tr>
+                <th scope="row">{{ h.jours }}</th>
+                <td>{{ h.heures }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+    {# ── Colonne de droite : formulaire ── #}
+    <div class="bloc-formulaire">
+      <h2 class="bloc-formulaire__titre">Écrivez-nous</h2>
+      <p class="bloc-formulaire__intro">
+        Remplissez ce formulaire, nous revenons vers vous rapidement.
+      </p>
+
+      {#
+        Ce formulaire fonctionne automatiquement sur Netlify grâce à
+        l'attribut data-netlify="true" (aucun code serveur à écrire).
+        Les messages reçus s'affichent dans votre tableau de bord Netlify.
+        ⚠️ Sur Vercel, cette fonction n'existe pas : voir le README.
+      #}
+      <form class="formulaire"
+            name="contact"
+            method="POST"
+            action="/merci/"
+            data-netlify="true"
+            netlify-honeypot="bot-field">
+
+        {# Champs techniques requis par Netlify (invisibles) #}
+        <input type="hidden" name="form-name" value="contact">
+        <p class="cache">
+          <label>Ne pas remplir : <input name="bot-field"></label>
+        </p>
+
+        <div class="champ">
+          <label for="nom">Nom et prénom <span aria-hidden="true">*</span></label>
+          <input type="text" id="nom" name="nom" required autocomplete="name">
+        </div>
+
+        <div class="champ">
+          <label for="entreprise">Entreprise</label>
+          <input type="text" id="entreprise" name="entreprise" autocomplete="organization">
+        </div>
+
+        <div class="champ-double">
+          <div class="champ">
+            <label for="email">Email <span aria-hidden="true">*</span></label>
+            <input type="email" id="email" name="email" required autocomplete="email">
+          </div>
+          <div class="champ">
+            <label for="telephone">Téléphone</label>
+            <input type="tel" id="telephone" name="telephone" autocomplete="tel">
+          </div>
+        </div>
+
+        <div class="champ">
+          <label for="message">Votre message <span aria-hidden="true">*</span></label>
+          <textarea id="message" name="message" rows="6" required
+                    placeholder="Décrivez votre besoin : type de produit, quantité, délai souhaité."></textarea>
+        </div>
+
+        <button class="bouton bouton--principal bouton--large" type="submit">
+          Envoyer ma demande
+        </button>
+        <p class="formulaire__mention">
+          Les champs marqués d'une astérisque (*) sont obligatoires.
+        </p>
+      </form>
+    </div>
+
+  </div>
+</section>

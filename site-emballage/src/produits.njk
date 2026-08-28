@@ -1,0 +1,50 @@
+---
+layout: layouts/base.njk
+permalink: /produits/
+titre: "Nos produits"
+description: "Catalogue d'emballages alimentaires professionnels : barquettes, gobelets carton, sachets kraft, films, boîtes à emporter et couverts jetables."
+---
+{#
+  ─── PAGE CATALOGUE ────────────────────────────────────────────────────────
+  Affiche TOUS les produits du fichier src/_data/produits.js.
+  Les boutons de filtre sont générés à partir des catégories réellement
+  utilisées : ajoutez un produit, le filtre se met à jour tout seul.
+#}
+
+<section class="conteneur section">
+  <header class="page-entete">
+    <h1 class="page-entete__titre">Nos produits</h1>
+    <p class="page-entete__texte">
+      {{ produits.length }} références d'emballages alimentaires pour les professionnels
+      de la restauration et du commerce alimentaire. Tous nos produits sont disponibles
+      sur devis, avec des tarifs dégressifs selon les quantités.
+    </p>
+  </header>
+
+  {# ── Boutons de filtre par catégorie ── #}
+  <div class="filtres" role="group" aria-label="Filtrer par catégorie">
+    <button class="filtre est-actif" type="button" data-filtre="toutes">
+      Toutes les catégories
+    </button>
+    {% for categorie in produits | categories %}
+      <button class="filtre" type="button" data-filtre="{{ categorie }}">{{ categorie }}</button>
+    {% endfor %}
+  </div>
+
+  {# ── Grille des produits ── #}
+  <div class="grille-produits" id="liste-produits">
+    {% for produit in produits %}
+      {% include "partials/carte-produit.njk" %}
+    {% endfor %}
+  </div>
+
+  {# Message affiché si un filtre ne renvoie aucun résultat #}
+  <p class="aucun-resultat" id="aucun-resultat" hidden>
+    Aucun produit dans cette catégorie.
+  </p>
+</section>
+
+{% include "partials/bloc-contact.njk" %}
+
+{# Le script du filtre n'est chargé que sur cette page #}
+<script src="/assets/js/filtres.js" defer></script>

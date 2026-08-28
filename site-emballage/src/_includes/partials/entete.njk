@@ -1,0 +1,36 @@
+{#
+  ─── EN-TÊTE DU SITE ───────────────────────────────────────────────────────
+  Logo + menu de navigation + bouton d'appel bien visible.
+  Le menu se construit tout seul à partir de src/_data/site.js (champ « menu »).
+#}
+<header class="entete">
+  <div class="conteneur entete__interieur">
+
+    {# Logo cliquable qui ramène à l'accueil #}
+    <a class="logo" href="/">
+      <img src="{{ site.logo }}" alt="Logo {{ site.nom }}" width="40" height="40">
+      <span class="logo__texte">{{ site.nom }}</span>
+    </a>
+
+    {# Bouton « hamburger » : visible uniquement sur mobile #}
+    <button class="bouton-menu" type="button" aria-expanded="false" aria-controls="navigation">
+      <span class="bouton-menu__barres" aria-hidden="true"></span>
+      <span class="sr-only">Ouvrir le menu</span>
+    </button>
+
+    <nav class="navigation" id="navigation" aria-label="Navigation principale">
+      <ul class="navigation__liste">
+        {% for lien in site.menu %}
+          <li>
+            <a href="{{ lien.lien }}"
+               {% if page.url == lien.lien %}aria-current="page"{% endif %}>{{ lien.titre }}</a>
+          </li>
+        {% endfor %}
+      </ul>
+
+      {# Appel à l'action principal, présent sur toutes les pages #}
+      <a class="bouton bouton--principal navigation__cta" href="/contact/">Contactez-nous</a>
+    </nav>
+
+  </div>
+</header>

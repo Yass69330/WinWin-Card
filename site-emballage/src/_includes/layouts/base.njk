@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  {#
+    ─── RÉFÉRENCEMENT (SEO) ───────────────────────────────────────────────
+    Le titre et la description viennent de chaque page (bloc en haut de
+    fichier, entre les --- ). Si une page n'en a pas, on utilise ceux du
+    fichier src/_data/site.js.
+  #}
+  <title>{% if titre %}{{ titre }} | {{ site.nom }}{% else %}{{ site.nom }} — {{ site.slogan }}{% endif %}</title>
+  <meta name="description" content="{{ description if description else site.description }}">
+  <link rel="canonical" href="{{ site.url }}{{ page.url }}">
+
+  {#
+    Certaines pages ne doivent pas apparaître dans les résultats Google
+    (page d'erreur, page de remerciement). Il suffit d'écrire « noindex: true »
+    en haut de la page concernée pour les en exclure.
+  #}
+  {% if noindex %}<meta name="robots" content="noindex, follow">{% endif %}
+
+  {# Aperçu lors d'un partage sur les réseaux sociaux #}
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="fr_FR">
+  <meta property="og:site_name" content="{{ site.nom }}">
+  <meta property="og:title" content="{% if titre %}{{ titre }} | {{ site.nom }}{% else %}{{ site.nom }}{% endif %}">
+  <meta property="og:description" content="{{ description if description else site.description }}">
+  <meta property="og:url" content="{{ site.url }}{{ page.url }}">
+
+  <link rel="icon" href="{{ site.logo }}" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/css/style.css">
+
+  {#
+    ─── FICHE D'IDENTITÉ POUR GOOGLE ──────────────────────────────────────
+    Ce bloc invisible décrit l'entreprise à Google (nom, téléphone, adresse).
+    Il est rempli automatiquement depuis src/_data/site.js.
+  #}
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "LocalBusiness",
+    "name": "{{ site.nom }}",
+    "description": "{{ site.description }}",
+    "url": "{{ site.url }}",
+    "telephone": "{{ site.telephoneLien }}",
+    "email": "{{ site.email }}",
+    "address": {
+      "@type": "PostalAddress",
+      "streetAddress": "{{ site.adresse.rue }}",
+      "postalCode": "{{ site.adresse.codePostal }}",
+      "addressLocality": "{{ site.adresse.ville }}",
+      "addressCountry": "FR"
+    }
+  }
+  </script>
+</head>
+<body>
+
+  {# Lien d'accessibilité : visible uniquement au clavier (touche Tab) #}
+  <a class="lien-evitement" href="#contenu">Aller au contenu principal</a>
+
+  {% include "partials/entete.njk" %}
+
+  <main id="contenu">
+    {{ content | safe }}
+  </main>
+
+  {% include "partials/pied.njk" %}
+
+  <script src="/assets/js/menu.js" defer></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

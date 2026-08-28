@@ -1,0 +1,18 @@
+# ==============================================================================
+#  Configuration Netlify pour le SITE VITRINE EMBALLAGE (dossier site-emballage/)
+# ------------------------------------------------------------------------------
+#  Ce fichier doit rester à la racine du dépôt : c'est là que Netlify le cherche.
+#  Tous les chemins ci-dessous partent donc de la racine du dépôt.
+#  Grâce à ce fichier, il n'y a AUCUN réglage à saisir dans l'interface Netlify.
+# ==============================================================================
+
+[build]
+  # On entre dans le dossier du site, on installe ses outils, puis on le fabrique
+  command = "cd site-emballage && npm install && npm run build"
+
+  # Dossier contenant le site fini, à mettre en ligne
+  publish = "site-emballage/_site"
+
+[build.environment]
+  # Version de Node.js utilisée par Netlify pour fabriquer le site
+  NODE_VERSION = "22"

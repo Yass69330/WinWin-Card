@@ -1,0 +1,19 @@
+---
+layout: layouts/base.njk
+permalink: /404.html
+titre: "Page introuvable"
+description: "La page demandée n'existe pas ou a été déplacée. Retrouvez notre catalogue d'emballages alimentaires ou contactez-nous directement."
+noindex: true      # page exclue des résultats Google
+---
+{# Page affichée automatiquement quand une adresse n'existe pas #}
+<section class="conteneur section section--centree">
+  <p class="etiquette">Erreur 404</p>
+  <h1 class="page-entete__titre">Cette page n'existe pas</h1>
+  <p class="page-entete__texte">
+    Le lien est peut-être erroné ou la page a été déplacée.
+  </p>
+  <div class="hero__actions hero__actions--centrees">
+    <a class="bouton bouton--principal bouton--grand" href="/">Retour à l'accueil</a>
+    <a class="bouton bouton--secondaire bouton--grand" href="/contact/">Contactez-nous</a>
+  </div>
+</section>

@@ -1,0 +1,64 @@
+---
+layout: layouts/base.njk
+---
+{#
+  ─── GABARIT D'UNE FICHE PRODUIT ───────────────────────────────────────────
+  Cette page est générée automatiquement pour CHAQUE produit du fichier
+  src/_data/produits.js. Vous n'avez jamais besoin de créer une page à la main.
+#}
+
+{# Fil d'Ariane : aide le visiteur et Google à se repérer #}
+<nav class="fil-ariane conteneur" aria-label="Fil d'Ariane">
+  <ol>
+    <li><a href="/">Accueil</a></li>
+    <li><a href="/produits/">Nos produits</a></li>
+    <li aria-current="page">{{ produit.nom }}</li>
+  </ol>
+</nav>
+
+<article class="conteneur fiche">
+  <div class="fiche__media">
+    <img src="{{ produit.image }}" alt="{{ produit.imageAlt }}" width="600" height="450">
+  </div>
+
+  <div class="fiche__infos">
+    <p class="etiquette">{{ produit.categorie }}</p>
+    <h1 class="fiche__titre">{{ produit.nom }}</h1>
+    <p class="fiche__accroche">{{ produit.descriptionCourte }}</p>
+    <p class="fiche__description">{{ produit.description }}</p>
+
+    <h2 class="fiche__sous-titre">Caractéristiques</h2>
+    <ul class="liste-caracteristiques">
+      {% for caracteristique in produit.caracteristiques %}
+        <li>{{ caracteristique }}</li>
+      {% endfor %}
+    </ul>
+
+    {# Appel à l'action au plus près du produit : c'est ici qu'on convertit #}
+    <div class="fiche__actions">
+      <a class="bouton bouton--principal"
+         href="mailto:{{ site.email }}?subject=Demande%20de%20devis%20%3A%20{{ produit.nom | urlencode }}">
+        Demander un devis
+      </a>
+      <a class="bouton bouton--secondaire" href="tel:{{ site.telephoneLien }}">
+        Appeler le {{ site.telephone }}
+      </a>
+    </div>
+    <p class="fiche__mention">Tarifs dégressifs selon les quantités. Réponse sous 24 h ouvrées.</p>
+  </div>
+</article>
+
+{# Suggestions : autres produits de la même catégorie #}
+{% set similaires = produits | memeCategorie(produit.categorie, produit.id) %}
+{% if similaires.length %}
+  <section class="conteneur section">
+    <h2 class="section__titre">Dans la même catégorie</h2>
+    <div class="grille-produits">
+      {% for produit in similaires %}
+        {% include "partials/carte-produit.njk" %}
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}
+
+{% include "partials/bloc-contact.njk" %}

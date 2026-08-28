@@ -1,0 +1,24 @@
+{#
+  ─── BLOC « CONTACTEZ-NOUS » ───────────────────────────────────────────────
+  C'est l'appel à l'action principal du site. Il est inséré en bas de CHAQUE
+  page pour que le visiteur puisse toujours vous joindre en un clic.
+  Sur mobile, le numéro de téléphone lance directement l'appel.
+#}
+<section class="bloc-contact">
+  <div class="conteneur bloc-contact__interieur">
+    <div>
+      <h2 class="bloc-contact__titre">{{ titreContact if titreContact else "Un projet, un besoin, un devis ?" }}</h2>
+      <p class="bloc-contact__texte">
+        {{ texteContact if texteContact else "Notre équipe vous répond sous 24 h ouvrées et vous accompagne dans le choix de vos emballages." }}
+      </p>
+    </div>
+    <div class="bloc-contact__actions">
+      <a class="bouton bouton--principal" href="tel:{{ site.telephoneLien }}">
+        Appeler le {{ site.telephone }}
+      </a>
+      <a class="bouton bouton--secondaire" href="mailto:{{ site.email }}">
+        Envoyer un email
+      </a>
+    </div>
+  </div>
+</section>

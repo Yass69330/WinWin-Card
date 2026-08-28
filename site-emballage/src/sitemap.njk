@@ -1,0 +1,21 @@
+---
+permalink: /sitemap.xml
+eleventyExcludeFromCollections: true
+---
+{#-
+  Plan du site : liste toutes les pages pour que Google les trouve.
+  Généré automatiquement, aucune maintenance nécessaire.
+  Le tiret dans « {#- » supprime la ligne vide : la déclaration <?xml doit
+  impérativement être le tout premier caractère du fichier.
+-#}
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+{%- for page in collections.all %}
+  {#- On exclut les pages marquées « noindex » (erreur 404, remerciement) -#}
+  {%- if not page.data.noindex %}
+  <url>
+    <loc>{{ site.url }}{{ page.url }}</loc>
+  </url>
+  {%- endif %}
+{%- endfor %}
+</urlset>

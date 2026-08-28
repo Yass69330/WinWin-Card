@@ -1,0 +1,57 @@
+{#
+  ─── PIED DE PAGE ──────────────────────────────────────────────────────────
+  Rappelle les coordonnées sur toutes les pages.
+  Tout vient de src/_data/site.js : rien à modifier ici.
+#}
+<footer class="pied">
+  <div class="conteneur pied__grille">
+
+    {# Colonne 1 : identité #}
+    <div>
+      <div class="logo logo--pied">
+        <img src="{{ site.logo }}" alt="" width="36" height="36">
+        <span class="logo__texte">{{ site.nom }}</span>
+      </div>
+      <p class="pied__texte">{{ site.slogan }}</p>
+    </div>
+
+    {# Colonne 2 : coordonnées cliquables #}
+    <div>
+      <h2 class="pied__titre">Nous contacter</h2>
+      <ul class="pied__liste">
+        <li><a href="tel:{{ site.telephoneLien }}">{{ site.telephone }}</a></li>
+        <li><a href="mailto:{{ site.email }}">{{ site.email }}</a></li>
+        <li>
+          {{ site.adresse.rue }}<br>
+          {% if site.adresse.complement %}{{ site.adresse.complement }}<br>{% endif %}
+          {{ site.adresse.codePostal }} {{ site.adresse.ville }}
+        </li>
+      </ul>
+    </div>
+
+    {# Colonne 3 : horaires #}
+    <div>
+      <h2 class="pied__titre">Horaires</h2>
+      <ul class="pied__liste">
+        {% for h in site.horaires %}
+          <li><span class="pied__jour">{{ h.jours }}</span> {{ h.heures }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    {# Colonne 4 : navigation #}
+    <div>
+      <h2 class="pied__titre">Navigation</h2>
+      <ul class="pied__liste">
+        {% for lien in site.menu %}
+          <li><a href="{{ lien.lien }}">{{ lien.titre }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+
+  </div>
+
+  <div class="conteneur pied__bas">
+    <p>© {{ "" | anneeCourante }} {{ site.nom }}. Tous droits réservés.</p>
+  </div>
+</footer>

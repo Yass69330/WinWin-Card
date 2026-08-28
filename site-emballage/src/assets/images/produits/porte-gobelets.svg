@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300" role="img" aria-label="Porte-gobelets carton 4 places">
+  <rect width="400" height="300" fill="#eef1f4"/>
+  <g transform="translate(173 98)" fill="none" stroke="#b6c0ca" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M27 3 51 15v24L27 51 3 39V15z"/>
+    <path d="M3 15l24 12 24-12M27 27v24"/>
+  </g>
+    <text x="200" y="182.5" text-anchor="middle" font-family="-apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" fill="#8b96a1">Porte-gobelets carton</text>
+    <text x="200" y="201.5" text-anchor="middle" font-family="-apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" fill="#8b96a1">4 places</text>
+</svg>

@@ -1,0 +1,19 @@
+---
+#
+# ─── GÉNÉRATEUR DES FICHES PRODUITS ──────────────────────────────────────────
+# Ce petit fichier crée UNE page par produit du catalogue.
+# 11 produits dans produits.js = 11 pages créées automatiquement.
+# Vous n'avez normalement jamais à le modifier.
+#
+pagination:
+  data: produits      # on parcourt la liste des produits
+  size: 1             # une page par produit
+  alias: produit      # dans le gabarit, le produit s'appelle « produit »
+  addAllPagesToCollections: true   # toutes les fiches figurent dans le plan du site
+permalink: "/produits/{{ produit.id }}/"
+layout: layouts/produit.njk
+eleventyComputed:
+  # Titre et description propres à chaque produit (important pour Google)
+  titre: "{{ produit.nom }}"
+  description: "{{ produit.descriptionCourte }}"
+---

@@ -1,0 +1,7 @@
+# Dossiers générés automatiquement : inutile de les envoyer sur GitHub
+node_modules/
+_site/
+
+# Fichiers système
+.DS_Store
+Thumbs.db
