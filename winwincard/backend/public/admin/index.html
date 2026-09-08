@@ -1158,9 +1158,11 @@ function fillForm(m) {
   if (m.couleur_texte_reward) setColor('cp-texte-reward', 'f-texte-reward-c', m.couleur_texte_reward);
   else { document.getElementById('cp-texte-reward').value = '#190f00'; document.getElementById('f-texte-reward-c').value = ''; }
   if (m.couleur_pastille_fond)    setColor('cp-past-fond', 'f-past-fond', m.couleur_pastille_fond);
-  if (m.couleur_barre_principale) setColor('cp-barre-principale', 'f-barre-principale', m.couleur_barre_principale);
-  if (m.couleur_barre_secondaire) setColor('cp-barre-secondaire', 'f-barre-secondaire', m.couleur_barre_secondaire);
   else { document.getElementById('cp-past-fond').value = '#000000'; document.getElementById('f-past-fond').value = ''; }
+  if (m.couleur_barre_principale) setColor('cp-barre-principale', 'f-barre-principale', m.couleur_barre_principale);
+  else { document.getElementById('cp-barre-principale').value = '#ffffff'; document.getElementById('f-barre-principale').value = ''; }
+  if (m.couleur_barre_secondaire) setColor('cp-barre-secondaire', 'f-barre-secondaire', m.couleur_barre_secondaire);
+  else { document.getElementById('cp-barre-secondaire').value = '#888888'; document.getElementById('f-barre-secondaire').value = ''; }
   if (m.couleur_pastille_contour) setColor('cp-past-contour', 'f-past-contour', m.couleur_pastille_contour);
   else { document.getElementById('cp-past-contour').value = '#c9a84c'; document.getElementById('f-past-contour').value = ''; }
   if (m.couleur_pastille_icone)   setColor('cp-past-icone', 'f-past-icone', m.couleur_pastille_icone);
@@ -1225,7 +1227,7 @@ function setColor(cpId, txtId, hex) {
 function isHex(s) { return /^#[0-9a-fA-F]{6}$/.test(s); }
 
 // Synchronisation color picker ↔ champ texte
-[['cp-fond','f-fond'],['cp-texte','f-texte-c'],['cp-label','f-label'],['cp-reward','f-reward-color'],['cp-texte-reward','f-texte-reward-c'],['cp-past-fond','f-past-fond'],['cp-past-contour','f-past-contour'],['cp-past-icone','f-past-icone'],['cp-label-strip','f-label-strip']].forEach(([cpId, txtId]) => {
+[['cp-fond','f-fond'],['cp-texte','f-texte-c'],['cp-label','f-label'],['cp-reward','f-reward-color'],['cp-texte-reward','f-texte-reward-c'],['cp-past-fond','f-past-fond'],['cp-past-contour','f-past-contour'],['cp-past-icone','f-past-icone'],['cp-label-strip','f-label-strip'],['cp-barre-principale','f-barre-principale'],['cp-barre-secondaire','f-barre-secondaire']].forEach(([cpId, txtId]) => {
   document.getElementById(cpId).addEventListener('input', e => {
     document.getElementById(txtId).value = e.target.value;
     updatePastilleContrastWarn();
