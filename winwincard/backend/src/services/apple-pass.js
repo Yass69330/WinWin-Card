@@ -10,6 +10,7 @@ const dns = require('dns').promises;
 const net = require('net');
 const zlib = require('zlib');
 const crypto = require('crypto');
+const { backupCode } = require('../utils/backup-code');
 
 // ── Auth token ───────────────────────────────────────────────
 function computeAuthToken(serialNumber) {
@@ -364,7 +365,7 @@ function buildPassJson({ client, marchand, serialNumber, passNotification }) {
           // quand la caméra ne lit pas le QR. Serial immuable → code stable.
           key:   'backup_code',
           label: 'Backup code',
-          value: serialNumber.slice(-6).toUpperCase(),
+          value: backupCode(serialNumber),
         },
         {
           key: 'programme',
@@ -392,6 +393,11 @@ function buildPassJson({ client, marchand, serialNumber, passNotification }) {
       message: serialNumber,
       format: 'PKBarcodeFormatQR',
       messageEncoding: 'iso-8859-1',
+      // Code de secours SOUS le QR, sur le front du pass : un scan raté se
+      // rattrape en saisie manuelle sans retourner la carte. Le même code
+      // reste au dos (champ backup_code) tant qu'on n'a pas confirmé le rendu
+      // de altText sur un vrai iPhone.
+      altText: backupCode(serialNumber),
     }],
   };
 }

@@ -12,6 +12,7 @@
 //   strip@2x.png : 750 × 246 px  — milieu de la carte
 
 const jwt = require('jsonwebtoken');
+const { backupCode } = require('../utils/backup-code');
 
 const WALLET_API = 'https://walletobjects.googleapis.com/walletobjects/v1';
 
@@ -251,7 +252,9 @@ function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
     barcode: {
       type: 'QR_CODE',
       value: serialNumber,
-      alternateText: '',
+      // Code de secours sous le QR (miroir de altText côté Apple). Le barcode
+      // vit sur l'OBJET, pas sur la classe : aucun risque de classe périmée.
+      alternateText: backupCode(serialNumber),
     },
   };
 
@@ -380,6 +383,17 @@ async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, 
   };
 
   if (prenom) patch.accountName = prenom;
+
+  // Rattrapage des objets créés avant l'ajout du code de secours sous le QR.
+  // `barcode` est un sous-objet : un PATCH le REMPLACE en entier, il faut donc
+  // toujours renvoyer type et value avec alternateText. Idempotent — ré-écrire
+  // la même valeur à chaque scan ne coûte rien et guérit les anciens passes au
+  // moment exact où le code sert, c'est-à-dire quand le client est en caisse.
+  patch.barcode = {
+    type: 'QR_CODE',
+    value: serialNumber,
+    alternateText: backupCode(serialNumber),
+  };
 
   // Priorité hero image : images_tiers → image_strip_url (override universel) → strip généré
   const tierUrl = selectTierImageUrl(imagesTiers, storedValue);
