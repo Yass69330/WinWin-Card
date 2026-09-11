@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Résultats diagnostic caméra — WinWin</title>
+<style>
+  :root { color-scheme: light; --bg:#f8fafc; --surface:#fff; --line:#e2e8f0;
+          --text:#0f172a; --muted:#64748b; --ok:#16a34a; --warn:#d97706; --err:#dc2626;
+          --accent:#7c3aed; --temoin:#ecfdf5; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; background:var(--bg); color:var(--text);
+              font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif; }
+  .wrap { max-width:1100px; margin:0 auto; padding:28px 20px 64px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sous { color:var(--muted); font-size:14px; margin:0 0 22px; line-height:1.5; }
+  .bandeau { background:#fef3c7; border:1px solid #fcd34d; color:#78350f;
+             padding:10px 14px; border-radius:10px; font-size:13px; margin-bottom:20px; line-height:1.5; }
+  .boite { background:var(--surface); border:1px solid var(--line); border-radius:14px;
+           overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:14px; min-width:640px; }
+  th, td { text-align:left; padding:10px 14px; border-bottom:1px solid var(--line);
+           white-space:nowrap; }
+  thead th { background:#f1f5f9; font-size:12px; text-transform:uppercase;
+             letter-spacing:.04em; color:var(--muted); position:sticky; top:0; }
+  tbody th { font-weight:600; color:var(--muted); font-size:13px; white-space:normal;
+             min-width:190px; }
+  td.temoin, thead th.temoin { background:var(--temoin); }
+  .ok { color:var(--ok); font-weight:600; }
+  .warn { color:var(--warn); font-weight:600; }
+  .err { color:var(--err); font-weight:600; }
+  .mut { color:var(--muted); }
+  .actions { margin:22px 0 0; display:flex; gap:10px; flex-wrap:wrap; }
+  button { padding:11px 18px; font-size:14px; font-weight:600; border:1px solid var(--line);
+           border-radius:10px; background:var(--surface); color:var(--text); cursor:pointer; }
+  button.p { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .vide { padding:44px 20px; text-align:center; color:var(--muted); line-height:1.6; }
+  code { background:#f1f5f9; padding:1px 6px; border-radius:5px; font-size:13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Diagnostic caméra — résultats</h1>
+  <p class="sous">Dernière mesure reçue pour chaque étiquette. La colonne verte est le témoin sain : c'est elle qui donne son sens aux autres.</p>
+  <div class="bandeau">Instrument temporaire (palier 0.5). Cette page et sa table se suppriment ensemble une fois le chantier décodeur tranché — elle ne fait partie d'aucune fonctionnalité.</div>
+
+  <div class="boite" id="boite"><div class="vide">Chargement…</div></div>
+
+  <div class="actions">
+    <button class="p" id="btn-refresh">↻ Rafraîchir</button>
+    <button id="btn-json">Copier le JSON brut</button>
+  </div>
+</div>
+
+<script>
+// Instrument de lecture — isolé de la SPA admin. Réutilise le jeton déjà posé
+// par la SPA (même origine, même clé) : aucun login séparé, aucune modification
+// de index.html. Supprimable en supprimant ce seul fichier.
+const TOKEN_KEY = 'ww_admin_token';
+const ORDRE = ['temoin-sain', 'saxe', 'saint-priest', 'etats-unis'];
+
+// Lignes du tableau : [clé dans mesure, libellé, formateur optionnel].
+// L'ordre est celui de la lecture — le chiffre décisif en premier.
+const LIGNES = [
+  ['__resolution',       'Résolution négociée'],
+  ['fps_mesure',         'Images/s réelles',        v => v == null ? null : v + ' i/s'],
+  ['jsqr_ms',            'jsQR — coût par image',   v => v == null ? null : v + ' ms'],
+  ['zxing_ms',           'ZXing — coût par image',  v => v == null ? null : v + ' ms'],
+  ['__gain',             'Gain ZXing'],
+  ['currentTime_progresse', 'Flux vivant (signal C)', v => v === true ? 'oui' : v === false ? 'FIGÉ' : null],
+  ['track_muted',        'Piste muette',            v => v === true ? 'OUI' : v === false ? 'non' : null],
+  ['focus_mode',         'focusMode'],
+  ['exposure_mode',      'exposureMode'],
+  ['torch',              'torch'],
+  ['resolutions_max',    'Résolution max exposée'],
+  ['capabilities_exposees', 'getCapabilities', v => v === true ? 'exposé' : v === false ? 'NON exposé' : null],
+  ['barcode_detector',   'BarcodeDetector'],
+  ['facing',             'Caméra'],
+  ['device_label',       'Libellé appareil'],
+  ['webgl_renderer',     'Renderer WebGL'],
+  ['ecran',              'Écran'],
+  ['orientation',        'Orientation'],
+  ['zxing_charge',       'ZXing chargé',            v => v === true ? 'oui' : v === false ? 'NON' : null],
+  ['erreur',             'Erreur'],
+  ['__ua',               'User-Agent'],
+  ['__date',             'Mesuré le'],
+  ['__nb',               'Mesures reçues'],
+];
+
+let dernieresDonnees = null;
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+}
+
+// Coloration : elle doit sauter aux yeux, mais ne jamais inventer un seuil.
+// Les seuils ci-dessous sont des REPÈRES de lecture, pas des verdicts.
+function classe(cle, brut) {
+  if (brut == null || brut === '') return 'mut';
+  if (cle === 'currentTime_progresse') return brut === true ? 'ok' : 'err';
+  if (cle === 'track_muted')           return brut === true ? 'err' : 'ok';
+  if (cle === 'erreur')                return 'err';
+  if (cle === 'zxing_charge')          return brut === true ? 'ok' : 'err';
+  if (cle === 'jsqr_ms')  return brut > 150 ? 'err' : brut > 60 ? 'warn' : 'ok';
+  if (cle === 'zxing_ms') return brut > 150 ? 'err' : brut > 60 ? 'warn' : 'ok';
+  if (cle === 'capabilities_exposees') return brut === true ? 'ok' : 'warn';
+  return '';
+}
+
+function derive(cle, l) {
+  const m = l.mesure || {};
+  if (cle === '__resolution') return (m.largeur && m.hauteur) ? m.largeur + '×' + m.hauteur : null;
+  if (cle === '__gain') {
+    if (!m.jsqr_ms || !m.zxing_ms) return null;
+    return '×' + (m.jsqr_ms / m.zxing_ms).toFixed(1) + ' plus rapide';
+  }
+  if (cle === '__ua')   return l.user_agent;
+  if (cle === '__nb')   return l.nb_mesures;
+  if (cle === '__date') return new Date(l.created_at).toLocaleString('fr-FR',
+                          { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+  return m[cle];
+}
+
+function rendre(mesures) {
+  const boite = document.getElementById('boite');
+  if (!mesures.length) {
+    boite.innerHTML = '<div class="vide">Aucune mesure reçue pour l\'instant.<br>' +
+      'Ouvrez un lien <code>/diag/?pdv=…</code> sur une tablette, puis rafraîchissez.</div>';
+    return;
+  }
+  // Ordre imposé (témoin d'abord), puis les étiquettes libres à la suite.
+  const connues = ORDRE.filter(e => mesures.some(m => m.etiquette === e));
+  const autres  = mesures.map(m => m.etiquette).filter(e => !ORDRE.includes(e)).sort();
+  const cols = [...connues, ...autres].map(e => mesures.find(m => m.etiquette === e));
+
+  const estTemoin = i => cols[i].etiquette === 'temoin-sain';
+  let html = '<table><thead><tr><th></th>' +
+    cols.map((c, i) => `<th class="${estTemoin(i) ? 'temoin' : ''}">${esc(c.etiquette)}</th>`).join('') +
+    '</tr></thead><tbody>';
+
+  for (const [cle, libelle, fmt] of LIGNES) {
+    // On masque une ligne entièrement vide : moins de bruit à l'écran.
+    const valeurs = cols.map(c => derive(cle, c));
+    if (valeurs.every(v => v == null || v === '')) continue;
+    html += `<tr><th>${esc(libelle)}</th>`;
+    valeurs.forEach((brut, i) => {
+      const aff = (fmt ? fmt(brut) : brut);
+      const txt = (aff == null || aff === '') ? '—' : esc(aff);
+      const cl  = [classe(cle, brut), estTemoin(i) ? 'temoin' : ''].filter(Boolean).join(' ');
+      html += `<td class="${cl}">${txt}</td>`;
+    });
+    html += '</tr>';
+  }
+  boite.innerHTML = html + '</tbody></table>';
+}
+
+async function charger() {
+  const boite = document.getElementById('boite');
+  let token = null;
+  try { token = localStorage.getItem(TOKEN_KEY); } catch {}
+  if (!token) {
+    boite.innerHTML = '<div class="vide">Pas de session admin.<br>' +
+      'Connectez-vous sur <code>/admin</code> dans cet onglet, puis revenez ici.</div>';
+    return;
+  }
+  boite.innerHTML = '<div class="vide">Chargement…</div>';
+  try {
+    const r = await fetch('/api/diag/resultats', { headers: { Authorization: 'Bearer ' + token } });
+    if (r.status === 401 || r.status === 403) {
+      boite.innerHTML = '<div class="vide">Session expirée.<br>' +
+        'Reconnectez-vous sur <code>/admin</code>, puis rafraîchissez.</div>';
+      return;
+    }
+    if (!r.ok) throw new Error('serveur ' + r.status);
+    const d = await r.json();
+    dernieresDonnees = d;
+    rendre(d.mesures || []);
+  } catch (e) {
+    boite.innerHTML = '<div class="vide">Chargement impossible : ' + esc(e.message) + '</div>';
+  }
+}
+
+document.getElementById('btn-refresh').addEventListener('click', charger);
+document.getElementById('btn-json').addEventListener('click', async () => {
+  if (!dernieresDonnees) return;
+  const txt = JSON.stringify(dernieresDonnees, null, 2);
+  try { await navigator.clipboard.writeText(txt); alert('JSON copié.'); }
+  catch { alert('Copie refusée par le navigateur — ouvrez la console pour le lire.'); console.log(txt); }
+});
+
+charger();
+</script>
+</body>
+</html>

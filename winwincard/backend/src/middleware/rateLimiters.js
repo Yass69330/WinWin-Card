@@ -38,4 +38,16 @@ const limiterScannerLogin = rateLimit({
   legacyHeaders: false,
 });
 
-module.exports = { limiterInscription, limiterAdminLogin, limiterMarchandLogin, limiterScannerLogin };
+// Diagnostic caméra (palier 0.5) — endpoint PUBLIC : un employé ouvre la page
+// sans être connecté à rien. Généreux pour ne jamais rater une mesure légitime
+// (on peut relancer plusieurs fois sur une même tablette), assez serré pour
+// qu'on ne puisse pas remplir la table.
+const limiterDiag = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1h
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de mesures envoyées, réessayez plus tard' },
+});
+
+module.exports = { limiterInscription, limiterAdminLogin, limiterMarchandLogin, limiterScannerLogin, limiterDiag };

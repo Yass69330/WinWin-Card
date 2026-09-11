@@ -66,6 +66,7 @@ const dashboardRoutes     = require('./routes/dashboard');
 const adminUiRoutes       = require('./routes/admin-ui');
 const workflowsRoutes     = require('./routes/workflows');
 const scannerAuthRoutes   = require('./routes/scanner-auth');
+const diagRoutes          = require('./routes/diag');   // instrument temporaire (palier 0.5)
 
 // Fichiers statiques — HTML servi avec no-cache pour garantir la fraîcheur PWA
 app.use(express.static(path.join(__dirname, '../public'), {
@@ -105,6 +106,10 @@ app.use('/api/merchants/login', limiterMarchandLogin);
 app.use('/api/merchants', merchantsRoutes);
 app.use('/api/google-wallet', googleWalletRoutes);
 app.use('/api/notifications', notificationsRoutes);
+// Diagnostic caméra — instrument temporaire, isolé de tout le reste.
+// Le POST est public (limiteur dédié dans le routeur), le GET est authAdmin.
+app.use('/api/diag', diagRoutes);
+
 app.use('/api/admin/login', limiterAdminLogin);
 app.use('/api/admin/workflows', workflowsRoutes);
 app.use('/api/admin', adminRoutes);

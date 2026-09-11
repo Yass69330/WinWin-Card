@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Diagnostic caméra — WinWin</title>
+<style>
+  :root { color-scheme: dark; --bg:#0f172a; --surface:#1e293b; --text:#f1f5f9;
+          --muted:#94a3b8; --ok:#22c55e; --err:#ef4444; --accent:#7c3aed; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; min-height:100%; background:var(--bg); color:var(--text);
+               font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif; }
+  .wrap { max-width:560px; margin:0 auto; padding:24px 20px 56px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .pdv { display:inline-block; background:var(--accent); color:#fff; font-weight:700;
+         font-size:13px; padding:4px 12px; border-radius:999px; margin-bottom:20px; }
+  .card { background:var(--surface); border-radius:16px; padding:18px 20px; margin-bottom:14px; }
+  .etape { display:flex; align-items:center; gap:12px; padding:9px 0; font-size:15px; }
+  .puce { width:22px; height:22px; border-radius:50%; flex:0 0 22px; display:flex;
+          align-items:center; justify-content:center; font-size:13px;
+          background:#334155; color:var(--muted); }
+  .puce.on  { background:var(--ok);  color:#06240f; }
+  .puce.ko  { background:var(--err); color:#2b0707; }
+  .barre { height:6px; border-radius:3px; background:#334155; overflow:hidden; margin:16px 0 4px; }
+  .barre > i { display:block; height:100%; width:0; background:var(--accent); transition:width .3s; }
+  .final { text-align:center; padding:30px 20px; }
+  .final .gros { font-size:52px; line-height:1; margin-bottom:12px; }
+  .final h2 { margin:0 0 8px; font-size:21px; }
+  .final p { color:var(--muted); margin:0; font-size:15px; line-height:1.5; }
+  .err { color:var(--err); }
+  .hint { color:var(--muted); font-size:13px; line-height:1.5; margin-top:14px; }
+  video, canvas { display:none; }
+  button { width:100%; padding:16px; font-size:16px; font-weight:700; border:0;
+           border-radius:12px; background:var(--accent); color:#fff; margin-top:16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Diagnostic caméra</h1>
+  <div class="pdv" id="pdv">…</div>
+
+  <div class="card" id="carte-etapes">
+    <div class="etape"><span class="puce" id="p1">1</span><span>Ouverture de la caméra</span></div>
+    <div class="etape"><span class="puce" id="p2">2</span><span>Lecture des réglages</span></div>
+    <div class="etape"><span class="puce" id="p3">3</span><span>Mesure de la fluidité</span></div>
+    <div class="etape"><span class="puce" id="p4">4</span><span>Test des deux décodeurs</span></div>
+    <div class="etape"><span class="puce" id="p5">5</span><span>Envoi du résultat</span></div>
+    <div class="barre"><i id="jauge"></i></div>
+    <div class="hint" id="hint">Autorisez la caméra quand le téléphone le demande, puis posez la tablette et attendez. Rien d’autre à faire.</div>
+  </div>
+
+  <div class="card final" id="carte-fin" hidden>
+    <div class="gros" id="fin-icone">✅</div>
+    <h2 id="fin-titre">Mesure envoyée</h2>
+    <p id="fin-texte">Vous pouvez fermer cette page.</p>
+    <button id="btn-relancer" hidden>Relancer la mesure</button>
+  </div>
+</div>
+
+<video id="v" playsinline muted autoplay></video>
+<canvas id="c"></canvas>
+
+<script src="./vendor/jsQR.js"></script>
+<script type="module">
+// ════════════════════════════════════════════════════════════════════════════
+// DIAGNOSTIC CAMÉRA — instrument temporaire (palier 0.5)
+//
+// LECTURE SEULE. Cette page ne partage RIEN avec le scanner : son propre flux
+// caméra, ses propres instances de décodeur, son propre canvas. Elle ne crédite
+// aucun point, n'écrit aucun scan, ne lit aucune donnée client. Elle vit sous
+// /diag/, hors de la portée du service worker du scanner (/scanner/).
+//
+// Elle mesure ce que personne n'a jamais mesuré sur le parc :
+//   • la résolution RÉELLEMENT accordée (le scanner demande 1280x720 en
+//     `ideal`, ce qui n'engage à rien) — on reprend donc les MÊMES contraintes
+//     que le scanner, sinon la mesure ne dirait rien de ce qu'il obtient ;
+//   • le coût réel des décodeurs sur le décor de CE comptoir ;
+//   • si le flux se fige (le signal du problème « C ») ;
+//   • ce que getCapabilities expose — son absence est elle-même une mesure.
+// ════════════════════════════════════════════════════════════════════════════
+
+const $ = id => document.getElementById(id);
+const RE_ETIQUETTE = /^[a-z0-9-]{1,32}$/;        // miroir du serveur et du CHECK DB
+const DUREE_FLUX_MS = 5000;                       // fenêtre de mesure fps / currentTime
+const WASM_URL = new URL('./vendor/zxing_reader.wasm', import.meta.url).href;
+
+const etiquette = (new URLSearchParams(location.search).get('pdv') || '').trim().toLowerCase();
+$('pdv').textContent = etiquette || '⚠️ étiquette manquante';
+
+function etape(n, ok) {
+  const el = $('p' + n);
+  el.classList.remove('on', 'ko');
+  el.classList.add(ok ? 'on' : 'ko');
+  el.textContent = ok ? '✓' : '✕';
+  $('jauge').style.width = (n / 5 * 100) + '%';
+}
+function fin(icone, titre, texte, erreur) {
+  $('carte-etapes').hidden = true;
+  $('carte-fin').hidden = false;
+  $('fin-icone').textContent = icone;
+  $('fin-titre').textContent = titre;
+  $('fin-texte').textContent = texte;
+  $('fin-texte').className = erreur ? 'err' : '';
+  $('btn-relancer').hidden = !erreur;
+}
+
+// ── ZXing : chargé en avance, mais JAMAIS bloquant ─────────────────────────
+// Le .wasm est self-hébergé (pas de CDN) : il doit fonctionner sur un réseau de
+// boutique qui filtre, et sur une Huawei sans services Google. S'il ne charge
+// pas, on mesure quand même jsQR et on le note — une mesure partielle vaut
+// infiniment mieux qu'une page blanche à 40 km de Lyon.
+let zxLire = null, zxErreur = null;
+const zxPret = (async () => {
+  const m = await import('./vendor/zxing-reader.js');
+  m.prepareZXingModule({ overrides: { locateFile: () => WASM_URL } });
+  const opts = { formats: ['QRCode'], tryHarder: true, maxNumberOfSymbols: 1 };
+  // Amorce : force la compilation du wasm hors de la mesure chronométrée,
+  // sinon le premier appel porterait le coût de compilation et fausserait tout.
+  await m.readBarcodesFromImageData(new ImageData(32, 32), opts);
+  zxLire = d => m.readBarcodesFromImageData(d, opts);
+})().catch(e => { zxErreur = String(e && e.message || e).slice(0, 200); });
+
+// ── Chronométrage d'un décodeur sur des images RÉELLES du comptoir ─────────
+// On ne fabrique pas de scène : on décode ce que la caméra voit là, maintenant.
+// C'est précisément ce qui fait exploser jsQR sur un décor chargé.
+async function chrono(lire, imgs) {
+  let total = 0, decodes = 0;
+  for (const img of imgs) {
+    const t0 = performance.now();
+    let r = null;
+    try { r = await lire(img); } catch { /* un décodeur qui échoue coûte quand même */ }
+    total += performance.now() - t0;
+    if (r && (Array.isArray(r) ? r.length > 0 : !!r.data)) decodes++;
+  }
+  return { ms: Math.round(total / imgs.length * 10) / 10, decodes };
+}
+
+async function mesurer() {
+  const m = { erreur: null };
+  let stream = null;
+
+  try {
+    // ── 1. Caméra — MÊMES contraintes que le scanner (index.html:831) ──────
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+    });
+    etape(1, true);
+
+    const v = $('v');
+    v.srcObject = stream;
+    await v.play().catch(() => {});
+    await new Promise(r => (v.readyState >= 2 ? r() : v.addEventListener('loadeddata', r, { once: true })));
+
+    // ── 2. Réglages négociés + capacités ──────────────────────────────────
+    const track = stream.getVideoTracks()[0];
+    const s = (track.getSettings && track.getSettings()) || {};
+    m.largeur     = v.videoWidth  || s.width  || null;
+    m.hauteur     = v.videoHeight || s.height || null;
+    m.fps_demande = s.frameRate != null ? Math.round(s.frameRate) : null;
+    m.facing      = s.facingMode || null;
+    m.device_label = track.label || null;
+
+    // getCapabilities n'existe pas partout. Son ABSENCE est une mesure : on la
+    // note explicitement au lieu de planter ou de laisser un trou.
+    if (typeof track.getCapabilities === 'function') {
+      let caps = {};
+      try { caps = track.getCapabilities() || {}; } catch { caps = {}; }
+      m.capabilities_exposees = true;
+      m.focus_mode    = caps.focusMode    ? caps.focusMode.join('/')    : 'non supporté';
+      m.exposure_mode = caps.exposureMode ? caps.exposureMode.join('/') : 'non supporté';
+      m.torch         = caps.torch === true ? 'oui' : (caps.torch === false ? 'non' : 'non supporté');
+      m.resolutions_max = (caps.width && caps.height)
+        ? `${caps.width.max || '?'}x${caps.height.max || '?'}` : 'non exposé';
+    } else {
+      m.capabilities_exposees = false;
+      m.focus_mode = m.exposure_mode = m.torch = m.resolutions_max = 'non exposé';
+    }
+    etape(2, true);
+
+    // ── 3. Fluidité réelle + signal du problème « C » ─────────────────────
+    // currentTime qui n'avance pas = flux figé alors que readyState reste à
+    // HAVE_ENOUGH_DATA. C'est exactement l'angle mort du scanner aujourd'hui.
+    const c = $('c'), ctx = c.getContext('2d', { willReadFrequently: true });
+    const t0 = performance.now(), ct0 = v.currentTime;
+    let images = 0;
+    const echantillons = [];
+    await new Promise(resolve => {
+      (function boucle() {
+        if (performance.now() - t0 >= DUREE_FLUX_MS) return resolve();
+        images++;
+        // On garde 5 images réelles, espacées, pour le banc de décodage.
+        if (echantillons.length < 5 && images % 12 === 0 && v.videoWidth) {
+          c.width = v.videoWidth; c.height = v.videoHeight;
+          ctx.drawImage(v, 0, 0);
+          echantillons.push(ctx.getImageData(0, 0, c.width, c.height));
+        }
+        requestAnimationFrame(boucle);
+      })();
+    });
+    const secondes = (performance.now() - t0) / 1000;
+    m.duree_mesure_s = Math.round(secondes * 10) / 10;
+    m.fps_mesure = Math.round(images / secondes);
+    m.currentTime_delta_s = Math.round((v.currentTime - ct0) * 100) / 100;
+    m.currentTime_progresse = m.currentTime_delta_s > 0.2;
+    m.track_muted = track.muted === true;
+    m.track_state = track.readyState || null;
+    etape(3, m.currentTime_progresse);
+
+    // ── 4. Les deux décodeurs, sur les mêmes images du même comptoir ───────
+    if (!echantillons.length) {
+      // Repli : au moins une image, sinon pas de banc du tout.
+      c.width = v.videoWidth || 640; c.height = v.videoHeight || 480;
+      ctx.drawImage(v, 0, 0);
+      echantillons.push(ctx.getImageData(0, 0, c.width, c.height));
+    }
+
+    const rj = await chrono(d => jsQR(d.data, d.width, d.height, { inversionAttempts: 'dontInvert' }), echantillons);
+    m.jsqr_ms = rj.ms; m.jsqr_decodes = rj.decodes;
+
+    await zxPret;
+    if (zxLire) {
+      const rz = await chrono(zxLire, echantillons);
+      m.zxing_ms = rz.ms; m.zxing_decodes = rz.decodes; m.zxing_charge = true;
+    } else {
+      m.zxing_charge = false; m.zxing_ms = null; m.zxing_decodes = null;
+    }
+    etape(4, true);
+
+    // ── Contexte appareil ────────────────────────────────────────────────
+    m.barcode_detector = ('BarcodeDetector' in window) ? 'exposé' : 'absent';
+    m.ecran = `${screen.width}x${screen.height}@${window.devicePixelRatio || 1}`;
+    m.orientation = (screen.orientation && screen.orientation.type) ||
+                    (window.innerWidth > window.innerHeight ? 'paysage' : 'portrait');
+    try {
+      const gl = document.createElement('canvas').getContext('webgl');
+      const dbg = gl && gl.getExtension('WEBGL_debug_renderer_info');
+      m.webgl_renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)
+                             : (gl ? gl.getParameter(gl.RENDERER) : 'indisponible');
+    } catch { m.webgl_renderer = 'indisponible'; }
+    if (zxErreur) m.erreur = 'zxing: ' + zxErreur;
+
+  } catch (e) {
+    m.erreur = String(e && (e.name + ': ' + e.message) || e).slice(0, 250);
+    etape(1, false);
+  } finally {
+    if (stream) stream.getTracks().forEach(t => t.stop());
+  }
+  return m;
+}
+
+async function envoyer(mesure) {
+  const r = await fetch('/api/diag/camera', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ etiquette, mesure }),
+  });
+  if (!r.ok) throw new Error('serveur ' + r.status);
+}
+
+async function lancer() {
+  $('carte-etapes').hidden = false;
+  $('carte-fin').hidden = true;
+  for (let i = 1; i <= 5; i++) {
+    const el = $('p' + i); el.className = 'puce'; el.textContent = String(i);
+  }
+  $('jauge').style.width = '0';
+
+  const mesure = await mesurer();
+  try {
+    await envoyer(mesure);
+    etape(5, true);
+    if (mesure.erreur && !mesure.largeur) {
+      fin('⚠️', 'Mesure partielle envoyée',
+          "La caméra n'a pas pu être ouverte, mais l'information est bien remontée.", true);
+    } else {
+      fin('✅', 'Mesure envoyée', 'Merci — vous pouvez fermer cette page.', false);
+    }
+  } catch (e) {
+    etape(5, false);
+    fin('❌', 'Envoi impossible',
+        'Vérifiez la connexion internet de la tablette, puis relancez. (' + e.message + ')', true);
+  }
+}
+
+$('btn-relancer').addEventListener('click', lancer);
+
+if (!RE_ETIQUETTE.test(etiquette)) {
+  fin('⚠️', 'Lien incomplet',
+      "Ce lien ne porte pas d'étiquette de point de vente. Demandez le bon lien à WinWin.", true);
+  $('btn-relancer').hidden = true;
+} else {
+  lancer();
+}
+</script>
+</body>
+</html>
