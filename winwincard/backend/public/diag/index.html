@@ -53,6 +53,7 @@
     <div class="gros" id="fin-icone">✅</div>
     <h2 id="fin-titre">Mesure envoyée</h2>
     <p id="fin-texte">Vous pouvez fermer cette page.</p>
+    <p id="fin-detail" class="hint" style="margin-top:10px"></p>
     <button id="btn-relancer" hidden>Relancer la mesure</button>
   </div>
 </div>
@@ -94,13 +95,14 @@ function etape(n, ok) {
   el.textContent = ok ? '✓' : '✕';
   $('jauge').style.width = (n / 5 * 100) + '%';
 }
-function fin(icone, titre, texte, erreur) {
+function fin(icone, titre, texte, erreur, detail) {
   $('carte-etapes').hidden = true;
   $('carte-fin').hidden = false;
   $('fin-icone').textContent = icone;
   $('fin-titre').textContent = titre;
   $('fin-texte').textContent = texte;
   $('fin-texte').className = erreur ? 'err' : '';
+  $('fin-detail').textContent = detail || '';
   $('btn-relancer').hidden = !erreur;
 }
 
@@ -109,9 +111,17 @@ function fin(icone, titre, texte, erreur) {
 // boutique qui filtre, et sur une Huawei sans services Google. S'il ne charge
 // pas, on mesure quand même jsQR et on le note — une mesure partielle vaut
 // infiniment mieux qu'une page blanche à 40 km de Lyon.
+//
+// ⚠️ ARBORESCENCE À NE PAS APLATIR. vendor/reader/index.js fait `import ...
+// from "../share.js"` : les deux fichiers DOIVENT rester dans cette disposition
+// (share.js au niveau de vendor/, le reader dans vendor/reader/), sinon
+// l'import résout vers un 404 et Safari répond « Importing a module script
+// failed » — le décodeur ne charge pas et toute la moitié ZXing de la mesure
+// est perdue en silence. C'est exactement ce qui s'est produit en v1, où un
+// seul des deux fichiers avait été copié.
 let zxLire = null, zxErreur = null;
 const zxPret = (async () => {
-  const m = await import('./vendor/zxing-reader.js');
+  const m = await import('./vendor/reader/index.js');
   m.prepareZXingModule({ overrides: { locateFile: () => WASM_URL } });
   const opts = { formats: ['QRCode'], tryHarder: true, maxNumberOfSymbols: 1 };
   // Amorce : force la compilation du wasm hors de la mesure chronométrée,
@@ -272,6 +282,13 @@ async function lancer() {
     if (mesure.erreur && !mesure.largeur) {
       fin('⚠️', 'Mesure partielle envoyée',
           "La caméra n'a pas pu être ouverte, mais l'information est bien remontée.", true);
+    } else if (mesure.zxing_charge === false) {
+      // Mesure à moitié utile : la comparaison des décodeurs manque. L'employé
+      // n'a rien à faire de plus (on ne l'inquiète pas), mais l'information
+      // doit se voir à l'écran — en v1 elle n'apparaissait que dans le JSON,
+      // et l'échec n'a été découvert qu'en relisant la base.
+      fin('✅', 'Mesure envoyée', 'Merci — vous pouvez fermer cette page.', false,
+          'Note technique : le second décodeur n’a pas pu être chargé sur cet appareil. La mesure est remontée malgré tout.');
     } else {
       fin('✅', 'Mesure envoyée', 'Merci — vous pouvez fermer cette page.', false);
     }
