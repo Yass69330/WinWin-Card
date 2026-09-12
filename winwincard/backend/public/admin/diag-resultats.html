@@ -57,7 +57,9 @@
 // par la SPA (même origine, même clé) : aucun login séparé, aucune modification
 // de index.html. Supprimable en supprimant ce seul fichier.
 const TOKEN_KEY = 'ww_admin_token';
-const ORDRE = ['temoin-sain', 'saxe', 'saint-priest', 'etats-unis'];
+// Les deux témoins d'abord : ce sont eux qui donnent son sens à tout le reste.
+// Une étiquette absente de cette liste est rendue quand même, à la suite.
+const ORDRE = ['temoin-sain', 'temoin-sain-2', 'saxe', 'saint-priest', 'etats-unis'];
 
 // Lignes du tableau : [clé dans mesure, libellé, formateur optionnel].
 // L'ordre est celui de la lecture — le chiffre décisif en premier.
