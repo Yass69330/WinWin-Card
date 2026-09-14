@@ -1344,8 +1344,13 @@ document.getElementById('btn-refresh-scans').addEventListener('click', () => { S
 // TAB: SCANNER
 // ════════════════════════════════════════════════
 function startScannerTab() {
+  // ⚠️ Même défaut que le scanner PWA, en plus étroit : awaitingPoints n'était
+  // remis à zéro nulle part. Pavé points laissé ouvert → changement d'onglet →
+  // retour ici : la caméra repartait, la boucle restait aveugle. On passe par
+  // les fermetures pour ne pas laisser de modale fantôme.
   SC.processing = false;
-  SC.awaitingConfirm = false;
+  closeConfirmDashboard();
+  closePointsPadDashboard();
   scClearLock();
   document.getElementById('sc-result-sheet').classList.remove('visible');
   document.getElementById('sc-status').style.display = 'none';
@@ -1667,6 +1672,8 @@ function showScanResult(data, ok, serial) {
 
 document.getElementById('sc-btn-rescan').addEventListener('click', () => {
   SC.processing = false;
+  closeConfirmDashboard();
+  closePointsPadDashboard();
   document.getElementById('sc-result-sheet').classList.remove('visible');
   SC.scanning = true;
   scLoop();
@@ -1675,6 +1682,8 @@ document.getElementById('sc-btn-rescan').addEventListener('click', () => {
 document.getElementById('sc-btn-manual').addEventListener('click', () => openManualScan());
 document.getElementById('sc-btn-manual-after').addEventListener('click', () => {
   SC.processing = false;
+  closeConfirmDashboard();
+  closePointsPadDashboard();
   document.getElementById('sc-result-sheet').classList.remove('visible');
   SC.scanning = true; scLoop();
   openManualScan();

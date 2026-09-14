@@ -824,6 +824,22 @@ async function startScanner() {
   document.getElementById('merchant-badge').textContent = state.marchandNom || state.marchandSlug;
   setScreen('screen-scanner');
 
+  // ⚠️ REMISE À ZÉRO DES TROIS PORTES DE LA BOUCLE — ne pas retirer.
+  // scanLoop sort immédiatement si processing / awaitingPoints / awaitingConfirm
+  // vaut true. Or submitScan() pose processing = true et ne le relâche QUE par
+  // « scanner le suivant » : toute autre route de retour vers cet écran (saisie
+  // manuelle après un scan, retour d'historique) rallumait la caméra avec le
+  // drapeau encore armé. Observé en boutique : image qui bouge, ligne de scan
+  // animée, et plus AUCUNE détection — jusqu'à ce que le caissier tue l'appli
+  // (revenir à l'accueil ne suffit pas, iOS garde l'état JS en mémoire).
+  // On réarme donc ici, au SEUL endroit qui rallume la boucle : ça couvre les
+  // chemins d'aujourd'hui et ceux qu'on ajoutera demain. On passe par les
+  // fermetures plutôt que d'écrire les drapeaux à la main, pour ne pas laisser
+  // une modale fantôme par-dessus une caméra redevenue active.
+  state.processing = false;
+  closeConfirm();
+  closePointsPad();
+
   // Stop any previous stream
   if (state.stream) state.stream.getTracks().forEach(t => t.stop());
 
