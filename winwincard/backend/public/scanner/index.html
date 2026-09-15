@@ -513,9 +513,9 @@
 
       <!-- Reward -->
       <div class="reward-banner" id="reward-banner" style="display:none">
-        <div class="reward-icon">🎉</div>
+        <div class="reward-icon" id="reward-icon-el">🎉</div>
         <div class="reward-text">
-          <div class="reward-title" data-i18n="rewardUnlocked">Reward unlocked!</div>
+          <div class="reward-title" id="reward-title"></div>
           <div class="reward-sub" id="reward-sub" data-i18n="rewardSubDefault">Client reached their goal</div>
         </div>
       </div>
@@ -638,7 +638,12 @@ const I18N = {
     scannerTitle:'Scanner', signOut:'Sign out', scanHint:'Point at the pass QR code',
     manualEntry:'Manual entry', points:'Points', rewardUnlocked:'Reward unlocked!',
     rewardSubDefault:'Client reached their goal',
-    rewardSub:({prenom,max})=>`${prenom} reached ${max} points — give the reward!`,
+    // Seuil franchi : la récompense est acquise, PAS à remettre maintenant.
+    seuilTitre:({prenom})=>`Thanks for your loyalty ${prenom}`,
+    seuilSous:'Reward on your next visit',
+    // Remise : c'est CE scan qui donne la récompense.
+    remiseTitre:'Card complete',
+    remiseSous:({prenom})=>`Give ${prenom} their reward`,
     counterReset:'↩️ Counter reset after reward', nextScan:'Next scan',
     enterSerialSub:'Paste the full pass ID, or type the 6-character backup code from the back of the pass',
     serialNumber:'Pass ID or backup code', pickClient:'Multiple matches — tap the right client:',
@@ -670,7 +675,10 @@ const I18N = {
     scannerTitle:'Scanner', signOut:'Se déconnecter', scanHint:'Visez le QR code du pass',
     manualEntry:'Saisie manuelle', points:'Points', rewardUnlocked:'Récompense débloquée !',
     rewardSubDefault:'Le client a atteint son objectif',
-    rewardSub:({prenom,max})=>`${prenom} a atteint ${max} points — remettez la récompense !`,
+    seuilTitre:({prenom})=>`Merci pour ta fidélité, ${prenom}`,
+    seuilSous:'Récompense au prochain passage',
+    remiseTitre:'Carte complétée',
+    remiseSous:({prenom})=>`Remets la récompense à ${prenom}`,
     counterReset:'↩️ Compteur remis à zéro après la récompense', nextScan:'Scan suivant',
     enterSerialSub:'Collez l’ID complet du pass, ou tapez le code de secours à 6 caractères au dos du pass',
     serialNumber:'ID du pass ou code de secours', pickClient:'Plusieurs clients — appuyez sur le bon :',
@@ -1146,7 +1154,7 @@ function showResult(data, ok, serial) {
     return;
   }
 
-  const { prenom, stored_value_apres: val, stored_value_avant, max_value, display_max_value, recompense } = data;
+  const { prenom, stored_value_apres: val, stored_value_avant, max_value, display_max_value, recompense, is_reset } = data;
   const stored_value = val ?? data.stored_value ?? 0;
   const displayMax = display_max_value || max_value;
 
@@ -1181,11 +1189,30 @@ function showResult(data, ok, serial) {
     }
   }
 
-  // Reward
+  // ── Récompense : DEUX moments distincts, jamais le même message ──────────
+  // Le serveur les sépare depuis toujours (scan.js) ; c'est l'affichage qui les
+  // confondait. Avant, le franchissement du seuil disait à la fois « remettez
+  // la récompense » et « compteur remis à zéro » : deux affirmations fausses au
+  // même instant, et le scan de remise — le seul qui compte pour le caissier —
+  // n'affichait rien de particulier.
+  const banniere = document.getElementById('reward-banner');
+  const titre    = document.getElementById('reward-title');
+  const sous     = document.getElementById('reward-sub');
+
   if (recompense) {
-    document.getElementById('reward-banner').style.display = 'flex';
-    document.getElementById('reward-sub').textContent = t('rewardSub', { prenom, max: displayMax });
-    document.getElementById('reset-banner').style.display = 'flex';
+    // Seuil franchi. Message tourné vers le client : le caissier peut lui
+    // montrer l'écran. Rien à remettre aujourd'hui.
+    document.getElementById('reward-icon-el').textContent = '🎉';
+    titre.textContent = t('seuilTitre', { prenom });
+    sous.textContent  = t('seuilSous');
+    banniere.style.display = 'flex';
+    try { navigator.vibrate && navigator.vibrate([100, 50, 100, 50, 200]); } catch {}
+  } else if (is_reset) {
+    // Remise. Message tourné vers le caissier : c'est une instruction d'action.
+    document.getElementById('reward-icon-el').textContent = '🎁';
+    titre.textContent = t('remiseTitre');
+    sous.textContent  = t('remiseSous', { prenom });
+    banniere.style.display = 'flex';
     try { navigator.vibrate && navigator.vibrate([100, 50, 100, 50, 200]); } catch {}
   }
 }

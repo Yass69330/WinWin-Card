@@ -20,9 +20,12 @@ const messages = {
     en: ({ prenom, max }) => `Card updated — ${prenom}: 0/${max} pts`,
     fr: ({ prenom, max }) => `Carte remise à zéro — ${prenom} : 0/${max} pts`,
   },
+  // Envoyé au franchissement du SEUIL. Ne dit plus « récompense débloquée » :
+  // le client le lisait et se présentait en caisse le jour même, alors que la
+  // récompense se remet au passage SUIVANT. Le texte annonce donc le bon moment.
   passReward: {
-    en: ({ prenom }) => `Congrats ${prenom}! Reward unlocked 🎉`,
-    fr: ({ prenom }) => `Bravo ${prenom} ! Récompense débloquée 🎉`,
+    en: ({ prenom }) => `Thanks for your loyalty ${prenom} — Reward on your next visit`,
+    fr: ({ prenom }) => `Merci pour ta fidélité ${prenom} — Récompense au prochain passage`,
   },
   passProgress: {
     // amount : nombre de points ajoutés par ce scan. Mode tampons → toujours 1

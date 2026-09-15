@@ -461,9 +461,9 @@
           <div class="sc-dots-wrap" id="sc-dots"></div>
         </div>
         <div id="sc-reward-banner" class="sc-reward-banner" style="display:none">
-          <div style="font-size:28px">🎉</div>
+          <div id="sc-reward-icon" style="font-size:28px">🎉</div>
           <div>
-            <div style="font-size:15px;font-weight:700" data-i18n="rewardUnlocked">Reward unlocked!</div>
+            <div id="sc-reward-title" style="font-size:15px;font-weight:700"></div>
             <div id="sc-reward-sub" style="font-size:13px;opacity:.85"></div>
           </div>
         </div>
@@ -721,6 +721,10 @@ const I18N = {
     rewardBadge:'🎉 Reward', resetBadge:'↩️ Reset',
     scanHint:"Point at the client's pass QR code", manualEntry:'Manual entry', points:'Points',
     rewardUnlocked:'Reward unlocked!',
+    seuilTitre:({prenom})=>`Thanks for your loyalty ${prenom}`,
+    seuilSous:'Reward on your next visit',
+    remiseTitre:'Card complete',
+    remiseSous:({prenom})=>`Give ${prenom} their reward`,
     rewardSub:({prenom,max})=>`${prenom} reached ${max} points — give the reward!`,
     counterReset:'↩️ Counter reset', nextScan:'Next scan', processing:'⏳ Processing…',
     confirmScanTitle:'Confirm this scan?', confirmScanSub:'Only the tap below records the scan.',
@@ -794,6 +798,10 @@ const I18N = {
     rewardBadge:'🎉 Récompense', resetBadge:'↩️ Remise à zéro',
     scanHint:'Visez le QR code du pass du client', manualEntry:'Saisie manuelle', points:'Points',
     rewardUnlocked:'Récompense débloquée !',
+    seuilTitre:({prenom})=>`Merci pour ta fidélité, ${prenom}`,
+    seuilSous:'Récompense au prochain passage',
+    remiseTitre:'Carte complétée',
+    remiseSous:({prenom})=>`Remets la récompense à ${prenom}`,
     rewardSub:({prenom,max})=>`${prenom} a atteint ${max} points — remettez la récompense !`,
     counterReset:'↩️ Compteur remis à zéro', nextScan:'Scan suivant', processing:'⏳ Traitement…',
     confirmScanTitle:'Valider ce scan ?', confirmScanSub:'Seul l\'appui ci-dessous enregistre le scan.',
@@ -1628,10 +1636,17 @@ function showScanResult(data, ok, serial) {
     return;
   }
 
-  const { prenom, stored_value_apres: val, stored_value_avant, max_value, display_max_value, recompense } = data;
+  const { prenom, stored_value_apres: val, stored_value_avant, max_value, display_max_value, recompense, is_reset } = data;
   const stored = val ?? 0;
   const displayMax = display_max_value || max_value || S.displayMax;
-  const isReset = stored === 0 && stored_value_avant > 0 && !recompense;
+  // Le drapeau vient désormais du SERVEUR. L'ancienne déduction « solde === 0 »
+  // ne marchait qu'en mode tampons : en mode points la remise laisse le surplus
+  // reporté (ex. 130), jamais 0 — le dashboard ne détectait donc JAMAIS la
+  // remise chez un marchand en points. Repli sur l'ancien calcul si le serveur
+  // est plus ancien que ce front (déploiement en cours).
+  const isReset = (is_reset !== undefined)
+    ? is_reset
+    : (stored === 0 && stored_value_avant > 0 && !recompense);
 
   const av = document.getElementById('sc-avatar');
   av.textContent = (prenom || '?').charAt(0).toUpperCase();
@@ -1662,12 +1677,25 @@ function showScanResult(data, ok, serial) {
     }
   }
 
+  // ── Récompense : deux moments distincts, mêmes messages que le scanner PWA ──
+  const banniere = document.getElementById('sc-reward-banner');
+  const titre    = document.getElementById('sc-reward-title');
+  const sous     = document.getElementById('sc-reward-sub');
   if (recompense) {
-    document.getElementById('sc-reward-banner').style.display = 'flex';
-    document.getElementById('sc-reward-sub').textContent = t('rewardSub', { prenom, max: displayMax });
+    // Seuil franchi — rien à remettre aujourd'hui.
+    document.getElementById('sc-reward-icon').textContent = '🎉';
+    titre.textContent = t('seuilTitre', { prenom });
+    sous.textContent  = t('seuilSous');
+    banniere.style.display = 'flex';
+    try { navigator.vibrate && navigator.vibrate([100, 50, 100, 50, 200]); } catch {}
+  } else if (isReset) {
+    // Remise — instruction d'action pour le caissier.
+    document.getElementById('sc-reward-icon').textContent = '🎁';
+    titre.textContent = t('remiseTitre');
+    sous.textContent  = t('remiseSous', { prenom });
+    banniere.style.display = 'flex';
     try { navigator.vibrate && navigator.vibrate([100, 50, 100, 50, 200]); } catch {}
   }
-  if (isReset) document.getElementById('sc-reset-banner').style.display = 'block';
 }
 
 document.getElementById('sc-btn-rescan').addEventListener('click', () => {

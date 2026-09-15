@@ -205,7 +205,14 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
     max_value: maxValue,
     display_max_value: displayMaxValue,
     amount,
+    // recompense : le SEUIL vient d'être franchi. La récompense est acquise mais
+    // n'est PAS à remettre maintenant — elle se donne au passage suivant.
     recompense,
+    // is_reset : CE scan est celui de la remise. C'est le seul moment où le
+    // caissier doit donner la récompense. Le front ne pouvait pas le déduire :
+    // en mode points le solde après remise vaut le surplus reporté, jamais 0,
+    // donc l'heuristique « solde === 0 » du dashboard était aveugle.
+    is_reset: isReset,
     message: scanMessage,
   });
 }));
