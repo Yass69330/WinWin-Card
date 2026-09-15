@@ -1475,10 +1475,27 @@ function renderStripTiers(imagesTiers) {
           <div class="strip-tier-label">${esc(label)}</div>
           <div class="strip-tier-url">${esc(t.url)}</div>
         </div>
-        <button class="btn btn-danger btn-sm" type="button" onclick="deleteStripTier(${i}, ${JSON.stringify(label)})">✕</button>
+        <button class="btn btn-danger btn-sm btn-del-tier" type="button"
+                data-index="${i}" data-label="${esc(label)}">✕</button>
       </div>`;
     }).join('')
   }</div>`;
+
+  // ⚠️ NE PAS repasser à un onclick en ligne avec une chaîne interpolée.
+  // La version précédente écrivait onclick="deleteStripTier(0, "Tier 8 pts")" :
+  // JSON.stringify ajoute des guillemets DOUBLES à l'intérieur d'un attribut
+  // lui-même délimité par des guillemets doubles. Le navigateur fermait donc
+  // l'attribut au premier guillemet interne, gardait « deleteStripTier(0, »
+  // comme corps de gestionnaire — invalide — et transformait le reste en
+  // attributs parasites. Le bouton s'affichait et le tap ne faisait RIEN.
+  // L'index et le libellé passent maintenant par des data-attributes, et le
+  // gestionnaire est attaché en JavaScript : plus aucune valeur ne traverse
+  // du HTML.
+  list.querySelectorAll('.btn-del-tier').forEach(btn => {
+    btn.addEventListener('click', () => {
+      deleteStripTier(parseInt(btn.dataset.index, 10), btn.dataset.label || '');
+    });
+  });
 }
 
 document.getElementById('btn-upload-tier').addEventListener('click', async () => {
