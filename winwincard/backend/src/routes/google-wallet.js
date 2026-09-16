@@ -17,7 +17,9 @@ router.get('/pass/:serialNumber', asyncHandler(async (req, res) => {
 
   const [{ data: client }, { data: marchand }] = await Promise.all([
     supabase.from('clients').select('prenom, stored_value').eq('id', pass.client_id).single(),
-    supabase.from('marchands').select('id, nom, slug, logo_url, couleur_fond, max_value, display_max_value').eq('id', pass.marchand_id).single()
+    // images_tiers et image_strip_url sont indispensables au hero posé sur l'objet
+    // à sa création (D1) : sans elles, buildLoyaltyObject ne verrait jamais rien.
+    supabase.from('marchands').select('id, nom, slug, logo_url, couleur_fond, max_value, display_max_value, images_tiers, image_strip_url').eq('id', pass.marchand_id).single()
   ]);
 
   if (!client || !marchand) return res.status(404).json({ error: 'Données introuvables' });

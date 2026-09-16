@@ -268,6 +268,24 @@ function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
     obj.hexBackgroundColor = marchand.couleur_fond || '#1a1a2e';
   }
 
+  // Hero à la CRÉATION de l'objet (D1). Sans ça, un porteur Google qui installe
+  // sa carte AVANT son premier scan hérite du hero de la CLASSE — or la classe
+  // (googleHeroUrl) ignore totalement images_tiers. Un marchand servi par tiers
+  // et sans strip_mode ni image_strip_url n'avait donc AUCUN hero à
+  // l'installation, jusqu'à ce que le PATCH du premier scan le pose enfin.
+  // On ne traite ici que les deux sources SYNCHRONES : le strip généré resterait
+  // à couvrir, mais la classe en porte déjà un à filledCount 0, ce qui est juste
+  // à l'installation — et le générer ici imposerait de rendre cette fonction
+  // asynchrone pour aucun gain.
+  const heroObjet = selectTierImageUrl(marchand.images_tiers, client.stored_value)
+    || marchand.image_strip_url || null;
+  if (heroObjet) {
+    obj.heroImage = {
+      sourceUri: { uri: heroObjet },
+      contentDescription: { defaultValue: { language: 'en', value: 'loyalty progress' } },
+    };
+  }
+
   return obj;
 }
 
