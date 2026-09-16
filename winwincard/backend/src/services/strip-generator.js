@@ -69,6 +69,9 @@ const FONT_PATHS = (() => {
     ['dm-sans', 'dm-sans-latin-400-normal.woff', 'dm-sans-400.ttf'],
     ['dm-sans', 'dm-sans-latin-700-normal.woff', 'dm-sans-700.ttf'],
     ['syne',    'syne-latin-700-normal.woff',    'syne-700.ttf'],
+    // Poppins : réservé au thème « illustration ». Son absence est sans effet
+    // sur les thèmes existants, qui n'utilisent que DM Sans et Syne.
+    ['poppins', 'poppins-latin-700-normal.woff', 'poppins-700.ttf'],
   ];
   for (const [pkg, woff, out] of fonts) {
     try {
