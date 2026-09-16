@@ -527,7 +527,31 @@
             <select id="f-strip-theme">
               <option value="icon_metier">Icône métier (cadeau sur le dernier tampon)</option>
               <option value="logo_stamp">Logo du marchand</option>
+              <option value="illustration">Illustration (dessin multicolore)</option>
             </select>
+          </div>
+
+          <!-- Thème illustration — masqué hors de ce thème -->
+          <div id="section-illustration" style="display:none">
+            <div id="illustration-banner" class="field-hint" style="display:none;background:rgba(220,52,39,.12);border:1px solid rgba(220,52,39,.45);border-radius:8px;padding:10px;margin-bottom:12px;color:#ff6b5b"></div>
+            <div class="field" style="margin-bottom:12px">
+              <label for="f-strip-illustration">Illustration</label>
+              <select id="f-strip-illustration"></select>
+              <div class="field-hint">Dessin multicolore à couleurs figées : il ne suit pas la palette du marchand, seulement sa taille et sa position.</div>
+            </div>
+            <div class="field" style="margin-bottom:12px">
+              <label for="f-strip-produit">Nom du produit</label>
+              <input id="f-strip-produit" type="text" maxlength="24" placeholder="ex. KEBAB">
+              <div class="field-hint">Un seul mot. Sert au sous-titre : « LE 12ÈME KEBAB OFFERT ». Vide = « LE 12ÈME OFFERT ».</div>
+            </div>
+            <div class="field" style="margin-bottom:12px">
+              <label for="f-strip-vide">Passages restants</label>
+              <select id="f-strip-vide">
+                <option value="">Illustration en transparence (recommandé)</option>
+                <option value="logo">Logo du marchand sur un disque</option>
+              </select>
+              <div id="logo-alpha-warn" class="field-hint" style="display:none;color:var(--warning);margin-top:6px"></div>
+            </div>
           </div>
           <div class="field" id="section-stamp-icon" style="margin-bottom:12px">
             <label>Icône</label>
@@ -539,7 +563,7 @@
         <!-- Couleurs manuelles des pastilles (optionnel) — écrasent le calcul WCAG auto -->
         <div id="section-pastille-colors">
           <div class="field" style="margin-bottom:12px">
-            <label>Pastille — fond du cercle rempli (optionnel)</label>
+            <label id="lbl-past-fond">Pastille — fond du cercle rempli (optionnel)</label>
             <div class="color-row">
               <input type="color" id="cp-past-fond" value="#000000">
               <input type="text"  id="f-past-fond" placeholder="vide = auto · accepte « transparent »">
@@ -563,7 +587,7 @@
             </div>
           </div>
           <div class="field" style="margin-bottom:12px">
-            <label>Pastille — contour, vides + remplies (optionnel)</label>
+            <label id="lbl-past-contour">Pastille — contour, vides + remplies (optionnel)</label>
             <div class="color-row">
               <input type="color" id="cp-past-contour" value="#c9a84c">
               <input type="text"  id="f-past-contour" placeholder="vide = auto · accepte « transparent »">
@@ -1078,6 +1102,8 @@ function resetForm() {
   document.getElementById('f-type-programme').value = 'stamps';
   document.getElementById('f-strip-mode').value  = 'stamps';
   document.getElementById('f-strip-theme').value = 'icon_metier';
+  document.getElementById('f-strip-produit').value = '';
+  document.getElementById('f-strip-vide').value = '';
   document.getElementById('f-stamp-icon').value  = 'coffee';
   document.getElementById('f-strip-label').checked = true;
   document.getElementById('strip-static-preview').style.display = 'none';
@@ -1195,11 +1221,27 @@ function fillForm(m) {
   // Design du pass
   document.getElementById('f-strip-mode').value  = m.strip_mode || '';
   document.getElementById('f-strip-theme').value = m.strip_theme || 'icon_metier';
+  document.getElementById('f-strip-produit').value = m.strip_produit || '';
+  document.getElementById('f-strip-vide').value    = m.strip_vide || '';
   const savedIcon = m.stamp_icon || 'coffee';
   document.getElementById('f-stamp-icon').value  = savedIcon;
   renderIconPicker(savedIcon);
   document.getElementById('f-strip-label').checked = m.strip_label !== 'off';
   toggleStampOptions(m.strip_mode);
+  // Le sélecteur doit être peuplé AVANT d'y écrire la valeur du marchand,
+  // sinon l'option n'existe pas encore et la sélection est perdue en silence.
+  chargerIllustrations().then(() => {
+    const sel = document.getElementById('f-strip-illustration');
+    if (m.strip_illustration) {
+      // Clé absente du registre : on l'ajoute comme option pour ne pas la
+      // perdre à la sauvegarde, et le bandeau la signalera en rouge.
+      if (!Array.from(sel.options).some(o => o.value === m.strip_illustration)) {
+        sel.insertAdjacentHTML('afterbegin', `<option value="${m.strip_illustration}">${m.strip_illustration} (inconnue)</option>`);
+      }
+      sel.value = m.strip_illustration;
+    }
+    majSectionIllustration();
+  });
 
   // Image statique (si image_strip_url est un upload Storage, afficher la miniature)
   const stripUrl = m.image_strip_url || '';
@@ -1409,6 +1451,9 @@ function collectForm() {
   body.strip_theme = document.getElementById('f-strip-theme').value || 'icon_metier';
   body.stamp_icon  = document.getElementById('f-stamp-icon').value  || 'coffee';
   body.strip_label = document.getElementById('f-strip-label').checked ? 'on' : 'off';
+  body.strip_illustration = document.getElementById('f-strip-illustration').value || null;
+  body.strip_produit      = document.getElementById('f-strip-produit').value.trim() || null;
+  body.strip_vide         = document.getElementById('f-strip-vide').value || null;
   // Couleurs manuelles des pastilles (optionnel) — vide → null → repli WCAG auto.
   // Champ texte : accepte hex, rgba() ou « transparent ».
   body.couleur_pastille_fond    = document.getElementById('f-past-fond').value.trim()    || null;
@@ -1589,7 +1634,91 @@ function selectIcon(name) {
 function toggleIconPickerVisibility() {
   const theme = document.getElementById('f-strip-theme').value;
   const el = document.getElementById('section-stamp-icon');
-  if (el) el.style.display = (theme === 'logo_stamp') ? 'none' : '';
+  if (el) el.style.display = (theme === 'icon_metier') ? '' : 'none';
+}
+
+// ── Thème illustration ─────────────────────────────────────────────────────
+// Registre chargé une fois, depuis le serveur : l'admin ne connaît jamais la
+// liste des illustrations en dur, sinon elle divergerait du code au premier
+// ajout. La même réponse dit si Poppins est disponible côté serveur.
+let S_ILLUS = null;
+async function chargerIllustrations() {
+  if (S_ILLUS) return S_ILLUS;
+  // api() renvoie la Response brute et prend le chemin complet.
+  try {
+    const r = await api('/api/admin/illustrations');
+    S_ILLUS = r.ok ? await r.json() : { illustrations: [], poppins: true };
+  } catch { S_ILLUS = { illustrations: [], poppins: true }; }
+  const sel = document.getElementById('f-strip-illustration');
+  const actuel = sel.value;
+  sel.innerHTML = S_ILLUS.illustrations.map(i => `<option value="${i.cle}">${i.label}</option>`).join('');
+  if (actuel) sel.value = actuel;
+  return S_ILLUS;
+}
+
+// Bandeau rouge : clé absente du registre, ou police manquante côté serveur.
+// Deux états visibles plutôt qu'un repli silencieux — c'est la leçon de l'icône
+// Phosphor renommée en juillet.
+function majBandeauIllustration(cleMarchand) {
+  const el = document.getElementById('illustration-banner');
+  if (!el || !S_ILLUS) return;
+  const msgs = [];
+  const cles = S_ILLUS.illustrations.map(i => i.cle);
+  if (cleMarchand && !cles.includes(cleMarchand)) {
+    msgs.push(`Illustration « ${cleMarchand} » absente du registre : le strip rendra tous les passages en état restant, sans dessin.`);
+  }
+  if (S_ILLUS.poppins === false) {
+    msgs.push('Police Poppins absente du serveur : le sous-titre est rendu en DM Sans.');
+  }
+  el.innerHTML = msgs.join('<br>');
+  el.style.display = msgs.length ? '' : 'none';
+}
+
+// Avertissement si « passages restants = logo » et logo sans transparence réelle.
+async function verifierLogoAlpha() {
+  const el = document.getElementById('logo-alpha-warn');
+  if (!el) return;
+  const actif = document.getElementById('f-strip-theme').value === 'illustration'
+             && document.getElementById('f-strip-vide').value === 'logo';
+  if (!actif || !S.editId) { el.style.display = 'none'; return; }
+  let r;
+  try {
+    const rep = await api(`/api/admin/marchands/${S.editId}/logo-check`);
+    if (!rep.ok) { el.style.display = 'none'; return; }
+    r = await rep.json();
+  } catch { el.style.display = 'none'; return; }
+  if (r.ok) { el.style.display = 'none'; return; }
+  const raisons = {
+    aucun_logo: "Aucun logo : les passages restants seront des disques vides.",
+    pas_de_canal_alpha: "Le logo n'a pas de canal de transparence : il apparaîtra dans un carré sur le disque sombre.",
+    alpha_opaque: `Le logo est quasi opaque (${Math.round((r.partTransparente || 0) * 100)} % de pixels transparents) : il rendra mal sur un disque sombre.`,
+    telechargement_impossible: "Logo inaccessible — vérification impossible.",
+    image_illisible: "Logo illisible — vérification impossible.",
+  };
+  el.textContent = '⚠ ' + (raisons[r.raison] || 'Logo inadapté à ce mode.');
+  el.style.display = '';
+}
+
+// Les mêmes réglages de couleur portent des noms différents selon le thème :
+// en illustration, la « pastille » n'existe plus — c'est un accent et un disque.
+function majLibellesCouleurs() {
+  const illu = document.getElementById('f-strip-theme').value === 'illustration';
+  const f = document.getElementById('lbl-past-fond');
+  const c = document.getElementById('lbl-past-contour');
+  if (f) f.textContent = illu ? "Disque (mode logo) — fond (optionnel)" : "Pastille — fond du cercle rempli (optionnel)";
+  if (c) c.textContent = illu ? "Couleur d'accent — sous-titre + contour des disques (optionnel)" : "Pastille — contour, vides + remplies (optionnel)";
+}
+
+async function majSectionIllustration() {
+  const illu = document.getElementById('f-strip-theme').value === 'illustration';
+  const el = document.getElementById('section-illustration');
+  if (el) el.style.display = illu ? '' : 'none';
+  majLibellesCouleurs();
+  if (illu) {
+    await chargerIllustrations();
+    majBandeauIllustration(document.getElementById('f-strip-illustration').value);
+    verifierLogoAlpha();
+  }
 }
 
 function toggleStampOptions(mode) {
@@ -1603,6 +1732,11 @@ document.getElementById('f-strip-mode').addEventListener('change', function() {
 
 document.getElementById('f-strip-theme').addEventListener('change', function() {
   toggleIconPickerVisibility();
+  majSectionIllustration();
+});
+document.getElementById('f-strip-vide').addEventListener('change', verifierLogoAlpha);
+document.getElementById('f-strip-illustration').addEventListener('change', function() {
+  majBandeauIllustration(this.value);
 });
 
 // Upload image statique
@@ -1675,6 +1809,14 @@ function loadStripPreview(id, mode, theme, icon, label, maxVal) {
     filled:  Math.ceil((maxVal || 10) / 2),
     variant: 'strip2x',
   });
+
+  // Thème illustration : on transmet les réglages du FORMULAIRE, pas ceux
+  // enregistrés — sinon l'aperçu ne bougerait qu'après sauvegarde.
+  if (theme === 'illustration') {
+    params.set('illustration', document.getElementById('f-strip-illustration').value || '');
+    params.set('produit',      document.getElementById('f-strip-produit').value.trim());
+    params.set('vide',         document.getElementById('f-strip-vide').value || '');
+  }
 
   // <img src> ne transmet pas le header Authorization → fetch authentifié + blob URL
   fetch(`/api/admin/marchands/${id}/strip-preview?${params}`, {

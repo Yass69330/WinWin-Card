@@ -203,6 +203,9 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
   const VISUAL_FIELDS = new Set([
     'couleur_fond', 'couleur_fond_reward', 'logo_url', 'nom', 'pass_display_name',
     'strip_mode', 'strip_theme', 'stamp_icon', 'strip_custom_background_url', 'max_value', 'strip_label',
+    // Thème illustration : DANS LES DEUX listes. Absentes de VISUAL_FIELDS,
+    // changer d'illustration servirait l'ancienne image en cache indéfiniment.
+    'strip_illustration', 'strip_produit', 'strip_vide',
     'type_programme',
     'couleur_pastille_fond', 'couleur_pastille_contour', 'couleur_pastille_icone',
     'couleur_label_strip',
@@ -228,6 +231,7 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
     'couleur_label_strip',
     // Champs générateur de strip (aucun gating forfait côté admin)
     'strip_mode', 'strip_theme', 'stamp_icon', 'strip_custom_background_url', 'strip_label',
+    'strip_illustration', 'strip_produit', 'strip_vide',
     'freq_seuil_bas', 'freq_seuil_haut',
   ];
 
@@ -251,6 +255,23 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
   if (updates.freq_seuil_bas !== undefined && updates.freq_seuil_haut !== undefined
       && updates.freq_seuil_bas > updates.freq_seuil_haut) {
     return res.status(400).json({ error: 'freq_seuil_bas doit être ≤ freq_seuil_haut' });
+  }
+
+  // Thème illustration : la clé doit exister DANS LE REGISTRE, pas seulement
+  // avoir la bonne forme. Le CHECK de la migration 043 garantit la forme ;
+  // seul le code connaît les clés réellement disponibles. Refuser ici est ce
+  // qui rend l'état « clé morte » impossible à produire depuis l'interface.
+  if (updates.strip_illustration) {
+    const { estConnue, listerCles } = require('../services/illustrations');
+    if (!estConnue(updates.strip_illustration)) {
+      return res.status(400).json({
+        error: `Illustration inconnue : « ${updates.strip_illustration} ». Disponibles : ${listerCles().join(', ')}`,
+      });
+    }
+  }
+  if (updates.strip_vide !== undefined && updates.strip_vide !== null
+      && !['illustration', 'logo'].includes(updates.strip_vide)) {
+    return res.status(400).json({ error: "strip_vide doit valoir 'illustration' ou 'logo'" });
   }
 
   // Bump strip_config_version si un champ visuel a changé
@@ -293,6 +314,47 @@ router.patch('/marchands/:id/suspension', authAdmin, asyncHandler(async (req, re
   res.json(data);
 }));
 
+// GET /api/admin/illustrations — clés du registre + disponibilité de Poppins.
+// Alimente le sélecteur d'illustration et le bandeau d'alerte de l'admin.
+router.get('/illustrations', authAdmin, asyncHandler(async (req, res) => {
+  const { ILLUSTRATIONS, listerCles } = require('../services/illustrations');
+  let poppins = false;
+  try { require.resolve('@fontsource/poppins/files/poppins-latin-700-normal.woff'); poppins = true; } catch {}
+  res.json({
+    illustrations: listerCles().map(cle => ({ cle, label: ILLUSTRATIONS[cle].label })),
+    poppins,
+  });
+}));
+
+// GET /api/admin/marchands/:id/logo-check — le logo a-t-il un canal alpha réel ?
+// Le mode « passages restants = logo » dessine le logo sur un disque sombre :
+// un logo à fond opaque (typiquement récupéré sur Instagram) y rend mal. On
+// mesure plutôt que de demander au fondateur de juger à l'œil.
+router.get('/marchands/:id/logo-check', authAdmin, asyncHandler(async (req, res) => {
+  const { data: m, error } = await supabase
+    .from('marchands').select('logo_url').eq('id', req.params.id).single();
+  if (error || !m) return res.status(404).json({ error: 'Marchand introuvable' });
+  if (!m.logo_url) return res.json({ ok: false, raison: 'aucun_logo' });
+
+  const { fetchImage } = require('../services/apple-pass');
+  const buf = await fetchImage(m.logo_url).catch(() => null);
+  if (!buf) return res.json({ ok: false, raison: 'telechargement_impossible' });
+
+  const sharp = require('sharp');
+  const meta = await sharp(buf).metadata().catch(() => null);
+  if (!meta) return res.json({ ok: false, raison: 'image_illisible' });
+  if (!meta.hasAlpha) return res.json({ ok: false, raison: 'pas_de_canal_alpha' });
+
+  // hasAlpha ne suffit pas : un PNG peut avoir un canal alpha entièrement
+  // opaque. On regarde la proportion réellement transparente.
+  const { data, info } = await sharp(buf).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  let transparents = 0;
+  const total = info.width * info.height;
+  for (let i = 3; i < data.length; i += info.channels) if (data[i] < 200) transparents++;
+  const part = transparents / total;
+  res.json({ ok: part >= 0.05, raison: part >= 0.05 ? null : 'alpha_opaque', partTransparente: +part.toFixed(3) });
+}));
+
 // GET /api/admin/marchands/:id/strip-preview — rendu PNG du strip sans cache Storage
 // Query: filled (0..max_value), theme (override), icon (override), variant (strip2x|strip3x|hero)
 router.get('/marchands/:id/strip-preview', authAdmin, asyncHandler(async (req, res) => {
@@ -315,6 +377,12 @@ router.get('/marchands/:id/strip-preview', authAdmin, asyncHandler(async (req, r
     strip_theme: req.query.theme  || marchand.strip_theme || 'icon_metier',
     stamp_icon:  req.query.icon   || marchand.stamp_icon  || 'coffee',
     strip_label: req.query.label  || 'on',
+    // Thème illustration : overrides d'aperçu, pour voir le rendu AVANT de
+    // sauvegarder. Une clé inconnue n'est pas refusée ici — l'aperçu doit
+    // justement montrer le repli visible que produirait cette clé.
+    strip_illustration: req.query.illustration ?? marchand.strip_illustration,
+    strip_produit:      req.query.produit      ?? marchand.strip_produit,
+    strip_vide:         req.query.vide         ?? marchand.strip_vide,
   };
 
   const { render } = require('../services/strip-generator');
