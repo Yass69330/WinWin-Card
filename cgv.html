@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conditions générales de vente — WinWin Card</title>
+<meta name="robots" content="index,follow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #0E1B3D;
+    --electric: #2F5BFF;
+    --paper: #F7F8FB;
+    --ink: #1A2233;
+    --muted: #5B6478;
+    --rule: #DCE1EC;
+    --surface: #FFFFFF;
+    --font: "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0A1330;
+      --ink: #E6EAF4;
+      --muted: #9AA3BA;
+      --rule: #22305A;
+      --surface: #111D44;
+      --electric: #6D8BFF;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font);
+    font-size: 1.0625rem;
+    line-height: 1.65;
+  }
+  a { color: var(--electric); text-underline-offset: 3px; }
+  a:focus-visible { outline: 2px solid var(--electric); outline-offset: 3px; border-radius: 2px; }
+
+  header.masthead {
+    background: var(--navy);
+    color: #fff;
+    padding: 3.5rem 1.5rem 3rem;
+  }
+  .masthead .wrap { max-width: 68rem; margin: 0 auto; }
+  .brand { color: #fff; text-decoration: none; font-weight: 700; letter-spacing: -0.01em; }
+  .brand span { color: #8FA6FF; }
+  .masthead h1 {
+    font-size: clamp(2.2rem, 6vw, 4.2rem);
+    line-height: 1.02;
+    letter-spacing: -0.035em;
+    font-weight: 800;
+    margin: 2.5rem 0 1rem;
+    max-width: 14ch;
+  }
+  .masthead p { margin: 0; color: #B9C4E4; max-width: 60ch; }
+
+  .layout {
+    max-width: 68rem;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 5rem;
+    display: grid;
+    grid-template-columns: 15rem minmax(0, 1fr);
+    gap: 4rem;
+  }
+  nav.toc { position: sticky; top: 2rem; align-self: start; font-size: 0.9rem; }
+  nav.toc h2 { font-size: 0.9rem; margin: 0 0 0.75rem; color: var(--muted); font-weight: 500; }
+  nav.toc ol { list-style: none; margin: 0; padding: 0; counter-reset: toc; }
+  nav.toc li { counter-increment: toc; margin: 0.35rem 0; }
+  nav.toc a { color: var(--ink); text-decoration: none; display: flex; gap: 0.6rem; }
+  nav.toc a::before { content: counter(toc); color: var(--electric); font-weight: 700; min-width: 1.4rem; }
+  nav.toc a:hover { color: var(--electric); }
+
+  main { max-width: 42rem; counter-reset: art; }
+  section { counter-increment: art; padding: 0 0 2.25rem; margin: 0 0 2.25rem; border-bottom: 1px solid var(--rule); scroll-margin-top: 1.5rem; }
+  section:last-of-type { border-bottom: 0; }
+  section h2 {
+    font-size: 1.45rem;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    margin: 0 0 1rem;
+    display: flex;
+    gap: 0.9rem;
+    align-items: baseline;
+  }
+  section h2::before {
+    content: counter(art);
+    color: var(--electric);
+    font-weight: 800;
+    font-size: 1.1rem;
+    min-width: 1.6rem;
+  }
+  p { margin: 0 0 1rem; }
+  ul { margin: 0 0 1rem; padding-left: 1.2rem; }
+  li { margin: 0.3rem 0; }
+  .price {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--electric);
+    padding: 1rem 1.25rem;
+    margin: 0 0 1rem;
+  }
+  .price p { margin: 0.2rem 0; }
+  .price strong { font-size: 1.15rem; }
+  .updated { color: var(--muted); font-size: 0.9rem; }
+
+  footer { border-top: 1px solid var(--rule); padding: 2rem 1.5rem; text-align: center; color: var(--muted); font-size: 0.9rem; }
+
+  @media (max-width: 860px) {
+    .layout { grid-template-columns: 1fr; gap: 2rem; }
+    nav.toc { position: static; border: 1px solid var(--rule); background: var(--surface); padding: 1rem 1.25rem; }
+  }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap">
+    <a class="brand" href="https://winwin-card.com">WinWin<span>Card</span></a>
+    <h1>Conditions générales de vente</h1>
+    <p>Elles s'appliquent à tout abonnement souscrit par un professionnel auprès de WinWin Card. Les accepter est nécessaire pour valider le paiement.</p>
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="toc" aria-label="Sommaire">
+    <h2>Sommaire</h2>
+    <ol>
+      <li><a href="#prestataire">Prestataire</a></li>
+      <li><a href="#service">Le service</a></li>
+      <li><a href="#souscription">Souscription</a></li>
+      <li><a href="#prix">Prix</a></li>
+      <li><a href="#paiement">Paiement</a></li>
+      <li><a href="#installation">Pack installation</a></li>
+      <li><a href="#resiliation">Durée et résiliation</a></li>
+      <li><a href="#contestation">Contestation de paiement</a></li>
+      <li><a href="#engagements">Engagements de WinWin</a></li>
+      <li><a href="#client">Engagements du client</a></li>
+      <li><a href="#donnees">Données personnelles</a></li>
+      <li><a href="#responsabilite">Responsabilité</a></li>
+      <li><a href="#propriete">Propriété intellectuelle</a></li>
+      <li><a href="#reference">Référence commerciale</a></li>
+      <li><a href="#modification">Modification des CGV</a></li>
+      <li><a href="#droit">Droit applicable</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <p class="updated">En vigueur au 17 septembre 2026.</p>
+
+    <section id="prestataire">
+      <h2>Prestataire</h2>
+      <p>Le service WinWin Card est fourni par Yacine Belgasmi, entrepreneur individuel (EI), immatriculé sous le numéro SIRET 983 443 938 00011, dont l'adresse est 7 route nationale, 69330 Pusignan (ci-après « WinWin »).</p>
+      <p>Contact : <a href="mailto:contact@winwin-card.com">contact@winwin-card.com</a></p>
+      <p>Les présentes conditions s'adressent exclusivement aux professionnels (ci-après « le Client »). Elles ne s'appliquent pas aux consommateurs.</p>
+    </section>
+
+    <section id="service">
+      <h2>Le service</h2>
+      <p>WinWin fournit au Client un programme de fidélité digital destiné à ses propres clients (ci-après « les Porteurs ») :</p>
+      <ul>
+        <li>une carte de fidélité à l'image du Client, ajoutée par les Porteurs dans Apple Wallet ou Google Wallet, sans application à télécharger ;</li>
+        <li>une page d'inscription dédiée ;</li>
+        <li>un scanner accessible depuis le navigateur d'un smartphone ou d'une tablette, pour créditer les passages ou les points ;</li>
+        <li>un tableau de bord de suivi ;</li>
+        <li>le cas échéant, des notifications envoyées aux Porteurs, selon la formule souscrite.</li>
+      </ul>
+      <p>Le service est accessible en ligne. Le Client fournit le matériel (smartphone ou tablette avec un navigateur récent) et la connexion internet nécessaires à son utilisation, sauf accord écrit contraire.</p>
+    </section>
+
+    <section id="souscription">
+      <h2>Souscription</h2>
+      <p>La souscription se fait en ligne, via la page de paiement sécurisée de notre prestataire Stripe. Le Client accepte les présentes conditions en cochant la case prévue à cet effet avant de payer. Le contrat est conclu dès la confirmation du paiement.</p>
+    </section>
+
+    <section id="prix">
+      <h2>Prix</h2>
+      <div class="price">
+        <p><strong>120 €</strong>, pack installation, payé une seule fois à la souscription</p>
+        <p><strong>35 € par mois</strong>, abonnement, payé chaque mois</p>
+      </div>
+      <p>TVA non applicable, art. L. 223-3 du CIBS.</p>
+      <p>Les prix applicables sont ceux affichés sur la page de paiement au jour de la souscription. WinWin peut faire évoluer ses tarifs ; toute hausse est notifiée par email au moins 30 jours avant son application, et le Client peut résilier avant cette date sans frais.</p>
+    </section>
+
+    <section id="paiement">
+      <h2>Paiement</h2>
+      <p>Le paiement se fait par carte bancaire. Le premier paiement (pack installation et premier mois) est débité à la souscription. L'abonnement est ensuite débité automatiquement chaque mois, à la date anniversaire de la souscription, sur la carte enregistrée.</p>
+      <p>En cas d'échec de paiement, le Client est prévenu par email et invité à mettre à jour sa carte. Sans régularisation dans les 15 jours suivant cette notification, WinWin peut suspendre le service jusqu'au paiement.</p>
+      <p>Toute somme impayée à son échéance entraîne de plein droit des pénalités de retard égales à trois fois le taux d'intérêt légal, ainsi qu'une indemnité forfaitaire pour frais de recouvrement de 40 € (articles L. 441-10 et D. 441-5 du Code de commerce).</p>
+    </section>
+
+    <section id="installation">
+      <h2>Pack installation</h2>
+      <p>Le pack installation couvre la conception de la carte à l'image du Client, le paramétrage du programme et la mise en service. La carte est mise en ligne après validation de son visuel par le Client.</p>
+      <p>Le pack installation n'est pas remboursable une fois les travaux de conception commencés.</p>
+    </section>
+
+    <section id="resiliation">
+      <h2>Durée et résiliation</h2>
+      <p>L'abonnement est sans engagement de durée. Il se renouvelle automatiquement chaque mois.</p>
+      <p>Le Client peut le résilier à tout moment, par simple email à <a href="mailto:contact@winwin-card.com">contact@winwin-card.com</a>. La résiliation prend effet à la fin du mois d'abonnement en cours : aucun nouveau prélèvement n'est effectué, et le mois en cours reste dû et n'est pas remboursé, même partiellement.</p>
+      <p>À la fin de l'abonnement, les cartes des Porteurs ne sont plus mises à jour et le scanner est désactivé. Sur demande formulée dans les 30 jours, WinWin transmet au Client la liste de ses Porteurs dans un format exploitable. Passé ce délai, les données sont supprimées.</p>
+      <p>WinWin peut résilier l'abonnement en cas de manquement grave du Client, notamment un impayé persistant ou un usage contraire à la loi, après une mise en demeure restée sans effet pendant 15 jours.</p>
+    </section>
+
+    <section id="contestation">
+      <h2>Contestation de paiement</h2>
+      <p>Avant toute contestation auprès de sa banque, le Client s'engage à contacter WinWin pour trouver une solution.</p>
+      <p>Une contestation portant sur une période pendant laquelle le service a été fourni est considérée comme injustifiée. L'historique des passages enregistrés par le scanner et les présentes conditions acceptées à la souscription font foi de l'utilisation du service. En cas de contestation injustifiée, WinWin peut suspendre immédiatement le service et engager le recouvrement des sommes dues, frais de contestation inclus.</p>
+    </section>
+
+    <section id="engagements">
+      <h2>Engagements de WinWin</h2>
+      <p>WinWin met en œuvre les moyens raisonnables pour assurer le bon fonctionnement et la disponibilité du service. Des interruptions ponctuelles peuvent survenir pour maintenance ou en cas d'incident ; WinWin s'efforce de les limiter et de les résoudre rapidement.</p>
+      <p>Les cartes et notifications reposent sur les services d'Apple et de Google. WinWin ne peut garantir la réception de chaque notification par chaque Porteur, ni être tenu responsable d'une modification ou d'une indisponibilité de ces services.</p>
+    </section>
+
+    <section id="client">
+      <h2>Engagements du client</h2>
+      <ul>
+        <li>fournir des informations exactes et les tenir à jour ;</li>
+        <li>disposer des droits sur les logos, visuels et textes transmis à WinWin ;</li>
+        <li>utiliser le service conformément à la loi, notamment pour les messages envoyés aux Porteurs ;</li>
+        <li>garder confidentiels ses identifiants d'accès et ceux de ses scanners.</li>
+      </ul>
+    </section>
+
+    <section id="donnees">
+      <h2>Données personnelles</h2>
+      <p>Les données des Porteurs (prénom, email, téléphone, date de naissance, historique de passages) sont collectées pour le compte du Client, qui en est le responsable de traitement. WinWin agit en qualité de sous-traitant au sens de l'article 28 du RGPD : il traite ces données uniquement pour fournir le service, ne les vend pas et ne les utilise pas pour son propre compte.</p>
+      <p>Les données sont hébergées au sein de l'Union européenne. Les modalités détaillées du traitement sont décrites dans l'accord de sous-traitance, disponible sur simple demande.</p>
+      <p>Les données du Client lui-même sont utilisées par WinWin pour gérer l'abonnement et la facturation.</p>
+    </section>
+
+    <section id="responsabilite">
+      <h2>Responsabilité</h2>
+      <p>La responsabilité de WinWin ne peut être engagée que pour les dommages directs résultant d'une faute prouvée. Elle est limitée au montant total payé par le Client au cours des 12 mois précédant le fait générateur. WinWin n'est pas responsable des dommages indirects, tels qu'une perte de chiffre d'affaires ou de clientèle.</p>
+    </section>
+
+    <section id="propriete">
+      <h2>Propriété intellectuelle</h2>
+      <p>La plateforme WinWin Card, ses logiciels et ses éléments graphiques restent la propriété de WinWin. L'abonnement confère au Client un droit d'utilisation personnel et non transférable, pour la durée de l'abonnement.</p>
+      <p>Le Client reste propriétaire de ses marques et logos, dont il autorise l'utilisation par WinWin pour les besoins du service.</p>
+    </section>
+
+    <section id="reference">
+      <h2>Référence commerciale</h2>
+      <p>Le Client autorise WinWin à citer son nom et à montrer son logo comme référence client, sur son site et dans ses supports commerciaux. Il peut retirer cette autorisation à tout moment par email.</p>
+    </section>
+
+    <section id="modification">
+      <h2>Modification des CGV</h2>
+      <p>WinWin peut modifier les présentes conditions. Le Client est informé par email au moins 30 jours avant leur entrée en vigueur ; s'il les refuse, il peut résilier son abonnement avant cette date.</p>
+    </section>
+
+    <section id="droit">
+      <h2>Droit applicable</h2>
+      <p>Les présentes conditions sont soumises au droit français. En cas de litige, les parties recherchent d'abord une solution amiable. À défaut, le litige est porté devant les juridictions compétentes du ressort de Lyon.</p>
+    </section>
+  </main>
+</div>
+
+<footer>
+  WinWin Card, Yacine Belgasmi EI, SIRET 983 443 938 00011. <a href="mailto:contact@winwin-card.com">contact@winwin-card.com</a>
+</footer>
+
+</body>
+</html>
