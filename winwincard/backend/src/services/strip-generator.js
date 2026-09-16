@@ -10,6 +10,9 @@ const path  = require('path');
 const zlib  = require('zlib');
 const sharp = require('sharp');
 const { Resvg } = require('@resvg/resvg-js');
+// Registre des illustrations (thème « illustration »). Frozen, append-only :
+// une clé ne se renomme ni ne se supprime jamais — cf. illustrations/index.js.
+const { obtenir: obtenirIllustration } = require('./illustrations');
 
 // ── WOFF → TTF (in-memory) ────────────────────────────────────────────────
 // fontdb/ttf-parser ne lit pas les WOFF nativement. On décompresse les tables
@@ -420,6 +423,292 @@ function pointsBarSvg({ w, h, valeur, maxValue, langue, showLabel, principale, s
     ${fill}`;
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// THÈME « ILLUSTRATION » — bloc autonome
+//
+// Ce bloc est une SORTIE ANTICIPÉE de buildSvg. Il APPELLE computeLayout, la
+// palette (stampColors) et les utilitaires de couleur, mais n'en MODIFIE aucun :
+// la preuve de non-régression des thèmes logo_stamp et icon_metier se réduit
+// ainsi à « le chemin d'exécution n'est pas atteint ».
+//
+// Ce qui distingue une illustration d'une icône : elle est MULTICOLORE à
+// couleurs figées. Elle s'adapte au marchand par sa TAILLE et sa POSITION,
+// jamais par sa teinte. Les couleurs du marchand habillent ce qui l'entoure —
+// fond, titre, sous-titre, disques des passages restants.
+//
+// Correspondance des réglages (décisions de pilotage) :
+//   fond            ← couleur_fond            (MÊME en état doré — surtout pas
+//                                              couleur_fond_reward : l'effet
+//                                              doré vient des 11 dessins
+//                                              allumés, pas d'un fond jaune)
+//   titre           ← couleur_label_strip     (sinon WCAG, même règle exacte
+//                                              que labelSvg, recopiée ici parce
+//                                              que labelSvg ne doit pas bouger)
+//   accent          ← couleur_pastille_contour (sous-titre + contour des disques)
+//   disque, mode logo ← couleur_pastille_fond  (contour = accent à 35 %)
+//
+// NON UTILISÉ ICI, volontairement : strip_custom_background_url. Un fond
+// photographique sous onze dessins multicolores donne une bouillie illisible.
+// Le champ reste en base et continue de servir aux autres thèmes ; en thème
+// illustration il est ignoré, sans erreur ni avertissement. À consigner dans
+// la passation technique.
+// ════════════════════════════════════════════════════════════════════════════
+
+// Ordinal du passage offert : 11 tampons → « LE 12ÈME ».
+// EN : 11/12/13 font exception (11TH, pas 11ST) — la règle du chiffre des
+// unités ne s'applique qu'en dehors de l'adolescence des nombres.
+function ordinal(n, langue) {
+  if (langue === 'fr') return n === 1 ? '1ER' : `${n}ÈME`;
+  const centaine = n % 100;
+  if (centaine >= 11 && centaine <= 13) return `${n}TH`;
+  return `${n}${({ 1: 'ST', 2: 'ND', 3: 'RD' })[n % 10] || 'TH'}`;
+}
+
+// ── Largeur du sous-titre ─────────────────────────────────────────────────
+// Le sous-titre est le SEUL texte de longueur variable du strip, et la
+// migration 043 autorise jusqu'à 24 caractères de nom de produit. Mesuré : un
+// produit de 24 caractères déborde la zone sûre, jusqu'à la pleine largeur du
+// strip avec des glyphes larges (« WWWW… » sortait à [0, 749] au lieu de
+// [70, 680]). Il faut donc ajuster la taille — et pour l'ajuster il faut
+// MESURER, pas deviner.
+//
+// Avances réelles de Poppins 700, en em, relevées par rastérisation de
+// « H<c>H<c>… » puis soustraction de la contribution des H (isole l'avance du
+// glyphe, bearings compris — l'encre seule sous-estimerait). Relevé une fois
+// hors ligne ; la police est figée dans package.json, la table avec elle.
+const AVANCES_POPPINS = Object.freeze({
+  '0':0.652,'1':0.376,'2':0.571,'3':0.605,'4':0.677,'5':0.650,'6':0.637,'7':0.535,'8':0.648,'9':0.615,
+  'A':0.737,'B':0.659,'C':0.762,'D':0.727,'E':0.541,'F':0.547,'G':0.762,'H':0.731,'I':0.295,'J':0.578,
+  'K':0.697,'L':0.477,'M':0.918,'N':0.752,'O':0.786,'P':0.624,'Q':0.788,'R':0.652,'S':0.615,'T':0.591,
+  'U':0.705,'V':0.730,'W':1.052,'X':0.715,'Y':0.671,'Z':0.596,' ':0.212,'-':0.580,"'":0.221,
+  'É':0.541,'À':0.737,'È':0.541,'Ù':0.705,'Ç':0.762,'Ô':0.786,'Û':0.705,'Î':0.295,'Ê':0.541,'Â':0.737,
+  'Ï':0.295,'Ë':0.541,'Ü':0.705,'Ö':0.786,'Ä':0.737,'Ñ':0.752,'Õ':0.786,'Å':0.737,'Ø':0.786,
+  'Æ':0.955,'Œ':1.063,
+});
+// Glyphe inconnu → on prend le PLUS LARGE mesuré. L'estimation ne peut alors
+// que surestimer, donc le texte peut finir plus petit que nécessaire, jamais
+// plus large que prévu. Se tromper vers le petit est lisible ; se tromper vers
+// le grand sort de la zone sûre.
+const AVANCE_MAX = 1.063;
+
+function largeurTexte(texte, taille, interlettre) {
+  return emTexte(texte) * taille + interlettre * Math.max(0, [...texte].length - 1);
+}
+
+// Somme des avances, en em — indépendante de la taille de police.
+function emTexte(texte) {
+  let em = 0;
+  for (const c of texte) em += AVANCES_POPPINS[c] ?? AVANCE_MAX;
+  return em;
+}
+
+// Plus grande taille de police tenant dans `dispo`, plafonnée à `taille`.
+// RÉSOLUTION EXACTE, pas une règle de trois : l'interlettrage est un terme
+// CONSTANT (il ne suit pas la taille de police), donc la largeur est affine en
+// taille, pas proportionnelle. Une simple mise à l'échelle par le rapport des
+// largeurs sous-estime la réduction nécessaire — mesuré : un produit de 24
+// « W » restait 12 px trop large et partait en troncature alors qu'il tenait
+// parfaitement à 17,7 px.
+function tailleQuiRentre(texte, tailleMax, tailleMin, dispo, interlettre) {
+  const em = emTexte(texte);
+  if (em <= 0) return tailleMax;
+  const restant = dispo - interlettre * Math.max(0, [...texte].length - 1);
+  return Math.max(tailleMin, Math.min(tailleMax, restant / em));
+}
+
+// Sous-titre. Le nom du produit est facultatif : sans lui la phrase reste
+// grammaticale, jamais « LE 12ÈME  OFFERT » ni « undefined ».
+// Le CHECK de la migration 043 refuse déjà " < > & ; escAttr est la seconde
+// ceinture, côté code, pour toute valeur arrivée autrement que par l'admin
+// (aperçu admin, ligne antérieure à la migration).
+function illustrationSousTitre({ langue, produit, maxValue, isReward }) {
+  const fr = langue === 'fr';
+  const p  = produit ? escAttr(String(produit).trim().toUpperCase()) : '';
+  if (isReward) {
+    if (!p) return fr ? "C'EST OFFERT" : "IT'S FREE";
+    return fr ? `TON ${p} EST OFFERT` : `YOUR FREE ${p}`;
+  }
+  const ord = ordinal((maxValue || 0) + 1, langue);
+  if (!p) return fr ? `LE ${ord} OFFERT` : `YOUR ${ord} FREE`;
+  return fr ? `LE ${ord} ${p} OFFERT` : `YOUR ${ord} ${p} FREE`;
+}
+
+// ── Taille de l'illustration ──────────────────────────────────────────────
+// Un multiplicateur fixe du rayon ne marche pas : computeLayout resserre les
+// tampons quand n grandit, et déborde pour n = 6, 8, 14, 16, 20. La taille se
+// DÉDUIT donc des positions, par quatre bornes dont on prend la plus petite —
+// dans l'espace 750×246, avant mise à l'échelle de la variante :
+//
+//   1. 2 × (xMin − 70)        zone morte gauche : bord de zone sûre (60) + 10 px
+//   2. 2 × (680 − xMax)       zone morte droite : symétrique
+//   3. espacement × 0,92      deux voisins d'une même rangée ne se touchent pas
+//   4. écartV × 0,92 × (w/h)  deux rangées ne se touchent pas, converti en
+//                             largeur par le rapport d'aspect de l'illustration
+//
+// Règle vérifiée pour n = 3..20 sur les trois variantes, marge ≥ 10 px partout.
+// Pour n = 11 : 85 × 59,5 en espace 750 — 11 % sous la maquette, arbitrage
+// accepté en pilotage, la zone sûre Apple prime sur la taille du dessin.
+function tailleIllustration(positions, illW, illH, showLabel) {
+  const xs = positions.map(p => p.x);
+  const ys = [...new Set(positions.map(p => p.y))].sort((a, b) => a - b);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+
+  // Espacement horizontal : distance entre deux voisins de la rangée du haut.
+  // n = 1 → aucun voisin, toute la zone sûre est disponible.
+  const memeRangee = positions.filter(p => p.y === ys[0]).map(p => p.x).sort((a, b) => a - b);
+  const espacement = memeRangee.length > 1 ? memeRangee[1] - memeRangee[0] : 630;
+
+  // Écart vertical : entre rangées s'il y en a deux ; sinon hauteur utile
+  // autour de l'unique rangée (bornée par le bloc de texte au-dessus).
+  const hautTexte = showLabel ? 78 : 14;
+  const ecartV = ys.length > 1
+    ? ys[1] - ys[0]
+    : 2 * Math.min(ys[0] - hautTexte, 232 - ys[0]);
+
+  const largeur = Math.min(
+    2 * (xMin - 70),
+    2 * (680 - xMax),
+    espacement * 0.92,
+    ecartV * 0.92 * (illW / illH),
+  );
+  return { largeur, hauteur: largeur * (illH / illW) };
+}
+
+// Une illustration posée en (cx, cy), à la largeur voulue. Le scale est
+// UNIQUE (même facteur en x et en y) : aucun étirement, y compris sur le hero
+// Google dont le rapport diffère légèrement du strip Apple.
+function illustrationSvg({ cx, cy, largeur, hauteur, illW, illH, fragment, opacite }) {
+  const s  = +(largeur / illW).toFixed(5);
+  const tx = +(cx - largeur / 2).toFixed(1);
+  const ty = +(cy - hauteur / 2).toFixed(1);
+  const op = opacite < 1 ? ` opacity="${opacite}"` : '';
+  return `<g transform="translate(${tx},${ty}) scale(${s})"${op}>${fragment}</g>`;
+}
+
+// Disque d'un passage restant, mode strip_vide = 'logo'. Réservé aux logos à
+// canal alpha réel : un logo Instagram opaque et basse définition rend mal ici.
+// L'aperçu admin avertira (étape 4) avant d'autoriser ce mode.
+function disqueVideSvg({ cx, cy, r, fond, accent, logoB64, idx }) {
+  const cercle = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fond}" stroke="${accent}" stroke-opacity="0.35" stroke-width="2.5"/>`;
+  if (!logoB64) return cercle;
+  const taille = r * 1.4;
+  const clip = `ivclip${idx}`;
+  return `<defs><clipPath id="${clip}"><circle cx="${cx}" cy="${cy}" r="${r}"/></clipPath></defs>`
+    + cercle
+    + `<image href="data:image/png;base64,${logoB64}" x="${+(cx - taille / 2).toFixed(1)}" y="${+(cy - taille / 2).toFixed(1)}"`
+    + ` width="${taille}" height="${taille}" clip-path="url(#${clip})" preserveAspectRatio="xMidYMid meet" opacity="0.55"/>`;
+}
+
+// ── Constructeur du thème illustration ────────────────────────────────────
+function buildIllustrationSvg({ marchand, filledCount, logoB64, w, h, isReward, maxValue }) {
+  const scaleX = w / 750;
+  const scaleY = h / 246;
+  // Le DESSIN suit la plus petite des deux échelles (jamais d'étirement) ;
+  // les POSITIONS suivent chacune la sienne (le cadrage reste proportionnel).
+  const k = Math.min(scaleX, scaleY);
+
+  const showLabel = marchand.strip_label !== 'off';
+  const langue    = marchand.langue;
+
+  // Fond : couleur_fond dans TOUS les états, doré compris (décision de pilotage).
+  const bgColor = marchand.couleur_fond || '#1a1a2e';
+  const lum     = relativeLuminance(bgColor);
+  // Même règle que labelSvg, recopiée plutôt qu'appelée : labelSvg fixe sa
+  // baseline à y=60, or ce thème a DEUX lignes de texte. La recopier laisse
+  // labelSvg strictement intacte, donc les autres thèmes au bit près.
+  const couleurTitre = marchand.couleur_label_strip || (lum < 0.18 ? 'white' : darken(bgColor, 0.62));
+  const opaciteTitre = marchand.couleur_label_strip ? '1' : (lum < 0.18 ? '0.5' : '0.80');
+  const accent       = marchand.couleur_pastille_contour || (lum < 0.18 ? lighten(bgColor, 0.75) : darken(bgColor, 0.55));
+  const fondDisque   = marchand.couleur_pastille_fond || (lum < 0.18 ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)');
+
+  // Registre. AUCUNE substitution : une clé inconnue rend tous les passages en
+  // état restant et se signale dans les logs (verrou 3 de illustrations/index.js).
+  const entree = obtenirIllustration(marchand.strip_illustration);
+  if (!entree) {
+    console.error(`[strip-generator] illustration inconnue « ${marchand.strip_illustration} » `
+      + `pour le marchand ${marchand.slug} — aucun substitut, passages rendus en état restant`);
+  }
+  const illW = entree ? entree.w : 200;
+  const illH = entree ? entree.h : 140;
+  const fragment = entree ? entree.svg() : null;
+
+  const positions = computeLayout(maxValue, { showLabel });
+  const { largeur, hauteur } = tailleIllustration(positions, illW, illH, showLabel);
+
+  // Mode des passages restants. NULL → 'illustration' (même dessin, en faible
+  // opacité). Sans illustration disponible, le disque est le seul recours.
+  const modeVide = (!fragment || marchand.strip_vide === 'logo') ? 'logo' : 'illustration';
+  const rDisque  = Math.min(largeur, hauteur) / 2;
+
+  const contenu = positions.map((pos, i) => {
+    const cx = +(pos.x * scaleX).toFixed(1);
+    const cy = +(pos.y * scaleY).toFixed(1);
+    const lg = largeur * k;
+    const ht = hauteur * k;
+    const acquis = isReward || i < filledCount;
+
+    if (acquis && fragment) {
+      return illustrationSvg({ cx, cy, largeur: lg, hauteur: ht, illW, illH, fragment, opacite: 1 });
+    }
+    if (modeVide === 'illustration') {
+      return illustrationSvg({ cx, cy, largeur: lg, hauteur: ht, illW, illH, fragment, opacite: 0.18 });
+    }
+    return disqueVideSvg({ cx, cy, r: +(rDisque * k).toFixed(1), fond: fondDisque, accent, logoB64, idx: i });
+  }).join('');
+
+  const titre = langue === 'fr' ? 'CARTE DE FIDÉLITÉ' : 'LOYALTY CARD';
+  let sousTitre = illustrationSousTitre({
+    langue, produit: marchand.strip_produit, maxValue, isReward,
+  });
+
+  // Ajustement de taille — en espace 750, avant mise à l'échelle de la variante.
+  // Point de départ : la zone sûre Apple moins la même marge de 10 px que les
+  // illustrations, soit [70, 680] → 610 px.
+  // On en retient 580 : 30 px sont mis en réserve pour le cas DÉGRADÉ où
+  // @fontsource/poppins manque au boot. resvg retombe alors sur DM Sans, dont
+  // certains glyphes (« Œ », « Æ ») sont plus larges que la table ci-dessus ne
+  // le prévoit — mesuré : la marge tombait à 1 px au lieu de 10 sur un produit
+  // de 24 « Œ ». La réserve rend l'ajustement correct dans les deux polices,
+  // et ne coûte rien au cas nominal : « LE 12ÈME KEBAB OFFERT » fait 313 px,
+  // très loin du seuil de réduction.
+  const LARGEUR_UTILE = 580, INTERLETTRE = 1.2, TAILLE_MAX = 25, TAILLE_MIN = 14;
+  const tailleSous = tailleQuiRentre(sousTitre, TAILLE_MAX, TAILLE_MIN, LARGEUR_UTILE, INTERLETTRE);
+  // Dernier filet : une valeur plus longue que ce que la migration autorise
+  // (24 caractères) déborderait encore au plancher de taille. On coupe plutôt
+  // que de laisser le texte sortir du cadre. Inatteignable à 24 caractères,
+  // même en « Œ » — c'est une ceinture, pas un chemin nominal.
+  if (largeurTexte(sousTitre, tailleSous, INTERLETTRE) > LARGEUR_UTILE) {
+    const chars = [...sousTitre];
+    while (chars.length > 1 && largeurTexte(chars.join('') + '…', tailleSous, INTERLETTRE) > LARGEUR_UTILE) {
+      chars.pop();
+    }
+    sousTitre = chars.join('') + '…';
+  }
+
+  // Deux lignes, au-dessus de la première rangée (dont le bord haut est à
+  // y = 91 en espace 750 pour n = 11). Poppins 700 pour le sous-titre : c'est
+  // la seule police du thème, ajoutée à l'étape 1. Si @fontsource/poppins
+  // manque, resvg retombe sur defaultFontFamily (DM Sans) — le texte reste
+  // lisible, seule la graisse du dessin change.
+  const blocTexte = showLabel
+    ? `<text x="${w / 2}" y="${(34 / 246) * h}" font-family="DM Sans, sans-serif" font-weight="700"
+    font-size="${(17 / 246) * h}" letter-spacing="${(3.2 / 246) * h}" fill="${couleurTitre}"
+    opacity="${opaciteTitre}" text-anchor="middle">${titre}</text>
+  <text x="${w / 2}" y="${(68 / 246) * h}" font-family="Poppins, DM Sans, sans-serif" font-weight="700"
+    font-size="${(tailleSous / 246) * h}" letter-spacing="${(INTERLETTRE / 246) * h}" fill="${accent}"
+    text-anchor="middle">${sousTitre}</text>`
+    : `<text x="${w / 2}" y="${(46 / 246) * h}" font-family="Poppins, DM Sans, sans-serif" font-weight="700"
+    font-size="${(tailleSous / 246) * h}" letter-spacing="${(INTERLETTRE / 246) * h}" fill="${accent}"
+    text-anchor="middle">${sousTitre}</text>`;
+
+  // bgSvg SANS customBgB64 : le fond photo est ignoré dans ce thème (cf. entête).
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${w}" height="${h}">
+  ${bgSvg({ w, h, couleurFond: bgColor, customBgB64: null })}
+  ${blocTexte}
+  ${contenu}
+</svg>`;
+}
+
 // ── Constructeur SVG principal ─────────────────────────────────────────────
 // Contenu (tampons, label) dans la zone sûre Apple (630px centraux en espace
 // 750) ; le décor de fond couvre toute la largeur. Pas de nom marchand, pas
@@ -449,6 +738,16 @@ function buildSvg({ marchand, filledCount, logoB64, customBgB64, w = 750, h = 24
   };
   const colors    = stampColors(bgColor, overrides); // WCAG auto + overrides manuels éventuels
   const showLabel = marchand.strip_label !== 'off';
+
+  // ── SORTIE ANTICIPÉE : thème « illustration » ────────────────────────────
+  // Bloc autonome, défini plus haut. Il recalcule ce dont il a besoin plutôt
+  // que d'hériter de bgColor/colors : ses règles de couleur diffèrent (fond
+  // jamais doré, pas de palette WCAG sur le dessin lui-même).
+  // Mode points : le thème est IGNORÉ — une barre de progression n'a pas de
+  // passages à illustrer. Seul le mode tampons entre ici.
+  if (theme === 'illustration' && iStamps && maxValue > 0) {
+    return buildIllustrationSvg({ marchand, filledCount, logoB64, w, h, isReward, maxValue });
+  }
 
   // Mise à l'échelle des positions si h != 246 (même SVG, juste viewBox changé)
   const scaleY = h / 246;
@@ -540,8 +839,13 @@ async function render({ marchand, filledCount, logoBuffer, customBgBuffer, stati
   const maxValue = marchand.max_value || 10;
 
   // Normalisation du logo pour logo_stamp (une fois, réutilisée pour toutes les variantes)
+  // Le thème illustration a lui aussi besoin du logo normalisé, mais seulement
+  // dans le mode où il le dessine (strip_vide = 'logo'). Inutile de payer la
+  // normalisation sharp quand les passages restants sont des illustrations.
   let logoB64 = null;
-  if (theme === 'logo_stamp' && logoBuffer) {
+  const veutLogo = theme === 'logo_stamp'
+    || (theme === 'illustration' && marchand.strip_vide === 'logo');
+  if (veutLogo && logoBuffer) {
     const refRadius = Math.max(16, Math.min(30, (750 - 72) / maxValue / 2 - 5));
     logoB64 = await normalizeLogoForStamp(logoBuffer, refRadius).catch(e => {
       console.warn('[strip-generator] Logo normalisation échouée:', e.message);
@@ -569,4 +873,6 @@ async function render({ marchand, filledCount, logoBuffer, customBgBuffer, stati
   return { strip2x, strip3x, hero };
 }
 
-module.exports = { render, buildSvg, computeLayout, normalizeLogoForStamp, valeurAffichee, PLAFOND_EXACT, VARIANTS, ICONS };
+module.exports = { render, buildSvg, computeLayout, normalizeLogoForStamp, valeurAffichee, PLAFOND_EXACT, VARIANTS, ICONS,
+  // Exposés pour vérification hors ligne du thème illustration
+  ordinal, illustrationSousTitre, tailleIllustration, largeurTexte, tailleQuiRentre };
