@@ -910,8 +910,8 @@ function renderMerchants(filter = '') {
         </div>
       </div>
       <div class="merchant-stats">
-        <div class="merchant-stat">👥 <strong>${m.total_clients}</strong> clients</div>
-        <div class="merchant-stat">✅ <strong>${m.scans_aujourdhui}</strong> scans aujourd'hui</div>
+        <div class="merchant-stat">👥 <strong>${m.total_clients ?? '–'}</strong> clients</div>
+        <div class="merchant-stat">✅ <strong>${m.scans_aujourdhui ?? '–'}</strong> scans aujourd'hui</div>
         <div class="merchant-stat">🎯 <strong>${m.max_value}</strong> ${m.type_programme === 'points' ? 'points' : 'tampons'}</div>
         ${m.boutiques_actives > 0 ? `<div class="merchant-stat">🏪 <strong>${m.boutiques_actives}</strong> boutiques</div>` : ''}
       </div>

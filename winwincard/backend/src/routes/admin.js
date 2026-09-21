@@ -20,37 +20,48 @@ router.post('/login', asyncHandler(async (req, res) => {
 
 // GET /api/admin/marchands — liste complète avec stats par marchand
 router.get('/marchands', authAdmin, asyncHandler(async (req, res) => {
+  // Les compteurs viennent d'une AGRÉGATION EN BASE (migration 044), jamais
+  // d'un comptage JS. Raison, identique à celle de group_stats (§12 passation) :
+  // PostgREST tronque toute lecture de lignes à 1 000. L'ancienne version
+  // ramenait les lignes de `clients` pour les compter ici — passé 1 000 clients
+  // au total, elle en recevait 1 000 sans erreur ni avertissement, et les
+  // marchands dont les lignes tombaient au-delà affichaient 0. Constaté en
+  // production à 1 329 clients : un marchand de 22 porteurs affiché à 0.
+  //
+  // Le total global de /admin/stats, lui, était juste — il utilise
+  // `count: 'exact', head: true`, qui ne renvoie aucune ligne et échappe donc
+  // au plafond. Ne jamais revenir à un comptage JS sur une table non bornée.
   const [
     { data: marchands, error },
-    { data: clientRows },
-    { data: scanRows },
-    { data: boutiqueRows },
+    { data: stats, error: errStats },
   ] = await Promise.all([
     supabase
       .from('marchands')
       .select('id, nom, slug, forfait, actif, email_contact, couleur_fond, logo_url, max_value, type_programme, created_at')
       .order('created_at', { ascending: false }),
-    supabase.from('clients').select('marchand_id').is('deleted_at', null),
-    supabase.from('scans').select('marchand_id').gte('date_scan', new Date().toISOString().split('T')[0]).is('annule_le', null),
-    // Boutiques ACTIVES par marchand = base de facturation (multi-boutiques).
-    supabase.from('points_de_vente').select('marchand_id').is('deleted_at', null),
+    // Filtres (clients supprimés, scans annulés, boutiques archivées = base de
+    // facturation) portés par la fonction SQL — cf. inventaire §13.
+    supabase.rpc('admin_marchands_stats'),
   ]);
 
   if (error) return res.status(500).json({ error: error.message });
 
-  const clientsParMarchand   = {};
-  const scansParMarchand     = {};
-  const boutiquesParMarchand = {};
-  (clientRows   || []).forEach(c => { clientsParMarchand[c.marchand_id]   = (clientsParMarchand[c.marchand_id]   || 0) + 1; });
-  (scanRows     || []).forEach(s => { scansParMarchand[s.marchand_id]     = (scansParMarchand[s.marchand_id]     || 0) + 1; });
-  (boutiqueRows || []).forEach(b => { boutiquesParMarchand[b.marchand_id] = (boutiquesParMarchand[b.marchand_id] || 0) + 1; });
+  // §3.9 : supabase-js ne rejette jamais, on LIT l'erreur. Si l'agrégation
+  // échoue, on renvoie null et le front affiche « – ». Un compteur absent est
+  // honnête ; un compteur faux ne l'est pas — c'est exactement ce défaut qui a
+  // motivé cette migration.
+  if (errStats) console.error('[admin] admin_marchands_stats:', errStats.message);
+  const parMarchand = errStats ? null : (stats || {});
 
-  res.json(marchands.map(m => ({
-    ...m,
-    total_clients:     clientsParMarchand[m.id]   || 0,
-    scans_aujourdhui:  scansParMarchand[m.id]     || 0,
-    boutiques_actives: boutiquesParMarchand[m.id] || 0,
-  })));
+  res.json(marchands.map(m => {
+    const st = parMarchand ? (parMarchand[m.id] || {}) : null;
+    return {
+      ...m,
+      total_clients:     st ? (st.total_clients     ?? 0) : null,
+      scans_aujourdhui:  st ? (st.scans_aujourdhui  ?? 0) : null,
+      boutiques_actives: st ? (st.boutiques_actives ?? 0) : null,
+    };
+  }));
 }));
 
 // GET /api/admin/marchands/:id — détail complet d'un marchand
