@@ -53,6 +53,16 @@
       transition: border-color .15s; -webkit-appearance: none; font-family: inherit;
     }
     .field input:focus, .field textarea:focus { border-color: var(--accent); }
+    /* Case « rester connecté ». Hors de .field volontairement : `.field input`
+       met -webkit-appearance:none, ce qui rend une case cochée visuellement
+       identique à une case vide. */
+    .remember-row { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+    .remember-row input[type="checkbox"] {
+      width: 18px; height: 18px; margin: 1px 0 0; flex: none;
+      -webkit-appearance: auto; appearance: auto; accent-color: var(--accent);
+    }
+    .remember-label { display: block; font-size: 14px; color: var(--text); }
+    .remember-hint  { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
     .field textarea { resize: vertical; min-height: 100px; }
 
     .char-count { font-size: 11px; color: var(--muted); text-align: right; margin-top: 2px; }
@@ -355,6 +365,19 @@
       <label for="in-pwd" data-i18n="password">Password</label>
       <input id="in-pwd" type="password" placeholder="••••••••" autocomplete="current-password">
     </div>
+    <!-- Connexion mémorisée. Le serveur sait faire 365 j depuis toujours
+         (merchants.js : remember_device ? '365d' : '7d'), mais cet écran ne le
+         lui demandait jamais : tous les marchands repassaient par le login tous
+         les 7 jours. Cochée par défaut — celui qui ne la regarde pas obtient le
+         comportement attendu ; celui qui est sur un poste partagé peut la
+         décocher et retomber à 7 jours. -->
+    <label class="remember-row">
+      <input type="checkbox" id="in-remember" checked>
+      <span>
+        <span class="remember-label" data-i18n="rememberMe">Stay signed in on this device</span>
+        <span class="remember-hint" data-i18n="rememberMeHint">Uncheck on a shared computer.</span>
+      </span>
+    </label>
     <div id="login-err" class="alert alert-error" style="display:none"></div>
     <button type="submit" class="btn btn-primary" id="btn-login" data-i18n="signIn">Sign in</button>
   </form>
@@ -700,6 +723,7 @@ const I18N = {
   en: {
     pageTitle:'WinWin Dashboard', loginSub:'Manage your loyalty program',
     merchantId:'Merchant ID (slug)', password:'Password', signIn:'Sign in', signOut:'Sign out',
+    rememberMe:'Stay signed in on this device', rememberMeHint:'Uncheck on a shared computer.',
     qrSectionTitle:'QR code landing page',
     pdvSectionTitle:'Points of sale', pdvRename:'Rename',
     pdvAddHint:'To add a point of sale, contact us.',
@@ -777,6 +801,7 @@ const I18N = {
   fr: {
     pageTitle:'WinWin — Tableau de bord', loginSub:'Gérez votre programme de fidélité',
     merchantId:'Identifiant marchand (slug)', password:'Mot de passe', signIn:'Se connecter', signOut:'Se déconnecter',
+    rememberMe:'Rester connecté sur cet appareil', rememberMeHint:'À décocher sur un ordinateur partagé.',
     qrSectionTitle:"QR code de la page d'accueil",
     pdvSectionTitle:'Points de vente', pdvRename:'Renommer',
     pdvAddHint:'Pour ajouter un point de vente, contactez-nous.',
@@ -969,6 +994,7 @@ function showDashboard() {
 document.getElementById('login-form').addEventListener('submit', async () => {
   const slug = document.getElementById('in-slug').value.trim();
   const pwd  = document.getElementById('in-pwd').value;
+  const remember = document.getElementById('in-remember').checked;
   const errEl = document.getElementById('login-err');
   const btn   = document.getElementById('btn-login');
   errEl.style.display = 'none';
@@ -977,7 +1003,9 @@ document.getElementById('login-form').addEventListener('submit', async () => {
   try {
     const res = await fetch('/api/merchants/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slug, password: pwd }),
+      // Sans ce champ le serveur retombe sur 7 jours : c'est ce qui déconnectait
+      // les marchands chaque semaine. Le scanner l'envoyait déjà, pas cet écran.
+      body: JSON.stringify({ slug, password: pwd, remember_device: remember }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || t('invalidCreds'));
