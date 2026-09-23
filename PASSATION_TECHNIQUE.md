@@ -60,7 +60,7 @@ commerçant scanne le QR du pass du client → le solde avance → à un seuil, 
 | `public/dashboard/index.html` | Dashboard marchand (stats, clients, scanner intégré, notifs) |
 | `public/scanner/index.html` | PWA scanner de caisse (login marchand, caméra, saisie manuelle, historique) |
 | `public/landing.html` | Page d'inscription client (`/l/:slug`) |
-| `database/schema.sql` + `database/migration_*.sql` | Schéma et migrations (voir pièges §3.3 : 012 et 022 sont NEUTRALISÉES, 023 est la référence pour le RPC ; 025 réconcilie repo↔prod ; 026 = couleurs pastilles ; 027 = colonnes workflow birthday — schema.sql + 002→027 reproduit la prod) |
+| `database/schema.sql` + `database/migration_*.sql` | Schéma et migrations (voir pièges §3.3 : 012 et 022 sont NEUTRALISÉES, 023 est la référence pour le RPC ; 025 réconcilie repo↔prod ; 026 = couleurs pastilles ; 027 = colonnes workflow birthday — schema.sql + 002→027 reproduit la prod ; 040→044 ajoutées depuis, cf. tableau §11) |
 
 ### Données clés (table `marchands` et `clients`)
 
@@ -638,6 +638,11 @@ zones dangereuses §5, contrat §7 s'appliquent toujours.*
 | 037 | Index composite `scans(marchand_id, date_scan)` | group_stats lit la tranche 90 j sans parcourir tout l'historique. |
 | 038 | `scans.annule_le` + **fonction `annuler_scan(uuid,uuid) RETURNS jsonb`** | Annulation atomique du dernier scan d'un client. |
 | 039 | `group_stats` re-CREATE OR REPLACE + filtre `annule_le IS NULL` | Exclut les scans annulés de tous les indicateurs réseau. |
+| 040 | CHECK `strip_mode` élargi à `points_bar` | Auto-adaptative : retire par introspection toute contrainte CHECK portant sur strip_mode, quel que soit son nom. Garde-fou : exception si une valeur inattendue existe. |
+| 041 | `couleur_barre_principale` / `couleur_barre_secondaire` | Deux réglages seulement. |
+| 042 | Table `diagnostics_camera` + index (étiquette, date) | Instrument de terrain, un lien par PDV. |
+| 043 | CHECK `strip_theme` élargi à `illustration` ; colonnes `strip_illustration`, `strip_produit`, `strip_vide` | Même patron d'introspection que la 040. |
+| 044 | **Fonction `admin_marchands_stats() RETURNS jsonb`** | Même motif que `group_stats` (§12). |
 
 ## 9. LE MODÈLE MULTI-BOUTIQUES
 
@@ -697,6 +702,13 @@ touchée**) :
   le `GROUP BY` côté Postgres et renvoie un jsonb. **Pourquoi une fonction et pas du JS :**
   PostgREST tronque toute lecture de lignes à **1 000** → une agrégation JS fausserait
   silencieusement un réseau. La fonction agrège en base (immunisée).
+- **Troisième et quatrième instances du plafond 1 000, découvertes le 21/09 :** `admin.js`
+  (`GET /marchands`) comptait en JS — corrigé par la migration 044. `cron.js:44` (scans 30 j
+  par marchand) porte le même motif, **non corrigé**.
+- **Le comptage JS n'est pas seulement sous-estimé, il est INSTABLE** :
+  `increment_stored_value` fait `UPDATE clients SET stored_value`, ce qui déplace
+  physiquement la ligne. Sans `ORDER BY`, l'ensemble des « 1 000 premières lignes » change à
+  chaque scan. Constaté : un marchand passé de 0 à 6 en trois jours pour 44 porteurs réels.
 - **Bloc réseau** (jamais ventilé) : porteurs, actifs 30 j, nouveaux ce mois, taux de
   retour (ce mois ∩ mois précédent), mobilité (>1 boutique / 90 j).
 - **Bloc boutiques** (une ligne, archivées incluses SI activité récente) : scans, clients
@@ -760,6 +772,23 @@ Côté Apple (`apple-pass.js:429`) la précédence est cohérente à chaque gén
 universel, `google_hero_url` = override Google, `images_tiers` court-circuite le reste
 là où il est consulté. **Statut : dette cosmétique documentée, non corrigée.**
 
+## 15 bis. THÈME DE STRIP « ILLUSTRATION »
+
+Registre `src/services/illustrations/` — **frozen, append-only : une clé ne se renomme ni ne
+se supprime jamais** (les clés sont stockées en base, `marchands.strip_illustration`).
+`obtenir()` ne substitue JAMAIS ; clé inconnue → `console.error` + tous les passages rendus
+en état restant, plus bandeau rouge dans l'admin. C'est la leçon de l'icône Phosphor
+renommée en juillet, dont le repli silencieux était invisible.
+
+`strip_custom_background_url` est **IGNORÉ** en thème illustration (volontaire : un fond
+photographique sous onze dessins multicolores est illisible). Mode points : thème ignoré.
+État doré : fond = `couleur_fond`, **jamais** `couleur_fond_reward` — l'effet doré vient des
+illustrations allumées, pas d'un fond jaune.
+
+Police Poppins ; si `@fontsource/poppins` manque au boot, resvg retombe sur DM Sans. La
+table d'avances `AVANCES_POPPINS` (relevée par rastérisation) réserve 30 px pour ce cas,
+sans quoi un produit de 24 caractères déborde la zone sûre.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
@@ -783,11 +812,45 @@ token marchand mono-site toujours non révocable).
   actifs/rétention/fréquence **sous-estimés sans erreur** (bug PRÉSENT). `group_stats`
   est immunisé ; `/me/stats` non. Correctif = même motif `COUNT`/RPC.
 - **Incohérences Google hero** (§15).
+- **`remember_device` jamais câblé sur le dashboard** (corrigé le 21/09, `4e63731`). Classe
+  de défaut à surveiller : *le serveur sait faire, le front ne demande jamais*. Le scanner
+  l'envoyait depuis `dfdaf87` ; le dashboard, jamais, sur toute l'histoire du dépôt.
+- **Jeton marchand irrévocable, portée ×52.** `authMarchand` (`middleware/auth.js:4-21`) ne
+  consulte RIEN en base. **Aucune des 14 routes `authMarchand` ne vérifie `actif`**, dont 5
+  qui écrivent : `POST /notifications`, `PATCH`/`DELETE /clients/:id`,
+  `PATCH /me/points-de-vente/:id` et `/actif`. `GET /clients/export` est ouvert aussi. Seul
+  le scan est protégé (`authScanner` relit la boutique). Depuis le 21/09 la fenêtre est de
+  365 j au lieu de 7.
+- **Aucune idempotence serveur sur `POST /scan`.** Aucune colonne de référence externe,
+  aucune contrainte unique, aucune garde applicative. Les seules protections sont en mémoire
+  du navigateur (`state.processing`, `lockedSerial`). Bloquant pour toute intégration serveur
+  à serveur (e-commerce, borne).
+- **Code de secours non unique.** Suffixe de 6 caractères hex = 16,8 M combinaisons ; ~3 % de
+  collision à 1 000 clients/marchand, ~53 % à 5 000. Géré par un 409 `ambiguous` + candidats —
+  utilisable par une caissière, **impasse en serveur à serveur**.
 
 **Toujours reportés (raison valable) :** #4 (re-sync Google, arbitrage), #5, #6, #8,
 #10, #11 (corriger listing+horloge ENSEMBLE, jamais séparément), #13 (parké).
 
+## 17. DÉCISIONS HORS PILOTAGE
+
+Toute décision prise sans passer par le pilotage (Yass) se note ici : date, décision,
+raison, effet constaté. Une entrée vaut aveu, pas justification — la règle reste le
+contrat §7 (diagnostic, validation, puis code).
+
+*(aucune entrée à ce jour)*
+
 ---
+
+*Mis à jour le 2026-09-23 par la session « SETUP 3 » : migrations 040→044 ; mode points
+(barre de progression, solde exact, couleurs modulables) ; code de secours sous le QR ;
+diagnostic caméra (palier 0.5) ; correctif « C » (scanner aveugle) ; séparation seuil
+atteint / récompense à remettre ; thème de strip « illustration » (registre, rendu, admin,
+§15 bis) ; comptage admin en base (migration 044, §12) ; connexion mémorisée du dashboard.
+Dette découverte : jeton marchand irrévocable sur 14 routes, absence totale d'idempotence
+serveur, non-unicité du code de secours, troisième et quatrième instances du plafond 1 000.
+Contrat §7 respecté : migrations exécutées par le fondateur AVANT le code, diff avant push,
+feu vert explicite par déploiement.*
 
 *Mis à jour ~2026-08 par la session « chantier franchise » : migrations 028→039 ;
 multi-boutiques complet (étape 1 mesure, 2 boutiques+gestion, 3 scanner par boutique
