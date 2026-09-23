@@ -8,3 +8,6 @@
   PASSATION_TECHNIQUE.md (livré, décisions, dette découverte) et la committer.
 - Toute décision prise sans passer par pilotage est notée dans la passation,
   section « Décisions hors pilotage ».
+- Pas de créneau horaire imposé pour les push. Une fenêtre de déploiement
+  ne s'applique que si pilotage la demande explicitement pour un push
+  sensible.
