@@ -919,6 +919,8 @@ function renderMerchants(filter = '') {
         <button class="btn btn-outline btn-sm btn-edit" data-id="${m.id}">✏️ Modifier</button>
         <button class="btn btn-outline btn-sm btn-pdv" data-id="${m.id}" data-nom="${esc(m.nom)}">🏪 Boutiques</button>
         <button class="btn ${toggleClass} btn-sm btn-toggle" data-id="${m.id}" data-actif="${m.actif}">${toggleLabel}</button>
+        <button class="btn btn-outline btn-sm btn-revoke" data-id="${m.id}" data-nom="${esc(m.nom)}"
+                title="Invalide tous les jetons de ce marchand — dashboard et caisses. Le compte reste actif.">🔓 Déconnecter les appareils</button>
       </div>
     </div>`;
   }).join('');
@@ -928,9 +930,36 @@ function renderMerchants(filter = '') {
   list.querySelectorAll('.btn-toggle').forEach(b => {
     b.addEventListener('click', () => toggleSuspension(b.dataset.id, b.dataset.actif === 'true'));
   });
+  list.querySelectorAll('.btn-revoke').forEach(b => {
+    b.addEventListener('click', () => revoquerSessions(b.dataset.id, b.dataset.nom));
+  });
 }
 
 document.getElementById('search-merchants').addEventListener('input', e => renderMerchants(e.target.value));
+
+// ════════════════════════════════════
+// RÉVOCATION DES SESSIONS (chantier P0 sécurité, cas b)
+// ════════════════════════════════════
+// Cas d'usage : tablette perdue ou volée chez un marchand qui reste ACTIF.
+// Incrémente token_version → tous les jetons déjà émis sont refusés, dashboard
+// ET caisses. Le compte n'est pas suspendu : le marchand se reconnecte avec son
+// mot de passe habituel et repart. Irréversible (on ne décrémente jamais).
+async function revoquerSessions(id, nom) {
+  if (!confirm(
+    `Déconnecter tous les appareils de « ${nom} » ?\n\n` +
+    `Son tableau de bord ET ses caisses devront se reconnecter.\n` +
+    `Le compte reste actif. Action irréversible.`
+  )) return;
+
+  try {
+    const res = await api(`/api/admin/marchands/${id}/revoquer-sessions`, { method: 'POST' });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error || res.status); }
+    const d = await res.json();
+    alert(`Appareils déconnectés pour « ${d.nom} ».\nVersion de jeton : ${d.token_version}`);
+  } catch (e) {
+    alert('Échec : ' + e.message);
+  }
+}
 
 // ════════════════════════════════════
 // SUSPENSION

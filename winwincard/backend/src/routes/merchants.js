@@ -17,7 +17,7 @@ router.post('/login', asyncHandler(async (req, res) => {
   const field = slug ? 'slug' : 'email_contact';
   const { data: marchand } = await supabase
     .from('marchands')
-    .select('id, nom, slug, langue, type_programme, email_contact, password_hash, actif')
+    .select('id, nom, slug, langue, type_programme, email_contact, password_hash, actif, token_version')
     .eq(field, identifier)
     .single();
 
@@ -30,7 +30,10 @@ router.post('/login', asyncHandler(async (req, res) => {
 
   const expiresIn = remember_device ? '365d' : '7d';
   const token = jwt.sign(
-    { role: 'marchand', marchand_id: marchand.id, nom: marchand.nom },
+    // tv : version de jeton au moment de l'émission (migration 045). Un jeton
+    // sans ce champ vaut tv = 1 côté middleware — c'est ce qui garantit qu'aucune
+    // session en cours n'est coupée par le déploiement.
+    { role: 'marchand', marchand_id: marchand.id, nom: marchand.nom, tv: marchand.token_version ?? 1 },
     process.env.JWT_SECRET,
     { expiresIn }
   );

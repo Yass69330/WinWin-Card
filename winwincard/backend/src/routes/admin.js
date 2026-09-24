@@ -321,6 +321,36 @@ router.patch('/marchands/:id/suspension', authAdmin, asyncHandler(async (req, re
   const { data, error } = await supabase
     .from('marchands').update({ actif }).eq('id', req.params.id).select('id, nom, actif').single();
 
+  // Invalidation immédiate du cache d'autorisation (chantier P0, cas a) : sans
+  // elle, la suspension mettrait jusqu'à 60 s à prendre effet. Placée AVANT le
+  // test d'erreur : si l'update a réussi mais que la réponse est illisible, le
+  // cache doit quand même tomber.
+  require('../services/marchand-cache').invalider(req.params.id);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+}));
+
+// POST /api/admin/marchands/:id/revoquer-sessions — déconnecter tous les appareils
+// Chantier P0 sécurité, cas (b) : tablette perdue ou volée chez un marchand qui
+// reste ACTIF. Incrémenter token_version invalide d'un coup TOUS les jetons déjà
+// émis — dashboard ET caisses, y compris les jetons boutique, qui portent le même
+// marchand_id. Le compte n'est pas touché : le marchand se reconnecte et repart.
+//
+// Le RETURNING donne la nouvelle valeur ; on invalide le cache dans la foulée
+// pour que l'effet soit immédiat et non différé de 60 s.
+router.post('/marchands/:id/revoquer-sessions', authAdmin, asyncHandler(async (req, res) => {
+  const { data: cur, error: errLire } = await supabase
+    .from('marchands').select('token_version').eq('id', req.params.id).single();
+  if (errLire || !cur) return res.status(404).json({ error: 'Marchand introuvable' });
+
+  const nouvelle = (cur.token_version ?? 1) + 1;
+  const { data, error } = await supabase
+    .from('marchands').update({ token_version: nouvelle })
+    .eq('id', req.params.id).select('id, nom, token_version').single();
+
+  require('../services/marchand-cache').invalider(req.params.id);
+
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 }));

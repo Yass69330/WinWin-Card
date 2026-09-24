@@ -29,7 +29,7 @@ router.post('/login', asyncHandler(async (req, res) => {
   // qui traiterait % et _ comme des jokers sur une saisie utilisateur).
   const { data: boutique } = await supabase
     .from('points_de_vente')
-    .select('id, nom, marchand_id, scanner_password_hash, actif, deleted_at, marchands(slug, langue, type_programme, actif, nom)')
+    .select('id, nom, marchand_id, scanner_password_hash, actif, deleted_at, marchands(slug, langue, type_programme, actif, nom, token_version)')
     .eq('scanner_login', ident.toLowerCase())
     .is('deleted_at', null)
     .maybeSingle();
@@ -41,7 +41,10 @@ router.post('/login', asyncHandler(async (req, res) => {
     if (!boutique.marchands?.actif) return res.status(403).json({ error: 'Account suspended' });
 
     const token = jwt.sign(
-      { role: 'scanner', marchand_id: boutique.marchand_id, point_de_vente_id: boutique.id, nom: boutique.nom },
+      // tv porté aussi par le jeton BOUTIQUE : révoquer un marchand coupe ses
+      // caisses en même temps que son dashboard.
+      { role: 'scanner', marchand_id: boutique.marchand_id, point_de_vente_id: boutique.id,
+        nom: boutique.nom, tv: boutique.marchands?.token_version ?? 1 },
       process.env.JWT_SECRET, { expiresIn }
     );
     return res.json({
@@ -59,13 +62,13 @@ router.post('/login', asyncHandler(async (req, res) => {
   // ── 2) Repli login MARCHAND (mono-site) — par slug, puis par email ──────────
   let { data: marchand } = await supabase
     .from('marchands')
-    .select('id, nom, slug, langue, type_programme, password_hash, actif')
+    .select('id, nom, slug, langue, type_programme, password_hash, actif, token_version')
     .eq('slug', ident)
     .maybeSingle();
   if (!marchand) {
     ({ data: marchand } = await supabase
       .from('marchands')
-      .select('id, nom, slug, langue, type_programme, password_hash, actif')
+      .select('id, nom, slug, langue, type_programme, password_hash, actif, token_version')
       .eq('email_contact', ident)
       .maybeSingle());
   }
@@ -91,7 +94,7 @@ router.post('/login', asyncHandler(async (req, res) => {
 
   // Mono-site : token marchand, identique à /api/merchants/login.
   const token = jwt.sign(
-    { role: 'marchand', marchand_id: marchand.id, nom: marchand.nom },
+    { role: 'marchand', marchand_id: marchand.id, nom: marchand.nom, tv: marchand.token_version ?? 1 },
     process.env.JWT_SECRET, { expiresIn }
   );
   res.json({

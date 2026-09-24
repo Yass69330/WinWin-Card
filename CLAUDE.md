@@ -11,3 +11,6 @@
 - Pas de créneau horaire imposé pour les push. Une fenêtre de déploiement
   ne s'applique que si pilotage la demande explicitement pour un push
   sensible.
+- Tout fix est pensé pour la roadmap : nommer ses hypothèses (ce qui le
+  ferait casser) et ses limites. Ce qui est provisoire ou reporté est écrit
+  comme tel dans la passation.

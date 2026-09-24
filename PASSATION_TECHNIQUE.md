@@ -643,6 +643,7 @@ zones dangereuses §5, contrat §7 s'appliquent toujours.*
 | 042 | Table `diagnostics_camera` + index (étiquette, date) | Instrument de terrain, un lien par PDV. |
 | 043 | CHECK `strip_theme` élargi à `illustration` ; colonnes `strip_illustration`, `strip_produit`, `strip_vide` | Même patron d'introspection que la 040. |
 | 044 | **Fonction `admin_marchands_stats() RETURNS jsonb`** | Même motif que `group_stats` (§12). |
+| 045 | `marchands.token_version` (int NOT NULL DEFAULT 1) | Révocation des jetons marchand. DEFAULT 1 = aucune reconnexion forcée (§18). |
 
 ## 9. LE MODÈLE MULTI-BOUTIQUES
 
@@ -789,6 +790,61 @@ Police Poppins ; si `@fontsource/poppins` manque au boot, resvg retombe sur DM S
 table d'avances `AVANCES_POPPINS` (relevée par rastérisation) réserve 30 px pour ce cas,
 sans quoi un produit de 24 caractères déborde la zone sûre.
 
+## 15 ter. AUTORISATION MARCHAND (chantier P0 sécurité)
+
+Avant ce chantier, `authMarchand` ne consultait **rien** en base : ni `actif`, ni
+le mot de passe. Aucune des 14 routes qu'il protège ne vérifiait `actif` non plus,
+dont 5 qui écrivent. Un jeton marchand était irrévocable pendant toute sa durée de
+vie — 365 jours depuis `4e63731`.
+
+**Deux leviers, un seul cache.** `src/services/marchand-cache.js` lit `actif` ET
+`token_version` en une requête, TTL 60 s par `marchand_id`, anti-stampede. Le cas
+(b) ne coûte donc **aucune requête de plus** que le cas (a). Mesuré : 20 appels
+consécutifs = 1 lecture base, 19 servies par le cache.
+
+- **`actif` → 403 `account_suspended`** : suspension du compte.
+- **`token_version` → 403 `session_revoked`** : tablette perdue ou volée chez un
+  marchand qui reste ACTIF. Bouton admin « Déconnecter les appareils »
+  (`POST /marchands/:id/revoquer-sessions`). Coupe le dashboard **et** les
+  caisses — les jetons boutique portent le même `marchand_id`.
+
+**LE TTL N'EST PAS LE DÉLAI DE COUPURE.** Les deux chemins admin (suspension,
+révocation) appellent `invalider()` → effet immédiat. Le TTL ne couvre que les
+changements faits ailleurs (SQL brut), où la coupure prend au plus une minute.
+
+**AUCUNE RECONNEXION FORCÉE, règle absolue du chantier.** Un jeton émis avant le
+déploiement ne porte pas de champ `tv` ; `payload.tv ?? 1` le fait valoir 1, et la
+migration met `token_version` à 1 partout. Ne jamais changer ce DEFAULT, ne jamais
+traiter un `tv` absent comme invalide : ce serait déconnecter tout le parc.
+
+**COMPORTEMENT EN PANNE DE LECTURE — décision fondateur.** Si Supabase répond une
+erreur, on **ne refuse pas** : on sert la dernière valeur connue même périmée, à
+défaut on laisse passer en journalisant. Refuser arrêterait TOUTES les caisses de
+TOUS les marchands pendant l'incident. Une ligne ABSENTE (marchand supprimé) est
+une réponse valide, pas une panne, et vaut refus.
+
+**Non traité, écarté en pilotage :** le cas (c) — la caisse mono-site tourne
+toujours avec un jeton `role: 'marchand'` (`scanner-auth.js:97`), identique à celui
+du dashboard, donc porteuse des 14 routes.
+
+**HYPOTHÈSES DU CORRECTIF — ce qui le ferait casser.**
+
+1. **Une seule instance.** Le cache vit en mémoire du processus Node. Avec
+   plusieurs instances Railway, `invalider()` ne touche QUE l'instance qui a reçu
+   l'appel admin : les autres continuent de servir leur copie jusqu'à expiration,
+   donc la suspension et la révocation y prennent **jusqu'à 60 s**. C'est
+   acceptable aujourd'hui (instance unique) et ça ne l'est plus le jour d'un
+   passage multi-instance — **à revoir à ce moment-là**, pas avant. Pistes :
+   invalidation par canal partagé (Postgres `LISTEN/NOTIFY`, Redis) ou TTL réduit.
+2. **`token_version` révoque TOUT ce qui porte l'identité du marchand** —
+   dashboard et caisses ensemble, sans distinction. C'est voulu pour le cas
+   « tablette perdue », mais ça en fait un instrument **grossier** : on ne peut
+   pas couper un seul appareil. Corollaire dimensionnant pour la roadmap : les
+   futures intégrations API (borne, caisse, e-commerce) doivent avoir **leurs
+   propres clés et leur propre révocation**, jamais un jeton marchand — sinon
+   révoquer une tablette volée couperait aussi le site e-commerce de la cliente.
+   Pour couper une seule boutique, le levier existe déjà : `points_de_vente.actif`.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
@@ -815,8 +871,10 @@ token marchand mono-site toujours non révocable).
 - **`remember_device` jamais câblé sur le dashboard** (corrigé le 21/09, `4e63731`). Classe
   de défaut à surveiller : *le serveur sait faire, le front ne demande jamais*. Le scanner
   l'envoyait depuis `dfdaf87` ; le dashboard, jamais, sur toute l'histoire du dépôt.
-- **Jeton marchand irrévocable, portée ×52.** `authMarchand` (`middleware/auth.js:4-21`) ne
-  consulte RIEN en base. **Aucune des 14 routes `authMarchand` ne vérifie `actif`**, dont 5
+- ~~**Jeton marchand irrévocable, portée ×52.**~~ **RÉSOLU** (migration 045, §15 ter) pour
+  les cas « compte suspendu » et « appareil perdu ». Reste ouvert : la caisse mono-site
+  porte un jeton marchand complet (cas c, écarté en pilotage). Constat d'origine :
+  `authMarchand` ne consultait RIEN en base. **Aucune des 14 routes `authMarchand` ne vérifie `actif`**, dont 5
   qui écrivent : `POST /notifications`, `PATCH`/`DELETE /clients/:id`,
   `PATCH /me/points-de-vente/:id` et `/actif`. `GET /clients/export` est ouvert aussi. Seul
   le scan est protégé (`authScanner` relit la boutique). Depuis le 21/09 la fenêtre est de
