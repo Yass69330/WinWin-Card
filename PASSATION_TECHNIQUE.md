@@ -1007,6 +1007,37 @@ Les appels sont lancés **sans `await`** avant `res.json()`, et aucun `await` ne
 s'intercale. Le registre s'ajoute à une chaîne qui tourne déjà en arrière-plan
 **après** la réponse. La caisse n'attend rien.
 
+**ÉTAT FINAL DU CHANTIER (clôturé le 2026-09-25).**
+
+Registre déployé le **25/09** (commit `4b2d3f5`, migration 046 exécutée avant le
+push). **Dix surfaces tracées.** Envoi manuel **vérifié en production** : deux
+lignes, Apple et Google, statut 200, même horodatage à la microseconde — donc bien
+un insert unique.
+
+Reste **une requête de contrôle du premier passage de cron**, à lancer le 26/09
+après 08:00 UTC. Le cron n'avait pas encore tourné au moment de la clôture (déployé
+à 17:14 UTC, prochain passage le lendemain).
+
+**LIMITE — `serial_number` absent sur les lignes Apple de l'envoi manuel.**
+`notifications.js` ne sélectionne que `push_token` (la requête est scopée au
+marchand, le serial n'y est pas chargé) ; les lignes Google, elles, portent le
+serial. Conséquence : sur un envoi manuel, une ligne Apple dit **quel appareil** a
+été poussé, pas **quelle carte**. Le lien se reconstitue par
+`md5(dt.push_token) = e.token_hash`, **mais il est définitivement perdu si la carte
+est supprimée** (la ligne `device_tokens` part en cascade). Correction non retenue
+en pilotage : une ligne dans le `select`, à faire si le besoin apparaît.
+
+**PIÈGE DE LECTURE, constaté à la recette.** Un envoi manuel est scopé
+`.eq('marchand_id', req.marchandId)` sur `device_tokens` ET sur `passes` : il ne
+touche QUE les porteurs de ce marchand. Un testeur détenant N cartes chez N
+marchands ne verra donc qu'**une** ligne Apple, pas N. Ne pas confondre le parc de
+l'appareil avec la portée d'une campagne.
+
+**MIS EN PARKING CÔTÉ PILOTAGE** — connus, non traités, aucune date :
+filtre « passes updated since » (§12) et un push par jeton ; suppression des jetons
+morts (410) ; callbacks Google Wallet (save/delete) ; statut joignable sur la fiche
+client.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
