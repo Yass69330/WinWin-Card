@@ -1135,15 +1135,26 @@ changement.
    pousser `{ uris: [] }`, dont l'acceptation par l'API n'est **pas vérifiée**.
    Un PATCH refusé ferait échouer la mise à jour des points de **tous** les
    porteurs Android. Non vérifié = non envoyé.
-3. **Un message constant répété sans changement de valeur entre deux envois
-   n'affiche rien sur iOS.** Concerne la relance inactif et l'anniversaire, dont
-   le texte est identique d'une fois sur l'autre. Le registre l'enregistre
-   pourtant en `200` : APNs a bien accepté le push, c'est iOS qui n'affiche rien.
-   **Un `200` au registre ne prouve donc pas qu'une notification a été vue.**
-   *Vérification annexe en cours côté pilotage : Yass a reçu une relance d'un
-   marchand chez qui il n'avait eu aucune autre notification entre deux relances,
-   ce qui contredirait cette règle. Requête 3 de
-   `database/requetes/avis_et_ouverture_pro.sql`.*
+3. **HYPOTHÈSE NON VÉRIFIÉE, TEST EN COURS — « un message constant répété sans
+   changement de valeur n'affiche rien sur iOS ».** Cette règle avait été
+   consignée le 25/09 comme une limite connue. **Elle ne l'est pas.** La
+   chronologie de l'appareil `b1fa63b0…` (requête 3 de
+   `database/requetes/avis_et_ouverture_pro.sql`) montre **9 séquences de
+   relances identiques consécutives sans aucune autre écriture entre elles**,
+   dont six d'affilée chez MK Barbershop (16/08 → 25/09) et six chez MK Café
+   (28/07 → 06/09) — et Yass déclare les avoir reçues.
+
+   Ce que les données **ne** prouvent pas : lesquelles se sont affichées à
+   l'écran. Le registre ne mesure que l'acceptation par APNs, jamais l'affichage.
+
+   **Test décisif en attente côté pilotage :** deux campagnes manuelles portant
+   exactement le même texte, à une minute d'intervalle, sans scan entre les deux.
+   Si la seconde s'affiche, la règle est fausse et cette entrée disparaît. Sinon,
+   il faut chercher ailleurs ce qui explique les relances reçues.
+
+   **Ce qui reste vrai dans tous les cas :** un `200` au registre ne prouve pas
+   qu'une notification a été vue. Aucune mesure ne distingue « accepté » de
+   « affiché », ni côté Apple ni côté Google.
 4. **`serial_number` reste NULL sur la surface manuelle** (consigné au lot
    précédent). L'avis, lui, le renseigne.
 5. **`avis_clics` n'est pas purgée** — indicateur commercial à regarder sur la
@@ -1193,6 +1204,30 @@ de « affiché ». À instruire dans un chantier d'observabilité, pas ici.
 
 Rejouable. Vérifiée sur PostgreSQL 16 local : les six colonnes de contrôle à
 `true`, rejeu à blanc, garde-fou déclenché puis levé, retour arrière fourni.
+
+### Déploiement et reste à faire
+
+**Déployé le 26/09/2026** (25/09 22:08 UTC) sur `keen-goldberg-MXslu`, commit
+**`ca0579a`**. Migration 047 exécutée par Yass AVANT le push, six colonnes de
+contrôle à `true`. Photographie prise au même moment : 15 marchands Pro, **tous
+interrupteurs éteints**, aucun lien d'avis configuré — le déploiement n'a donc
+envoyé strictement rien, il a rendu ces réglages opérants.
+
+**Reste à faire, côté pilotage :**
+1. **Test de bout en bout sur un marchand de test** — renseigner le lien d'avis,
+   vérifier qu'il apparaît au dos de la carte, cliquer (une ligne dans
+   `avis_clics`), puis faire un scan de **remise** de récompense et attendre
+   30 min (une ligne `source='avis'` par plateforme dans `notification_envois`).
+2. **Test de la règle iOS** — deux campagnes manuelles au texte identique, à une
+   minute d'intervalle, sans scan entre les deux (voir limite 3 ci-dessus).
+
+**Traité à la clôture :** l'anniversaire du Grand Buffet Indien (allumé sans
+landing premium, donc inerte) a été éteint par Yass le 26/09.
+
+**Suite ouverte par ce chantier :** la chronologie produite pour la vérification
+annexe a mis au jour un défaut de fond — la relance et le boost ne s'arrêtent
+jamais pour un client inactif. Constats chiffrés et pistes dans
+`docs/audit/02-scalabilite.md`, premier matériau du chantier scalabilité.
 
 **La migration DOIT être passée avant le déploiement du code.** Sans elle, la
 colonne n'existe pas (toutes les listes `SELECT` du pass échouent) et le registre
