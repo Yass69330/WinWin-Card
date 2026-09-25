@@ -845,6 +845,54 @@ du dashboard, donc porteuse des 14 routes.
    révoquer une tablette volée couperait aussi le site e-commerce de la cliente.
    Pour couper une seule boutique, le levier existe déjà : `points_de_vente.actif`.
 
+## 15 quater. DIAGNOSTIC SMART NOTIFS (phase 1, 2026-09-25)
+
+Déclencheur terrain : un porteur a reçu la relance inactif de 5 marchands **au même
+instant**. Diagnostic mené sur le code seul — aucun accès base depuis le conteneur,
+aucune requête exécutée. Les requêtes de vérification sont dans le fil de pilotage.
+
+**POURQUOI TOUT ARRIVE ENSEMBLE — trois causes qui se composent.**
+1. **Un seul cron global**, `0 8 * * *` UTC (`cron.js:9`), pour les 48 marchands.
+   Aucun étalement, aucun fuseau marchand (la colonne n'existe pas).
+2. **Le push APNs vise un TOKEN, pas un pass** (`apns.js:98` :
+   `/3/device/${pushToken}`, topic `pass.com.winwincard.loyalty`). Tous les marchands
+   partagent le Pass Type ID → un token couvre tous les pass d'un appareil.
+3. **Le filtre de « passes updated since » est inerte** (`apple-wallet.js:90`) :
+   `.gt('passes.updated_at', …)` porte sur une ressource EMBARQUÉE. Sans `!inner`,
+   PostgREST ne supprime pas la ligne parente, il vide l'embed → l'endpoint renvoie
+   **tous** les serials de l'appareil. **Hypothèse forte, non vérifiée en production**
+   (test : `curl …?passesUpdatedSince=2030-01-01T00:00:00Z`, doit renvoyer 204).
+
+Le champ `notification_txt` porte `changeMessage: '%@'` (`apple-pass.js:356-360`) :
+chaque pass re-téléchargé dont ce champ a changé déclenche une notification iOS.
+
+**ÉTAT PAR WORKFLOW.**
+- `inactive`, `near_reward` : partent, mais **tronquables** — `grep -c "order(\|range("`
+  sur `cron.js` = **0**. `cron.js:44` (scans 30 j) est le pire cas : tronquée, des
+  clients actifs sont classés inactifs et **relancés à tort**. `cron.js:46` tronquée
+  ferait sauter la déduplication.
+- `birthday` : **ne peut rien envoyer**. Exige `date_anniversaire IS NOT NULL`
+  (`cron.js:174`) ; le champ de la landing est masqué en V1 (`landing.html:513-517`,
+  classe `field-v2`).
+- `purge` : lit `count` mais pas `error` (`cron.js:233`) — silencieuse en cas d'échec.
+
+**CE QUI N'EST PAS MESURABLE.** Le cron n'écrit **rien** dans `notification_logs` :
+les envois de workflow ne laissent que des `console.log` Railway, éphémères. Les
+statuts APNs sont lus (`apns.js:127`) et journalisés, jamais stockés.
+
+**410 NON TRAITÉ.** Aucune occurrence de `410` / `Unregistered` / `BadDeviceToken`
+dans `src/`. Un token mort est re-poussé indéfiniment et gonfle `total_apple`, ce qui
+rend le taux d'envoi du dashboard ininterprétable. Côté Google, **aucun callback**
+save/delete : on met à jour des objets dont on ignore l'état.
+
+**`.catch()` MORT CONFIRMÉ** (§3.9) : `notifications.js:137`, `.then().catch()` sur un
+insert Supabase — un échec d'écriture de `notification_logs` est silencieux. Les trois
+autres occurrences portent sur `supabase.storage`, qui rejette bien : légitimes.
+
+**Rappel** : `workflow_executions` n'a reçu son GRANT qu'en migration **028** ; avant,
+la table restait vide et la déduplication ne fonctionnait pas. Toute lecture
+d'historique antérieure à 028 est sans valeur.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
