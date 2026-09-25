@@ -1038,6 +1038,167 @@ filtre « passes updated since » (§12) et un push par jeton ; suppression des 
 morts (410) ; callbacks Google Wallet (save/delete) ; statut joignable sur la fiche
 client.
 
+## 15 sexies. AVIS GOOGLE + OUVERTURE DES WORKFLOWS AU PRO (2026-09-25)
+
+Deux chantiers livrés ensemble, une seule migration : **047**.
+
+### A. Ouverture des workflows automatiques au forfait Pro
+
+Les trois workflows du cron étaient filtrés `.eq('forfait','pro_plus')`
+(`cron.js` lignes 28, 89, 158). Ils lisent maintenant une constante unique,
+`FORFAITS_WORKFLOWS = ['pro','pro_plus']` — **`basic` reste exclu**.
+
+**Rien ne s'allume tout seul.** Les interrupteurs par marchand
+(`workflow_*_enabled`) restent le seul déclencheur réel : les 15 Pro les ont tous
+à `false` (vérifié en SQL côté pilotage avant le chantier), donc le déploiement
+n'envoie strictement rien. Il rend seulement ces cases **opérantes**.
+
+**Corollaire front, indispensable :** la section « Workflows automatiques » de
+l'admin était conditionnée à `pro_plus`. Sans elle, un Pro n'aurait eu aucune
+case à cocher et l'ouverture serait restée théorique. Elle s'affiche désormais
+pour `pro` et `pro_plus` ; la section **landing premium reste Pro+**.
+
+**NO-OP ASSUMÉ — anniversaire chez un Pro.** `runBirthdayWorkflow` exige
+`landing_premium = true` (seule surface où le client saisit sa date de
+naissance), et `landing_premium` reste un droit Pro+. Un Pro peut donc cocher
+« Message d'anniversaire » sans qu'il ne parte jamais rien : aucune date n'est
+collectée. Le formulaire l'annonce déjà (bandeau orange sous la case). Ce n'est
+pas un oubli, c'est la conséquence de ne pas avoir ouvert la landing premium.
+
+### B. Demande d'avis Google
+
+**Déclencheur : `is_reset`**, c'est-à-dire la récompense **REMISE**, pas le
+franchissement du seuil. Même signal dans les deux modes (tampons et points).
+Un client qui atteint 10/10 ne reçoit rien ; il reçoit la demande d'avis au
+passage suivant, celui où la boutique lui donne effectivement le cadeau.
+
+**`marchands.lien_avis_google` est l'unique interrupteur.** Vide ou `NULL` → pas
+de lien au dos de la carte ET pas de notification. Aucun booléen séparé : un
+réglage de moins à désynchroniser. Saisi dans le formulaire admin (jamais en SQL
+brut : classe Google), validé côté code — `http(s)` obligatoire, 500 caractères
+maximum, valeur enregistrée après `trim`. Accepté **à la création comme à la
+modification** : le formulaire affiche le champ dès la création, l'ignorer
+côté `POST` aurait fait disparaître le lien sans message (c'est le piège que
+`telephone` et `adresse` portent encore aujourd'hui — non corrigé ici, hors
+périmètre).
+
+**Chaîne complète :**
+
+| Moment | Ce qui se passe | Requêtes ajoutées |
+|---|---|---|
+| Scan de remise | `avis.planifier()` après `res.json()` — arme un minuteur en mémoire | **0** |
+| T+30 min | réécriture de `passes.notification_message`, relecture des jetons, push APNs, `addMessage` Google, une ligne de registre `source='avis'` | 1 update + 1 select + 1 insert |
+| Clic sur le lien | résolution du marchand, `302`, puis insert dans `avis_clics` | 1 select + 1 insert |
+
+Le « 0 requête au scan » est **mesuré**, pas supposé : le même scan chez un
+marchand avec lien et sans lien produit le même nombre d'appels Supabase (8).
+`lien_avis_google`, la langue et le prénom sont déjà en main — ils ont été
+ajoutés aux listes `SELECT` existantes (règle §2[4]), pas relus.
+
+**Pourquoi 30 minutes :** au moment du scan le client est encore en caisse.
+Lui demander un avis devant le commerçant, c'est demander un avis de complaisance.
+
+**Pourquoi relire les jetons à T+30 (option a, tranchée en pilotage) :** un
+client qui désinstalle sa carte entre-temps n'est pas poussé sur un jeton mort,
+et un appareil ajouté entre-temps la reçoit. Coût : une lecture par récompense.
+
+**Le lien de la carte n'est pas celui du marchand.** Il pointe sur
+`app.winwin-card.com/avis/<serial>`, qui redirige en 302 vers la page d'avis du
+marchand. C'est la seule façon de mesurer un clic. Deux détails qui comptent :
+- `Cache-Control: no-store` sur la redirection — sans lui, le téléphone met le
+  302 en cache et les clics suivants partiraient chez Google sans repasser par
+  nous. Le compteur sous-compterait **sans qu'on puisse le voir**.
+- on redirige vers l'URL **revalidée**, jamais vers la valeur brute de la base :
+  un lien sans schéma deviendrait une redirection relative sur notre domaine.
+
+**Où vit le lien :** backField Apple `avis_google` (entre « How it works » et
+« Refer a Friend ») et `linksModuleData` sur l'**OBJET** Google — jamais sur la
+classe, puisque l'URL porte le serial de la carte. Posé aussi au PATCH, ce qui
+donne le lien aux cartes déjà installées à leur prochaine mise à jour.
+**`primaryFields` et `auxiliaryFields` n'ont pas été touchés** (chantier dédié).
+
+**Texte (B3, tranché en pilotage) :** pas de suffixe, pas de case éphémère, pas
+d'horodatage. L'avis écrit dans `notification_txt` comme tout le reste. Entre
+deux récompenses il y a forcément des scans, qui écrivent chacun une valeur
+différente dans ce champ ; la comparaison `old/new` d'iOS voit donc toujours un
+changement.
+
+### Limites connues, hors périmètre
+
+1. **Le minuteur vit en mémoire d'une seule instance.** Un redémarrage Railway
+   dans la fenêtre de 30 min perd les demandes en attente. La perte est
+   silencieuse et ne produit **jamais de doublon**. Ce qui la rendrait fiable —
+   une table de rendez-vous relue par le cron — coûte une table, un
+   planificateur et des requêtes à chaque passage.
+2. **Retirer le lien ne l'efface pas des objets Google déjà créés.** Côté Apple
+   le champ disparaît à la mise à jour suivante ; côté Google il faudrait
+   pousser `{ uris: [] }`, dont l'acceptation par l'API n'est **pas vérifiée**.
+   Un PATCH refusé ferait échouer la mise à jour des points de **tous** les
+   porteurs Android. Non vérifié = non envoyé.
+3. **Un message constant répété sans changement de valeur entre deux envois
+   n'affiche rien sur iOS.** Concerne la relance inactif et l'anniversaire, dont
+   le texte est identique d'une fois sur l'autre. Le registre l'enregistre
+   pourtant en `200` : APNs a bien accepté le push, c'est iOS qui n'affiche rien.
+   **Un `200` au registre ne prouve donc pas qu'une notification a été vue.**
+   *Vérification annexe en cours côté pilotage : Yass a reçu une relance d'un
+   marchand chez qui il n'avait eu aucune autre notification entre deux relances,
+   ce qui contredirait cette règle. Requête 3 de
+   `database/requetes/avis_et_ouverture_pro.sql`.*
+4. **`serial_number` reste NULL sur la surface manuelle** (consigné au lot
+   précédent). L'avis, lui, le renseigne.
+5. **`avis_clics` n'est pas purgée** — indicateur commercial à regarder sur la
+   durée, volume très faible, contrairement au registre d'envois (TTL 90 j).
+
+### Plafond Google de 3 notifications / 24 h — constat et hypothèse
+
+**HYPOTHÈSE, non vérifiée contre la documentation Google.** Le plafond de 3
+notifications par objet et par 24 h ne repose que sur **un commentaire du dépôt**
+(`google-pass.js:497`, `messageType: 'TEXT_AND_NOTIFY'`). Il n'a jamais été
+confirmé ni observé en production. Aucune parade n'est codée, conformément au
+cadrage.
+
+**Si ce plafond existe, voici ce que l'avis peut rencontrer.** Six surfaces
+appellent `addMessageToLoyaltyObject` : scan, avis, les trois workflows du cron,
+la campagne manuelle, plus ajustement/annulation. Sur une journée de récompense :
+
+| Ordre | Surface | Heure |
+|---|---|---|
+| 1 | scan de remise | en caisse |
+| 2 | **avis** | +30 min |
+| 3 | workflow du cron (anniversaire p. ex.) | 08:00 UTC suivant |
+| 4 | campagne manuelle du marchand | au choix du marchand |
+
+**L'avis arrive en 2ᵉ position, dans les 30 minutes qui suivent le scan.** Pour
+qu'il soit lui-même écrêté, il faudrait trois envois Google dans les 24 h
+*précédentes* — c'est-à-dire plusieurs scans le même jour, ou plusieurs
+campagnes. Cas possible mais rare. Ce sont bien plus probablement les envois
+**suivants** (cron de la nuit, campagne manuelle) qui seraient écrêtés par l'avis.
+
+**Conséquence à surveiller :** ouvrir les workflows au Pro augmente le nombre
+d'envois Google par carte. Si le plafond existe, les marchands qui allument tout
+et envoient des campagnes manuelles verront des notifications Android
+silencieusement perdues — **le registre les enregistrera en `200`**, exactement
+comme la limite iOS ci-dessus. Aucune mesure ne distingue aujourd'hui « accepté »
+de « affiché ». À instruire dans un chantier d'observabilité, pas ici.
+
+### Migration 047 — ce qu'elle fait, dans cet ordre
+
+1. `marchands.lien_avis_google text` + `CHECK` de longueur (≤ 500).
+2. `CHECK` de `notification_envois.source` élargi à une **neuvième** valeur,
+   `'avis'`. Même patron d'introspection que 040 et 043 : on ne présume jamais du
+   nom de la contrainte. Garde-fou : une valeur inattendue fait échouer toute la
+   transaction.
+3. Table `avis_clics` + index `(marchand_id, clique_le DESC)` + RLS + `GRANT` sur
+   la table **et sa séquence**.
+
+Rejouable. Vérifiée sur PostgreSQL 16 local : les six colonnes de contrôle à
+`true`, rejeu à blanc, garde-fou déclenché puis levé, retour arrière fourni.
+
+**La migration DOIT être passée avant le déploiement du code.** Sans elle, la
+colonne n'existe pas (toutes les listes `SELECT` du pass échouent) et le registre
+refuserait la source `'avis'` — la notification partirait sans laisser de trace,
+le registre ne bloquant jamais un envoi (§15 quinquies).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
@@ -1098,6 +1259,17 @@ l'appel d'un `catch` qui journalise — le comportement visible est inchangé, e
 `scan.js` a reçu un `catch` supplémentaire pour que l'`addMessage` suivant parte
 toujours. Sans cette levée, la colonne `statut` aurait toujours valu 200 pour cette
 surface, c'est-à-dire une mesure fausse.
+
+**2026-09-25 — ouverture de la section « Workflows » de l'admin au forfait Pro,
+et découplage de `landing_premium`.** Le cadrage ne parlait que du filtre serveur
+(`cron.js`). Mais la section du formulaire était conditionnée à `pro_plus` : sans
+ce changement, aucun marchand Pro n'aurait eu de case à cocher et l'ouverture
+serait restée sans effet. Corollaire découvert en le faisant : `landing_premium`
+était envoyé **depuis le bloc des workflows**. Une fois ce bloc ouvert au Pro,
+enregistrer un Pro aurait transmis `landing_premium = false` depuis une case
+jamais remplie — donc **écrasé la valeur en base**. Le champ suit désormais sa
+propre section (Pro+). Vérifié au navigateur : un enregistrement Pro ne contient
+plus `landing_premium`, un enregistrement Pro+ le contient toujours.
 
 **2026-09-25 — trois surfaces d'envoi ajoutées au recensement.** `ajustement`,
 `annulation` et le parrainage n'étaient pas dans la liste minimale donnée en

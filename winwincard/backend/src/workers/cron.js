@@ -6,6 +6,13 @@ const registre = require('../services/notif-registre');
 const DEDUP_DAYS   = 7;
 const PURGE_DAYS   = 90;
 
+// Forfaits éligibles aux workflows automatiques. Ouverts au Pro le 25/09/2026 ;
+// `basic` reste exclu et ne reçoit aucun envoi automatique. Une seule constante
+// pour les trois workflows : rien à désynchroniser si le périmètre rebouge.
+// Les interrupteurs par workflow (workflow_*_enabled) restent le seul
+// déclencheur réel — un forfait éligible n'envoie rien tant qu'ils sont à false.
+const FORFAITS_WORKFLOWS = ['pro', 'pro_plus'];
+
 // Nightly at 08:00 UTC (noon Gulf time — bonne fenêtre pour déclencher des visites)
 cron.schedule('0 8 * * *', async () => {
   console.log('[cron] Démarrage des workflows…');
@@ -25,7 +32,7 @@ async function runInactiveWorkflow(opts = {}) {
   let query = supabase
     .from('marchands')
     .select('id, nom, langue, workflow_inactive_days, workflow_inactive_message')
-    .eq('forfait', 'pro_plus')
+    .in('forfait', FORFAITS_WORKFLOWS)
     .eq('actif',   true);
 
   if (!force) query = query.eq('workflow_inactive_enabled', true);
@@ -86,7 +93,7 @@ async function runNearRewardWorkflow(opts = {}) {
   let query = supabase
     .from('marchands')
     .select('id, nom, langue, max_value, workflow_near_reward_threshold')
-    .eq('forfait', 'pro_plus')
+    .in('forfait', FORFAITS_WORKFLOWS)
     .eq('actif',   true);
 
   if (!force) query = query.eq('workflow_near_reward_enabled', true);
@@ -144,8 +151,11 @@ async function runNearRewardWorkflow(opts = {}) {
 
 // ── Workflow : anniversaire client ────────────────────────────────
 // Envoi le jour de l'anniversaire (jour + mois ; année ignorée). Réservé aux
-// marchands Pro+ AVEC landing premium — seule surface où le client saisit sa
-// date de naissance. Zéro écriture sur stored_value : simple message via
+// marchands éligibles (FORFAITS_WORKFLOWS) AVEC landing premium — seule surface
+// où le client saisit sa date de naissance. Or landing_premium reste un droit
+// Pro+ : en pratique l'ouverture au Pro ne change RIEN pour l'anniversaire tant
+// qu'un Pro n'a pas de landing premium (aucune date collectée → aucun envoi).
+// C'est un no-op assumé, pas un oubli. Zéro écriture sur stored_value : simple message via
 // notifyClient (identique stamps/points). Pas de quota (aucun notification_logs).
 // opts.marchandId : limiter à un seul marchand (test)
 // opts.force      : ignorer workflow_birthday_enabled (test)
@@ -155,7 +165,7 @@ async function runBirthdayWorkflow(opts = {}) {
   let query = supabase
     .from('marchands')
     .select('id, nom, langue, workflow_birthday_message')
-    .eq('forfait', 'pro_plus')
+    .in('forfait', FORFAITS_WORKFLOWS)
     .eq('actif',   true)
     .eq('landing_premium', true); // date d'anniversaire collectée uniquement sur landing premium
 

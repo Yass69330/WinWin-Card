@@ -66,6 +66,7 @@ const dashboardRoutes     = require('./routes/dashboard');
 const adminUiRoutes       = require('./routes/admin-ui');
 const workflowsRoutes     = require('./routes/workflows');
 const scannerAuthRoutes   = require('./routes/scanner-auth');
+const avisRoutes          = require('./routes/avis');
 const diagRoutes          = require('./routes/diag');   // instrument temporaire (palier 0.5)
 
 // Fichiers statiques — HTML servi avec no-cache pour garantir la fraîcheur PWA
@@ -83,6 +84,10 @@ app.get('/demo', (req, res) => res.redirect(301, '/l/demo'));
 
 // Landing pages marchands
 app.use('/l', landingRoutes);
+
+// Lien d'avis Google imprimé au dos des cartes — public, sans authentification :
+// il est ouvert depuis le pass d'un client. Redirige et compte le clic.
+app.use('/avis', avisRoutes);
 
 // PWA Scanner
 app.use('/scanner', scannerRoutes);

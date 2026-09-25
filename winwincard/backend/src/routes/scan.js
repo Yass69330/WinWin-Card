@@ -57,7 +57,7 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   //   • Backup code (6 derniers caractères du serial) → filet de secours caisse
   //     → match par suffixe insensible à la casse
   // L'incrément passe ensuite par le même RPC atomique, quel que soit le format.
-  const SELECT_CLIENT = 'id, prenom, stored_value, marchand_id, pass_serial_number, marchands(id, max_value, display_max_value, actif, nom, slug, forfait, langue, type_programme, images_tiers, couleur_fond, couleur_fond_reward, couleur_pastille_fond, couleur_pastille_contour, couleur_pastille_icone, couleur_label_strip, couleur_barre_principale, couleur_barre_secondaire,logo_url, strip_mode, strip_theme, strip_illustration, strip_produit, strip_vide, stamp_icon, strip_custom_background_url, strip_config_version, referral_enabled, referral_bonus_points)';
+  const SELECT_CLIENT = 'id, prenom, stored_value, marchand_id, pass_serial_number, marchands(id, max_value, display_max_value, actif, nom, slug, forfait, langue, type_programme, images_tiers, couleur_fond, couleur_fond_reward, couleur_pastille_fond, couleur_pastille_contour, couleur_pastille_icone, couleur_label_strip, couleur_barre_principale, couleur_barre_secondaire,logo_url, strip_mode, strip_theme, strip_illustration, strip_produit, strip_vide, stamp_icon, strip_custom_background_url, strip_config_version, referral_enabled, referral_bonus_points, lien_avis_google)';
   const raw = String(serial_input).trim().toLowerCase();
   let client = null;
 
@@ -215,6 +215,24 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
     is_reset: isReset,
     message: scanMessage,
   });
+
+  // ── Demande d'avis Google, 30 min plus tard ─────────────────────────────
+  // APRÈS res.json() : la caisse a déjà sa réponse, rien de ce qui suit ne peut
+  // la ralentir. ZÉRO REQUÊTE AJOUTÉE AU SCAN — lien_avis_google, la langue et
+  // le prénom sont déjà en main (SELECT_CLIENT, lu une seule fois plus haut).
+  //
+  // isReset et non `recompense` : le déclencheur est la récompense REMISE, pas le
+  // franchissement du seuil. Même signal dans les deux modes (tampons et points).
+  //
+  // planifier() est synchrone, ne lit rien et ne lève jamais ; elle rend false
+  // (sans bruit) si le marchand n'a pas de lien d'avis — l'unique interrupteur.
+  if (isReset) {
+    require('../services/avis').planifier({
+      marchand: client.marchands,
+      prenom:   client.prenom,
+      serial,
+    });
+  }
 }));
 
 async function notifierMiseAJourPass(serialNumber, marchandId) {
@@ -275,7 +293,7 @@ async function creditReferrerIfApplicable(filleulClientId, marchandId, bonusPoin
   // Récupérer pass + infos du parrain (même marchand)
   const { data: parrain } = await supabase
     .from('clients')
-    .select('prenom, pass_serial_number, marchands(id, max_value, display_max_value, images_tiers, couleur_fond, couleur_fond_reward, couleur_pastille_fond, couleur_pastille_contour, couleur_pastille_icone, couleur_label_strip, couleur_barre_principale, couleur_barre_secondaire,slug, forfait, langue, type_programme, logo_url, strip_mode, strip_theme, strip_illustration, strip_produit, strip_vide, stamp_icon, strip_custom_background_url, strip_config_version)')
+    .select('prenom, pass_serial_number, marchands(id, max_value, display_max_value, images_tiers, couleur_fond, couleur_fond_reward, couleur_pastille_fond, couleur_pastille_contour, couleur_pastille_icone, couleur_label_strip, couleur_barre_principale, couleur_barre_secondaire,slug, forfait, langue, type_programme, logo_url, strip_mode, strip_theme, strip_illustration, strip_produit, strip_vide, stamp_icon, strip_custom_background_url, strip_config_version, lien_avis_google)')
     .eq('id', parrainClientId)
     .eq('marchand_id', marchandId)
     .single();

@@ -4,8 +4,8 @@
 // Chaque message est une fonction (vars) => string : l'interpolation et la
 // gestion du pluriel se font naturellement en JS, sans moteur de template.
 //
-// Périmètre : les 5 notifications système (bienvenue, pass mis à jour ×3,
-// relance inactif, near reward, parrainage). Le contenu écrit par le marchand
+// Périmètre : les notifications système (bienvenue, pass mis à jour ×3, relance
+// inactif, near reward, anniversaire, parrainage, demande d'avis Google). Le contenu écrit par le marchand
 // (override workflow_inactive_message, notif marketing manuelle) n'est PAS ici.
 
 const messages = {
@@ -58,6 +58,16 @@ const messages = {
   birthday: {
     en: ({ prenom }) => `Happy birthday ${prenom}! 🎂 We hope you have a wonderful day.`,
     fr: ({ prenom }) => `Joyeux anniversaire ${prenom} ! 🎂 On te souhaite une très belle journée.`,
+  },
+
+  // ── Demande d'avis Google (T+30 min après une récompense REMISE) ─────────
+  // Tutoiement en FR, aligné sur les autres messages clients. Le lien n'est PAS
+  // dans le texte : une notification Wallet n'est pas cliquable, le lien vit au
+  // dos de la carte (backField Apple / linksModuleData Google). Le message y
+  // renvoie explicitement, sinon le client ne sait pas où cliquer.
+  avisGoogle: {
+    en: ({ prenom }) => `Thanks for your visit ${prenom}, leave us a Google review by tapping the link in your card details.`,
+    fr: ({ prenom }) => `Merci pour ta visite ${prenom}, laisse-nous un avis Google en cliquant sur le lien dans les informations de la carte.`,
   },
 
   // ── Bonus parrainage crédité au parrain ─────────────────────────────────

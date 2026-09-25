@@ -11,6 +11,14 @@ const net = require('net');
 const zlib = require('zlib');
 const crypto = require('crypto');
 const { backupCode } = require('../utils/backup-code');
+// Lien d'avis : la validation de forme et la construction de l'URL vivent dans
+// le service avis, pas ici — c'est lui qui décide quoi envoyer, la carte doit
+// imprimer exactement le même lien.
+const {
+  lienValide:  lienAvisValide,
+  urlAvis,
+  libelleLien: libelleLienAvis,
+} = require('./avis');
 
 // ── Auth token ───────────────────────────────────────────────
 function computeAuthToken(serialNumber) {
@@ -372,6 +380,16 @@ function buildPassJson({ client, marchand, serialNumber, passNotification }) {
           label: 'How it works',
           value: marchand.how_it_works || `Show your pass at every visit.\nAfter ${displayMax} visits, your reward is automatically unlocked.`,
         },
+        // Lien d'avis Google. Un backField, comme le parrainage : Apple rend les
+        // URL du dos cliquables (comportement déjà éprouvé par le champ referral).
+        // lien_avis_google vide → le champ n'existe pas, et aucune demande d'avis
+        // n'est envoyée : c'est le même et unique interrupteur.
+        // AUCUNE touche aux primaryFields ni aux auxiliaryFields (chantier dédié).
+        ...(lienAvisValide(marchand.lien_avis_google) ? [{
+          key:   'avis_google',
+          label: libelleLienAvis(marchand.langue),
+          value: urlAvis(serialNumber),
+        }] : []),
         ...(marchand.referral_enabled ? [{
           key:   'referral',
           label: 'Refer a Friend',

@@ -280,6 +280,11 @@
           <label for="f-adresse">Adresse <span style="color:var(--muted)">(affichée au dos du pass)</span></label>
           <input id="f-adresse" type="text" placeholder="12 rue de la Paix, Paris 75001">
         </div>
+        <div class="field">
+          <label for="f-avis-google">Lien d'avis Google <span style="color:var(--muted)">(vide = désactivé)</span></label>
+          <input id="f-avis-google" type="url" maxlength="500" placeholder="https://g.page/r/…/review" autocorrect="off" autocapitalize="none">
+          <div class="field-hint">Unique interrupteur du workflow d'avis. Rempli → lien au dos de la carte, et demande d'avis envoyée 30 min après chaque récompense remise. Vide → aucun lien, aucune notification. Les cartes déjà installées reçoivent le lien à leur prochaine mise à jour.</div>
+        </div>
         <div class="field" id="field-password">
           <label for="f-pwd">Mot de passe *</label>
           <input id="f-pwd" type="password" placeholder="Mot de passe du marchand" autocomplete="new-password">
@@ -359,9 +364,9 @@
         </div>
       </div>
 
-      <!-- Section : Workflows (Pro+ uniquement, visible en mode édition) -->
+      <!-- Section : Workflows (Pro et Pro+, visible en mode édition) -->
       <div class="form-section" id="section-workflows" style="display:none">
-        <div class="form-section-title">Workflows automatiques <span style="color:var(--warning);font-size:10px">Pro+</span></div>
+        <div class="form-section-title">Workflows automatiques <span style="color:var(--warning);font-size:10px">Pro / Pro+</span></div>
         <div class="field-hint" style="margin-bottom:8px">Envois push automatiques — déclenchés chaque nuit à 12h (heure du Golfe).</div>
 
         <div style="background:var(--surface2);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:12px">
@@ -1125,7 +1130,7 @@ document.getElementById('sheet-backdrop').addEventListener('click', e => {
 // FORM : REMPLIR / VIDER
 // ════════════════════════════════════
 function resetForm() {
-  ['f-nom','f-pass-name','f-slug','f-email','f-telephone','f-adresse','f-pwd','f-new-pwd','f-quota-override','f-logo','f-logo-reward','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-how-it-works','f-tiers','f-wf-inactive-message','f-wf-birthday-message'].forEach(id => {
+  ['f-nom','f-pass-name','f-slug','f-email','f-telephone','f-adresse','f-avis-google','f-pwd','f-new-pwd','f-quota-override','f-logo','f-logo-reward','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-how-it-works','f-tiers','f-wf-inactive-message','f-wf-birthday-message'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   document.getElementById('f-type-programme').value = 'stamps';
@@ -1190,6 +1195,7 @@ function fillForm(m) {
   v('f-email',     m.email_contact);
   v('f-telephone', m.telephone);
   v('f-adresse',   m.adresse);
+  v('f-avis-google', m.lien_avis_google);
   v('f-texte',  m.texte_landing);
   v('f-logo',        m.logo_url);
   v('f-logo-reward', m.logo_reward_url);
@@ -1230,10 +1236,10 @@ function fillForm(m) {
   // Section strip tiers — visible en mode édition uniquement
   document.getElementById('section-strip-tiers').style.display = '';
   renderStripTiers(m.images_tiers);
-  // Sections Pro+ — visibles en édition pour les Pro+
-  if (m.forfait === 'pro_plus') {
+  // Workflows : Pro ET Pro+ (basic exclu). Miroir exact de FORFAITS_WORKFLOWS
+  // côté cron — sans ça, un Pro n'aurait aucun interrupteur à cocher.
+  if (m.forfait === 'pro' || m.forfait === 'pro_plus') {
     document.getElementById('section-workflows').style.display     = 'flex';
-    document.getElementById('section-landing-fields').style.display = 'flex';
     document.getElementById('f-wf-inactive-enabled').checked = !!m.workflow_inactive_enabled;
     document.getElementById('f-wf-inactive-days').value       = m.workflow_inactive_days || 30;
     v('f-wf-inactive-message', m.workflow_inactive_message);
@@ -1241,6 +1247,10 @@ function fillForm(m) {
     document.getElementById('f-wf-near-threshold').value      = m.workflow_near_reward_threshold || 2;
     document.getElementById('f-wf-birthday-enabled').checked  = !!m.workflow_birthday_enabled;
     v('f-wf-birthday-message', m.workflow_birthday_message);
+  }
+  // Landing premium : reste un droit Pro+, inchangé par l'ouverture des workflows.
+  if (m.forfait === 'pro_plus') {
+    document.getElementById('section-landing-fields').style.display = 'flex';
     document.getElementById('f-landing-premium').checked = !!m.landing_premium;
   }
   document.getElementById('f-referral-enabled').checked = !!m.referral_enabled;
@@ -1345,12 +1355,13 @@ function updatePastilleContrastWarn() {
 document.getElementById('f-fond').addEventListener('input', updatePastilleContrastWarn);
 document.getElementById('cp-fond').addEventListener('input', updatePastilleContrastWarn);
 
-// Toggle sections Pro+ quand le forfait change en mode édition
+// Toggle des sections à forfait quand le forfait change en mode édition.
+// Workflows : Pro et Pro+. Landing premium : Pro+ seulement.
 document.getElementById('f-forfait').addEventListener('change', function() {
   if (!S.editId) return;
-  const isProPlus = this.value === 'pro_plus';
-  document.getElementById('section-workflows').style.display     = isProPlus ? 'flex' : 'none';
-  document.getElementById('section-landing-fields').style.display = isProPlus ? 'flex' : 'none';
+  const aWorkflows = this.value === 'pro' || this.value === 'pro_plus';
+  document.getElementById('section-workflows').style.display      = aWorkflows ? 'flex' : 'none';
+  document.getElementById('section-landing-fields').style.display = this.value === 'pro_plus' ? 'flex' : 'none';
 });
 
 // Auto-génération slug depuis le nom (création uniquement)
@@ -1454,13 +1465,14 @@ function collectForm() {
     google_hero_url:  document.getElementById('f-ghero').value.trim()     || null,
     telephone:        document.getElementById('f-telephone').value.trim() || null,
     adresse:          document.getElementById('f-adresse').value.trim()   || null,
+    lien_avis_google: document.getElementById('f-avis-google').value.trim() || null,
     images_tiers,
   };
 
   if (!S.editId && pwd) body.password = pwd;
   if (S.editId  && pwd) body.new_password = pwd;
 
-  // Champs Pro+ (édition Pro+ uniquement)
+  // Champs des workflows (édition, forfait Pro ou Pro+)
   if (S.editId && document.getElementById('section-workflows').style.display === 'flex') {
     body.workflow_inactive_enabled      = document.getElementById('f-wf-inactive-enabled').checked;
     body.workflow_inactive_days         = parseInt(document.getElementById('f-wf-inactive-days').value) || 30;
@@ -1469,6 +1481,14 @@ function collectForm() {
     body.workflow_near_reward_threshold = parseInt(document.getElementById('f-wf-near-threshold').value) || 2;
     body.workflow_birthday_enabled      = document.getElementById('f-wf-birthday-enabled').checked;
     body.workflow_birthday_message      = document.getElementById('f-wf-birthday-message').value.trim() || null;
+  }
+
+  // landing_premium suit SA propre section (Pro+). Il était envoyé depuis le bloc
+  // ci-dessus, ce qui était sans conséquence tant que les deux sections étaient
+  // ouvertes ensemble. Maintenant que les workflows s'ouvrent au Pro, l'enregistrement
+  // d'un marchand Pro aurait envoyé landing_premium=false depuis une case jamais
+  // remplie — donc écrasé la valeur en base. On le sort de ce bloc.
+  if (S.editId && document.getElementById('section-landing-fields').style.display === 'flex') {
     body.landing_premium = document.getElementById('f-landing-premium').checked;
   }
 

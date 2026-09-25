@@ -13,6 +13,13 @@
 
 const jwt = require('jsonwebtoken');
 const { backupCode } = require('../utils/backup-code');
+// Même source que le pass Apple : la carte doit imprimer exactement le lien que
+// le service avis validera et comptera.
+const {
+  lienValide:  lienAvisValide,
+  urlAvis,
+  libelleLien: libelleLienAvis,
+} = require('./avis');
 
 const WALLET_API = 'https://walletobjects.googleapis.com/walletobjects/v1';
 
@@ -191,6 +198,21 @@ async function buildLoyaltyClass(cId, marchand) {
 
 // ── Construction LoyaltyObject ───────────────────────────────
 
+// Bloc de liens de l'OBJET — aujourd'hui le seul lien est celui de l'avis.
+// Sur l'objet et jamais sur la classe : l'URL contient le serial, donc elle est
+// propre à chaque carte, alors qu'une classe est partagée par tous les porteurs
+// du marchand. Rend null quand le marchand n'a pas de lien configuré.
+function blocLiensAvis(marchand, serialNumber) {
+  if (!marchand || !lienAvisValide(marchand.lien_avis_google)) return null;
+  return {
+    uris: [{
+      id:          'avis_google',
+      uri:         urlAvis(serialNumber),
+      description: libelleLienAvis(marchand.langue),
+    }],
+  };
+}
+
 function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
   const isRecompense = client.stored_value > 0 && client.stored_value >= (marchand.max_value || 1);
   const displayMax = marchand.display_max_value || marchand.max_value;
@@ -257,6 +279,10 @@ function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
       alternateText: backupCode(serialNumber),
     },
   };
+
+  // Lien d'avis dès la création de l'objet (miroir du backField Apple).
+  const liensAvis = blocLiensAvis(marchand, serialNumber);
+  if (liensAvis) obj.linksModuleData = liensAvis;
 
   // Couleur de fond reward — override l'objet par-dessus la classe (miroir Apple) :
   //   reward → couleur perso si définie, sinon doré par défaut (tous modes)
@@ -440,6 +466,19 @@ async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, 
   patch.hexBackgroundColor = isRecompense
     ? (couleurFondReward || REWARD_GOLD)
     : (couleurFond || '#1a1a2e');
+
+  // Lien d'avis posé AUSSI au PATCH : c'est ce qui donne le lien aux cartes
+  // Google DÉJÀ installées, à leur prochaine mise à jour, sans migration
+  // d'objets ni parcours de la base.
+  //
+  // LIMITE : le bloc n'est envoyé que s'il y a un lien. Retirer lien_avis_google
+  // dans l'admin arrête bien la notification et retire le champ du pass Apple,
+  // mais ne l'efface PAS des objets Google déjà créés — il faudrait pour cela
+  // pousser `{ uris: [] }`, dont l'acceptation par l'API n'est pas vérifiée, et
+  // un PATCH refusé ferait échouer la mise à jour des points de tous les
+  // porteurs Android. Non vérifié = non envoyé.
+  const liensAvisPatch = blocLiensAvis(marchand, serialNumber);
+  if (liensAvisPatch) patch.linksModuleData = liensAvisPatch;
 
   // Le statut n'était PAS lu : un PATCH refusé par Google passait totalement
   // inaperçu. On le lève désormais, avec le code attaché pour le registre.

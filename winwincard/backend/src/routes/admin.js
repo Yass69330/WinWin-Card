@@ -175,6 +175,20 @@ router.post('/marchands', authAdmin, asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'nom, slug, email_contact et password sont requis' });
   }
 
+  // Le formulaire affiche le champ dès la création : sans cette prise en compte,
+  // un admin qui le remplit en créant le marchand le verrait disparaître sans
+  // message. Même validation qu'au PATCH.
+  let lien_avis_google = null;
+  if (req.body.lien_avis_google) {
+    const { lienValide } = require('../services/avis');
+    lien_avis_google = lienValide(String(req.body.lien_avis_google));
+    if (!lien_avis_google) {
+      return res.status(400).json({
+        error: "lien_avis_google doit être une URL http:// ou https:// de 500 caractères maximum",
+      });
+    }
+  }
+
   const { data: existing } = await supabase.from('marchands').select('id').eq('slug', slug).single();
   if (existing) return res.status(409).json({ error: 'Ce slug est déjà utilisé' });
 
@@ -195,6 +209,7 @@ router.post('/marchands', authAdmin, asyncHandler(async (req, res) => {
       texte_landing, pass_display_name: pass_display_name || null, images_tiers,
       max_value: max_value || 10,
       display_max_value: display_max_value || null,
+      lien_avis_google,
       actif: true,
     })
     .select()
@@ -244,6 +259,10 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
     'strip_mode', 'strip_theme', 'stamp_icon', 'strip_custom_background_url', 'strip_label',
     'strip_illustration', 'strip_produit', 'strip_vide',
     'freq_seuil_bas', 'freq_seuil_haut',
+    // Avis Google — ABSENT de VISUAL_FIELDS : le lien vit au dos de la carte, il
+    // n'entre dans aucun strip, donc aucun bump de strip_config_version (un bump
+    // invaliderait tout le cache d'images pour rien).
+    'lien_avis_google',
   ];
 
   const updates = {};
@@ -283,6 +302,30 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
   if (updates.strip_vide !== undefined && updates.strip_vide !== null
       && !['illustration', 'logo'].includes(updates.strip_vide)) {
     return res.status(400).json({ error: "strip_vide doit valoir 'illustration' ou 'logo'" });
+  }
+
+  // Lien d'avis Google — SEUL interrupteur du workflow d'avis. Vide → null, donc
+  // plus de lien au dos de la carte et plus de demande d'avis, sans second
+  // réglage à désynchroniser.
+  // La forme est validée ICI et pas seulement en base : le CHECK de la migration
+  // 047 borne la longueur, il ne sait pas ce qu'est une URL. On exige http(s) —
+  // une valeur sans schéma produirait une redirection relative sur notre propre
+  // domaine depuis /avis/<serial>, et un `value` non-URL ne serait pas cliquable
+  // au dos du pass Apple. On enregistre la valeur NETTOYÉE (trim).
+  if (updates.lien_avis_google !== undefined) {
+    const brut = updates.lien_avis_google === null ? '' : String(updates.lien_avis_google).trim();
+    if (!brut) {
+      updates.lien_avis_google = null;
+    } else {
+      const { lienValide } = require('../services/avis');
+      const propre = lienValide(brut);
+      if (!propre) {
+        return res.status(400).json({
+          error: "lien_avis_google doit être une URL http:// ou https:// de 500 caractères maximum",
+        });
+      }
+      updates.lien_avis_google = propre;
+    }
   }
 
   // Bump strip_config_version si un champ visuel a changé
