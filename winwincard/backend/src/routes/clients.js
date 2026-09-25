@@ -236,7 +236,10 @@ router.patch('/:id([0-9a-f\\-]{36})', authMarchand, asyncHandler(async (req, res
   res.json({ id: updated.id, prenom: updated.prenom, stored_value: updated.stored_value, created_at: updated.created_at });
 }));
 
-async function syncPassAfterAdjustment(serialNumber, marchandId, prenom, newValue) {
+// `source` : 'ajustement' (édition des points depuis le dashboard) ou
+// 'annulation' (resync après annuler_scan). Ces DEUX surfaces avaient été
+// manquées au recensement de la phase 1 du chantier smart notifs.
+async function syncPassAfterAdjustment(serialNumber, marchandId, prenom, newValue, source = 'ajustement') {
   console.log(`[clients] syncPass START serial=${serialNumber} prenom=${prenom} newValue=${newValue}`);
 
   const { data: marchand } = await supabase
@@ -263,6 +266,8 @@ async function syncPassAfterAdjustment(serialNumber, marchandId, prenom, newValu
   if (passErr) console.error('[clients] syncPass: passes update error:', passErr.message);
   else console.log('[clients] syncPass: passes.notification_message + updated_at mis à jour');
 
+  const lot = require('../services/notif-registre').creerLot(source, marchandId);
+
   // Apple Wallet — silent APNs push si configuré
   const { isApnsConfigured, sendPushUpdate } = require('../services/apns');
   if (!isApnsConfigured()) {
@@ -276,20 +281,30 @@ async function syncPassAfterAdjustment(serialNumber, marchandId, prenom, newValu
     console.log(`[clients] syncPass: ${(tokens || []).length} device token(s) trouvé(s) pour serial=${serialNumber}`);
 
     for (const { push_token } of (tokens || [])) {
+      let erreur = null;
       await sendPushUpdate(push_token)
         .then(() => console.log(`[clients] syncPass: push OK token=…${push_token.slice(-8)}`))
-        .catch(e => console.error(`[clients] syncPass: push FAILED token=…${push_token.slice(-8)}:`, e.message));
+        .catch(e => { erreur = e; console.error(`[clients] syncPass: push FAILED token=…${push_token.slice(-8)}:`, e.message); });
+      lot.ajouter({ plateforme: 'apple', serialNumber, pushToken: push_token, erreur });
     }
   }
 
   // Google Wallet — update points, tier hero image, and push notification
   const { updateLoyaltyObjectPoints, addMessageToLoyaltyObject, isConfigured: isGoogleConfigured } = require('../services/google-pass');
   if (isGoogleConfigured()) {
+    let errUpd = null;
     await updateLoyaltyObjectPoints(serialNumber, marchandId, newValue, marchand.max_value, marchand.display_max_value || marchand.max_value, marchand.images_tiers, prenom, marchand.couleur_fond, marchand.couleur_fond_reward, marchand)
-      .catch(e => console.error('[clients] Google update:', e.message));
-    addMessageToLoyaltyObject(serialNumber, null, msg)
-      .catch(e => console.error('[clients] Google notify:', e.message));
+      .catch(e => { errUpd = e; console.error('[clients] Google update:', e.message); });
+    lot.ajouter({ plateforme: 'google', serialNumber, erreur: errUpd });
+
+    let errMsg = null;
+    await addMessageToLoyaltyObject(serialNumber, null, msg)
+      .catch(e => { errMsg = e; console.error('[clients] Google notify:', e.message); });
+    lot.ajouter({ plateforme: 'google', serialNumber, erreur: errMsg });
   }
+
+  // Un insert pour tout l'événement, après les envois.
+  await lot.ecrire();
 }
 
 async function linkReferral(filleulId, marchandId, refSerial) {

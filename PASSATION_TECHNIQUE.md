@@ -644,6 +644,7 @@ zones dangereuses §5, contrat §7 s'appliquent toujours.*
 | 043 | CHECK `strip_theme` élargi à `illustration` ; colonnes `strip_illustration`, `strip_produit`, `strip_vide` | Même patron d'introspection que la 040. |
 | 044 | **Fonction `admin_marchands_stats() RETURNS jsonb`** | Même motif que `group_stats` (§12). |
 | 045 | `marchands.token_version` (int NOT NULL DEFAULT 1) | Révocation des jetons marchand. DEFAULT 1 = aucune reconnexion forcée (§18). |
+| 046 | Table `notification_envois` + 5 index + GRANT | Registre des envois de notification, toutes surfaces. Rétention 90 j via la purge du cron. |
 
 ## 9. LE MODÈLE MULTI-BOUTIQUES
 
@@ -893,6 +894,76 @@ autres occurrences portent sur `supabase.storage`, qui rejette bien : légitimes
 la table restait vide et la déduplication ne fonctionnait pas. Toute lecture
 d'historique antérieure à 028 est sans valeur.
 
+## 15 quinquies. REGISTRE DES ENVOIS (smart notifs, phase 2)
+
+Répond à une seule question : **quelles notifications partent, lesquelles Apple et
+Google acceptent ou refusent**. Aucun changement de comportement visible.
+
+**DIX SURFACES D'ENVOI, recensement complet.** La phase 1 n'en avait vu que sept.
+Trois manquaient, toutes confirmées par `grep` sur les appels APNs et Google :
+
+| Source | Où | Manquée en phase 1 ? |
+|---|---|---|
+| `inactive`, `near_reward`, `birthday` | `cron.js` | non |
+| `manuel` | `notifications.js` | non |
+| `scan` | `scan.js:220`, `scan.js:242` | non |
+| `welcome` | `apple-wallet.js:172` | non |
+| `ajustement` | `clients.js:232` → `syncPassAfterAdjustment` | **OUI** |
+| `annulation` | `scan.js:390` → `syncPassAfterAdjustment` | **OUI** |
+| parrainage | `scan.js:324` → `notifierMiseAJourPass` | **OUI** (rattaché à `scan`) |
+
+Le workflow **anniversaire fonctionne** : il s'active avec la landing premium, où le
+champ date de naissance est visible. La phase 1 n'avait lu que la landing standard.
+**Correction d'un constat erroné de l'audit `docs/audit/01-notifications.md` §4.**
+
+**RÈGLE ABSOLUE : le registre ne bloque ni ne retarde jamais un envoi.** Deux
+garanties dans `notif-registre.js` : l'écriture a TOUJOURS lieu après l'envoi, et
+`Lot.ecrire()` comme `enregistrer()` **ne rejettent jamais** — elles journalisent.
+Un registre en panne laisse la plateforme envoyer normalement.
+
+**ÉCRITURES GROUPÉES.** Un insert par lot, jamais un par push. Flush **par
+marchand** dans le cron, et non en fin de workflow : si le cron meurt en route on ne
+perd que le marchand en cours. Découpe à 500 lignes par insert.
+Écritures ajoutées par passage de cron : **0 avant → au plus 3 × (marchands Pro+
+ayant au moins un envoi)** après. Un marchand sans envoi n'écrit rien.
+
+**PAS DE JETON EN CLAIR.** `token_hash` = `md5(push_token)`. md5 est **natif
+Postgres** (digest() exigerait pgcrypto) et sert de clé de corrélation, pas de
+primitive de sécurité. Jointure : `md5(dt.push_token) = e.token_hash`.
+
+**`statut` NULL ≠ refus.** NULL veut dire « aucune réponse obtenue » (coupure,
+timeout, session morte). Distinguer les deux est tout l'intérêt du registre.
+
+**LES 410 SONT NOTÉS, RIEN N'EST SUPPRIMÉ.** Aucune logique d'effacement de
+`device_tokens` — décision de pilotage, hors périmètre de ce lot.
+
+**ÉCRITURES MUETTES CORRIGÉES** (§3.9) : `.then().catch()` mort sur l'insert de
+`notification_logs` (`notifications.js`), les trois inserts de déduplication du cron,
+et la purge qui ne lisait pas son `error`.
+
+**EFFET DE BORD NEUTRALISÉ.** `updateLoyaltyObjectPoints` (`google-pass.js`) ne
+lisait pas le statut du PATCH : un refus Google passait inaperçu. Il lève désormais.
+Dans `scan.js`, l'appel est maintenant enveloppé d'un `catch` — sans quoi
+l'exception sauterait l'`addMessage` qui suit et le message Android ne partirait
+plus, ce qui aurait été un changement de comportement visible.
+
+**HYPOTHÈSES — ce qui ferait casser ce lot.**
+1. **Appariement par index** dans `notifications.js` : `Promise.allSettled` préserve
+   l'ordre des entrées, donc `appleResults[i]` correspond à `tokens[i]`. Si un jour
+   les envois étaient filtrés ou réordonnés avant `allSettled`, les lignes du
+   registre seraient attribuées au mauvais jeton — **sans erreur visible**.
+2. **Le CHECK sur `source` fige les huit valeurs.** Toute surface d'envoi ajoutée
+   plus tard DOIT être ajoutée au CHECK, sinon son insert échoue — silencieusement
+   du point de vue de l'envoi, qui partira quand même.
+3. **Crash du cron** : un lot accumulé mais non écrit est perdu. Borné à un marchand.
+4. **Le registre mesure la RÉPONSE d'Apple, pas l'affichage.** Un 200 ne prouve pas
+   qu'une notification s'est affichée sur l'écran du porteur — non obtenable.
+
+**HORS PÉRIMÈTRE, décidé en pilotage** : purge des jetons morts, statut joignable sur
+la fiche client, troncature du cron (chantier P1), filtre « passes updated since »,
+un push par jeton, étalement/fuseau marchand, callbacks Google, logique de
+l'anniversaire.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
@@ -944,7 +1015,20 @@ Toute décision prise sans passer par le pilotage (Yass) se note ici : date, dé
 raison, effet constaté. Une entrée vaut aveu, pas justification — la règle reste le
 contrat §7 (diagnostic, validation, puis code).
 
-*(aucune entrée à ce jour)*
+**2026-09-25 — `updateLoyaltyObjectPoints` lève désormais sur statut non-200.**
+Le lot « registre des envois » demandait d'enregistrer le statut des mises à jour
+d'objets Google. La fonction ne le LISAIT pas : rendre le statut exploitable
+imposait de le vérifier, donc de lever. Ce n'était pas explicitement au périmètre.
+Conséquence contenue : les deux appelants (`scan.js`, `clients.js`) enveloppent
+l'appel d'un `catch` qui journalise — le comportement visible est inchangé, et
+`scan.js` a reçu un `catch` supplémentaire pour que l'`addMessage` suivant parte
+toujours. Sans cette levée, la colonne `statut` aurait toujours valu 200 pour cette
+surface, c'est-à-dire une mesure fausse.
+
+**2026-09-25 — trois surfaces d'envoi ajoutées au recensement.** `ajustement`,
+`annulation` et le parrainage n'étaient pas dans la liste minimale donnée en
+pilotage. Elles envoient bien des pushes ; les omettre aurait laissé des trous dans
+le registre. Rattachées aux sources `ajustement`, `annulation` et `scan`.
 
 ---
 

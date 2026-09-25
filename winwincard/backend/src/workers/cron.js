@@ -1,6 +1,7 @@
 const cron    = require('node-cron');
 const supabase = require('../services/supabase');
 const { notif } = require('../i18n/messages');
+const registre = require('../services/notif-registre');
 
 const DEDUP_DAYS   = 7;
 const PURGE_DAYS   = 90;
@@ -46,6 +47,7 @@ async function runInactiveWorkflow(opts = {}) {
       supabase.from('workflow_executions').select('client_id').eq('marchand_id', merchant.id).eq('workflow_type', 'inactive').gte('executed_at', dedupSince),
     ]);
 
+    const lot = registre.creerLot('inactive', merchant.id);
     const activeSet = new Set((activeScans || []).map(s => s.client_id));
     const dedupSet  = new Set((recentExec  || []).map(e => e.client_id));
     const toNotify  = (clients || []).filter(c => !activeSet.has(c.id) && !dedupSet.has(c.id));
@@ -54,9 +56,13 @@ async function runInactiveWorkflow(opts = {}) {
       const msg = merchant.workflow_inactive_message
         ? merchant.workflow_inactive_message.replace('{prenom}', client.prenom).replace('{nom}', merchant.nom)
         : notif('inactive', merchant.langue, { prenom: client.prenom, nom: merchant.nom });
-      await notifyClient(client, merchant.id, msg);
-      await supabase.from('workflow_executions').insert({ workflow_type: 'inactive', client_id: client.id, marchand_id: merchant.id });
+      await notifyClient(client, merchant.id, msg, lot);
+      const { error: errDedup } = await supabase.from('workflow_executions').insert({ workflow_type: 'inactive', client_id: client.id, marchand_id: merchant.id });
+      if (errDedup) console.error('[cron] inactive dedup insert:', errDedup.message);
     }
+
+    // Registre : UN insert pour tout ce marchand, après les envois.
+    await lot.ecrire();
 
     console.log(`[cron] inactive: ${toNotify.length} client(s) notifié(s) — ${merchant.nom}`);
     const inactiveClients = (clients || []).filter(c => !activeSet.has(c.id));
@@ -110,15 +116,19 @@ async function runNearRewardWorkflow(opts = {}) {
         .gte('executed_at', dedupSince),
     ]);
 
+    const lot = registre.creerLot('near_reward', merchant.id);
     const dedupSet = new Set((recentExec || []).map(e => e.client_id));
     const toNotify = (clients || []).filter(c => !dedupSet.has(c.id));
 
     for (const client of toNotify) {
       const remaining = maxVal - client.stored_value;
       const msg = notif('nearReward', merchant.langue, { prenom: client.prenom, remaining, nom: merchant.nom });
-      await notifyClient(client, merchant.id, msg);
-      await supabase.from('workflow_executions').insert({ workflow_type: 'near_reward', client_id: client.id, marchand_id: merchant.id });
+      await notifyClient(client, merchant.id, msg, lot);
+      const { error: errDedup } = await supabase.from('workflow_executions').insert({ workflow_type: 'near_reward', client_id: client.id, marchand_id: merchant.id });
+      if (errDedup) console.error('[cron] near_reward dedup insert:', errDedup.message);
     }
+
+    await lot.ecrire();
 
     console.log(`[cron] near_reward: ${toNotify.length} client(s) notifié(s) — ${merchant.nom}`);
     results.push({
@@ -179,6 +189,7 @@ async function runBirthdayWorkflow(opts = {}) {
         .gte('executed_at', yearStart),
     ]);
 
+    const lot = registre.creerLot('birthday', merchant.id);
     const sentSet = new Set((sentThisYear || []).map(e => e.client_id));
     // slice(5) de 'AAAA-MM-JJ' → 'MM-JJ'. 29/02 ne matche que les années
     // bissextiles → aucun envoi les autres années (voulu, pas de contournement).
@@ -192,9 +203,12 @@ async function runBirthdayWorkflow(opts = {}) {
       const msg = merchant.workflow_birthday_message
         ? merchant.workflow_birthday_message.replace('{prenom}', client.prenom).replace('{nom}', merchant.nom)
         : notif('birthday', merchant.langue, { prenom: client.prenom, nom: merchant.nom });
-      await notifyClient(client, merchant.id, msg);
-      await supabase.from('workflow_executions').insert({ workflow_type: 'birthday', client_id: client.id, marchand_id: merchant.id });
+      await notifyClient(client, merchant.id, msg, lot);
+      const { error: errDedup } = await supabase.from('workflow_executions').insert({ workflow_type: 'birthday', client_id: client.id, marchand_id: merchant.id });
+      if (errDedup) console.error('[cron] birthday dedup insert:', errDedup.message);
     }
+
+    await lot.ecrire();
 
     console.log(`[cron] birthday: ${toNotify.length} client(s) notifié(s) — ${merchant.nom}`);
     results.push({ marchand: merchant.nom, notifies: toNotify.length });
@@ -204,7 +218,10 @@ async function runBirthdayWorkflow(opts = {}) {
 }
 
 // ── Envoi de notification à un client ────────────────────────────
-async function notifyClient(client, marchandId, msg) {
+// `lot` : collecteur du registre des envois (migration 046). Les lignes sont
+// accumulées ici et écrites UNE FOIS par marchand, jamais une par push. Le
+// registre n'est jamais attendu avant l'envoi : il ne peut rien retarder.
+async function notifyClient(client, marchandId, msg, lot) {
   if (!client.pass_serial_number) return;
 
   await supabase.from('passes')
@@ -216,25 +233,43 @@ async function notifyClient(client, marchandId, msg) {
   if (isApnsConfigured()) {
     const { data: tokens } = await supabase.from('device_tokens').select('push_token').eq('serial_number', client.pass_serial_number);
     for (const { push_token } of (tokens || [])) {
-      await sendPushUpdate(push_token).catch(e => console.error('[cron] APNs push:', e.message));
+      let erreur = null;
+      await sendPushUpdate(push_token).catch(e => { erreur = e; console.error('[cron] APNs push:', e.message); });
+      if (lot) lot.ajouter({ plateforme: 'apple', serialNumber: client.pass_serial_number, pushToken: push_token, erreur });
     }
   }
 
   const { addMessageToLoyaltyObject, isConfigured: isGoogleConfigured } = require('../services/google-pass');
   if (isGoogleConfigured()) {
+    let errG = null;
     await addMessageToLoyaltyObject(client.pass_serial_number, null, msg)
-      .catch(e => console.error('[cron] Google notify:', e.message));
+      .catch(e => { errG = e; console.error('[cron] Google notify:', e.message); });
+    if (lot) lot.ajouter({ plateforme: 'google', serialNumber: client.pass_serial_number, erreur: errG });
   }
 }
 
 // ── Purge automatique des anciennes exécutions (TTL 90j) ─────────
 async function purgeOldExecutions() {
   const cutoff = new Date(Date.now() - PURGE_DAYS * 864e5).toISOString();
-  const { count } = await supabase
+
+  // L'erreur n'était pas lue : une purge en échec (GRANT retiré, table
+  // renommée) aurait été totalement invisible et la table aurait grossi sans
+  // fin. §3.9 — supabase-js ne rejette jamais.
+  const { count, error } = await supabase
     .from('workflow_executions')
     .delete({ count: 'exact' })
     .lt('executed_at', cutoff);
-  if (count > 0) console.log(`[cron] purge: ${count} workflow_executions supprimée(s)`);
+  if (error) console.error('[cron] purge workflow_executions:', error.message);
+  else if (count > 0) console.log(`[cron] purge: ${count} workflow_executions supprimée(s)`);
+
+  // Même rétention de 90 jours pour le registre des envois (migration 046) :
+  // aucun nouveau planificateur, on réutilise ce passage.
+  const { count: cE, error: errE } = await supabase
+    .from('notification_envois')
+    .delete({ count: 'exact' })
+    .lt('envoye_le', cutoff);
+  if (errE) console.error('[cron] purge notification_envois:', errE.message);
+  else if (cE > 0) console.log(`[cron] purge: ${cE} notification_envois supprimée(s)`);
 }
 
 module.exports = { runInactiveWorkflow, runNearRewardWorkflow, runBirthdayWorkflow };

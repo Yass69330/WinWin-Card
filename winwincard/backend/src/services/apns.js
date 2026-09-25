@@ -124,7 +124,14 @@ function doRequest(pushToken, payload, isAlert) {
       if (status === 200) {
         resolve();
       } else {
-        reject(new Error(`APNs ${status}: ${reason || body}`));
+        // Le message reste identique (des logs et des tests s'y appuient) ; on
+        // ATTACHE en plus le statut et la reason pour que le registre des envois
+        // (migration 046) puisse les stocker en colonnes plutôt que de les
+        // extraire d'une chaîne. Ajout de propriétés : invisible pour l'appelant.
+        const err = new Error(`APNs ${status}: ${reason || body}`);
+        err.apnsStatus = status;
+        err.apnsReason = reason;
+        reject(err);
       }
     });
     req.on('error', e => {

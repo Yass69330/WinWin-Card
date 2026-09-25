@@ -183,7 +183,7 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   ]);
 
   // Mises à jour Apple + Google Wallet en parallèle, sans bloquer la réponse
-  notifierMiseAJourPass(serial).catch(e => console.error('[scan] push Apple:', e.message));
+  notifierMiseAJourPass(serial, req.marchandId).catch(e => console.error('[scan] push Apple:', e.message));
   mettreAJourGoogleWallet(serial, req.marchandId, apresScan, maxValue, displayMaxValue, scanMessage, client.marchands.images_tiers, client.prenom, client.marchands.couleur_fond, client.marchands.couleur_fond_reward, client.marchands).catch(e => console.error('[scan] push Google:', e.message));
 
   // Parrainage — crédit au parrain au premier tampon/point du filleul, UNE
@@ -217,7 +217,7 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   });
 }));
 
-async function notifierMiseAJourPass(serialNumber) {
+async function notifierMiseAJourPass(serialNumber, marchandId) {
   const { data: tokens } = await supabase
     .from('device_tokens')
     .select('push_token')
@@ -225,17 +225,40 @@ async function notifierMiseAJourPass(serialNumber) {
 
   if (!tokens || tokens.length === 0) return;
 
+  const registre = require('../services/notif-registre');
+  const lot = registre.creerLot('scan', marchandId);
+
   const { sendPushUpdate } = require('../services/apns');
   for (const { push_token } of tokens) {
-    await sendPushUpdate(push_token).catch(e => console.error(`[scan] sendPushUpdate échoué (…${push_token.slice(-8)}):`, e.message));
+    let erreur = null;
+    await sendPushUpdate(push_token).catch(e => { erreur = e; console.error(`[scan] sendPushUpdate échoué (…${push_token.slice(-8)}):`, e.message); });
+    lot.ajouter({ plateforme: 'apple', serialNumber, pushToken: push_token, erreur });
   }
+  // Après les envois : ne retarde rien. Un appareil porte typiquement 1 jeton
+  // par carte, donc 1 ligne — le lot reste un insert unique par scan.
+  await lot.ecrire();
 }
 
 async function mettreAJourGoogleWallet(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, scanMessage, imagesTiers, prenom, couleurFond, couleurFondReward, marchand) {
   const { updateLoyaltyObjectPoints, addMessageToLoyaltyObject } = require('../services/google-pass');
-  await updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, imagesTiers, prenom, couleurFond, couleurFondReward, marchand);
-  addMessageToLoyaltyObject(serialNumber, null, scanMessage)
-    .catch(e => console.error('[scan] Google addMessage:', e.message));
+  const registre = require('../services/notif-registre');
+  const lot = registre.creerLot('scan', marchandId);
+
+  // updateLoyaltyObjectPoints NE LEVAIT PAS sur un statut non-200 (le statut
+  // n'était pas lu) ; il le fait désormais. Sans ce catch, l'exception
+  // sauterait l'addMessage qui suit et le message Android ne partirait plus —
+  // ce serait un changement de comportement visible, hors périmètre de ce lot.
+  let errUpd = null;
+  await updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, imagesTiers, prenom, couleurFond, couleurFondReward, marchand)
+    .catch(e => { errUpd = e; console.error('[scan] Google updateObject:', e.message); });
+  lot.ajouter({ plateforme: 'google', serialNumber, erreur: errUpd });
+
+  let errMsg = null;
+  await addMessageToLoyaltyObject(serialNumber, null, scanMessage)
+    .catch(e => { errMsg = e; console.error('[scan] Google addMessage:', e.message); });
+  lot.ajouter({ plateforme: 'google', serialNumber, erreur: errMsg });
+
+  await lot.ecrire();
 }
 
 async function creditReferrerIfApplicable(filleulClientId, marchandId, bonusPoints) {
@@ -298,7 +321,7 @@ async function creditReferrerIfApplicable(filleulClientId, marchandId, bonusPoin
     .eq('marchand_id', marchandId);
 
   // Push Apple + Google au parrain
-  notifierMiseAJourPass(parrain.pass_serial_number)
+  notifierMiseAJourPass(parrain.pass_serial_number, marchandId)
     .catch(e => console.error('[scan] referral push Apple:', e.message));
   mettreAJourGoogleWallet(
     parrain.pass_serial_number, marchandId, newValue, maxValue, displayMax,
@@ -364,7 +387,7 @@ router.post('/:id/annuler', authScanner, asyncHandler(async (req, res) => {
   const { data: client } = await supabase
     .from('clients').select('prenom').eq('id', data.client_id).single();
   const { syncPassAfterAdjustment } = require('./clients');
-  syncPassAfterAdjustment(data.serial, req.marchandId, client?.prenom || '', data.stored_value)
+  syncPassAfterAdjustment(data.serial, req.marchandId, client?.prenom || '', data.stored_value, 'annulation')
     .catch(e => console.error('[scan] annulation resync:', e.message));
 
   res.json({ ok: true, stored_value: data.stored_value });

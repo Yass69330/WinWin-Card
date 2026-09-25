@@ -441,7 +441,17 @@ async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, 
     ? (couleurFondReward || REWARD_GOLD)
     : (couleurFond || '#1a1a2e');
 
-  await walletRequest('PATCH', `/loyaltyObject/${encodeURIComponent(oId)}`, patch, token);
+  // Le statut n'était PAS lu : un PATCH refusé par Google passait totalement
+  // inaperçu. On le lève désormais, avec le code attaché pour le registre.
+  // Les appelants enveloppent déjà cet appel dans un .catch() qui journalise
+  // (scan.js, clients.js) — le comportement visible ne change pas.
+  const { status, data } = await walletRequest('PATCH', `/loyaltyObject/${encodeURIComponent(oId)}`, patch, token);
+  if (status !== 200) {
+    const detail = data?.error?.message || JSON.stringify(data);
+    const err = new Error(`Google updateObject ${status}: ${detail}`);
+    err.googleStatus = status;
+    throw err;
+  }
 }
 
 // Notification — ajoute un message sur le LoyaltyObject et envoie une
@@ -469,7 +479,9 @@ async function addMessageToLoyaltyObject(serialNumber, titre, message) {
 
   if (status !== 200) {
     const detail = data?.error?.message || JSON.stringify(data);
-    throw new Error(`Google addMessage ${status}: ${detail}`);
+    const err = new Error(`Google addMessage ${status}: ${detail}`);
+    err.googleStatus = status;   // pour le registre des envois (migration 046)
+    throw err;
   }
 }
 

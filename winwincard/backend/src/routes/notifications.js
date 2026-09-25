@@ -5,6 +5,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const { authMarchand } = require('../middleware/auth');
 const { sendPushUpdate, isApnsConfigured }                    = require('../services/apns');
 const { addMessageToLoyaltyObject, isConfigured: isGoogleConfigured } = require('../services/google-pass');
+const registre = require('../services/notif-registre');
 
 const NOTIF_LIMITS = { basic: 0, pro: 10, pro_plus: 50 };
 
@@ -120,6 +121,22 @@ router.post('/', authMarchand, asyncHandler(async (req, res) => {
       : Promise.resolve([]),
   ]);
 
+  // Registre des envois (migration 046) : UN insert pour toute la campagne,
+  // après les envois — il ne peut donc rien retarder. Promise.allSettled
+  // conserve l'ordre des entrées, d'où l'appariement par index avec tokens/passes.
+  const lot = registre.creerLot('manuel', req.marchandId);
+  appleResults.forEach((r, i) => lot.ajouter({
+    plateforme: 'apple',
+    pushToken:  (tokens || [])[i]?.push_token,
+    erreur:     r.status === 'rejected' ? r.reason : null,
+  }));
+  googleResults.forEach((r, i) => lot.ajouter({
+    plateforme:   'google',
+    serialNumber: (passes || [])[i]?.serial_number,
+    erreur:       r.status === 'rejected' ? r.reason : null,
+  }));
+  await lot.ecrire();   // ne rejette jamais
+
   // Log des échecs pour diagnostic Railway
   appleResults.filter(r => r.status === 'rejected')
     .forEach(r => console.error('[notifications] APNs échec:', r.reason?.message));
@@ -127,6 +144,9 @@ router.post('/', authMarchand, asyncHandler(async (req, res) => {
     .forEach(r => console.error('[notifications] Google échec:', r.reason?.message));
 
   // Log fire-and-forget
+  // §3.9 : supabase-js ne rejette JAMAIS — l'ancien `.then().catch()` était du
+  // code mort et tout échec d'écriture de notification_logs (la table dont
+  // dépend le dashboard) passait inaperçu. On lit `error`.
   supabase.from('notification_logs').insert({
     marchand_id:    req.marchandId,
     message,
@@ -134,7 +154,9 @@ router.post('/', authMarchand, asyncHandler(async (req, res) => {
     envoyes_google: googleResults.filter(r => r.status === 'fulfilled').length,
     total_apple:    (tokens || []).length,
     total_google:   (passes || []).length,
-  }).then().catch(e => console.error('[notifications] log:', e.message));
+  }).then(({ error }) => {
+    if (error) console.error('[notifications] notification_logs insert:', error.message);
+  });
 
   res.json({
     apple: {

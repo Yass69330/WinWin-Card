@@ -187,8 +187,21 @@ async function sendWelcomePush(serialNumber, pushToken, marchandId) {
 
   const { isApnsConfigured, sendPushUpdate } = require('../services/apns');
   if (isApnsConfigured()) {
-    await sendPushUpdate(pushToken);
-    console.log(`[apple-wallet] Welcome push OK — serial=${serialNumber}`);
+    // Un seul push par événement : écriture unitaire au registre, APRÈS l'envoi.
+    // On relève l'erreur puis on la relance — l'appelant (le .catch() du POST
+    // d'enregistrement) journalise comme avant, le comportement ne change pas.
+    let erreur = null;
+    try {
+      await sendPushUpdate(pushToken);
+      console.log(`[apple-wallet] Welcome push OK — serial=${serialNumber}`);
+    } catch (e) {
+      erreur = e;
+    }
+    await require('../services/notif-registre').enregistrer({
+      source: 'welcome', marchandId, plateforme: 'apple',
+      serialNumber, pushToken, erreur,
+    });
+    if (erreur) throw erreur;
   }
 }
 
