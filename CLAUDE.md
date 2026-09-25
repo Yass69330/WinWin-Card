@@ -14,3 +14,5 @@
 - Tout fix est pensé pour la roadmap : nommer ses hypothèses (ce qui le
   ferait casser) et ses limites. Ce qui est provisoire ou reporté est écrit
   comme tel dans la passation.
+- Toute nouvelle surface d'envoi (APNs ou Google) écrit dans
+  notification_envois.

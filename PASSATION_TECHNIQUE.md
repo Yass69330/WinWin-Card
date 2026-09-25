@@ -964,6 +964,49 @@ la fiche client, troncature du cron (chantier P1), filtre « passes updated sinc
 un push par jeton, étalement/fuseau marchand, callbacks Google, logique de
 l'anniversaire.
 
+**LES TROIS PREUVES EXIGÉES EN REVUE (2026-09-25).** Trois risques avaient été
+soulevés en pilotage. Aucun n'a nécessité de correction de code — mais deux
+reposaient sur des affirmations non étayées de ma livraison. Les preuves sont
+consignées ici pour que la question ne se repose pas.
+
+**1. Rétention 90 jours — implémentée, dans `purgeOldExecutions` (`cron.js`).**
+Même passage de cron et même `PURGE_DAYS = 90` que `workflow_executions`, aucun
+nouveau planificateur. La purge **lit désormais son `error`** : l'ancienne ne le
+faisait pas, et un `GRANT DELETE` manquant aurait fait grossir la table sans fin,
+en silence. Le GRANT de la migration 046 inclut bien `DELETE`. Vérifié sur
+PostgreSQL 16 : une ligne à 91 jours est supprimée, les autres restent.
+
+**2. Panne Google totale — les QUATRE chemins tiennent.** Le risque : rendre
+`updateLoyaltyObjectPoints` capable de lever exposait `scan`, mais aussi
+`ajustement`, `annulation` et `parrainage`. Testé avec Google renvoyant 503 sur
+**toute** écriture d'objet — 9 assertions, 0 échec :
+
+| Chemin | Protection dans la fonction | Protection au site d'appel |
+|---|---|---|
+| scan | `catch` sur l'update (`scan.js`) | `.catch()` + fire-and-forget |
+| ajustement | `catch` (`clients.js`) | `.catch()`, `res.json` indépendant |
+| annulation | même fonction, même `catch` | `.catch()` + fire-and-forget |
+| parrainage | via `mettreAJourGoogleWallet`, déjà protégé | `.catch()` |
+
+Constaté sous panne : la fonction **ne lève pas**, l'`addMessage` est tenté
+**malgré** l'échec de l'update, le registre est écrit quand même, les deux lignes
+Google portent le 503 et la ligne Apple reste un succès. Un incident Google ne peut
+donc pas faire échouer une annulation ni un ajustement côté marchand.
+
+**3. Latence du scan — mesurée.** « L'envoi n'est jamais bloqué » ne disait rien de
+la réponse à la caisse. Séquence réelle de `scan.js` horodatée :
+
+```
+   0ms  scan : écriture en base terminée
+   0ms  >>> res.json() — LA CAISSE A SA RÉPONSE
+ 121ms  APNs répondu
+ 161ms  REGISTRE écrit
+```
+
+Les appels sont lancés **sans `await`** avant `res.json()`, et aucun `await` ne
+s'intercale. Le registre s'ajoute à une chaîne qui tourne déjà en arrière-plan
+**après** la réponse. La caisse n'attend rien.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
