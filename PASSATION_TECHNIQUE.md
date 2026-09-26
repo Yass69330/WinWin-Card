@@ -1157,7 +1157,7 @@ changement.
    d'une fois sur l'autre. Entre deux envois consécutifs **sans rien pour changer
    la valeur entre-temps**, seul le premier s'affiche. Les 9 séquences de
    relances identiques consécutives relevées sur l'appareil `b1fa63b0…`
-   (`docs/audit/02-scalabilite.md` §1) sont donc, pour l'essentiel, des pushes
+   (`docs/audit/A-scalabilite-anterieure.md` §1) sont donc, pour l'essentiel, des pushes
    acceptés par APNs et **jamais vus**.
 
    *Ce que ça ne change pas :* l'avis Google n'est pas concerné — le scan de
@@ -1241,7 +1241,7 @@ landing premium, donc inerte) a été éteint par Yass le 26/09.
 **Suite ouverte par ce chantier :** la chronologie produite pour la vérification
 annexe a mis au jour un défaut de fond — la relance et le boost ne s'arrêtent
 jamais pour un client inactif. Constats chiffrés et pistes dans
-`docs/audit/02-scalabilite.md`, premier matériau du chantier scalabilité.
+`docs/audit/A-scalabilite-anterieure.md`, premier matériau du chantier scalabilité.
 
 **La migration DOIT être passée avant le déploiement du code.** Sans elle, la
 colonne n'existe pas (toutes les listes `SELECT` du pass échouent) et le registre

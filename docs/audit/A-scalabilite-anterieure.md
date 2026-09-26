@@ -1,9 +1,15 @@
-# Audit WinWin — Segment 02 : scalabilité
+# Audit WinWin — Rapport A : scalabilité (antérieur au cadrage)
 
-> Deuxième segment de l'audit global. Même règle que le segment 01 : **tout
-> constat est rattaché à une preuve** (fichier:ligne, requête, données). Ce qui
-> n'a pas pu être prouvé est marqué comme tel et n'est jamais comblé par une
-> reconstitution.
+> **Statut : rapport transverse, écrit le 26/09 AVANT le brief d'audit.** Il n'est
+> pas un segment. Ses constats relèvent de l'angle *comportement* et de l'angle
+> *projection*, et sont **à répartir** dans les segments concernés — surtout le 1
+> (notifications) et le 6 (infrastructure et exploitation). Conservé tel quel :
+> les mesures qu'il contient ne sont pas refaisables à l'identique (le registre
+> des envois n'existe que depuis le 25/09).
+>
+> Même règle que les segments : **tout constat est rattaché à une preuve**
+> (fichier:ligne, requête, données). Ce qui n'a pas pu être prouvé est marqué
+> comme tel et n'est jamais comblé par une reconstitution.
 
 | | |
 |---|---|
