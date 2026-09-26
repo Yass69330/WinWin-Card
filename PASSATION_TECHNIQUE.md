@@ -1172,13 +1172,26 @@ changement.
 5. **`avis_clics` n'est pas purgée** — indicateur commercial à regarder sur la
    durée, volume très faible, contrairement au registre d'envois (TTL 90 j).
 
-### Plafond Google de 3 notifications / 24 h — constat et hypothèse
+### Plafond Google de 3 notifications / 24 h — CONFIRMÉ par la documentation
 
-**HYPOTHÈSE, non vérifiée contre la documentation Google.** Le plafond de 3
-notifications par objet et par 24 h ne repose que sur **un commentaire du dépôt**
-(`google-pass.js:497`, `messageType: 'TEXT_AND_NOTIFY'`). Il n'a jamais été
-confirmé ni observé en production. Aucune parade n'est codée, conformément au
-cadrage.
+**CONFIRMÉ par la documentation officielle Google Wallet, NON OBSERVÉ en
+production.** Maximum **3 notifications par carte et par 24 h**, pour les messages
+`TEXT_AND_NOTIFY` **comme pour les notifications de mise à jour** ; au-delà,
+`QuotaExceededException`.
+<https://developers.google.com/wallet/retail/loyalty-cards/use-cases/trigger-push-notifications>
+
+Le commentaire du dépôt (`google-pass.js:497`) disait donc vrai, mais rien ne
+l'étayait : il est désormais rattaché à sa source. Ce qui reste non vérifié est
+l'**effet réel** — aucune mesure en production ne montre un envoi écrêté, et le
+registre des envois ne le montrerait pas (voir plus bas). Aucune parade n'est
+codée, conformément au cadrage.
+
+**Le quota est partagé avec les mises à jour, ce qui change l'arithmétique.** On
+avait compté un envoi par `addMessageToLoyaltyObject`. Si nos PATCH d'objet
+(`updateLoyaltyObjectPoints`) déclenchent une notification de mise à jour, un
+seul scan en consomme **deux**, pas une. `buildLoyaltyClass` ne pose aucun
+réglage de notification — reste à établir si le défaut Google en émet quand même.
+À trancher dans le segment cartes (4) ou infrastructure (6).
 
 **Si ce plafond existe, voici ce que l'avis peut rencontrer.** Six surfaces
 appellent `addMessageToLoyaltyObject` : scan, avis, les trois workflows du cron,

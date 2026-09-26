@@ -132,7 +132,7 @@ Point de départ, pas périmètre.
 - `docs/audit/01-notifications.md`, `docs/audit/A-scalabilite-anterieure.md` (rapport transverse écrit avant ce cadrage, à répartir dans les segments concernés) et `PASSATION_TECHNIQUE.md` (§5 et §14 zones dangereuses, §15 bis à sexies, §16 dette, §17 décisions hors pilotage).
 - **Relance sans fin** : un client inactif est relancé tous les 8 jours à vie ; iOS n'affiche qu'une fois un texte identique, la plateforme travaille donc dans le vide. Piste retenue : plafond par épisode d'inactivité.
 - **63 % des envois Google** visent des cartes installées sur iPhone (mesuré le 26/09).
-- **Limite Google** : 3 notifications par carte et par 24 h, confirmée.
+- **Limite Google** : 3 notifications par carte et par 24 h, confirmée par la documentation officielle Google Wallet (messages TEXT_AND_NOTIFY et notifications de mise à jour, QuotaExceededException au-delà). Non observée en production.
 - **Aucune idempotence serveur** sur `POST /scan` ; **code de secours non unique**.
 - **La caisse mono-site** porte un jeton marchand complet (écarté, en parking).
 - **Cache marchand** mono-instance, invalidé localement.

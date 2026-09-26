@@ -270,21 +270,33 @@ sait notifier l'ajout et la suppression d'un objet. Les brancher donnerait un
 déjà en parking côté pilotage (§15 quinquies de la passation). La piste
 ci-dessus est un palliatif à coût nul ; les callbacks sont la réponse.
 
-### 5.2 Le plafond Google de 3 notifications / 24 h existe-t-il ?
+### 5.2 Le plafond Google de 3 notifications / 24 h — CONFIRMÉ, non observé
 
-**NON VÉRIFIÉ.** Ce plafond ne repose que sur **un commentaire du dépôt**
-(`google-pass.js:497`), jamais confirmé contre la documentation Google ni observé
-en production. Six surfaces appellent `addMessageToLoyaltyObject` ; si le plafond
-existe, les envois au-delà du troisième dans la fenêtre sont perdus **en
-silence**, et le registre les enregistre en `200`.
+**CONFIRMÉ par la documentation officielle Google Wallet le 26/09, NON OBSERVÉ en
+production.** Maximum **3 notifications par carte et par 24 h**, pour les messages
+`TEXT_AND_NOTIFY` **comme pour les notifications de mise à jour** ; au-delà,
+`QuotaExceededException`.
+<https://developers.google.com/wallet/retail/loyalty-cards/use-cases/trigger-push-notifications>
+Voir §15 sexies de `PASSATION_TECHNIQUE.md`.
 
-Deux façons de trancher, sans code : lire la documentation Google Wallet sur
-`messageType: TEXT_AND_NOTIFY`, ou provoquer quatre envois en moins de 24 h sur
-une carte Android de test et regarder ce qui s'affiche.
+Ce paragraphe disait NON VÉRIFIÉ ; il ne reposait alors que sur un commentaire du
+dépôt (`google-pass.js:497`). La documentation le confirme. Reste non observé :
+aucune mesure de production ne montre un envoi écrêté — et **le registre ne le
+montrerait pas**, un envoi refusé pour quota n'étant pas distingué d'un envoi
+accepté dès lors que l'appel HTTP rend `200`.
 
-**Lien avec le §1 :** si le plafond existe, la cadence d'un client sous deux
-workflows actifs plus des campagnes manuelles le dépasse régulièrement — et ce
-sont les envois **commerciaux** du marchand qui sont écrêtés par les envois
+**Le quota est partagé avec les mises à jour.** Ce segment comptait un envoi par
+appel à `addMessageToLoyaltyObject` ; la documentation range les notifications de
+mise à jour dans le même quota. Si les PATCH d'objet
+(`updateLoyaltyObjectPoints`) en déclenchent, **un scan consomme deux unités de
+quota, pas une**, et le plafond est atteint deux fois plus vite que ce que dit le
+§1. `buildLoyaltyClass` ne pose aucun réglage de notification : reste à établir si
+Google en émet par défaut. **À trancher dans le segment 4 (cartes) ou 6
+(infrastructure) — c'est la première chose à vérifier de ce paragraphe.**
+
+**Lien avec le §1 :** la cadence d'un client sous deux workflows actifs, plus les
+campagnes manuelles, dépasse régulièrement trois envois sur 24 h. Ce sont alors
+les envois **commerciaux** du marchand qui sont écrêtés par les envois
 automatiques, pas l'inverse.
 
 ---
