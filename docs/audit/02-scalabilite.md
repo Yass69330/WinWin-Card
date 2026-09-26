@@ -74,6 +74,16 @@ carte reste installée et que les deux interrupteurs restent allumés.
 Le cas **MK Café** est le plus pur : **jamais un seul scan**, 9 pushes
 automatiques quand même.
 
+**Et la plupart n'ont jamais été vues.** Le test du 26/09 a confirmé qu'iOS
+n'affiche rien quand la valeur du champ ne change pas entre deux envois
+(protocole et résultat en §15 sexies de la passation). Or la relance envoie un
+texte identique d'une fois sur l'autre : dans une suite de relances consécutives
+sans rien entre elles — six d'affilée chez MK Barbershop, six chez MK Café —
+**seule la première s'est affichée**. La plateforme paie donc le coût complet
+d'envois que personne ne reçoit. Cela ne diminue en rien le défaut du §1 : ça le
+retourne. La boucle ne fatigue pas le client, elle consomme la plateforme dans le
+vide.
+
 ### Pourquoi c'est le défaut de scalabilité principal
 
 Le stock de clients inactifs **ne décroît jamais tout seul** : un client n'en
@@ -129,7 +139,7 @@ mois, et le seront encore dans un an. Elles écrivent aussi de la donnée :
 et `notification_envois` d'une ligne par push et par plateforme (purgée à
 90 jours également).
 
-**PROUVÉ — et pour une carte supprimée, c'est payé pour rien.** Rien dans le
+**PROUVÉ — et pour une carte supprimée, c'est payé pour rien** (chiffré au §5.1). Rien dans le
 chemin ne vérifie que la carte est encore installée. Côté Apple, la
 désinscription est fonctionnelle (le jeton disparaît de `device_tokens`), donc
 la boucle Apple devient un no-op silencieux. Côté Google, `addMessage` est
@@ -195,21 +205,64 @@ silencieux et se manifesterait d'abord comme du spam, pas comme une erreur.
 
 ---
 
-## 5. À vérifier
+## 5. Les envois Google : un gaspillage mesuré, un plafond à vérifier
 
-### 5.1 Le cron tente-t-il un envoi Google pour un client qui n'a qu'Apple ?
+### 5.1 MESURÉ — la majorité des envois Google part vers des cartes qui ont une sonnette Apple
 
-**PROUVÉ au niveau du code, NON VÉRIFIÉ en production.** `cron.js:252-258`
-appelle `addMessageToLoyaltyObject` dès que `isConfigured()` rend vrai, sans
-aucune condition sur le client. Un porteur iPhone qui n'a jamais ajouté sa carte
-à Google Wallet n'a pas d'objet Google : l'appel devrait échouer.
+**Ce point n'est plus une question : il est mesuré.**
 
-Ce qui manque : le **statut réellement renvoyé**, et le volume. C'est désormais
-mesurable — le registre des envois existe depuis le 25/09. Requête en annexe A1.
+**Registre des envois, 24 h du 26/09 : 148 envois Google, dont 93 (63 %) vers
+des cartes qui ont une sonnette Apple.** Près de deux envois Google sur trois
+concernent une carte déjà joignable par APNs.
 
-Si l'hypothèse se confirme, c'est un appel réseau gaspillé **par client et par
-passage**, sur toute la part du parc qui n'a pas de carte Google — part **non
-mesurée à ce jour**, que la requête A1 permet justement d'établir.
+**PROUVÉ — la cause.** `cron.js:252-258` appelle `addMessageToLoyaltyObject` dès
+que `isConfigured()` rend vrai, sans aucune condition sur le client ni sur
+l'existence d'un objet Google. Un porteur iPhone qui n'a jamais ajouté sa carte à
+Google Wallet n'a pas d'objet : l'appel est un aller-retour réseau pour rien, et
+il est payé **par client et par passage**.
+
+**PROUVÉ — le correctif existe déjà, sur une seule surface.** La campagne
+manuelle fait exactement ce qu'il faut : elle ne pousse vers Google que les
+passes dont `google_pass_url` n'est pas nul (`notifications.js:84-88`). Le cron,
+lui, pousse vers tout le monde. Le patron est donc dans la maison, appliqué à une
+surface sur cinq.
+
+### Piste retenue en pilotage : sauter l'envoi Google quand une sonnette Apple existe
+
+Coût annoncé : **zéro requête ajoutée**, les sonnettes étant déjà lues juste
+avant l'envoi. C'est exact pour le cron (`cron.js:244`) et pour l'avis
+(`avis.js`) : les deux lisent `device_tokens` puis appellent Google dans la même
+fonction. Une réserve d'implémentation, pas de principe : `tokens` est
+aujourd'hui déclaré **à l'intérieur** du `if (isApnsConfigured())`
+(`cron.js:243-250`) — il faut le sortir de ce bloc pour que la décision Google
+puisse le lire. Ce n'est pas vrai partout : dans `scan.js`, la lecture des jetons
+et l'envoi Google vivent dans deux fonctions distinctes
+(`notifierMiseAJourPass` / `mettreAJourGoogleWallet`), il faudrait les
+rapprocher.
+
+**Le risque à instruire avant de coder.** « A une sonnette Apple » n'est pas
+l'inverse de « n'a pas de carte Google ». Un même client peut détenir la carte
+sur un iPhone **et** dans Google Wallet — rien ne l'empêche. Dans ce cas, la
+règle proposée **éteindrait une carte Google réellement installée**, sans bruit
+et sans trace. Combien de cartes sont dans ce cas est **non mesuré** ; c'est la
+première chose à chiffrer (requête A4).
+
+**Refinement à comparer : utiliser le signal direct plutôt que le proxy.**
+`passes.google_pass_url` dit si un objet Google a été créé pour cette carte —
+c'est exactement la question posée, et c'est le signal que la campagne manuelle
+utilise déjà. Dans le cron, il coûte lui aussi **zéro requête** : `notifyClient`
+met déjà `passes` à jour en tête de fonction (`cron.js:237-240`), il suffit
+d'ajouter un `.select('google_pass_url')` à cette écriture pour le récupérer dans
+le même aller-retour. Avantage sur la sonnette Apple : aucun faux positif sur les
+porteurs à deux plateformes. Limite connue : l'URL n'est renseignée que si le
+lien Google a été généré (`clients.js:83`, `google-wallet.js:35`) — une carte
+créée avant que Google ne soit configuré l'aurait à nul. À chiffrer aussi.
+
+**Solution complète, hors de cette piste : les callbacks Google Wallet.** Google
+sait notifier l'ajout et la suppression d'un objet. Les brancher donnerait un
+état d'installation **fiable et tenu à jour**, au lieu d'un proxy déduit. C'est
+déjà en parking côté pilotage (§15 quinquies de la passation). La piste
+ci-dessus est un palliatif à coût nul ; les callbacks sont la réponse.
 
 ### 5.2 Le plafond Google de 3 notifications / 24 h existe-t-il ?
 
@@ -301,6 +354,24 @@ LIMIT 60;
 `pire_marchand` est la grandeur à surveiller pour le §4 : tant qu'elle reste très
 en dessous de 1 000 sur 7 jours glissants, la dédup tient.
 
+### A4 — Cartes à deux plateformes : le faux positif de la piste du §5.1
+
+```sql
+SELECT
+  count(*)                                                   AS cartes,
+  count(*) FILTER (WHERE dt.serial_number IS NOT NULL)       AS avec_sonnette_apple,
+  count(*) FILTER (WHERE p.google_pass_url IS NOT NULL)      AS avec_objet_google,
+  count(*) FILTER (WHERE dt.serial_number IS NOT NULL
+                     AND p.google_pass_url IS NOT NULL)      AS LES_DEUX
+FROM public.passes p
+LEFT JOIN (SELECT DISTINCT serial_number FROM public.device_tokens) dt
+       ON dt.serial_number = p.serial_number;
+```
+
+`LES_DEUX` est le nombre de cartes que la piste du §5.1 éteindrait à tort si elle
+se fondait sur la sonnette Apple. Si ce nombre est nul ou négligeable, la piste
+est sans danger ; sinon, passer par `google_pass_url`.
+
 ---
 
 ## Annexe B — Fichiers concernés
@@ -310,4 +381,5 @@ en dessous de 1 000 sur 7 jours glissants, la dédup tient.
 | `src/workers/cron.js` | les trois workflows, la boucle de notification, la purge |
 | `src/services/notif-registre.js` | registre des envois (migration 046) — la seule mesure existante |
 | `src/services/google-pass.js` | `addMessageToLoyaltyObject`, commentaire du plafond 3/24 h (`:497`) |
+| `src/routes/notifications.js` | campagne manuelle — **seule surface qui filtre déjà sur `google_pass_url`** (`:84-88`) |
 | `database/requetes/avis_et_ouverture_pro.sql` | requête 3 — la chronologie qui a produit les données du §1 |

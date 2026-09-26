@@ -1076,7 +1076,15 @@ passage suivant, celui où la boutique lui donne effectivement le cadeau.
 de lien au dos de la carte ET pas de notification. Aucun booléen séparé : un
 réglage de moins à désynchroniser. Saisi dans le formulaire admin (jamais en SQL
 brut : classe Google), validé côté code — `http(s)` obligatoire, 500 caractères
-maximum, valeur enregistrée après `trim`. Accepté **à la création comme à la
+maximum, valeur enregistrée après `trim`.
+
+**Forme du lien recommandée**, à fabriquer à l'installation de chaque marchand :
+`https://search.google.com/local/writereview?placeid=<Place ID>`. Elle ouvre
+directement la fenêtre d'avis, sans passer par la fiche — c'est la forme validée
+en réel le 26/09. Un lien de partage Google Maps fonctionne aussi mais fait
+atterrir sur la fiche, avec un clic de plus.
+
+Accepté **à la création comme à la
 modification** : le formulaire affiche le champ dès la création, l'ignorer
 côté `POST` aurait fait disparaître le lien sans message (c'est le piège que
 `telephone` et `adresse` portent encore aujourd'hui — non corrigé ici, hors
@@ -1135,26 +1143,30 @@ changement.
    pousser `{ uris: [] }`, dont l'acceptation par l'API n'est **pas vérifiée**.
    Un PATCH refusé ferait échouer la mise à jour des points de **tous** les
    porteurs Android. Non vérifié = non envoyé.
-3. **HYPOTHÈSE NON VÉRIFIÉE, TEST EN COURS — « un message constant répété sans
-   changement de valeur n'affiche rien sur iOS ».** Cette règle avait été
-   consignée le 25/09 comme une limite connue. **Elle ne l'est pas.** La
-   chronologie de l'appareil `b1fa63b0…` (requête 3 de
-   `database/requetes/avis_et_ouverture_pro.sql`) montre **9 séquences de
-   relances identiques consécutives sans aucune autre écriture entre elles**,
-   dont six d'affilée chez MK Barbershop (16/08 → 25/09) et six chez MK Café
-   (28/07 → 06/09) — et Yass déclare les avoir reçues.
+3. **CONFIRMÉ le 26/09 — un message constant répété sans changement de valeur
+   n'affiche rien sur iOS.** Cette règle avait été consignée le 25/09, puis
+   rétrogradée en hypothèse parce que les données de terrain semblaient la
+   contredire. **Le test l'a tranchée : elle est vraie.**
 
-   Ce que les données **ne** prouvent pas : lesquelles se sont affichées à
-   l'écran. Le registre ne mesure que l'acceptation par APNs, jamais l'affichage.
+   *Protocole (Yass, iPhone, 26/09) :* deux campagnes manuelles au texte
+   **identique**, à 5 minutes d'écart → **la seconde ne s'affiche pas**. Un
+   texte **différent** juste après → **il s'affiche**. C'est bien la comparaison
+   `old/new` de `changeMessage: '%@'` qui décide, rien d'autre.
 
-   **Test décisif en attente côté pilotage :** deux campagnes manuelles portant
-   exactement le même texte, à une minute d'intervalle, sans scan entre les deux.
-   Si la seconde s'affiche, la règle est fausse et cette entrée disparaît. Sinon,
-   il faut chercher ailleurs ce qui explique les relances reçues.
+   *Portée :* la relance inactif et l'anniversaire envoient un texte identique
+   d'une fois sur l'autre. Entre deux envois consécutifs **sans rien pour changer
+   la valeur entre-temps**, seul le premier s'affiche. Les 9 séquences de
+   relances identiques consécutives relevées sur l'appareil `b1fa63b0…`
+   (`docs/audit/02-scalabilite.md` §1) sont donc, pour l'essentiel, des pushes
+   acceptés par APNs et **jamais vus**.
 
-   **Ce qui reste vrai dans tous les cas :** un `200` au registre ne prouve pas
-   qu'une notification a été vue. Aucune mesure ne distingue « accepté » de
+   *Ce que ça ne change pas :* l'avis Google n'est pas concerné — le scan de
+   remise écrit une valeur différente juste avant, la demande d'avis s'affiche.
+
+   **Conséquence à retenir : un `200` au registre ne prouve pas qu'une
+   notification a été vue.** Aucune mesure ne distingue « accepté » de
    « affiché », ni côté Apple ni côté Google.
+
 4. **`serial_number` reste NULL sur la surface manuelle** (consigné au lot
    précédent). L'avis, lui, le renseigne.
 5. **`avis_clics` n'est pas purgée** — indicateur commercial à regarder sur la
@@ -1213,13 +1225,15 @@ contrôle à `true`. Photographie prise au même moment : 15 marchands Pro, **to
 interrupteurs éteints**, aucun lien d'avis configuré — le déploiement n'a donc
 envoyé strictement rien, il a rendu ces réglages opérants.
 
-**Reste à faire, côté pilotage :**
-1. **Test de bout en bout sur un marchand de test** — renseigner le lien d'avis,
-   vérifier qu'il apparaît au dos de la carte, cliquer (une ligne dans
-   `avis_clics`), puis faire un scan de **remise** de récompense et attendre
-   30 min (une ligne `source='avis'` par plateforme dans `notification_envois`).
-2. **Test de la règle iOS** — deux campagnes manuelles au texte identique, à une
-   minute d'intervalle, sans scan entre les deux (voir limite 3 ci-dessus).
+**Recette passée le 26/09 — les deux tests sont VERTS.**
+
+1. **Bout en bout sur Hamza Salon.** Notification reçue à **T+30 min**, registre
+   conforme : une ligne `apple 200` et une ligne `google 200`, toutes deux en
+   `source='avis'`. Le lien au dos de la carte ouvre bien la fenêtre d'avis
+   Google. Le clic est enregistré dans `avis_clics` avec le bon marchand, le bon
+   client et le bon serial. Toute la chaîne est donc vérifiée en réel : minuteur,
+   relecture des jetons, double envoi, registre, lien, redirection, comptage.
+2. **Règle iOS** — voir limite 3 ci-dessus : confirmée.
 
 **Traité à la clôture :** l'anniversaire du Grand Buffet Indien (allumé sans
 landing premium, donc inerte) a été éteint par Yass le 26/09.
