@@ -120,8 +120,50 @@ app.use('/api/admin/workflows', workflowsRoutes);
 app.use('/api/admin', adminRoutes);
 
 // ── Santé ────────────────────────────────────────────────────
+// /health : le process répond. Sonde externe (UptimeRobot) — ne touche pas la base.
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), node: process.version });
+});
+
+// /health/db : healthcheck de DÉPLOIEMENT de Railway (railway.toml). Une version
+// qui ne lit pas la base avec les droits du serveur est refusée, et Railway garde
+// la version en place. Sont refusées :
+//   - clé fausse, révoquée, ou base injoignable → erreur de lecture ;
+//   - clé PUBLIQUE (anon / sb_publishable_) : elle joint la base, mais la RLS lui
+//     cache tout (liste vide ou refus). D'où l'exigence d'UNE ligne, pas d'une
+//     réponse sans erreur ;
+//   - base qui ne répond pas en DELAI_SANTE_BASE_MS (réessais compris).
+// HYPOTHÈSES — ce qui ferait casser ce contrôle :
+//   - `marchands` n'est jamais vide (vrai en production) : une base neuve sans
+//     aucun marchand fait échouer tout déploiement ;
+//   - la clé publique ne voit aucune ligne de `marchands` : une policy qui l'y
+//     ouvrirait en lecture rendrait ce contrôle aveugle à la clé publique.
+// Railway n'appelle cette route qu'au déploiement : ce n'est pas une supervision.
+const supabase = require('./services/supabase');
+const DELAI_SANTE_BASE_MS = 5000;
+
+app.get('/health/db', async (req, res) => {
+  try {
+    // §3.9 : supabase-js ne rejette jamais — on lit `error`.
+    const { data, error } = await supabase
+      .from('marchands')
+      .select('id')
+      .limit(1)
+      .abortSignal(AbortSignal.timeout(DELAI_SANTE_BASE_MS));
+
+    if (error) {
+      console.error('[health/db] lecture impossible :', error.message);
+      return res.status(503).json({ status: 'error', cause: 'lecture_impossible' });
+    }
+    if (!Array.isArray(data) || data.length === 0) {
+      console.error('[health/db] aucune ligne lue — clé sans les droits du serveur ?');
+      return res.status(503).json({ status: 'error', cause: 'aucune_ligne' });
+    }
+    res.json({ status: 'ok' });
+  } catch (e) {
+    console.error('[health/db] échec :', e.message);
+    res.status(503).json({ status: 'error', cause: 'exception' });
+  }
 });
 
 // ── Erreurs ──────────────────────────────────────────────────
