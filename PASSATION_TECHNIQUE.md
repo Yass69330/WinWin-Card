@@ -8,6 +8,14 @@
 > **Qui pilote.** Le fondateur, non-développeur. Il valide chaque étape, exécute lui-même
 > les migrations SQL dans Supabase, et teste sur de vrais téléphones. La méthode de travail
 > (section 7) n'est pas décorative : c'est le contrat.
+>
+> **Audit global (26-29/09/2026) — à lire avant tout chantier.** La synthèse
+> `docs/audit/99-synthese.md` donne l'état de santé, le tableau de capacité, le calendrier
+> des échéances (en tête : la clé Supabase historique, supprimée fin 2026) et la **roadmap
+> ordonnée** (aucune correction d'argent ou de scan avant le filet de tests, étape 10). Les
+> rapports de segment sont dans `docs/audit/` (00a à 06, A). Plusieurs points de ce
+> document ne sont plus exacts : voir la synthèse §11.2. Les décisions de l'audit sont
+> consignées dans la synthèse §12, et non ici.
 
 ---
 
