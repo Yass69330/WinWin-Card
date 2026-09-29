@@ -166,6 +166,23 @@ app.get('/health/db', async (req, res) => {
   }
 });
 
+// /health/cron : le passage planifié du cron (08:00 UTC) a-t-il démarré, et
+// fini sans erreur ? Surveillé par UptimeRobot : un 503 déclenche l'alerte.
+// Causes : pas_demarre (aucune ligne 10 min après 08:00), pas_fini (toujours en
+// cours 60 min après), erreurs (une étape a levé), lecture_impossible.
+// Avant 08:10 UTC, c'est le passage de la VEILLE qui est jugé. Décision et
+// hypothèses : services/cron-passages.js. Rien d'autre n'est exposé (le bilan
+// des envois reste en base).
+const cronPassages = require('./services/cron-passages');
+
+app.get('/health/cron', async (req, res) => {
+  const e = await cronPassages.etat();   // ne rejette jamais
+  res.status(e.ok ? 200 : 503).json({
+    status: e.ok ? 'ok' : 'error', cause: e.cause, attendu: e.attendu,
+    debut: e.debut ?? null, fin: e.fin ?? null,
+  });
+});
+
 // ── Erreurs ──────────────────────────────────────────────────
 app.use((req, res) => res.status(404).json({ error: 'Route not found' }));
 

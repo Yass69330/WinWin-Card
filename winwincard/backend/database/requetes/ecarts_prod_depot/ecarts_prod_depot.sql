@@ -6,8 +6,8 @@
 -- SQL Editor de Supabase, puis « Run ». Moins de 40 lignes rendues.
 --
 -- État du dépôt figé ci-dessous (VALUES « depot ») : base rejouée depuis le
--- dépôt, 49 fichiers (schema.sql, migrations jusqu'à
--- migration_048_consignation_hors_depot.sql, rgpd_effacement.sql), PostgreSQL local.
+-- dépôt, 50 fichiers (schema.sql, migrations jusqu'à
+-- migration_049_cron_passages.sql, rgpd_effacement.sql), PostgreSQL local.
 -- La requête photographie la base où elle tourne et ne rend que les ÉCARTS :
 --   plateforme : TRUNCATE / REFERENCES / TRIGGER hérités des privilèges par
 --                défaut de Supabase — non consignés, décision du 2026-09-29 ;
@@ -21,6 +21,8 @@ WITH depot(categorie, objet, valeur) AS (VALUES
   ('droits_donnees', 'avis_clics_id_seq → service_role', 'rU'),
   ('droits_donnees', 'clients → service_role', 'rawd'),
   ('droits_donnees', 'consentements → service_role', 'rawd'),
+  ('droits_donnees', 'cron_passages → service_role', 'raw'),
+  ('droits_donnees', 'cron_passages_id_seq → service_role', 'rU'),
   ('droits_donnees', 'device_tokens → service_role', 'rawd'),
   ('droits_donnees', 'diagnostics_camera → service_role', 'rad'),
   ('droits_donnees', 'marchands → service_role', 'rawd'),
@@ -47,6 +49,8 @@ WITH depot(categorie, objet, valeur) AS (VALUES
   ('proprietaire', 'avis_clics_id_seq', 'postgres'),
   ('proprietaire', 'clients', 'postgres'),
   ('proprietaire', 'consentements', 'postgres'),
+  ('proprietaire', 'cron_passages', 'postgres'),
+  ('proprietaire', 'cron_passages_id_seq', 'postgres'),
   ('proprietaire', 'device_tokens', 'postgres'),
   ('proprietaire', 'diagnostics_camera', 'postgres'),
   ('proprietaire', 'marchands', 'postgres'),
@@ -62,6 +66,7 @@ WITH depot(categorie, objet, valeur) AS (VALUES
   ('rls', 'avis_clics', 'true/false'),
   ('rls', 'clients', 'true/false'),
   ('rls', 'consentements', 'true/false'),
+  ('rls', 'cron_passages', 'true/false'),
   ('rls', 'device_tokens', 'true/false'),
   ('rls', 'diagnostics_camera', 'true/false'),
   ('rls', 'marchands', 'true/false'),
@@ -77,6 +82,8 @@ WITH depot(categorie, objet, valeur) AS (VALUES
   ('structure', 'avis_clics_id_seq', 'S'),
   ('structure', 'clients', 'r 3a7d704fac e5703d37ae 718580fca1 cd81ee2ec6 92c8f318d5'),
   ('structure', 'consentements', 'r 6522d2d2b5 47372e7a27 2c19580a47 d41d8cd98f d41d8cd98f'),
+  ('structure', 'cron_passages', 'r 153b7679bb 3e4c5482d2 4c493ae770 d41d8cd98f d41d8cd98f'),
+  ('structure', 'cron_passages_id_seq', 'S'),
   ('structure', 'device_tokens', 'r e30b39da5b cfe0042077 562cf11d3a d41d8cd98f ef98a53312'),
   ('structure', 'diagnostics_camera', 'r 81c6e53263 ca71463871 495fdbec43 d41d8cd98f d41d8cd98f'),
   ('structure', 'marchands', 'r ec310c2d79 c44777a8e3 b96831cf15 d8c0ed18e6 ba2c64374a'),
@@ -189,7 +196,7 @@ SELECT 0 AS ordre, 'VERDICT' AS categorie,
             THEN 'IDENTIQUE au dépôt (hors plateforme)' ELSE 'ÉCART — à examiner' END AS objet,
        (SELECT count(*) FROM classes WHERE classe = 'ECART') || ' écart(s) · '
        || (SELECT count(*) FROM classes WHERE classe = 'plateforme') || ' plateforme' AS production,
-       'dépôt jusqu''à migration_048_consignation_hors_depot.sql' AS depot, NULL AS lecture
+       'dépôt jusqu''à migration_049_cron_passages.sql' AS depot, NULL AS lecture
 UNION ALL
 SELECT 1, c.categorie, c.n || ' objets comparés',
        coalesce((SELECT count(*) FROM classes k WHERE k.categorie = c.categorie), 0) || ' écart(s)', NULL, NULL

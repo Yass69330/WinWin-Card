@@ -655,6 +655,7 @@ zones dangereuses §5, contrat §7 s'appliquent toujours.*
 | 046 | Table `notification_envois` + 5 index + GRANT | Registre des envois de notification, toutes surfaces. Rétention 90 j via la purge du cron. |
 | 047 | `marchands.lien_avis_google` + CHECK du registre élargi à `'avis'` + table `avis_clics` | Chantier avis Google (§15 sexies). |
 | 048 | Consignation de ce qui vivait en production hors dépôt : droits `service_role` sur 7 tables, RLS sur 4 tables, `rls_auto_enable()` + déclencheur `ensure_rls` | Étape 9 (§15 octies). **Sans effet en production** (chaque bloc n'agit que si l'élément manque) ; indispensable à toute base rejouée depuis le dépôt. |
+| 049 | Table `cron_passages` + index + RLS + GRANT (SELECT, INSERT, UPDATE ; séquence) | Suivi du passage quotidien du cron, lu par `/health/cron` (§15 nonies). Une ligne par jour, pas de purge. |
 
 ## 9. LE MODÈLE MULTI-BOUTIQUES
 
@@ -1275,8 +1276,9 @@ le registre ne bloquant jamais un envoi (§15 quinquies).
 
 Chantier ouvert par l'échéance n° 1 de l'audit (99 §6) : la clé historique
 `service_role` (format `eyJ…`) sera supprimée par Supabase fin 2026 (date exacte non
-annoncée). Roadmap : étape 1 (garde-fou) **livrée**, étape 2 (bascule) **à faire par
-Yass**.
+annoncée). Roadmap : étape 1 (garde-fou) **livrée**, étape 2 (bascule) **faite par Yass
+le 29/09 au soir** — clés historiques encore actives, désactivation prévue vers le 03/10
+(voir B, état).
 
 **Où vit la clé — une seule, côté serveur.** `SUPABASE_SERVICE_KEY` n'est lue que dans
 `services/supabase.js:8-14` (client unique, 17 fichiers l'importent, base ET Storage).
@@ -1348,6 +1350,12 @@ la production. Si le déploiement du garde-fou échoue, la version précédente 
 ligne ; les lignes `[health/db]` des journaux donnent le motif.
 
 ### B. La bascule vers `sb_secret_` (à faire par Yass, aucun code)
+
+**ÉTAT (relevé de Yass, 29/09 au soir) : étapes 1 à 5 FAITES.** La clé secrète dédiée
+`serveur_railway` (`sb_secret_…`) est en production dans `SUPABASE_SERVICE_KEY`.
+Vérifié par Yass : `/health/db` → `{"status":"ok"}`, admin, scan cobaye puis annulation.
+**Reste :** étape 6 (observation, dont le cron de 08:00 UTC), **étape 7 prévue vers le
+03/10** (désactiver les clés historiques ; retour : les réactiver), étape 8 (ménage).
 
 Principe : ancienne et nouvelle clés fonctionnent **en même temps** tant que les clés
 historiques ne sont pas désactivées ; la désactivation est elle-même réversible
@@ -1446,6 +1454,58 @@ Supabase Auth. Ces réglages ne sont pas du SQL du projet : ils relèvent d'une 
 réglages, **non écrite**. La partie « réglages Railway » de l'étape 9 relève de la
 décision sur `railway.toml` avant le 01/12 (§16).
 
+## 15 nonies. ÉTAPE 5 : SUPERVISION — BASE ET CRON (2026-09-29)
+
+**Avant.** Une seule sonde : UptimeRobot sur `HEAD /health`, qui ne touche pas la base
+(audit 02, annexe). Le cron de 08:00 UTC ne laissait que deux lignes de journal (7 jours
+chez Railway), « terminés » s'affichait même si tout avait échoué, et rien n'alertait.
+
+**Sondes UptimeRobot (réglées par Yass), alertes par e-mail reçues sur son téléphone** (pas
+d'application) :
+1. `/health` — le serveur répond (existante).
+2. `/health/db` — **créée le 29/09.** La base répond avec les droits du serveur (même route
+   que le healthcheck de déploiement, §15 septies). Testé en HEAD : 200 / 503.
+3. `/health/cron` — **À CRÉER PAR YASS le 30/09 APRÈS 08:10 UTC seulement**, une fois que
+   l'adresse affiche `fini`. Créée avant, elle alerte aussitôt (`pas_demarre`) : aucune
+   ligne n'existe avant le premier passage suivi.
+Lecture croisée : `/health` OK et `/health/db` KO → base ou clé ; les deux KO → serveur,
+Railway ou domaine.
+
+**Suivi du cron (migration 049, `services/cron-passages.js`).** `passageQuotidien()`
+(`workers/cron.js`) écrit une ligne `cron_passages` au début (`en_cours`), la complète à
+la fin (`ok` ou `erreurs`, bilan des envois par étape). Les 4 étapes, leur ordre et leurs
+messages d'erreur sont ceux d'origine. **Le suivi ne bloque jamais le cron** (même règle
+que le registre, §15 quinquies) : table absente, droit retiré ou base en panne → le cron
+tourne, le refus est journalisé `[cron-suivi]`, et `/health/cron` répond 503.
+`/health/cron` → 200 `fini` / `en_cours` ; 503 `pas_demarre` (aucune ligne 10 min après
+08:00), `pas_fini` (en cours 60 min après), `erreurs`, `lecture_impossible`. Avant 08:10
+UTC, c'est le passage de la veille qui est jugé. La route n'expose que l'état et les heures.
+Le déclenchement manuel admin (`/api/admin/workflows/trigger`) n'est **pas** suivi.
+
+**Tests (base rejouée depuis le dépôt, PostgREST 12.2.12 local, supabase-js 2.107.0, code
+du dépôt) : 28/28** — décision heure par heure (11 cas), vrai passage avec les vraies
+étapes (1 inactif relancé sur un marchand cobaye, déduplication écrite), étape qui lève
+(les suivantes tournent, journal au format d'origine), suivi en panne (le cron tourne),
+`etat()` à travers PostgREST (7 cas). Routes sur le vrai serveur : 503 puis 200, HEAD OK ;
+`cron_passages` illisible sans clé (401). **Production, après la 049 : requête d'écarts
+`IDENTIQUE au dépôt (hors plateforme) | 0 écart(s) · 45 plateforme`** (15 tables).
+Le banc (`lancer.sh`, `e2e.js`) est resté dans le scratchpad, hors dépôt : il préfigure
+l'API locale du filet de tests (étape 10).
+
+**HYPOTHÈSES — ce qui ferait casser.**
+1. **Le serveur tourne en UTC** (audit 06 §5.1) : node-cron planifie à l'heure du process.
+2. **08:00 est écrit deux fois** : `cron.schedule('0 8 * * *')` et `HEURE_UTC` de
+   `cron-passages.js`. Changer l'un sans l'autre = alertes fausses.
+3. **`DELAI_FIN_MIN = 60`** : le passage dure ≈ 80 s aujourd'hui, une à deux heures à
+   100 000 porteurs (99 §5.2). À relever avec le volume, sinon `pas_fini` à tort.
+
+**LIMITES.** « Fini sans erreur » ≠ « juste » tant que l'étape 22 n'est pas faite (une
+lecture en échec DANS un workflow n'est toujours pas vue, `cron.js:41`). `/health/db` ne
+voit pas une base passée en lecture seule. Les alertes n'arrivent qu'à Yass (décision C3 :
+ajouter la personne qui supervisera). Sentry (erreurs serveur) reste installé et inactif,
+hors de ce chantier. **Point à vérifier par Yass** : les conditions d'UptimeRobot sur
+l'usage commercial de l'offre gratuite (sources contradictoires, non tranché).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
@@ -1541,6 +1601,14 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-09-29 par la session « SETUP 4 », troisième chantier : étape 5 (§15 nonies).
+Bascule de clé faite par Yass le 29/09 au soir (§15 septies B, état ; clés historiques à
+désactiver vers le 03/10). Sonde UptimeRobot `/health/db` créée par Yass. Livré : migration
+049 (exécutée par Yass, contrôle 4 × `true`), suivi du cron et route `/health/cron`
+(28/28), requête d'écarts régénérée (production : IDENTIQUE, 45 plateforme). Reste à Yass :
+créer la sonde `/health/cron` le 30/09 après 08:10 UTC. Contrat §7 respecté : diagnostic,
+proposition testée, migration exécutée AVANT le push, feu vert explicite.*
 
 *Mis à jour le 2026-09-29 par la session « SETUP 4 », second chantier : étape 9 (§15 octies).
 Migration 048 exécutée par Yass (contrôle 4 × `true`) ; requête d'écarts en production :

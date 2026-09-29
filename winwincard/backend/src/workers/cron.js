@@ -2,6 +2,7 @@ const cron    = require('node-cron');
 const supabase = require('../services/supabase');
 const { notif } = require('../i18n/messages');
 const registre = require('../services/notif-registre');
+const passages = require('../services/cron-passages');
 
 const DEDUP_DAYS   = 7;
 const PURGE_DAYS   = 90;
@@ -14,14 +15,42 @@ const PURGE_DAYS   = 90;
 const FORFAITS_WORKFLOWS = ['pro', 'pro_plus'];
 
 // Nightly at 08:00 UTC (noon Gulf time — bonne fenêtre pour déclencher des visites)
-cron.schedule('0 8 * * *', async () => {
-  console.log('[cron] Démarrage des workflows…');
-  try { await runInactiveWorkflow();   } catch (e) { console.error('[cron] inactive:', e.message); }
-  try { await runNearRewardWorkflow(); } catch (e) { console.error('[cron] near_reward:', e.message); }
-  try { await runBirthdayWorkflow();   } catch (e) { console.error('[cron] birthday:', e.message); }
-  try { await purgeOldExecutions();   } catch (e) { console.error('[cron] purge:', e.message); }
-  console.log('[cron] Workflows terminés.');
+// C'est aussi l'heure qu'attend /health/cron (cron-passages.js, HEURE_UTC).
+cron.schedule('0 8 * * *', () => {
+  passageQuotidien().catch(e => console.error('[cron] passage:', e.message));
 });
+
+// Étapes du passage, dans l'ordre d'origine.
+const ETAPES = [
+  ['inactive',    runInactiveWorkflow],
+  ['near_reward', runNearRewardWorkflow],
+  ['birthday',    runBirthdayWorkflow],
+  ['purge',       purgeOldExecutions],
+];
+
+// Le passage planifié. Chaque étape attrape sa propre erreur : un workflow en
+// échec n'empêche pas les suivants (comportement d'origine, inchangé). Le suivi
+// (cron_passages, migration 049) encadre le passage sans jamais le bloquer.
+// `etapes` n'est passé que par les tests.
+async function passageQuotidien(etapes = ETAPES) {
+  console.log('[cron] Démarrage des workflows…');
+  const passage = await passages.debuter();
+  const bilan   = {};
+  const erreurs = [];
+  for (const [nom, etape] of etapes) {
+    try {
+      const resultats = await etape();
+      bilan[nom] = Array.isArray(resultats)
+        ? resultats.reduce((n, r) => n + (r.notifies || 0), 0)
+        : 'ok';
+    } catch (e) {
+      erreurs.push(nom);
+      console.error(`[cron] ${nom}:`, e.message);
+    }
+  }
+  await passages.terminer(passage, { bilan, erreurs });
+  console.log('[cron] Workflows terminés.');
+}
 
 // ── Workflow : clients inactifs ───────────────────────────────────
 // opts.marchandId : limiter à un seul marchand (test)
@@ -282,4 +311,4 @@ async function purgeOldExecutions() {
   else if (cE > 0) console.log(`[cron] purge: ${cE} notification_envois supprimée(s)`);
 }
 
-module.exports = { runInactiveWorkflow, runNearRewardWorkflow, runBirthdayWorkflow };
+module.exports = { runInactiveWorkflow, runNearRewardWorkflow, runBirthdayWorkflow, passageQuotidien };
