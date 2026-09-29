@@ -653,6 +653,8 @@ zones dangereuses §5, contrat §7 s'appliquent toujours.*
 | 044 | **Fonction `admin_marchands_stats() RETURNS jsonb`** | Même motif que `group_stats` (§12). |
 | 045 | `marchands.token_version` (int NOT NULL DEFAULT 1) | Révocation des jetons marchand. DEFAULT 1 = aucune reconnexion forcée (§18). |
 | 046 | Table `notification_envois` + 5 index + GRANT | Registre des envois de notification, toutes surfaces. Rétention 90 j via la purge du cron. |
+| 047 | `marchands.lien_avis_google` + CHECK du registre élargi à `'avis'` + table `avis_clics` | Chantier avis Google (§15 sexies). |
+| 048 | Consignation de ce qui vivait en production hors dépôt : droits `service_role` sur 7 tables, RLS sur 4 tables, `rls_auto_enable()` + déclencheur `ensure_rls` | Étape 9 (§15 octies). **Sans effet en production** (chaque bloc n'agit que si l'élément manque) ; indispensable à toute base rejouée depuis le dépôt. |
 
 ## 9. LE MODÈLE MULTI-BOUTIQUES
 
@@ -1373,6 +1375,77 @@ de Supabase ni `JWT_SECRET` de Railway (sans rapport).
    l'année : après la suppression par Supabase, ce retour n'existe plus.
 8. Ménage : `.env.example:3` (format `eyJ`), commentaire `supabase.js:7`.
 
+## 15 octies. ÉTAPE 9 : LE DÉPÔT RECONSTRUIT LA PRODUCTION (migration 048, 2026-09-29)
+
+**Le défaut.** Rejoué tel quel (`schema.sql` + 002→047 + `rgpd_effacement.sql`), le
+dépôt donnait une base où le serveur recevait « permission denied » sur les 7 tables
+centrales (`marchands`, `clients`, `passes`, `scans`, `device_tokens`, `consentements`,
+`workflows`) : 7 tables sur 14 accessibles, constaté sur PostgreSQL 16. Une restauration
+après perte du projet, la base du filet de tests (étape 10) ou un second projet Supabase
+ne fonctionnaient donc pas. Origine des droits en production : inconnue (00a §5.1).
+
+**Ce qui manquait au dépôt — prouvé en production le 29/09** par une requête d'écarts
+en lecture seule : 13 écarts, tous déjà photographiés le 26/09, aucun imprévu.
+1. SELECT, INSERT, UPDATE, DELETE de `service_role` sur les 7 tables ;
+2. RLS active sur `diagnostics_camera`, `points_de_vente`, `referral_credits`,
+   `workflow_executions` ;
+3. fonction `public.rls_auto_enable()` + déclencheur d'événement `ensure_rls` (RLS
+   d'office sur toute table créée dans `public`, 00a §6.1).
+Prouvé au passage, non photographié par l'audit : les 16 objets appartiennent à
+`postgres` ; aucun droit posé colonne par colonne ; aucune RLS forcée ; code des 7
+fonctions du dépôt identique en production.
+
+**Migration 048** (commit `bd3a1ba`). Chaque bloc n'agit que si l'élément manque.
+Nécessaire : un simple `GRANT` d'un droit déjà en place **réécrit le catalogue**
+(vérifié) — sans ces conditions, la migration aurait écrit en production. **Exécutée par
+Yass le 29/09, contrôle à 4 × `true`.**
+
+**Décisions de pilotage (29/09).**
+- **Non consignés** : TRUNCATE / REFERENCES / TRIGGER de `anon`, `authenticated` et
+  `service_role` sur les 14 tables (privilèges par défaut de Supabase, inutiles au
+  serveur ; les écrire graverait une exposition que l'étape 7 veut réduire) ; le texte de
+  4 fonctions, qui ne diffère que par des commentaires (00a §4).
+- **`ensure_rls` consigné** : défaut sûr, toute nouvelle table est protégée d'office. Elle
+  exige toujours son `GRANT` explicite à `service_role` (leçon de 028 et 030).
+
+**L'outil de preuve : `database/requetes/ecarts_prod_depot/`.**
+- `generer.sh` rejoue tout le dépôt dans une base jetable (PostgreSQL local, rôle
+  superutilisateur ; dans le conteneur : `PSQL='runuser -u postgres -- psql' bash
+  generer.sh`), fige son état dans `ecarts_prod_depot.sql`, vérifie 0 écart sur la base
+  rejouée, puis la supprime. `etat_base.sql` = la photographie (formules de 00a).
+- `ecarts_prod_depot.sql` : requête en **lecture seule**, à coller dans le SQL Editor.
+  **Résultat en production le 29/09, après la 048 : `IDENTIQUE au dépôt (hors
+  plateforme) | 0 écart(s) · 42 plateforme`** — seules restent les 3 lignes des droits
+  hérités de Supabase.
+- **RÈGLE : après chaque migration, relancer `generer.sh`, committer la requête
+  régénérée, et la lancer en production.** Tout écart autre que « plateforme » signifie
+  que la base et le dépôt divergent (c'est ce qui aurait attrapé 028, 030 et les trois
+  textes de fonctions jamais committés).
+
+**Tests (PostgreSQL 16) : 15/15.** 49 fichiers rejoués sans échec ; avant la 048, 7 tables
+sur 14 et pas de RLS d'office ; 1er passage : 13 actions, contrôle 4 × `true` ; 2e
+passage : aucune action, catalogue inchangé ; après : 14/14 tables lues, créées, modifiées
+et supprimées par `service_role`, RLS d'office sur une nouvelle table ; sur une copie
+simulée de la production (validée par la requête du 29/09) : aucune action, aucune
+écriture au catalogue ; un écart inventé est détecté.
+
+**HYPOTHÈSES — ce qui ferait casser.**
+1. **`CREATE EVENT TRIGGER` exige un superutilisateur.** Sur Supabase, `postgres` le peut
+   (le déclencheur de production lui appartient). Sur un projet NEUF, non vérifié avant
+   l'environnement de test (étape 15). S'il était refusé, la transaction entière serait
+   annulée : rien de posé.
+2. **La comparaison est faite en PostgreSQL 16, la production est en 17.6.** Les
+   empreintes sont indépendantes de la version (00a §2.2) ; le droit MAINTAIN
+   (PostgreSQL 17) n'est pas comparé.
+
+**LIMITES — ce que « identique » ne couvre pas.** Uniquement le schéma `public` : ni les
+réglages de la plateforme (délais des rôles, plafond de 1 000 lignes de l'API, schémas
+exposés, privilèges par défaut), ni le Storage (bucket `passes`, recréé par le code ;
+règles de `storage.objects` non photographiées), ni les extensions de la plateforme, ni
+Supabase Auth. Ces réglages ne sont pas du SQL du projet : ils relèvent d'une fiche de
+réglages, **non écrite**. La partie « réglages Railway » de l'étape 9 relève de la
+décision sur `railway.toml` avant le 01/12 (§16).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
@@ -1468,6 +1541,13 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-09-29 par la session « SETUP 4 », second chantier : étape 9 (§15 octies).
+Migration 048 exécutée par Yass (contrôle 4 × `true`) ; requête d'écarts en production :
+IDENTIQUE au dépôt hors les 3 lignes « plateforme ». Outil de preuve versé dans
+`database/requetes/ecarts_prod_depot/`, à relancer après chaque migration. Ligne 047
+ajoutée au tableau §8, où elle manquait. Contrat §7 respecté : diagnostic, requête lancée
+par Yass, migration testée puis exécutée par Yass AVANT le push, feu vert explicite.*
 
 *Mis à jour le 2026-09-29 par la session « SETUP 4 » : chantier clé Supabase (§15 septies).
 Diagnostic : une seule clé, côté serveur, acceptée au format `sb_secret_` sans code ;
