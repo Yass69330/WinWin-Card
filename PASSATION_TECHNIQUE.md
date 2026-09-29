@@ -1269,6 +1269,110 @@ colonne n'existe pas (toutes les listes `SELECT` du pass échouent) et le regist
 refuserait la source `'avis'` — la notification partirait sans laisser de trace,
 le registre ne bloquant jamais un envoi (§15 quinquies).
 
+## 15 septies. CLÉ SUPABASE : GARDE-FOU DE DÉPLOIEMENT PUIS BASCULE (2026-09-29)
+
+Chantier ouvert par l'échéance n° 1 de l'audit (99 §6) : la clé historique
+`service_role` (format `eyJ…`) sera supprimée par Supabase fin 2026 (date exacte non
+annoncée). Roadmap : étape 1 (garde-fou) **livrée**, étape 2 (bascule) **à faire par
+Yass**.
+
+**Où vit la clé — une seule, côté serveur.** `SUPABASE_SERVICE_KEY` n'est lue que dans
+`services/supabase.js:8-14` (client unique, 17 fichiers l'importent, base ET Storage).
+Au boot, `index.js:10-15` et `supabase.js:3-5` ne vérifient que sa **présence**. Aucune
+page web n'utilise de clé Supabase (ni `createClient`, ni clé dans `public/`) : la clé
+publique (`anon` / `sb_publishable_`) ne sert nulle part. Les images passent par des
+URL publiques du Storage, sans clé.
+
+**Le code accepte `sb_secret_` sans modification.** Ni le code ni supabase-js 2.107.0
+ne regardent le format : la valeur part telle quelle dans `apikey` et
+`Authorization: Bearer` (`dist/index.cjs:932-933`), le Storage passe par le même
+`fetch` (`:1277`). Le guide officiel Supabase « Migrating to publishable and secret API
+keys » (étape 3) décrit exactement ce cas. Aucune fonction SQL ne lit les claims du jeton.
+Réserve : la doc conseille d'envoyer les nouvelles clés dans `apikey` seulement ; le
+test `curl` de l'étape 2 de la bascule (en-têtes identiques à supabase-js) tranche
+avant de toucher la production.
+
+### A. Le garde-fou `/health/db` (commit `c115e90`)
+
+**Avant :** le healthcheck Railway visait `/health`, qui ne touche pas la base. Rejoué
+contre une fausse base : clé fausse, clé publique, base muette, Supabase en 503… **6 cas
+de panne sur 6 acceptés** — la version cassée remplaçait la version saine, et au
+comptoir tout se lisait « carte introuvable ».
+
+**Après :** `railway.toml` vise `/health/db`, qui lit une ligne de `marchands` et
+**exige une ligne**. Railway n'active une version qu'après un 2xx ; sinon le déploiement
+est marqué en échec et **l'ancienne version reste en ligne** (doc Railway,
+`healthchecks.md`). Refusés : clé fausse ou révoquée (erreur), clé publique anon ou
+`sb_publishable_` (liste vide ou refus sous RLS — c'est pourquoi une réponse « sans
+erreur » ne suffit pas), base injoignable (délai 5 s). **`/health` inchangé** : c'est la
+sonde d'UptimeRobot (`HEAD /health`).
+
+**Pourquoi au déploiement et pas au démarrage** (écart assumé avec la formulation de
+l'audit 06 P2) : un serveur qui s'arrêterait au boot faute de base s'arrêterait aussi
+lors d'un simple redémarrage pendant une coupure Supabase — 3 essais
+(`railway.toml:8-9`) puis service arrêté jusqu'à une action humaine. Le healthcheck
+n'intervient qu'au déploiement.
+
+**Réessais de la bibliothèque.** postgrest-js 2.107.0 réessaie seul un GET jusqu'à 3 fois
+sur coupure réseau ou statut 503/520 (`dist/index.cjs:7, 21, 115-120`). L'`abortSignal`
+de 5 s englobe ces réessais ; Railway réinterroge ensuite jusqu'à 30 s.
+
+**Tests** (vrai serveur, dépendances du lockfile, fausse base PostgREST locale, clé
+factice) : bonne clé acceptée ; 6/6 cas de panne refusés ; clé reçue à l'identique dans
+les deux en-têtes ; **0 occurrence de la clé dans les journaux** (seul le motif est
+journalisé) ; `/health` reste 200 base muette ; le serveur survit à la base arrêtée.
+
+**HYPOTHÈSES — ce qui ferait casser le garde-fou.**
+1. **`marchands` n'est jamais vide.** Une base neuve (environnement de test, structure
+   UAE) fait échouer tout déploiement tant qu'aucun marchand n'existe.
+2. **La clé publique ne lit aucune ligne de `marchands`** (RLS sans policy pour
+   `anon`). Une policy qui l'y ouvrirait rendrait le contrôle aveugle à la clé publique.
+3. **`railway.toml` est lu par Railway — jusqu'au 2026-12-01 seulement** (voir §16,
+   nouvelle dette). Après cette date, c'est le chemin saisi dans le tableau de bord qui
+   compte : il doit valoir `/health/db`.
+
+**LIMITES.** Ce n'est pas une supervision : Railway n'appelle la route qu'au
+déploiement (étape 5 de la roadmap, à part). Supabase en panne pendant un push →
+déploiement refusé, version en place conservée (voulu). Le Storage n'est pas testé par
+la route (le `curl` de la bascule le couvre). Route publique : une lecture d'une ligne,
+sous le limiteur global.
+
+**Reste à vérifier par Yass après le déploiement :** (1) détail du déploiement Railway :
+healthcheck `/health/db` avec l'icône de fichier, déploiement réussi ;
+(2) `https://app.winwin-card.com/health/db` → `{"status":"ok"}` ; (3) saisir
+`/health/db` (délai 30 s) dans Settings → Healthcheck Path du tableau de bord ;
+(4) facultatif : essai réel avec la clé publique, qui doit être refusé sans effet sur
+la production. Si le déploiement du garde-fou échoue, la version précédente reste en
+ligne ; les lignes `[health/db]` des journaux donnent le motif.
+
+### B. La bascule vers `sb_secret_` (à faire par Yass, aucun code)
+
+Principe : ancienne et nouvelle clés fonctionnent **en même temps** tant que les clés
+historiques ne sont pas désactivées ; la désactivation est elle-même réversible
+(réactivation) jusqu'à la suppression par Supabase. Ne pas toucher la page « JWT Keys »
+de Supabase ni `JWT_SECRET` de Railway (sans rapport).
+
+1. Supabase → API Keys → créer une clé secrète dédiée (ex. `serveur_railway`) ; elle
+   commence par `sb_secret_`. *Retour : la supprimer, tant qu'elle n'est pas dans
+   Railway.*
+2. Test depuis le Mac, lecture seule (`read -s` pour ne pas afficher la clé) : `curl`
+   sur `/rest/v1/marchands?select=id&limit=1` et `/storage/v1/bucket` avec les en-têtes
+   `apikey` ET `Authorization: Bearer`. Attendu : une ligne, puis 200. Une erreur qui
+   parle de JWT = STOP, retour au diagnostic.
+3. Noter le déploiement Railway actif.
+4. Remplacer la valeur de `SUPABASE_SERVICE_KEY` dans Railway et déployer. Avec le
+   garde-fou, une mauvaise valeur est refusée et la version en place continue. *Retour :
+   Rollback Railway (restaure les variables, 72 h) ou remettre l'ancienne valeur, lisible
+   dans l'onglet « Legacy API keys ».*
+5. Vérifier tout de suite : liste admin, connexion dashboard, scan + annulation sur le
+   cobaye, journaux sans `Invalid API key` / `JWT` / `401`.
+6. Observer quelques jours (au moins un cron de 08:00 UTC) ; recenser tout autre usage
+   d'une clé `eyJ` (`.env` du MacBook, outil tiers — Supabase n'a aucun compteur).
+7. Désactiver les clés historiques (onglet Legacy). *Retour : les réactiver ; après
+   cette étape, un Rollback Railway seul ne suffit plus.* À faire bien avant la fin de
+   l'année : après la suppression par Supabase, ce retour n'existe plus.
+8. Ménage : `.env.example:3` (format `eyJ`), commentaire `supabase.js:7`.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
@@ -1310,6 +1414,18 @@ token marchand mono-site toujours non révocable).
 - **Code de secours non unique.** Suffixe de 6 caractères hex = 16,8 M combinaisons ; ~3 % de
   collision à 1 000 clients/marchand, ~53 % à 5 000. Géré par un 409 `ambiguous` + candidats —
   utilisable par une caissière, **impasse en serveur à serveur**.
+- **`railway.toml` cesse d'être lu le 2026-12-01 — ÉCHÉANCE ABSENTE DE L'AUDIT
+  (découverte le 2026-09-29).** Documentation Railway (`railwayapp/docs`,
+  `infrastructure-as-code.md:41`) : « Existing Config as Code files stop being read on
+  2026-12-01 (hard cutoff) ». Jusque-là le fichier l'emporte sur le tableau de bord ;
+  ensuite, ce sont les réglages du tableau de bord qui s'appliquent pour les **cinq**
+  réglages du fichier : constructeur (`nixpacks`), commande de démarrage, chemin et
+  délai du healthcheck, politique de redémarrage. Risques : le garde-fou `/health/db`
+  disparaîtrait en silence (§15 septies) ; si le tableau de bord n'indique pas Nixpacks,
+  la version de Node changerait sans commit (audit 99, étape 8). Parade minimale :
+  recopier les cinq réglages dans le tableau de bord. Parade complète : migrer
+  (`railway config migrate`, Infrastructure as Code). **Décision de pilotage à prendre
+  avant le 01/12.**
 
 **Toujours reportés (raison valable) :** #4 (re-sync Google, arbitrage), #5, #6, #8,
 #10, #11 (corriger listing+horloge ENSEMBLE, jamais séparément), #13 (parké).
@@ -1346,7 +1462,20 @@ plus `landing_premium`, un enregistrement Pro+ le contient toujours.
 pilotage. Elles envoient bien des pushes ; les omettre aurait laissé des trous dans
 le registre. Rattachées aux sources `ajustement`, `annulation` et `scan`.
 
+**2026-09-29 — copie locale avancée sans demande.** Au début de la session « SETUP 4 »,
+la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MXslu`
+(dont `docs/audit/99-synthese.md`, à lire). Avancée en avance rapide
+(`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
+
 ---
+
+*Mis à jour le 2026-09-29 par la session « SETUP 4 » : chantier clé Supabase (§15 septies).
+Diagnostic : une seule clé, côté serveur, acceptée au format `sb_secret_` sans code ;
+aucune clé dans les pages web. Livré : garde-fou de déploiement `/health/db` (`c115e90`,
+étape 1 de la roadmap), qui refuse clé fausse, clé publique et base injoignable. Procédure
+de bascule écrite pour Yass (étape 2, aucun code). Dette découverte : `railway.toml` n'est
+plus lu à partir du 2026-12-01 (§16). Contrat §7 respecté : diagnostic, proposition de
+code, feu vert explicite, puis commit et push.*
 
 *Mis à jour le 2026-09-23 par la session « SETUP 3 » : migrations 040→044 ; mode points
 (barre de progression, solde exact, couleurs modulables) ; code de secours sous le QR ;
