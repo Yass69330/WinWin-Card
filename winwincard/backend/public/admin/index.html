@@ -338,7 +338,7 @@
           <div class="field">
             <label for="f-quota-override">Quota notifs/mois (admin override)</label>
             <input id="f-quota-override" type="number" min="0" max="9999" placeholder="défaut forfait">
-            <div class="field-hint">Si vide → quota par défaut du forfait.</div>
+            <div class="field-hint">Si vide → quota du forfait (Basic 0, Pro 5, Pro+ 20). 0 = aucune notification.</div>
           </div>
           <div class="field" style="display:flex;gap:8px">
             <div style="flex:1">
@@ -429,15 +429,15 @@
         <div class="field-hint">⏱ Déduplication : relance/récompense max une fois par 7 jours ; anniversaire max une fois par an.</div>
       </div>
 
-      <!-- Section : Landing page premium (Pro+ uniquement, visible en mode édition) -->
+      <!-- Section : Landing page premium (Pro et Pro+, visible en mode édition) -->
       <div class="form-section" id="section-landing-fields" style="display:none">
-        <div class="form-section-title">Landing page <span style="color:var(--warning);font-size:10px">Pro+</span></div>
+        <div class="form-section-title">Landing page <span style="color:var(--warning);font-size:10px">Pro / Pro+</span></div>
         <div style="background:var(--surface2);border-radius:10px;padding:14px">
           <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px">
             <input type="checkbox" id="f-landing-premium" style="width:18px;height:18px;accent-color:var(--accent)">
             <div>
               <div style="font-weight:600">Landing page premium</div>
-              <div style="font-size:12px;color:var(--muted)">Affiche les champs email, téléphone et anniversaire sur le formulaire d'inscription.</div>
+              <div style="font-size:12px;color:var(--muted)">Affiche les champs email, téléphone et anniversaire sur le formulaire d'inscription. Le marchand voit ces coordonnées sur la fiche client et peut les exporter.</div>
             </div>
           </label>
         </div>
@@ -1248,10 +1248,13 @@ function fillForm(m) {
     document.getElementById('f-wf-birthday-enabled').checked  = !!m.workflow_birthday_enabled;
     v('f-wf-birthday-message', m.workflow_birthday_message);
   }
-  // Landing premium : reste un droit Pro+, inchangé par l'ouverture des workflows.
-  if (m.forfait === 'pro_plus') {
+  // Landing premium : case cochable en Pro et Pro+ (services/forfaits.js).
+  // La case reflète TOUJOURS la base, même masquée : changer le forfait dans
+  // le formulaire la révèle avec sa vraie valeur, jamais une case vide qui
+  // écraserait la base à l'enregistrement.
+  document.getElementById('f-landing-premium').checked = m.landing_premium === true;
+  if (m.forfait === 'pro' || m.forfait === 'pro_plus') {
     document.getElementById('section-landing-fields').style.display = 'flex';
-    document.getElementById('f-landing-premium').checked = !!m.landing_premium;
   }
   document.getElementById('f-referral-enabled').checked = !!m.referral_enabled;
   document.getElementById('f-referral-bonus').value     = m.referral_bonus_points || 1;
@@ -1297,6 +1300,15 @@ function fillForm(m) {
 }
 
 function v(id, val) { const el = document.getElementById(id); if (el && val != null) el.value = val; }
+
+// Quota manuel de notifications : champ vide → null (quota du forfait) ; sinon
+// l'entier saisi, 0 compris.
+function quotaManuel() {
+  const brut = document.getElementById('f-quota-override').value.trim();
+  if (brut === '') return null;
+  const n = parseInt(brut, 10);
+  return Number.isInteger(n) && n >= 0 ? n : null;
+}
 
 function setColor(cpId, txtId, hex) {
   const cp  = document.getElementById(cpId);
@@ -1356,12 +1368,13 @@ document.getElementById('f-fond').addEventListener('input', updatePastilleContra
 document.getElementById('cp-fond').addEventListener('input', updatePastilleContrastWarn);
 
 // Toggle des sections à forfait quand le forfait change en mode édition.
-// Workflows : Pro et Pro+. Landing premium : Pro+ seulement.
+// Workflows et landing premium : Pro et Pro+ (Basic : masquées, valeurs en base
+// inchangées puisque non envoyées).
 document.getElementById('f-forfait').addEventListener('change', function() {
   if (!S.editId) return;
-  const aWorkflows = this.value === 'pro' || this.value === 'pro_plus';
-  document.getElementById('section-workflows').style.display      = aWorkflows ? 'flex' : 'none';
-  document.getElementById('section-landing-fields').style.display = this.value === 'pro_plus' ? 'flex' : 'none';
+  const proOuPlus = this.value === 'pro' || this.value === 'pro_plus';
+  document.getElementById('section-workflows').style.display      = proOuPlus ? 'flex' : 'none';
+  document.getElementById('section-landing-fields').style.display = proOuPlus ? 'flex' : 'none';
 });
 
 // Auto-génération slug depuis le nom (création uniquement)
@@ -1451,7 +1464,9 @@ function collectForm() {
     forfait:         document.getElementById('f-forfait').value,
     langue:          document.getElementById('f-langue').value,
     type_programme:  document.getElementById('f-type-programme').value,
-    notification_quota_override: parseInt(document.getElementById('f-quota-override').value) || null,
+    // Vide → quota du forfait (null). 0 est un quota valable : « || null » le
+    // transformait en « quota du forfait ».
+    notification_quota_override: quotaManuel(),
     freq_seuil_bas:  parseInt(document.getElementById('f-freq-bas').value)  || 5,
     freq_seuil_haut: parseInt(document.getElementById('f-freq-haut').value) || 10,
     texte_landing:    document.getElementById('f-texte').value.trim()          || undefined,
@@ -1483,11 +1498,9 @@ function collectForm() {
     body.workflow_birthday_message      = document.getElementById('f-wf-birthday-message').value.trim() || null;
   }
 
-  // landing_premium suit SA propre section (Pro+). Il était envoyé depuis le bloc
-  // ci-dessus, ce qui était sans conséquence tant que les deux sections étaient
-  // ouvertes ensemble. Maintenant que les workflows s'ouvrent au Pro, l'enregistrement
-  // d'un marchand Pro aurait envoyé landing_premium=false depuis une case jamais
-  // remplie — donc écrasé la valeur en base. On le sort de ce bloc.
+  // landing_premium suit SA propre section (Pro et Pro+ depuis le 30/09/2026).
+  // Envoyé seulement si la section est visible : un Basic n'envoie rien, la
+  // valeur en base reste telle quelle (et ne compte pas : services/forfaits.js).
   if (S.editId && document.getElementById('section-landing-fields').style.display === 'flex') {
     body.landing_premium = document.getElementById('f-landing-premium').checked;
   }

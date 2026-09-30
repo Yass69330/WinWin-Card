@@ -689,7 +689,7 @@
 // ════════════════════════════════════════════════
 const S = {
   token: null, marchandId: null, marchandNom: null, marchandSlug: null, maxValue: 10, displayMax: 10,
-  forfait: null, typeProgramme: 'stamps',
+  forfait: null, coordonnees: null, typeProgramme: 'stamps',
   tab: 'overview',
   clients: null, scans: null, stats: null, qr: null, notifLogs: null,
   deleteTargetId: null, deleteTargetNom: null,
@@ -916,8 +916,8 @@ function saveSession(d) {
 }
 
 function clearSession() {
-  Object.assign(S, { token: null, marchandId: null, marchandNom: null, marchandSlug: null, forfait: null, typeProgramme: 'stamps' });
-  try { ['ww_dash_token','ww_dash_id','ww_dash_nom','ww_dash_slug','ww_dash_forfait','ww_dash_type_programme'].forEach(k => localStorage.removeItem(k)); } catch {}
+  Object.assign(S, { token: null, marchandId: null, marchandNom: null, marchandSlug: null, forfait: null, coordonnees: null, typeProgramme: 'stamps' });
+  try { ['ww_dash_token','ww_dash_id','ww_dash_nom','ww_dash_slug','ww_dash_forfait','ww_dash_coordonnees','ww_dash_type_programme'].forEach(k => localStorage.removeItem(k)); } catch {}
 }
 
 function restoreSession() {
@@ -929,6 +929,8 @@ function restoreSession() {
     S.marchandNom = localStorage.getItem('ww_dash_nom') || '';
     S.marchandSlug= localStorage.getItem('ww_dash_slug') || '';
     S.forfait     = localStorage.getItem('ww_dash_forfait') || null;
+    const coord   = localStorage.getItem('ww_dash_coordonnees');
+    S.coordonnees = coord === null ? null : coord === '1';
     S.typeProgramme = localStorage.getItem('ww_dash_type_programme') === 'points' ? 'points' : 'stamps';
     return true;
   } catch { return false; }
@@ -951,8 +953,10 @@ function applyForfaitGating() {
     btn.style.display = rank >= req ? '' : 'none';
   });
 
+  // Export CSV : droit calculé par le serveur (GET /me → coordonnees : Pro+, ou
+  // landing premium active). Avant la première réponse, repli sur le forfait.
   const exportBtn = document.getElementById('btn-export-csv');
-  if (exportBtn) exportBtn.style.display = f === 'pro_plus' ? '' : 'none';
+  if (exportBtn) exportBtn.style.display = (S.coordonnees ?? f === 'pro_plus') ? '' : 'none';
 
   // Si l'onglet actif est masqué, revenir à overview
   const cur = document.querySelector(`.nav-btn[data-tab="${S.tab}"]`);
@@ -1057,24 +1061,28 @@ function switchTab(tab) {
 // ════════════════════════════════════════════════
 async function loadOverview(force = false) {
   if (!force && S.stats && S.qr) { renderOverview(); return; }
-  const needMe = !S.forfait || S.maxValue === 10;
+  // /me est relu à chaque chargement (en parallèle, sans attente de plus) : le
+  // forfait et le droit aux coordonnées changent depuis l'admin, et une valeur
+  // gardée d'une session à l'autre laissait un bouton d'export faux.
   const [statsRes, qrRes, meRes, pdvRes] = await Promise.all([
     api('/api/merchants/me/stats'),
     api('/api/merchants/me/qrcode'),
-    needMe ? api('/api/merchants/me') : Promise.resolve(null),
+    api('/api/merchants/me'),
     api('/api/merchants/me/points-de-vente'),
   ]);
   S.stats = await statsRes.json();
   S.qr    = await qrRes.json();
   S.pdv   = await pdvRes.json().catch(() => []);
-  if (meRes) {
+  if (meRes.ok) {
     const me = await meRes.json();
     S.maxValue  = me.max_value || 10;
     S.displayMax = me.display_max_value || S.maxValue;
     S.forfait   = me.forfait || 'pro';
+    S.coordonnees = me.coordonnees === true;
     S.typeProgramme = me.type_programme === 'points' ? 'points' : 'stamps';
     try {
       localStorage.setItem('ww_dash_forfait', S.forfait);
+      localStorage.setItem('ww_dash_coordonnees', S.coordonnees ? '1' : '0');
       localStorage.setItem('ww_dash_type_programme', S.typeProgramme);
     } catch {}
     setLang(me.langue);
@@ -1963,10 +1971,11 @@ function renderClientSheet({ client, scans }) {
     ).join('');
   }
 
-  // Données contact — Pro+ uniquement
+  // Données contact — le serveur ne les envoie qu'aux marchands qui y ont droit
+  // (Pro+, ou landing premium active : services/forfaits.js). Rien à recalculer ici.
   const contactEl = document.getElementById('cs-contact');
   if (contactEl) {
-    const hasContact = S.forfait === 'pro_plus' && (client.email || client.telephone || client.date_anniversaire);
+    const hasContact = client.email || client.telephone || client.date_anniversaire;
     if (hasContact) {
       const rows = [];
       if (client.email)             rows.push(`<div class="cs-contact-row"><span class="cs-contact-icon">✉️</span><a class="cs-contact-link" href="mailto:${esc(client.email)}">${esc(client.email)}</a></div>`);

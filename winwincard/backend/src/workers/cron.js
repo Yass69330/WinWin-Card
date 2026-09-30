@@ -181,10 +181,10 @@ async function runNearRewardWorkflow(opts = {}) {
 // ── Workflow : anniversaire client ────────────────────────────────
 // Envoi le jour de l'anniversaire (jour + mois ; année ignorée). Réservé aux
 // marchands éligibles (FORFAITS_WORKFLOWS) AVEC landing premium — seule surface
-// où le client saisit sa date de naissance. Or landing_premium reste un droit
-// Pro+ : en pratique l'ouverture au Pro ne change RIEN pour l'anniversaire tant
-// qu'un Pro n'a pas de landing premium (aucune date collectée → aucun envoi).
-// C'est un no-op assumé, pas un oubli. Zéro écriture sur stored_value : simple message via
+// où le client saisit sa date de naissance. Depuis le 30/09/2026, la landing
+// premium s'active en Pro comme en Pro+ (services/forfaits.js,
+// landingPremiumActive) : ce filtre en est le miroir SQL, à tenir aligné.
+// Zéro écriture sur stored_value : simple message via
 // notifyClient (identique stamps/points). Pas de quota (aucun notification_logs).
 // opts.marchandId : limiter à un seul marchand (test)
 // opts.force      : ignorer workflow_birthday_enabled (test)

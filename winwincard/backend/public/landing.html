@@ -876,11 +876,12 @@
 
       // Stocker les flags pour le submit
       window._marchandSlug    = m.slug;
-      window._premiumLanding  = m.forfait === 'pro_plus' && !!m.landing_premium;
+      // Règle calculée par le serveur (services/forfaits.js) : Pro ou Pro+ avec la case cochée.
+      window._premiumLanding  = !!m.landing_premium_actif;
       window._referralEnabled = !!m.referral_enabled;
       window._referralBonus   = m.referral_bonus_points || 1;
 
-      // Champs Pro+ premium
+      // Champs de la landing premium
       if (window._premiumLanding) {
         $('field-email').style.display        = 'block';
         $('field-telephone').style.display    = 'block';

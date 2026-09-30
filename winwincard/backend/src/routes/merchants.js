@@ -45,12 +45,15 @@ router.post('/login', asyncHandler(async (req, res) => {
 router.get('/me', authMarchand, asyncHandler(async (req, res) => {
   const { data, error } = await supabase
     .from('marchands')
-    .select('id, nom, slug, logo_url, couleur_fond, couleur_texte, couleur_label, image_strip_url, texte_landing, max_value, display_max_value, forfait, langue, type_programme, email_contact')
+    .select('id, nom, slug, logo_url, couleur_fond, couleur_texte, couleur_label, image_strip_url, texte_landing, max_value, display_max_value, forfait, langue, type_programme, email_contact, landing_premium')
     .eq('id', req.marchandId)
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  // `coordonnees` : le dashboard montre le bouton d'export CSV sur cette seule
+  // information (services/forfaits.js) — il ne recalcule pas la règle.
+  const { droitCoordonnees } = require('../services/forfaits');
+  res.json({ ...data, coordonnees: droitCoordonnees(data) });
 }));
 
 // GET /merchants/me/stats — stats du dashboard + analytics 30j
@@ -183,7 +186,10 @@ router.get('/:slug/public', asyncHandler(async (req, res) => {
   if (error || !data) return res.status(404).json({ error: 'Merchant not found' });
   if (!data.actif) return res.status(403).json({ error: 'Program suspended' });
 
-  res.json(data);
+  // La landing affiche les champs premium sur `landing_premium_actif` seul
+  // (services/forfaits.js) — elle ne recalcule pas la règle.
+  const { landingPremiumActive } = require('../services/forfaits');
+  res.json({ ...data, landing_premium_actif: landingPremiumActive(data) });
 }));
 
 module.exports = router;

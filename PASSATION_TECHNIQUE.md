@@ -1605,10 +1605,11 @@ sont en place.
   « vérifié » par Yass le 30/09 (détail ci-dessous).
 - **7. Service worker de l'admin — FAIT** : poussé `4604fb6`, « vérifié » par Yass le 30/09
   après les trois contrôles (détail ci-dessous).
-- **8. Coordonnées clients réservées au Pro+ — FAIT le 30/09, en attente du feu vert de
-  push.** Liste ET fiche (le diagnostic ne citait que la liste) ; détail ci-dessous.
-- **9.** Page du dashboard vidée à chaque changement de session (05 c6 ; l'onglet Réseau
-  n'est même pas vidé à la déconnexion).
+- **8. Coordonnées clients réservées au Pro+ — FAIT** : poussé `a990413` le 30/09. Liste
+  ET fiche (le diagnostic ne citait que la liste) ; détail ci-dessous. Règle élargie le
+  30/09 au soir : coordonnées = Pro+ OU landing premium active (§15 duodecies).
+- **9. Page du dashboard vidée à chaque changement de session — NON FAIT, décision de
+  Yass (30/09)** : ne se fait pas, noté en dette mineure (§16).
 - **10. Secret des cartes Apple séparé** *(dossier extérieur)* (`apple-pass.js:26-30`) :
   nouvelle variable reprenant EXACTEMENT la valeur actuelle de `JWT_SECRET`, repli sur
   `JWT_SECRET`. **Risque élevé** : un caractère de différence = 1 104 cartes iPhone figées.
@@ -1784,6 +1785,97 @@ s'affiche, la fiche n'a pas de coordonnées (comme avant à l'écran).
 
 **Retour arrière.** `git revert` du commit, puis push.
 
+## 15 duodecies. FORFAITS ALIGNÉS SUR L'OFFRE COMMERCIALE (2026-09-30)
+
+**Décisions de Yass (30/09).**
+1. Smart notifications dès le Pro.
+2. Landing premium : case cochable dans l'admin, **en Pro comme en Pro+** (D1 b : pas
+   forcée en Pro+ ; Basic : section masquée, comme avant). Un marchand dont la landing
+   premium est active récolte email, téléphone et anniversaire, **les voit sur la fiche
+   et peut les exporter en CSV** (D2 b).
+3. Quotas de notifications manuelles : Basic 0, Pro 5, Pro+ 20 (avant 0 / 10 / 50). Le
+   quota réglé à la main dans l'admin prime toujours, **0 compris** (D3 : 0 devient
+   possible depuis l'admin).
+4. Ensuite, Yass repasse en Pro, par le formulaire admin, les commerçants français mis
+   en Pro+ pour les smart notifications. Parrainage inchangé (tous forfaits).
+
+**Diagnostic.** La règle 1 était déjà en place depuis le 25/09 (`ca0579a`, §15 sexies)
+sauf l'anniversaire, qui exige la landing premium, alors réservée au Pro+ : la règle 2
+le débloque. Requêtes de Yass en production (30/09) : **aucun Pro+ n'utilise de fond
+photo** sur ses cartes (le fond photo reste Pro+, `strip-cache.js:232`) ; **aucun
+marchand n'a dépassé le nouveau quota** de son forfait sur les trois derniers mois.
+
+**Livré.**
+- `src/services/forfaits.js` (nouveau) : **seul endroit où les règles s'écrivent** —
+  `landingPremiumActive` (Pro ou Pro+, case à `true` ; `landing_premium` est nullable
+  en production), `droitCoordonnees`, `limiteMensuelle`, `NOTIF_LIMITS`.
+- Inscription (`clients.js`) : coordonnées et consentements enregistrés si la landing
+  premium est active (avant : si Pro+, case ignorée). Fiche et export CSV : droit =
+  `droitCoordonnees`.
+- `GET /merchants/:slug/public` renvoie `landing_premium_actif` ; la landing ne
+  recalcule plus la règle (`landing.html`). `GET /merchants/me` renvoie
+  `coordonnees` ; le dashboard montre le bouton d'export sur cette seule information
+  et affiche les coordonnées que l'API lui envoie (plus de test `pro_plus`).
+- Dashboard : `/me` relu à chaque chargement de l'aperçu (en parallèle, sans attente de
+  plus). Avant, il ne l'était que si `max_value` valait 10 : un changement fait dans
+  l'admin pouvait laisser un bouton faux jusqu'à la déconnexion.
+- Admin : section « Landing page » visible en Pro et Pro+ ; la case reflète toujours la
+  base, même masquée (changer le forfait dans le formulaire révèle la vraie valeur au
+  lieu d'une case vide qui écraserait la base). Quota manuel : vide → quota du forfait,
+  0 → 0 (avant, `parseInt(...) || null` transformait 0 en « quota du forfait »).
+- `notifications.js` : quotas lus dans `forfaits.js`.
+- Cron : **aucun changement de comportement** ; le filtre SQL de l'anniversaire
+  (forfait ∈ pro, pro_plus ET case cochée) était déjà la règle 2. Commentaires mis à
+  jour.
+
+**Interprétation validée par Yass (feu vert du 30/09).** « Coordonnées visibles si landing premium
+active » est codé **« Pro+, OU landing premium active »** : un Pro+ sans la case garde
+la fiche et l'export (aucune régression pour un Pro+). La landing d'un Pro+ sans la
+case ne récolte rien de nouveau.
+
+**Tests.**
+- **Règle 2 + D3 : 73/73**, stable sur 6 passages. Banc complet (base rejouée,
+  PostgREST, ancien serveur HEAD et nouveau côte à côte), six marchands : Pro+, Pro,
+  Basic, chacun avec et sans la case (Basic : case restée cochée en base). API publique,
+  inscription (coordonnées + consentements en base), fiche, export, `/me`, anniversaire
+  du cron (retenus : Pro+ et Pro avec case, jamais Basic ni sans case). Navigateur :
+  champs de la landing, inscription réelle par la landing d'un Pro avec case, bouton
+  d'export et fiche du dashboard (dont une mémoire locale fausse, corrigée par le
+  serveur), formulaire admin (case, quota 0, vide, 7 ; Basic enregistré sans toucher la
+  case ; bascule Basic → Pro dans le formulaire).
+- **Règle 3 : 23/23** (quotas 0/5/20, quota manuel prioritaire, blocage au bon seuil,
+  mois précédent non compté, forfait illisible → quota du Pro).
+- **Point 8, régression : 31/31** sur les vérifications « nouveau = référence » ; les
+  4 vérifications « avant correction » n'ont plus d'objet (la référence HEAD contient
+  déjà le point 8).
+- Instabilité du banc corrigée : le service worker du dashboard recharge la page à sa
+  première installation ; bloqué dans ce test. Aucun lien avec le code livré.
+
+**Hypothèses (ce qui le ferait casser).** Deux miroirs hors de `forfaits.js`, à tenir
+alignés : le filtre SQL de l'anniversaire (`cron.js`) et la visibilité de la section
+dans l'admin. Un nouveau forfait doit être ajouté à `forfaits.js` ET à ces deux miroirs.
+
+**Limites.** Un marchand qui perd la landing premium (case décochée, ou repassé en
+Basic) garde en base les coordonnées déjà récoltées : masquées, pas effacées. Le texte
+de consentement de la landing est inchangé. Le serveur ne valide pas la valeur du quota
+manuel (§16). Un quota manuel à 0 renvoie le message existant « not available on the
+Basic plan », quel que soit le forfait (message non modifié).
+
+**Étape 4, pour Yass (après le push).** Pour chaque commerçant français à repasser en
+Pro : ouvrir sa fiche dans l'admin, forfait → Pro, **cocher « Landing page premium »**
+s'il doit continuer à récolter et voir les coordonnées et à envoyer l'anniversaire,
+enregistrer. Il garde les relances, passe à 5 notifications manuelles par mois (aucun
+n'a dépassé ce seuil). Chaque enregistrement régénère les images des cartes : sans
+effet visible, aucun fond photo n'étant utilisé.
+
+**Vérification après push (Yass).** Un Pro avec la case : sa landing montre les trois
+champs ; son dashboard montre le bouton d'export et les coordonnées sur une fiche. Un Pro
+sans la case : ni champs, ni bouton, ni coordonnées. Onglet notifications d'un Pro :
+« … / 5 ». Admin : un quota à 0 reste 0 après enregistrement.
+
+**Retour arrière.** `git revert` du commit, puis push. Les cases cochées en Pro restent en
+base, sans effet avec l'ancien code (qui exige le Pro+).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
@@ -1840,6 +1932,18 @@ token marchand mono-site toujours non révocable).
   introuvable dans le dashboard, et le compteur affiché plafonne. Cinquième instance du
   motif (§12). Sans effet tant qu'aucun marchand ne dépasse 1 000 clients (1 329 clients
   au total le 21/09). Correctif : recherche et pagination côté serveur.
+- **Dashboard non vidé au changement de session — DETTE MINEURE, décision de Yass
+  (30/09 : ne se fait pas).** Étape 7, point 9 ; audit 05 c6. Les données chargées
+  pendant une session (listes, statistiques ; l'onglet Réseau n'est même pas vidé à la
+  déconnexion) restent en mémoire de la page quand une autre session s'ouvre dans le
+  même onglet. Portée réduite depuis le point 8 : la liste des clients ne contient plus
+  de coordonnées. Cas concerné : un appareil partagé entre deux comptes, sans
+  rechargement de la page.
+- **Quota manuel de notifications non validé côté serveur** (découvert le 2026-09-30).
+  `PATCH /api/admin/marchands/:id` enregistre `notification_quota_override` tel quel :
+  seuls le champ du formulaire (`min="0"`) et `quotaManuel()` écartent un négatif ou un
+  non-entier. Sans effet depuis l'admin ; un appel direct pourrait enregistrer -1 (qui
+  bloque tout envoi) ou 2.5.
 - **`railway.toml` cesse d'être lu le 2026-12-01 — ÉCHÉANCE ABSENTE DE L'AUDIT
   (découverte le 2026-09-29).** Documentation Railway (`railwayapp/docs`,
   `infrastructure-as-code.md:41`) : « Existing Config as Code files stop being read on
@@ -1894,6 +1998,13 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-09-30 par la session « SETUP 4 », sixième chantier : forfaits
+alignés sur l'offre commerciale (§15 duodecies). Règles 2 (landing premium en Pro et Pro+,
+coordonnées suivant la landing premium) et 3 (quotas 0/5/20, quota manuel 0 possible),
+règles regroupées dans `services/forfaits.js` ; 73/73 et 23/23. Point 9 de l'étape 7 :
+non fait, dette mineure (décision de Yass). Dette découverte : quota manuel non validé
+côté serveur (§16).*
 
 *Mis à jour le 2026-09-30 par la session « SETUP 4 », cinquième chantier : étape 7
 (§15 undecies), en cours. Règle de pilotage corrigée (Amine non engagé, accès retiré le

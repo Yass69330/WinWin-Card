@@ -6,8 +6,8 @@ const { authMarchand } = require('../middleware/auth');
 const { sendPushUpdate, isApnsConfigured }                    = require('../services/apns');
 const { addMessageToLoyaltyObject, isConfigured: isGoogleConfigured } = require('../services/google-pass');
 const registre = require('../services/notif-registre');
-
-const NOTIF_LIMITS = { basic: 0, pro: 10, pro_plus: 50 };
+// Quota mensuel : Basic 0 / Pro 5 / Pro+ 20, quota manuel de l'admin prioritaire.
+const { limiteMensuelle } = require('../services/forfaits');
 
 function startOfMonth() {
   const d = new Date();
@@ -33,7 +33,7 @@ router.get('/', authMarchand, asyncHandler(async (req, res) => {
   if (logsResult.error) return res.status(500).json({ error: logsResult.error.message });
 
   const forfait = meResult.data?.forfait || 'pro';
-  const limit   = meResult.data?.notification_quota_override ?? NOTIF_LIMITS[forfait] ?? 10;
+  const limit   = limiteMensuelle(meResult.data);
   res.json({
     logs:  logsResult.data || [],
     quota: { used: countResult.count || 0, limit, forfait },
@@ -55,8 +55,7 @@ router.post('/', authMarchand, asyncHandler(async (req, res) => {
 
   // Vérification quota selon forfait (ou override admin si défini)
   const { data: me } = await supabase.from('marchands').select('forfait, notification_quota_override').eq('id', req.marchandId).single();
-  const forfait = me?.forfait || 'pro';
-  const limit   = me?.notification_quota_override ?? NOTIF_LIMITS[forfait] ?? 10;
+  const limit = limiteMensuelle(me);
 
   if (limit === 0) {
     return res.status(403).json({ error: 'Push notifications are not available on the Basic plan.', upgrade: true });

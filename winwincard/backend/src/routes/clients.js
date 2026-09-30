@@ -22,7 +22,7 @@ router.post('/', limiterInscription, asyncHandler(async (req, res) => {
   // Récupérer le marchand complet (nécessaire pour Google Wallet + forfait)
   const { data: marchand, error: errMarchand } = await supabase
     .from('marchands')
-    .select('id, nom, slug, forfait, langue, type_programme, max_value, display_max_value, actif, couleur_fond, couleur_fond_reward, couleur_pastille_fond, couleur_pastille_contour, couleur_pastille_icone, couleur_label_strip, couleur_barre_principale, couleur_barre_secondaire,couleur_texte, couleur_label, logo_url, image_strip_url, google_logo_url, google_hero_url, images_tiers, how_it_works, referral_enabled, referral_bonus_points, telephone, adresse, strip_mode, strip_theme, strip_illustration, strip_produit, strip_vide, stamp_icon, strip_custom_background_url, strip_config_version, lien_avis_google')
+    .select('id, nom, slug, forfait, langue, type_programme, max_value, display_max_value, actif, couleur_fond, couleur_fond_reward, couleur_pastille_fond, couleur_pastille_contour, couleur_pastille_icone, couleur_label_strip, couleur_barre_principale, couleur_barre_secondaire,couleur_texte, couleur_label, logo_url, image_strip_url, google_logo_url, google_hero_url, images_tiers, how_it_works, referral_enabled, referral_bonus_points, telephone, adresse, strip_mode, strip_theme, strip_illustration, strip_produit, strip_vide, stamp_icon, strip_custom_background_url, strip_config_version, lien_avis_google, landing_premium')
     .eq('slug', marchand_slug)
     .single();
 
@@ -32,9 +32,12 @@ router.post('/', limiterInscription, asyncHandler(async (req, res) => {
   const serialNumber = uuidv4();
   const clientData = { prenom: prenomPropre, stored_value: 0 };
 
-  // Champs premium (Pro+ uniquement)
+  // Coordonnées : récoltées si la landing premium est active (Pro ou Pro+ avec la
+  // case cochée) — même règle que les champs affichés par la landing.
+  const { landingPremiumActive } = require('../services/forfaits');
+  const premium = landingPremiumActive(marchand);
   const extraFields = {};
-  if (marchand.forfait === 'pro_plus') {
+  if (premium) {
     if (email)             extraFields.email             = String(email).trim().slice(0, 200) || null;
     if (telephone)         extraFields.telephone         = String(telephone).trim().slice(0, 30) || null;
     if (date_anniversaire) extraFields.date_anniversaire = date_anniversaire;
@@ -52,8 +55,8 @@ router.post('/', limiterInscription, asyncHandler(async (req, res) => {
   // Créer l'entrée passes
   await supabase.from('passes').insert({ client_id: client.id, marchand_id: marchand.id, serial_number: serialNumber });
 
-  // RGPD : enregistrer la preuve de consentement horodatée pour chaque champ Pro+ fourni
-  if (marchand.forfait === 'pro_plus') {
+  // RGPD : enregistrer la preuve de consentement horodatée pour chaque champ fourni
+  if (premium) {
     const consentements = [];
     if (extraFields.email)             consentements.push({ client_id: client.id, marchand_id: marchand.id, type: 'email',             valeur: true });
     if (extraFields.telephone)         consentements.push({ client_id: client.id, marchand_id: marchand.id, type: 'telephone',         valeur: true });
@@ -99,7 +102,8 @@ router.post('/', limiterInscription, asyncHandler(async (req, res) => {
 // Sans coordonnées (email, téléphone, anniversaire), quel que soit le forfait :
 // la liste du dashboard n'affiche que prénom et points, et charger toutes les
 // coordonnées dans le navigateur multipliait les copies. Elles restent sur la
-// fiche et dans l'export CSV, tous deux Pro+ uniquement (étape 7, point 8).
+// fiche et dans l'export CSV, pour les marchands qui y ont droit
+// (services/forfaits.js, droitCoordonnees ; étape 7, point 8).
 router.get('/', authMarchand, asyncHandler(async (req, res) => {
   const { data, error } = await supabase
     .from('clients')
@@ -112,16 +116,17 @@ router.get('/', authMarchand, asyncHandler(async (req, res) => {
   res.json(data);
 }));
 
-// GET /api/clients/export — export CSV (Pro+ uniquement)
+// GET /api/clients/export — export CSV (Pro+, ou landing premium active)
 router.get('/export', authMarchand, asyncHandler(async (req, res) => {
   const { data: marchand } = await supabase
     .from('marchands')
-    .select('nom, forfait')
+    .select('nom, forfait, landing_premium')
     .eq('id', req.marchandId)
     .single();
 
-  if (marchand?.forfait !== 'pro_plus') {
-    return res.status(403).json({ error: 'CSV export is available on the Pro+ plan only.' });
+  const { droitCoordonnees } = require('../services/forfaits');
+  if (!droitCoordonnees(marchand)) {
+    return res.status(403).json({ error: 'CSV export requires the Pro+ plan or the premium landing page.' });
   }
 
   const { data: clients, error } = await supabase
@@ -173,11 +178,11 @@ router.delete('/:id', authMarchand, asyncHandler(async (req, res) => {
 }));
 
 // GET /api/clients/:id — fiche client + derniers scans.
-// Coordonnées (email, téléphone, anniversaire) renvoyées au forfait Pro+
-// seulement, comme l'export CSV (étape 7, point 8). Un marchand repassé en Pro
-// garde en base celles collectées en Pro+ : avant ce filtre, l'API les lui
-// renvoyait et seul le dashboard les masquait. Forfait illisible → fiche sans
-// coordonnées, jamais l'inverse.
+// Coordonnées (email, téléphone, anniversaire) renvoyées seulement aux marchands
+// qui y ont droit — Pro+, ou landing premium active —, comme l'export CSV
+// (services/forfaits.js ; étape 7, point 8). Un marchand qui perd ce droit garde
+// en base les coordonnées déjà récoltées : sans ce filtre, l'API les lui
+// renverrait. Forfait illisible → fiche sans coordonnées, jamais l'inverse.
 router.get('/:id([0-9a-f\\-]{36})', authMarchand, asyncHandler(async (req, res) => {
   const { id } = req.params;
 
@@ -194,7 +199,7 @@ router.get('/:id([0-9a-f\\-]{36})', authMarchand, asyncHandler(async (req, res) 
       .single(),
     supabase
       .from('marchands')
-      .select('forfait')
+      .select('forfait, landing_premium')
       .eq('id', req.marchandId)
       .single(),
   ]);
@@ -202,7 +207,8 @@ router.get('/:id([0-9a-f\\-]{36})', authMarchand, asyncHandler(async (req, res) 
   if (errClient || !client) return res.status(404).json({ error: 'Client introuvable' });
 
   if (errMarchand) console.error('[clients] fiche : forfait illisible, coordonnées masquées :', errMarchand.message);
-  if (marchand?.forfait !== 'pro_plus') {
+  const { droitCoordonnees } = require('../services/forfaits');
+  if (!droitCoordonnees(marchand)) {
     client.email = null;
     client.telephone = null;
     client.date_anniversaire = null;
