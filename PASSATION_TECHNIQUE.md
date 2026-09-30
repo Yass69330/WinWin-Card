@@ -1465,9 +1465,9 @@ d'application) :
 1. `/health` — le serveur répond (existante).
 2. `/health/db` — **créée le 29/09.** La base répond avec les droits du serveur (même route
    que le healthcheck de déploiement, §15 septies). Testé en HEAD : 200 / 503.
-3. `/health/cron` — **À CRÉER PAR YASS le 30/09 APRÈS 08:10 UTC seulement**, une fois que
-   l'adresse affiche `fini`. Créée avant, elle alerte aussitôt (`pas_demarre`) : aucune
-   ligne n'existe avant le premier passage suivi.
+3. `/health/cron` — **créée par Yass le 30/09**, après le premier passage suivi (08:00:01 →
+   08:03:36 UTC). Leçon pour toute future base neuve : la créer AVANT le premier passage
+   la fait alerter aussitôt (`pas_demarre`), aucune ligne n'existant encore.
 Lecture croisée : `/health` OK et `/health/db` KO → base ou clé ; les deux KO → serveur,
 Railway ou domaine.
 
@@ -1496,8 +1496,11 @@ l'API locale du filet de tests (étape 10).
 1. **Le serveur tourne en UTC** (audit 06 §5.1) : node-cron planifie à l'heure du process.
 2. **08:00 est écrit deux fois** : `cron.schedule('0 8 * * *')` et `HEURE_UTC` de
    `cron-passages.js`. Changer l'un sans l'autre = alertes fausses.
-3. **`DELAI_FIN_MIN = 60`** : le passage dure ≈ 80 s aujourd'hui, une à deux heures à
-   100 000 porteurs (99 §5.2). À relever avec le volume, sinon `pas_fini` à tort.
+3. **`DELAI_FIN_MIN = 60`** : le passage du 30/09 a duré **3 min 35** (08:00:01 →
+   08:03:36 UTC, relevé de Yass) ; celui du 26/09, 80 s (00b C6). Une à deux heures à
+   100 000 porteurs (99 §5.2). À relever avec le volume, sinon `pas_fini` à tort. Le
+   commentaire de `cron-passages.js:21` dit encore « 80 s » : à corriger au prochain
+   commit de code.
 
 **LIMITES.** « Fini sans erreur » ≠ « juste » tant que l'étape 22 n'est pas faite (une
 lecture en échec DANS un workflow n'est toujours pas vue, `cron.js:41`). `/health/db` ne
@@ -1505,6 +1508,112 @@ voit pas une base passée en lecture seule. Les alertes n'arrivent qu'à Yass (d
 ajouter la personne qui supervisera). Sentry (erreurs serveur) reste installé et inactif,
 hors de ce chantier. **Point à vérifier par Yass** : les conditions d'UptimeRobot sur
 l'usage commercial de l'offre gratuite (sources contradictoires, non tranché).
+
+## 15 decies. ÉTAPE 6 : SERVEUR À AMSTERDAM (2026-09-30)
+
+**Fait par Yass le 30/09 vers 09:05 UTC** : service Railway en **EU West Metal
+(Amsterdam, `europe-west4-drams3a`), 1 réplique**, US West à 0. Vérifications OK. Aucun
+code. La base reste à Paris (`eu-west-3`). Diagnostic préalable : rien ne dépendait de la
+région — aucun stockage persistant (fichiers temporaires seulement,
+`apple-pass.js:517`, `strip-generator.js:68`), les restrictions réseau de Supabase ne
+s'appliquent pas à supabase-js (doc Supabase), pas d'IP de sortie fixe en offre Hobby,
+domaine inchangé (doc Railway), région absente de `railway.toml`.
+
+**Mesures (Yass, Dubaï, même Wi-Fi, Chrome, médiane de 15 essais, méthode 00a §7.2) :**
+
+| | `/health` | Dinapoli (1 requête base) | `/health/db` (1 requête base) | Coût d'une requête base |
+|---|---|---|---|---|
+| 26/09 (audit, Californie) | 291 ms | 504 ms | — | ≈ 213 ms |
+| 30/09 AVANT (Californie) | 287 ms | 514 ms | 496 ms | ≈ 210–230 ms |
+| 30/09 APRÈS (Amsterdam) | 282 ms | 360 ms | 405 ms | **≈ 80–120 ms**, minimums ≈ 40 ms |
+
+**Gain mesuré : ≈ 100 à 150 ms par requête base.** Chiffrage (HYPOTHÈSE, calcul sur
+ces mesures) : les 4 requêtes enchaînées d'un scan passent d'environ 0,85 s à environ
+0,35 s ; un scan vu de Dubaï d'environ 1,1 s à environ 0,65 s. Même gain par carte dans
+le cron (3 requêtes par carte).
+
+**Pourquoi `/health` n'a pas bougé depuis Dubaï.** Railway n'a **pas de réglage
+d'entrée par service** : son réseau d'entrée est en anycast, chaque utilisateur entre au
+point de présence (POP) que choisit le routage de son fournisseur d'accès, puis le trafic
+traverse le réseau interne de Railway jusqu'à la région (doc Railway « Edge
+Networking »). Le DNS de `app.winwin-card.com` (zone chez le registraire, alias vers
+Railway, **pas de Cloudflare**, audit 06 annexe A) n'a rien de régional. Un POP européen
+aurait divisé `/health` par deux environ : **le POP d'entrée depuis ce Wi-Fi de Dubaï
+n'est donc pas en Europe** (HYPOTHÈSE : côte Est américaine ou Singapour, qui donnent
+tous deux un total quasi identique avant et après). **À vérifier sans code** : page
+`https://routing-info-production.up.railway.app/` depuis le même Wi-Fi ; en-tête de
+réponse `X-Railway-Upstream-Zone` avec `X-Railway-Debug: 1` ; attribut `@edgeRegion`
+des journaux HTTP Railway.
+
+**Pourquoi 80–120 ms et non les 10–30 ms annoncés.** L'hypothèse de l'audit imputait les
+213 ms à la seule distance. Les mesures montrent une **part fixe d'environ 70 ms**,
+indépendante de la distance : avant ≈ aller-retour Californie–Paris (≈ 140–150 ms) +
+≈ 70 ms ; après ≈ aller-retour Amsterdam–Paris (≈ 10 ms) + ≈ 70 ms (HYPOTHÈSE : ordres
+de grandeur des allers-retours, non mesurés). Cette part fixe (passerelle Supabase,
+PostgREST, TLS/HTTP, supabase-js) n'est pas décomposable depuis Dubaï. **Pas la
+nouvelle clé** : l'« avant » a été mesuré avec `sb_secret_` (210–230 ms), comme le 26/09
+avec la clé historique (213 ms). Bruit de mesure : les deux routes à une requête
+diffèrent de ≈ 45 ms entre elles. **À mesurer sans code** : `@upstreamRqDuration` des
+journaux HTTP Railway (`/health` contre `/health/db`), et durées des journaux d'API
+Supabase.
+
+**Conséquences.** Le levier restant sur le scan est le **nombre d'allers-retours**
+(étape 11, transaction unique ; 02 P1) : chaque aller-retour évité vaut désormais
+≈ 80–100 ms. Côté Dubaï, le trajet caisse ↔ Railway (≈ 280 ms) dépend du POP d'entrée,
+que Railway ne permet pas de choisir. **Écarté pour l'instant** : un Cloudflare devant le
+domaine (gain incertain, risque élevé sur l'adresse gravée dans les cartes Apple, les
+appels d'Apple et de Google, les limiteurs) ; plusieurs régions (cron doublé, 00b F5).
+
+**Reste à vérifier :** le passage du cron du 01/10 à 08:00 UTC, le premier à Amsterdam
+(`/health/cron` → `fini`, début vers 08:00 UTC : confirme le fuseau). **La sonde
+UptimeRobot `/health/cron` est créée** (confirmé par Yass le 30/09) : les trois sondes
+sont en place.
+
+## 15 undecies. ÉTAPE 7 : VERROUILLAGE — EN COURS (diagnostic du 2026-09-30)
+
+**RÈGLE DE PILOTAGE (30/09) : tout code est relu par Amine avant push.** Ce qui ne
+demande qu'un réglage dans une interface peut se faire sans attendre.
+
+**Fait :** **chemins surveillés Railway** réglés par Yass le 30/09 : `/winwincard/backend/**`
+(les motifs partent de la racine du dépôt, même avec un sous-dossier racine — doc
+Railway). Réglage dans le tableau de bord, pas dans `railway.toml` (plus lu après le
+01/12). **Test : le push de cette passation ne doit déclencher AUCUN déploiement.**
+
+**Réglages restant à Yass (sans code) :** double authentification GitHub (la sienne ET
+celle d'Amine, second accès en écriture ; codes de secours rangés à deux endroits) ;
+protection de branche niveau 1 sur `claude/keen-goldberg-MXslu` (pas de réécriture forcée
+ni de suppression) ; `ADMIN_PASSWORD` long et aléatoire (redéploie : heure calme). **Point
+à confirmer :** copie de `JWT_SECRET` hors de Railway (étape 4), préalable du secret des
+cartes.
+
+**Code, dans cet ordre, après relecture d'Amine :**
+1. **Migration 050** : droit d'exécution des fonctions retiré à `PUBLIC`, `anon`,
+   `authenticated` (explicite pour `service_role`, et pour les futures fonctions).
+   `effacer_client` détruit une carte et reste appelable avec la clé publique ; la
+   désactivation des clés historiques ne ferme rien (`sb_publishable_` = même rôle).
+   **Risque** : un `service_role` privé d'exécution arrêterait tous les scans → banc
+   PostgREST + requête d'écarts régénérée avant exécution.
+2. Mot de passe admin comparé à temps constant (`admin.js:18`, aujourd'hui `!==`).
+3. Service worker de l'admin en « réseau d'abord » (`admin/sw.js`, cache d'abord, jamais
+   mis à jour) — **avant toute modification de la page admin**.
+4. Coordonnées clients réservées au Pro+ dans `GET /api/clients` (`clients.js:102`) — le
+   dashboard ne les affiche déjà qu'en Pro+ (`dashboard/index.html:1969`).
+5. Page du dashboard vidée à chaque changement de session (05 c6 ; l'onglet Réseau
+   n'est même pas vidé à la déconnexion).
+6. **Secret des cartes Apple séparé** (`apple-pass.js:26-30`) : nouvelle variable reprenant
+   EXACTEMENT la valeur actuelle de `JWT_SECRET`, repli sur `JWT_SECRET`. **Risque
+   élevé** : un caractère de différence = 1 104 cartes iPhone figées.
+7. **Logo de secours Google** (`google-pass.js:65`, seule référence au dépôt dans le code)
+   déplacé, classes concernées resynchronisées ; **puis** décision sur la visibilité du
+   dépôt. **PIÈGE (doc GitHub) : sur l'offre gratuite, GitHub Pages et la protection de
+   branche ne marchent que sur un dépôt public** — privé = vitrine `winwin-card.com` et
+   protection coupées. Options : GitHub Pro, ou vitrine dans un dépôt public séparé.
+   L'offre GitHub de Yass n'a pas été relevée.
+
+**Protection de branche niveau 2** (fusion approuvée par Amine) : à activer quand Amine
+commence. Risque : correctif urgent bloqué s'il est indisponible (décider si Yass garde
+le droit de passer outre). Le commentaire « 80 s » de `cron-passages.js:21` part avec le
+premier commit de code relu.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
@@ -1601,6 +1710,12 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-09-30 par la session « SETUP 4 », quatrième chantier : étape 6
+(§15 decies). Serveur déplacé à Amsterdam par Yass (30/09, 09:05 UTC, 1 réplique) ; coût
+d'une requête base mesuré depuis Dubaï : ≈ 213 → ≈ 80–120 ms. `/health` inchangé depuis
+Dubaï : POP d'entrée hors d'Europe (anycast Railway, aucun réglage par service). Part fixe
+d'≈ 70 ms par requête, indépendante de la distance. Aucun code.*
 
 *Mis à jour le 2026-09-29 par la session « SETUP 4 », troisième chantier : étape 5 (§15 nonies).
 Bascule de clé faite par Yass le 29/09 au soir (§15 septies B, état ; clés historiques à
