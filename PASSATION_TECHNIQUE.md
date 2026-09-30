@@ -1571,49 +1571,118 @@ sont en place.
 
 ## 15 undecies. ÉTAPE 7 : VERROUILLAGE — EN COURS (diagnostic du 2026-09-30)
 
-**RÈGLE DE PILOTAGE (30/09) : tout code est relu par Amine avant push.** Ce qui ne
-demande qu'un réglage dans une interface peut se faire sans attendre.
+**RÈGLE DE PILOTAGE (corrigée le 30/09).** Amine n'est **pas** engagé et son accès en
+écriture au dépôt a été retiré le 30/09. La règle « code relu par Amine avant push » est
+**supprimée**. À la place, selon la numérotation du diagnostic (points 5 à 11) :
+- **points 6, 7, 8, 9** : faits par Claude, testés, puis feu vert de Yass avant push ;
+- **points 5 et 10** (les plus risqués) : code écrit et testé **sans push**, puis un
+  dossier d'une page pour un développeur extérieur : contexte en 3 lignes, diff, tests
+  passés, 3 questions précises, temps estimé.
 
-**Fait :** **chemins surveillés Railway** réglés par Yass le 30/09 : `/winwincard/backend/**`
-(les motifs partent de la racine du dépôt, même avec un sous-dossier racine — doc
-Railway). Réglage dans le tableau de bord, pas dans `railway.toml` (plus lu après le
-01/12). **Test : le push de cette passation ne doit déclencher AUCUN déploiement.**
+**Faits (réglages de Yass, sans code) :**
+- double authentification GitHub (29/09) ;
+- protection de branche niveau 1 : règle GitHub « Protection prod » (suppression et
+  réécriture forcée interdites) ;
+- chemins surveillés Railway `/winwincard/backend/**` (30/09 ; les motifs partent de la
+  racine du dépôt, même avec un sous-dossier racine — doc Railway ; réglés dans le
+  tableau de bord, pas dans `railway.toml`, plus lu après le 01/12). **Test, première
+  moitié réussie :** `e7e3ac8` (passation seule) marqué « skipped » par Railway.
+  **Seconde moitié :** le push du point 7, qui touche `winwincard/backend/`, doit
+  redéployer.
 
-**Réglages restant à Yass (sans code) :** double authentification GitHub (la sienne ET
-celle d'Amine, second accès en écriture ; codes de secours rangés à deux endroits) ;
-protection de branche niveau 1 sur `claude/keen-goldberg-MXslu` (pas de réécriture forcée
-ni de suppression) ; `ADMIN_PASSWORD` long et aléatoire (redéploie : heure calme). **Point
-à confirmer :** copie de `JWT_SECRET` hors de Railway (étape 4), préalable du secret des
-cartes.
+**Décision de Yass (30/09) :** le mot de passe admin actuel est conservé. Retiré des tâches.
 
-**Code, dans cet ordre, après relecture d'Amine :**
-1. **Migration 050** : droit d'exécution des fonctions retiré à `PUBLIC`, `anon`,
-   `authenticated` (explicite pour `service_role`, et pour les futures fonctions).
-   `effacer_client` détruit une carte et reste appelable avec la clé publique ; la
-   désactivation des clés historiques ne ferme rien (`sb_publishable_` = même rôle).
-   **Risque** : un `service_role` privé d'exécution arrêterait tous les scans → banc
-   PostgREST + requête d'écarts régénérée avant exécution.
-2. Mot de passe admin comparé à temps constant (`admin.js:18`, aujourd'hui `!==`).
-3. Service worker de l'admin en « réseau d'abord » (`admin/sw.js`, cache d'abord, jamais
-   mis à jour) — **avant toute modification de la page admin**.
-4. Coordonnées clients réservées au Pro+ dans `GET /api/clients` (`clients.js:102`) — le
-   dashboard ne les affiche déjà qu'en Pro+ (`dashboard/index.html:1969`).
-5. Page du dashboard vidée à chaque changement de session (05 c6 ; l'onglet Réseau
-   n'est même pas vidé à la déconnexion).
-6. **Secret des cartes Apple séparé** (`apple-pass.js:26-30`) : nouvelle variable reprenant
-   EXACTEMENT la valeur actuelle de `JWT_SECRET`, repli sur `JWT_SECRET`. **Risque
-   élevé** : un caractère de différence = 1 104 cartes iPhone figées.
-7. **Logo de secours Google** (`google-pass.js:65`, seule référence au dépôt dans le code)
-   déplacé, classes concernées resynchronisées ; **puis** décision sur la visibilité du
-   dépôt. **PIÈGE (doc GitHub) : sur l'offre gratuite, GitHub Pages et la protection de
-   branche ne marchent que sur un dépôt public** — privé = vitrine `winwin-card.com` et
-   protection coupées. Options : GitHub Pro, ou vitrine dans un dépôt public séparé.
-   L'offre GitHub de Yass n'a pas été relevée.
+**Point à confirmer :** copie de `JWT_SECRET` hors de Railway (étape 4), préalable du point 10.
 
-**Protection de branche niveau 2** (fusion approuvée par Amine) : à activer quand Amine
-commence. Risque : correctif urgent bloqué s'il est indisponible (décider si Yass garde
-le droit de passer outre). Le commentaire « 80 s » de `cron-passages.js:21` part avec le
-premier commit de code relu.
+**Points de code :**
+- **5. Migration 050** *(dossier extérieur)* : droit d'exécution des fonctions retiré à
+  `PUBLIC`, `anon`, `authenticated` (explicite pour `service_role`, et pour les futures
+  fonctions). `effacer_client` détruit une carte et reste appelable avec la clé publique ;
+  la désactivation des clés historiques ne ferme rien (`sb_publishable_` = même rôle).
+  **Risque** : un `service_role` privé d'exécution arrêterait tous les scans → banc
+  PostgREST + requête d'écarts régénérée avant exécution.
+- **6.** Mot de passe admin comparé à temps constant (`admin.js:18`, aujourd'hui `!==`).
+- **7. Service worker de l'admin — FAIT le 30/09, en attente du feu vert de push** (détail
+  ci-dessous).
+- **8.** Coordonnées clients réservées au Pro+ dans `GET /api/clients` (`clients.js:102`) —
+  le dashboard ne les affiche déjà qu'en Pro+ (`dashboard/index.html:1969`).
+- **9.** Page du dashboard vidée à chaque changement de session (05 c6 ; l'onglet Réseau
+  n'est même pas vidé à la déconnexion).
+- **10. Secret des cartes Apple séparé** *(dossier extérieur)* (`apple-pass.js:26-30`) :
+  nouvelle variable reprenant EXACTEMENT la valeur actuelle de `JWT_SECRET`, repli sur
+  `JWT_SECRET`. **Risque élevé** : un caractère de différence = 1 104 cartes iPhone figées.
+- **11. Logo de secours Google** (`google-pass.js:65`, seule référence au dépôt dans le
+  code) déplacé, classes concernées resynchronisées ; **puis** décision sur la visibilité
+  du dépôt. **PIÈGE (doc GitHub) : sur l'offre gratuite, GitHub Pages et la protection de
+  branche ne marchent que sur un dépôt public** — privé = vitrine `winwin-card.com` et
+  règle « Protection prod » coupées. Options : GitHub Pro, ou vitrine dans un dépôt
+  public séparé. L'offre GitHub de Yass n'a pas été relevée.
+
+### Point 7 — service worker de l'admin en « réseau d'abord » (30/09)
+
+**Défaut (00b §4.7).** L'ancien `public/admin/sw.js` pré-cachait `/admin/` à
+l'installation, puis le servait depuis le cache sans jamais le rafraîchir (cache
+d'abord, aucune écriture au passage, nom de cache figé). Toute modification de
+`admin/index.html` — 8 commits du 26/08 au 25/09 — restait invisible sur un appareil où
+l'admin avait déjà été ouvert, sauf rechargement forcé. Même défaut que le scanner en
+2026-07.
+
+**Correctif (`public/admin/sw.js`, seul fichier de l'admin modifié).** Les pages
+(navigations) passent par le réseau d'abord ; le cache `winwin-admin-v2` ne sert qu'en
+repli hors ligne, et ne garde que les réponses valides (une 500 n'est jamais mise en
+cache). Rien d'autre n'est intercepté : API, icônes, manifest, images vont au réseau
+comme sans worker. L'activation supprime `winwin-admin-v1` et **seulement les caches
+`winwin-admin-*`** : l'ancien code supprimait tous les caches de l'origine, dont ceux du
+dashboard et du scanner. Pas de pré-cache : l'installation ne dépend plus d'un
+téléchargement. `index.html` inchangé (enregistrement du worker : `index.html:1923`).
+
+**Tests : 21/21** (Chromium via Playwright, serveur reproduisant les en-têtes de
+`src/index.js` : `.html` en `no-store`, `sw.js` en `max-age=0`, repli SPA) :
+- ancien worker installé, `index.html` modifié → l'ancienne page reste servie (défaut
+  reproduit) ;
+- nouveau `sw.js` déployé → 1re ouverture encore ancienne, `winwin-admin-v1` supprimé,
+  2e ouverture à jour ; caches du dashboard et du scanner conservés ;
+- ensuite chaque modification (index, `preview.html`, repli SPA `/admin/marchands/42`)
+  est servie dès le chargement suivant ; chaque appel API arrive au serveur ; le cache
+  ne contient que des pages ; une 500 est transmise mais pas gardée ;
+- serveur arrêté → dernière version valide servie (pas la 500) ; page jamais ouverte →
+  erreur réseau ordinaire ;
+- appareil neuf → worker installé, modifications servies au chargement suivant.
+Contre-épreuve : l'ancien worker échoue à 10 de ces vérifications ; une variante sans
+filtre de préfixe échoue à la conservation des caches voisins. Vraie page
+`admin/index.html` : contrôlée par le nouveau worker, aucune erreur console. Scripts de
+test non versés (bloc-notes de session).
+
+**Ce que Yass verra après le déploiement.** Sur un appareil où l'admin a déjà été ouvert :
+la **1re ouverture montre encore l'ancienne version** (servie par l'ancien worker, qui se
+remplace en arrière-plan) ; **à partir de la 2e, la version à jour**, puis toute
+modification future dès le chargement suivant. Si des nouveautés d'admin apparaissent
+alors pour la première fois, c'est l'ancien cache qui les masquait.
+
+**Hypothèses (ce qui le ferait casser).**
+- Le navigateur revérifie `sw.js` à chaque ouverture en contournant son cache HTTP
+  (comportement par défaut). Un intermédiaire qui mettrait `sw.js` en cache — un CDN
+  devant le domaine, écarté au §15 decies — retarderait les mises à jour du worker.
+- Le préfixe `winwin-admin-` reste réservé à l'admin.
+- Changer `CACHE` seulement si la stratégie change ; revenir au « cache d'abord » sur les
+  pages recréerait le défaut.
+
+**Limites.** Hors ligne, seules les pages déjà ouvertes avec le nouveau worker sont
+disponibles ; l'admin est de toute façon inutilisable hors ligne (tout passe par l'API).
+Les workers du dashboard et du scanner purgent encore tous les caches de l'origine,
+celui de l'admin compris (repli hors ligne seulement, pas la fraîcheur) : dette §16,
+non corrigée ici (hors périmètre).
+
+**Vérification après push (Yass).** 1. Railway démarre un déploiement pour ce commit
+(seconde moitié du test des chemins surveillés) et le healthcheck passe. 2.
+`https://app.winwin-card.com/admin/sw.js` contient `winwin-admin-v2`. 3. Admin ouvert
+deux fois : la seconde est à jour ; connexion et fiche d'un marchand OK.
+
+**Retour arrière.** `git revert` du commit, puis push : l'ancien worker se réinstalle
+(nouveau pré-cache, donc à jour à cet instant, puis figé à nouveau).
+
+**Au passage, même commit :** commentaire de `cron-passages.js:21` corrigé (« 80 s » →
+« 3 min 35 le 30/09 »), comme prévu au premier commit de code.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
@@ -1656,6 +1725,14 @@ token marchand mono-site toujours non révocable).
 - **Code de secours non unique.** Suffixe de 6 caractères hex = 16,8 M combinaisons ; ~3 % de
   collision à 1 000 clients/marchand, ~53 % à 5 000. Géré par un 409 `ambiguous` + candidats —
   utilisable par une caissière, **impasse en serveur à serveur**.
+- **Workers du dashboard et du scanner : purge de tous les caches de l'origine**
+  (découvert le 2026-09-30, point 7). À leur activation, `dashboard/sw.js:8` et
+  `scanner/sw.js:35` suppriment tout cache autre que le leur, y compris ceux des deux
+  autres espaces (le stockage des caches est commun à l'origine). Effet : repli hors
+  ligne perdu jusqu'à la prochaine ouverture en ligne ; le scanner re-télécharge jsQR.
+  Gravité faible. Correctif : filtre par préfixe, comme l'admin, au prochain passage
+  sur ces fichiers (toute modification d'un `sw.js` réinstalle le worker sur toutes les
+  caisses).
 - **`railway.toml` cesse d'être lu le 2026-12-01 — ÉCHÉANCE ABSENTE DE L'AUDIT
   (découverte le 2026-09-29).** Documentation Railway (`railwayapp/docs`,
   `infrastructure-as-code.md:41`) : « Existing Config as Code files stop being read on
@@ -1710,6 +1787,13 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-09-30 par la session « SETUP 4 », cinquième chantier : étape 7
+(§15 undecies), en cours. Règle de pilotage corrigée (Amine non engagé, accès retiré le
+30/09 ; points 5 et 10 par dossier extérieur). Faits par Yass : double authentification,
+règle « Protection prod », chemins surveillés (`e7e3ac8` « skipped »). Livré : point 7,
+service worker de l'admin en réseau d'abord (21/21 au navigateur). Dette découverte : les
+workers du dashboard et du scanner purgent les caches voisins (§16).*
 
 *Mis à jour le 2026-09-30 par la session « SETUP 4 », quatrième chantier : étape 6
 (§15 decies). Serveur déplacé à Amsterdam par Yass (30/09, 09:05 UTC, 1 réplique) ; coût

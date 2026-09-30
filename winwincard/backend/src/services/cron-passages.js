@@ -18,7 +18,7 @@
 //   - HEURE_UTC doit suivre cron.schedule('0 8 * * *') de workers/cron.js ;
 //   - le serveur tourne en UTC (audit 06 §5.1) : node-cron planifie à l'heure
 //     locale du process ;
-//   - DELAI_FIN_MIN borne la durée d'un passage : 80 s aujourd'hui, une à deux
+//   - DELAI_FIN_MIN borne la durée d'un passage : 3 min 35 le 30/09, une à deux
 //     heures à 100 000 porteurs (audit 99 §5.2). À relever avec le volume.
 // ════════════════════════════════════════════════════════════════════════════
 
