@@ -11,7 +11,9 @@ router.post('/login', asyncHandler(async (req, res) => {
   if (!process.env.ADMIN_PASSWORD) {
     return res.status(500).json({ error: 'ADMIN_PASSWORD non configuré côté serveur' });
   }
-  if (!password || password !== process.env.ADMIN_PASSWORD) {
+  // Temps constant (étape 7, point 6) : jamais `!==` sur un secret.
+  const { safeEqual } = require('../services/auth-utils');
+  if (!safeEqual(password, process.env.ADMIN_PASSWORD)) {
     return res.status(401).json({ error: 'Mot de passe incorrect' });
   }
   const token = jwt.sign({ role: 'admin' }, process.env.JWT_SECRET, { expiresIn: '24h' });

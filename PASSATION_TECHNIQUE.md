@@ -1587,8 +1587,8 @@ sont en place.
   racine du dépôt, même avec un sous-dossier racine — doc Railway ; réglés dans le
   tableau de bord, pas dans `railway.toml`, plus lu après le 01/12). **Test, première
   moitié réussie :** `e7e3ac8` (passation seule) marqué « skipped » par Railway.
-  **Seconde moitié :** le push du point 7, qui touche `winwincard/backend/`, doit
-  redéployer.
+  **Seconde moitié réussie :** `4604fb6` (point 7, touche `winwincard/backend/`) a
+  redéployé — le nouveau `admin/sw.js` est en ligne.
 
 **Décision de Yass (30/09) :** le mot de passe admin actuel est conservé. Retiré des tâches.
 
@@ -1601,9 +1601,10 @@ sont en place.
   la désactivation des clés historiques ne ferme rien (`sb_publishable_` = même rôle).
   **Risque** : un `service_role` privé d'exécution arrêterait tous les scans → banc
   PostgREST + requête d'écarts régénérée avant exécution.
-- **6.** Mot de passe admin comparé à temps constant (`admin.js:18`, aujourd'hui `!==`).
-- **7. Service worker de l'admin — FAIT le 30/09, en attente du feu vert de push** (détail
-  ci-dessous).
+- **6. Mot de passe admin comparé à temps constant — FAIT le 30/09, en attente du feu
+  vert de push** (détail ci-dessous).
+- **7. Service worker de l'admin — FAIT** : poussé `4604fb6`, « vérifié » par Yass le 30/09
+  après les trois contrôles (détail ci-dessous).
 - **8.** Coordonnées clients réservées au Pro+ dans `GET /api/clients` (`clients.js:102`) —
   le dashboard ne les affiche déjà qu'en Pro+ (`dashboard/index.html:1969`).
 - **9.** Page du dashboard vidée à chaque changement de session (05 c6 ; l'onglet Réseau
@@ -1683,6 +1684,49 @@ deux fois : la seconde est à jour ; connexion et fiche d'un marchand OK.
 
 **Au passage, même commit :** commentaire de `cron-passages.js:21` corrigé (« 80 s » →
 « 3 min 35 le 30/09 »), comme prévu au premier commit de code.
+
+### Point 6 — mot de passe admin comparé à temps constant (30/09)
+
+**Défaut.** `POST /api/admin/login` comparait la saisie au mot de passe avec `!==`, qui
+s'arrête au premier caractère différent : en théorie, la durée de la réponse révèle
+combien de caractères du début sont justes. **Exploitation à distance très
+improbable** : limiteur de 10 essais par heure et par adresse (`rateLimiters.js`,
+`trust proxy` réglé), bruit réseau de plusieurs millisecondes contre des écarts de
+nanosecondes. Défense en profondeur, pas une brèche ouverte. C'était la seule
+comparaison de secret en `!==` du serveur : jeton des cartes Apple
+(`apple-wallet.js:15`) et mots de passe marchand et boutique (`auth-utils.js`,
+scrypt) étaient déjà comparés à temps constant.
+
+**Correctif.** `safeEqual` dans `services/auth-utils.js` : empreintes SHA-256 des deux
+chaînes (encodage utf16le, pour que « empreintes égales » équivaille exactement à
+« chaînes égales ») comparées avec `crypto.timingSafeEqual` ; tout ce qui n'est pas
+une chaîne est refusé. La route admin l'utilise. Réponses inchangées : 401 « Mot de
+passe incorrect », 500 si `ADMIN_PASSWORD` absent, jeton de 24 h. Le mot de passe de
+Yass ne change pas ; aucune variable Railway à toucher.
+
+**Tests : 42/42.**
+- `safeEqual` donne le même verdict que `===` sur 12 cas limites (accents, emoji,
+  demi-paire isolée, caractère nul, accent composé) et sur 20 000 paires aléatoires ;
+  refuse `undefined`, `null`, nombre, booléen, tableau, objet, Buffer.
+- Route : ancien code (HEAD) et nouveau appelés avec les mêmes 17 entrées (bon mot de
+  passe ; un caractère de trop, de moins, premier faux, casse ; vide, absent, `null`,
+  nombre, booléen, tableau contenant le bon, objet ; texte brut ; JSON invalide ;
+  secret numérique saisi en nombre et en chaîne ; secret absent) : réponses
+  identiques (statut et corps ; jeton : rôle admin, 24 h).
+- Durée, secret de 200 000 caractères : avec `!==`, une saisie fausse seulement à la
+  fin prend 60 fois plus longtemps qu'une saisie fausse au début ; avec `safeEqual`,
+  rapport 1,00. Scripts non versés (bloc-notes de session).
+
+**Hypothèses.** `ADMIN_PASSWORD` est une chaîne (variable d'environnement : toujours).
+**Limites.** La durée dépend encore de la longueur de la saisie, choisie par
+l'appelant : elle ne révèle rien du secret. Inchangé, hors périmètre : mot de passe
+unique partagé, jeton admin de 24 h non révocable.
+
+**Vérification après push (Yass).** Connexion à l'admin avec ton mot de passe → OK.
+Un seul essai avec un mauvais mot de passe → « Mot de passe incorrect » (chaque essai
+faux compte dans les 10 par heure).
+
+**Retour arrière.** `git revert` du commit, puis push.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
@@ -1792,7 +1836,9 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (§15 undecies), en cours. Règle de pilotage corrigée (Amine non engagé, accès retiré le
 30/09 ; points 5 et 10 par dossier extérieur). Faits par Yass : double authentification,
 règle « Protection prod », chemins surveillés (`e7e3ac8` « skipped »). Livré : point 7,
-service worker de l'admin en réseau d'abord (21/21 au navigateur). Dette découverte : les
+service worker de l'admin en réseau d'abord (21/21 au navigateur ; `4604fb6`, vérifié par
+Yass, seconde moitié du test des chemins surveillés réussie) ; point 6, mot de passe admin
+comparé à temps constant (42/42). Dette découverte : les
 workers du dashboard et du scanner purgent les caches voisins (§16).*
 
 *Mis à jour le 2026-09-30 par la session « SETUP 4 », quatrième chantier : étape 6
