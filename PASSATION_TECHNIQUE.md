@@ -1601,12 +1601,12 @@ sont en place.
   la désactivation des clés historiques ne ferme rien (`sb_publishable_` = même rôle).
   **Risque** : un `service_role` privé d'exécution arrêterait tous les scans → banc
   PostgREST + requête d'écarts régénérée avant exécution.
-- **6. Mot de passe admin comparé à temps constant — FAIT le 30/09, en attente du feu
-  vert de push** (détail ci-dessous).
+- **6. Mot de passe admin comparé à temps constant — FAIT** : poussé `98b9605`,
+  « vérifié » par Yass le 30/09 (détail ci-dessous).
 - **7. Service worker de l'admin — FAIT** : poussé `4604fb6`, « vérifié » par Yass le 30/09
   après les trois contrôles (détail ci-dessous).
-- **8.** Coordonnées clients réservées au Pro+ dans `GET /api/clients` (`clients.js:102`) —
-  le dashboard ne les affiche déjà qu'en Pro+ (`dashboard/index.html:1969`).
+- **8. Coordonnées clients réservées au Pro+ — FAIT le 30/09, en attente du feu vert de
+  push.** Liste ET fiche (le diagnostic ne citait que la liste) ; détail ci-dessous.
 - **9.** Page du dashboard vidée à chaque changement de session (05 c6 ; l'onglet Réseau
   n'est même pas vidé à la déconnexion).
 - **10. Secret des cartes Apple séparé** *(dossier extérieur)* (`apple-pass.js:26-30`) :
@@ -1728,6 +1728,62 @@ faux compte dans les 10 par heure).
 
 **Retour arrière.** `git revert` du commit, puis push.
 
+### Point 8 — coordonnées clients réservées au Pro+ (30/09)
+
+**Défaut.** Les coordonnées (email, téléphone, anniversaire) ne sont collectées qu'en
+Pro+ (`clients.js:37`), mais deux routes les renvoyaient à tout marchand, quel que
+soit son forfait : la liste `GET /api/clients` (tous les clients d'un coup) et la
+fiche `GET /api/clients/:id`. Seul le dashboard les masquait
+(`dashboard/index.html:1969`), pas le serveur. Cas réel : un marchand repassé de Pro+
+à Pro garde en base les coordonnées collectées ; il les recevait toujours, lisibles
+dans les outils du navigateur. L'export CSV, lui, était déjà réservé au Pro+.
+
+**Correctif (`routes/clients.js`).**
+- **Liste : plus aucune coordonnée, quel que soit le forfait — choix validé par Yass
+  (feu vert du 30/09).** Le dashboard n'y affiche que prénom et points (`renderClients`), et charger
+  toutes les coordonnées dans le navigateur multipliait les copies (cf. point 9 :
+  la liste restait en mémoire d'une session à l'autre). Pour un Pro+, rien ne change
+  à l'écran : les coordonnées restent sur la fiche et dans l'export.
+- **Fiche : coordonnées renvoyées au Pro+ seulement**, à `null` sinon (forme de la
+  réponse inchangée). Le forfait est lu en base à chaque ouverture, en parallèle de
+  la lecture du client : pas de temps d'attente en plus. Forfait illisible → fiche
+  servie sans coordonnées, et une ligne `[clients] fiche : forfait illisible` au
+  journal.
+
+**Tests : 35/35**, banc complet (base rejouée depuis le dépôt, PostgREST, ancien serveur
+HEAD et nouveau côte à côte), marchands Pro+, Pro (coordonnées collectées en Pro+) et
+Basic :
+- AVANT, défaut reproduit : la liste envoyait au Pro les emails de ses clients ; les
+  fiches du Pro et du Basic contenaient des coordonnées ;
+- liste : aucune coordonnée pour les trois ; mêmes clients, même ordre, mêmes autres
+  champs qu'avant ;
+- fiche Pro+ identique à avant, coordonnées comprises ; fiches Pro et Basic : coordonnées
+  à `null`, tout le reste identique (client et scans) ; 404 inchangés (client d'un autre
+  marchand, client supprimé, identifiant inconnu) ; export inchangé (Pro+ 200, Pro 403) ;
+- forfait changé en base → effet immédiat dans les deux sens ;
+- lecture du forfait refusée (droit retiré sur la colonne) → fiche servie sans
+  coordonnées, ligne au journal ; droit rendu → coordonnées de retour ;
+- vrai dashboard dans Chromium : Pro+ voit sa liste et les coordonnées sur la fiche ;
+  Pro voit sa liste et une fiche sans coordonnées ; aucune adresse dans la réponse de
+  la liste. Scripts non versés (bloc-notes de session).
+
+**Hypothèses (ce qui le ferait casser).** « Pro+ » = `forfait === 'pro_plus'`, règle
+écrite à trois endroits du serveur (inscription `clients.js:37` et `:56`, export,
+fiche) et une du dashboard. Un nouveau forfait au-dessus du Pro+ n'aurait AUCUNE
+coordonnée tant que ces endroits ne sont pas mis à jour ensemble.
+
+**Limites.** Les coordonnées d'un marchand repassé en Pro restent en base : masquées,
+pas effacées. Les effacer, ou les rendre au retour en Pro+, est une décision métier et
+RGPD, non prise. La fiche garde une lecture en base de plus par ouverture (en
+parallèle). La liste reste plafonnée à 1 000 lignes par PostgREST : dette découverte ici
+(§16), non traitée.
+
+**Vérification après push (Yass).** Dashboard d'un marchand Pro+ : la liste s'affiche,
+une fiche montre email et téléphone. Dashboard d'un marchand Pro ou Basic : la liste
+s'affiche, la fiche n'a pas de coordonnées (comme avant à l'écran).
+
+**Retour arrière.** `git revert` du commit, puis push.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
@@ -1777,6 +1833,13 @@ token marchand mono-site toujours non révocable).
   Gravité faible. Correctif : filtre par préfixe, comme l'admin, au prochain passage
   sur ces fichiers (toute modification d'un `sw.js` réinstalle le worker sur toutes les
   caisses).
+- **Liste des clients du dashboard plafonnée à 1 000** (découvert le 2026-09-30, point 8).
+  `GET /api/clients` lit tous les clients d'un marchand sans pagination ; PostgREST en
+  renvoie au plus 1 000 (les mieux dotés en points), sans erreur. La recherche du
+  dashboard filtre dans le navigateur (`renderClients`) : un client au-delà du 1 000e est
+  introuvable dans le dashboard, et le compteur affiché plafonne. Cinquième instance du
+  motif (§12). Sans effet tant qu'aucun marchand ne dépasse 1 000 clients (1 329 clients
+  au total le 21/09). Correctif : recherche et pagination côté serveur.
 - **`railway.toml` cesse d'être lu le 2026-12-01 — ÉCHÉANCE ABSENTE DE L'AUDIT
   (découverte le 2026-09-29).** Documentation Railway (`railwayapp/docs`,
   `infrastructure-as-code.md:41`) : « Existing Config as Code files stop being read on
@@ -1838,8 +1901,10 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 règle « Protection prod », chemins surveillés (`e7e3ac8` « skipped »). Livré : point 7,
 service worker de l'admin en réseau d'abord (21/21 au navigateur ; `4604fb6`, vérifié par
 Yass, seconde moitié du test des chemins surveillés réussie) ; point 6, mot de passe admin
-comparé à temps constant (42/42). Dette découverte : les
-workers du dashboard et du scanner purgent les caches voisins (§16).*
+comparé à temps constant (42/42 ; `98b9605`, vérifié par Yass) ; point 8, coordonnées
+clients réservées au Pro+ dans la liste et la fiche (35/35). Dette découverte : les
+workers du dashboard et du scanner purgent les caches voisins ; liste des clients du
+dashboard plafonnée à 1 000 (§16).*
 
 *Mis à jour le 2026-09-30 par la session « SETUP 4 », quatrième chantier : étape 6
 (§15 decies). Serveur déplacé à Amsterdam par Yass (30/09, 09:05 UTC, 1 réplique) ; coût

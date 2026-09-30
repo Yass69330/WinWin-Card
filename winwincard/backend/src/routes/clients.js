@@ -95,11 +95,15 @@ router.post('/', limiterInscription, asyncHandler(async (req, res) => {
   });
 }));
 
-// GET /api/clients — liste des clients du marchand connecté
+// GET /api/clients — liste des clients du marchand connecté.
+// Sans coordonnées (email, téléphone, anniversaire), quel que soit le forfait :
+// la liste du dashboard n'affiche que prénom et points, et charger toutes les
+// coordonnées dans le navigateur multipliait les copies. Elles restent sur la
+// fiche et dans l'export CSV, tous deux Pro+ uniquement (étape 7, point 8).
 router.get('/', authMarchand, asyncHandler(async (req, res) => {
   const { data, error } = await supabase
     .from('clients')
-    .select('id, prenom, stored_value, created_at, pass_serial_number, email, telephone, date_anniversaire')
+    .select('id, prenom, stored_value, created_at, pass_serial_number')
     .eq('marchand_id', req.marchandId)
     .is('deleted_at', null)
     .order('stored_value', { ascending: false });
@@ -168,19 +172,41 @@ router.delete('/:id', authMarchand, asyncHandler(async (req, res) => {
   res.json({ success: true });
 }));
 
-// GET /api/clients/:id — fiche client + derniers scans
+// GET /api/clients/:id — fiche client + derniers scans.
+// Coordonnées (email, téléphone, anniversaire) renvoyées au forfait Pro+
+// seulement, comme l'export CSV (étape 7, point 8). Un marchand repassé en Pro
+// garde en base celles collectées en Pro+ : avant ce filtre, l'API les lui
+// renvoyait et seul le dashboard les masquait. Forfait illisible → fiche sans
+// coordonnées, jamais l'inverse.
 router.get('/:id([0-9a-f\\-]{36})', authMarchand, asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const { data: client, error: errClient } = await supabase
-    .from('clients')
-    .select('id, prenom, stored_value, created_at, pass_serial_number, email, telephone, date_anniversaire')
-    .eq('id', id)
-    .eq('marchand_id', req.marchandId)
-    .is('deleted_at', null)
-    .single();
+  const [
+    { data: client, error: errClient },
+    { data: marchand, error: errMarchand },
+  ] = await Promise.all([
+    supabase
+      .from('clients')
+      .select('id, prenom, stored_value, created_at, pass_serial_number, email, telephone, date_anniversaire')
+      .eq('id', id)
+      .eq('marchand_id', req.marchandId)
+      .is('deleted_at', null)
+      .single(),
+    supabase
+      .from('marchands')
+      .select('forfait')
+      .eq('id', req.marchandId)
+      .single(),
+  ]);
 
   if (errClient || !client) return res.status(404).json({ error: 'Client introuvable' });
+
+  if (errMarchand) console.error('[clients] fiche : forfait illisible, coordonnées masquées :', errMarchand.message);
+  if (marchand?.forfait !== 'pro_plus') {
+    client.email = null;
+    client.telephone = null;
+    client.date_anniversaire = null;
+  }
 
   const { data: scans, error: errScans } = await supabase
     .from('scans')
