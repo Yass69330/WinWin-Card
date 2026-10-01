@@ -1,0 +1,176 @@
+diff --git a/winwincard/backend/database/migration_050_execution_fonctions.sql b/winwincard/backend/database/migration_050_execution_fonctions.sql
+new file mode 100644
+index 0000000..757f5c0
+--- /dev/null
++++ b/winwincard/backend/database/migration_050_execution_fonctions.sql
+@@ -0,0 +1,123 @@
++-- Migration 050 : exécution des fonctions réservée au serveur (étape 7, point 5)
++--
++-- POURQUOI. Toute fonction créée dans public est exécutable par PUBLIC (défaut
++-- PostgreSQL) et, sur Supabase, par anon et authenticated (privilèges par défaut
++-- de la plateforme). Requête d'écarts (production, 29/09) : les 8 fonctions du
++-- projet portent exec=111, c'est-à-dire anon, authenticated et service_role.
++-- Or seul le serveur les appelle, avec la clé service_role. La plus exposée :
++-- effacer_client(uuid, uuid), SECURITY DEFINER, qui efface les données d'un
++-- client et reste appelable avec la clé publique (sb_publishable_ ou anon). La
++-- désactivation des clés historiques ne ferme rien : la clé publique nouvelle
++-- génération porte le même rôle anon.
++--
++-- CE QUE FAIT LA MIGRATION.
++--   1. Pour chaque fonction de public appartenant au rôle qui exécute (postgres
++--      dans le SQL Editor) et qui n'appartient pas à une extension : retire
++--      EXECUTE à PUBLIC, anon, authenticated ; l'accorde explicitement à
++--      service_role.
++--   2. Fonctions FUTURES créées par ce rôle : plus d'EXECUTE pour PUBLIC (défaut
++--      global, seul moyen de le retirer : un défaut par schéma ne peut pas
++--      retirer un défaut global), ni pour anon et authenticated dans public ;
++--      EXECUTE pour service_role dans public.
++--   3. Demande à PostgREST de relire son schéma.
++--
++-- CE QUI NE CHANGE PAS. Les déclencheurs : set_updated_at() (trois tables) et
++-- rls_auto_enable() (déclencheur d'événement ensure_rls, migration 048) sont
++-- appelés par le moteur, sans contrôle du droit EXECUTE. Les tables et leurs
++-- droits. Le serveur : il n'utilise que service_role.
++--
++-- RISQUE. Un service_role privé d'EXECUTE arrêterait le scan (increment_stored_value),
++-- l'annulation, le parrainage, l'effacement RGPD, les statistiques réseau et la
++-- liste de l'admin. C'est pourquoi le GRANT explicite est dans la MÊME boucle que
++-- le REVOKE, et pourquoi la vérification ci-dessous contrôle les 6 appels du serveur
++-- un par un. Transaction unique : tout ou rien.
++--
++-- Rejouable. Aucun code à déployer avec elle : le serveur ne change pas.
++
++BEGIN;
++SET lock_timeout = '3s';
++
++DO $$
++DECLARE
++  f  record;
++  nb int := 0;
++BEGIN
++  FOR f IN
++    SELECT p.oid::regprocedure AS signature
++      FROM pg_proc p
++     WHERE p.pronamespace = 'public'::regnamespace
++       AND p.prokind IN ('f', 'p')
++       AND p.proowner = (SELECT oid FROM pg_roles WHERE rolname = current_user)
++       AND NOT EXISTS (SELECT 1 FROM pg_depend d
++                        WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e')
++  LOOP
++    EXECUTE format('REVOKE EXECUTE ON ROUTINE %s FROM PUBLIC, anon, authenticated', f.signature);
++    EXECUTE format('GRANT EXECUTE ON ROUTINE %s TO service_role', f.signature);
++    nb := nb + 1;
++  END LOOP;
++  -- Exécutée par un autre rôle que le propriétaire des fonctions (postgres), la
++  -- boucle ne traiterait rien : échec plutôt que réussite muette.
++  IF nb = 0 THEN
++    RAISE EXCEPTION 'migration 050 : aucune fonction de public n''appartient à %, rien n''est changé', current_user;
++  END IF;
++  RAISE NOTICE 'migration 050 : % fonction(s) réservée(s) à service_role', nb;
++END $$;
++
++ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
++ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM anon, authenticated;
++ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO service_role;
++
++NOTIFY pgrst, 'reload schema';
++
++COMMIT;
++
++-- ── VÉRIFICATION (à coller juste après) ──────────────────────────────────
++-- Les quatre colonnes doivent valoir true.
++--
++-- SELECT
++--   -- 1. Les 6 fonctions appelées par le serveur restent exécutables par service_role.
++--   (SELECT bool_and(has_function_privilege('service_role', f, 'EXECUTE'))
++--      FROM unnest(ARRAY[
++--        'public.increment_stored_value(uuid,integer,integer,text)',
++--        'public.annuler_scan(uuid,uuid)',
++--        'public.credit_referral(uuid,integer)',
++--        'public.effacer_client(uuid,uuid)',
++--        'public.group_stats(uuid)',
++--        'public.admin_marchands_stats()']::regprocedure[]) AS f)        AS serveur_ok,
++--   -- 2. Aucune fonction du projet n'est exécutable par anon ni authenticated.
++--   NOT EXISTS (SELECT 1 FROM pg_proc p
++--                WHERE p.pronamespace = 'public'::regnamespace
++--                  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e')
++--                  AND (has_function_privilege('anon', p.oid, 'EXECUTE')
++--                    OR has_function_privilege('authenticated', p.oid, 'EXECUTE'))) AS public_ferme,
++--   -- 3. La plus exposée, nommément.
++--   NOT has_function_privilege('anon', 'public.effacer_client(uuid,uuid)', 'EXECUTE') AS effacement_ferme,
++--   -- 4. Défauts pour les fonctions futures : plus de PUBLIC, plus d'anon.
++--   EXISTS (SELECT 1 FROM pg_default_acl a
++--            WHERE a.defaclrole = (SELECT oid FROM pg_roles WHERE rolname = current_user)
++--              AND a.defaclnamespace = 0 AND a.defaclobjtype = 'f')
++--   AND NOT EXISTS (SELECT 1 FROM pg_default_acl a, aclexplode(a.defaclacl) x
++--                    WHERE a.defaclrole = (SELECT oid FROM pg_roles WHERE rolname = current_user)
++--                      AND a.defaclobjtype = 'f' AND x.privilege_type = 'EXECUTE'
++--                      AND x.grantee IN (0, 'anon'::regrole::oid, 'authenticated'::regrole::oid)) AS defauts_ok;
++
++-- ── RETOUR ARRIÈRE ────────────────────────────────────────────────────────
++-- Remet exactement l'état d'avant (exec=111 partout). Aucun code à revenir.
++--
++-- BEGIN;
++-- DO $$
++-- DECLARE f record;
++-- BEGIN
++--   FOR f IN SELECT p.oid::regprocedure AS signature FROM pg_proc p
++--             WHERE p.pronamespace = 'public'::regnamespace AND p.prokind IN ('f', 'p')
++--               AND p.proowner = (SELECT oid FROM pg_roles WHERE rolname = current_user)
++--               AND NOT EXISTS (SELECT 1 FROM pg_depend d
++--                                WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e')
++--   LOOP
++--     EXECUTE format('GRANT EXECUTE ON ROUTINE %s TO PUBLIC, anon, authenticated', f.signature);
++--   END LOOP;
++-- END $$;
++-- ALTER DEFAULT PRIVILEGES GRANT EXECUTE ON FUNCTIONS TO PUBLIC;
++-- ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated;
++-- NOTIFY pgrst, 'reload schema';
++-- COMMIT;
+diff --git a/winwincard/backend/database/requetes/ecarts_prod_depot/ecarts_prod_depot.sql b/winwincard/backend/database/requetes/ecarts_prod_depot/ecarts_prod_depot.sql
+index bff2d95..843b62e 100644
+--- a/winwincard/backend/database/requetes/ecarts_prod_depot/ecarts_prod_depot.sql
++++ b/winwincard/backend/database/requetes/ecarts_prod_depot/ecarts_prod_depot.sql
+@@ -6,8 +6,8 @@
+ -- SQL Editor de Supabase, puis « Run ». Moins de 40 lignes rendues.
+ --
+ -- État du dépôt figé ci-dessous (VALUES « depot ») : base rejouée depuis le
+--- dépôt, 50 fichiers (schema.sql, migrations jusqu'à
+--- migration_049_cron_passages.sql, rgpd_effacement.sql), PostgreSQL local.
++-- dépôt, 51 fichiers (schema.sql, migrations jusqu'à
++-- migration_050_execution_fonctions.sql, rgpd_effacement.sql), PostgreSQL local.
+ -- La requête photographie la base où elle tourne et ne rend que les ÉCARTS :
+ --   plateforme : TRUNCATE / REFERENCES / TRIGGER hérités des privilèges par
+ --                défaut de Supabase — non consignés, décision du 2026-09-29 ;
+@@ -37,14 +37,14 @@ WITH depot(categorie, objet, valeur) AS (VALUES
+   ('droits_donnees', 'workflow_executions → service_role', 'rawd'),
+   ('droits_donnees', 'workflows → service_role', 'rawd'),
+   ('evenement', 'ensure_rls', 'ddl_command_end | O | CREATE TABLE,CREATE TABLE AS,SELECT INTO | rls_auto_enable() | postgres'),
+-  ('fonction', 'admin_marchands_stats()', 'jsonb | sql | definer=false | s | - | code=ca8a05d052 | exec=111 | postgres'),
+-  ('fonction', 'annuler_scan(p_scan_id uuid, p_marchand_id uuid)', 'jsonb | plpgsql | definer=false | v | - | code=3b108bb459 | exec=111 | postgres'),
+-  ('fonction', 'credit_referral(p_parrain_client_id uuid, p_bonus_points integer)', 'TABLE(stored_value_avant integer, stored_value_apres integer) | plpgsql | definer=false | v | - | code=3a1baf914f | exec=111 | postgres'),
+-  ('fonction', 'effacer_client(p_client_id uuid, p_marchand_id uuid)', 'void | plpgsql | definer=true | v | - | code=e0cc0950ba | exec=111 | postgres'),
+-  ('fonction', 'group_stats(p_marchand_id uuid)', 'jsonb | sql | definer=false | s | - | code=46c933a208 | exec=111 | postgres'),
+-  ('fonction', 'increment_stored_value(p_client_id uuid, p_max_value integer, p_amount integer, p_type_programme text)', 'TABLE(stored_value_avant integer, stored_value_apres integer, is_reset boolean) | plpgsql | definer=false | v | - | code=d4b664ce21 | exec=111 | postgres'),
+-  ('fonction', 'rls_auto_enable()', 'event_trigger | plpgsql | definer=true | v | search_path=pg_catalog | code=2965a64617 | exec=111 | postgres'),
+-  ('fonction', 'set_updated_at()', 'trigger | plpgsql | definer=false | v | - | code=d258fba5fe | exec=111 | postgres'),
++  ('fonction', 'admin_marchands_stats()', 'jsonb | sql | definer=false | s | - | code=ca8a05d052 | exec=001 | postgres'),
++  ('fonction', 'annuler_scan(p_scan_id uuid, p_marchand_id uuid)', 'jsonb | plpgsql | definer=false | v | - | code=3b108bb459 | exec=001 | postgres'),
++  ('fonction', 'credit_referral(p_parrain_client_id uuid, p_bonus_points integer)', 'TABLE(stored_value_avant integer, stored_value_apres integer) | plpgsql | definer=false | v | - | code=3a1baf914f | exec=001 | postgres'),
++  ('fonction', 'effacer_client(p_client_id uuid, p_marchand_id uuid)', 'void | plpgsql | definer=true | v | - | code=e0cc0950ba | exec=001 | postgres'),
++  ('fonction', 'group_stats(p_marchand_id uuid)', 'jsonb | sql | definer=false | s | - | code=46c933a208 | exec=001 | postgres'),
++  ('fonction', 'increment_stored_value(p_client_id uuid, p_max_value integer, p_amount integer, p_type_programme text)', 'TABLE(stored_value_avant integer, stored_value_apres integer, is_reset boolean) | plpgsql | definer=false | v | - | code=d4b664ce21 | exec=001 | postgres'),
++  ('fonction', 'rls_auto_enable()', 'event_trigger | plpgsql | definer=true | v | search_path=pg_catalog | code=2965a64617 | exec=001 | postgres'),
++  ('fonction', 'set_updated_at()', 'trigger | plpgsql | definer=false | v | - | code=d258fba5fe | exec=001 | postgres'),
+   ('proprietaire', 'avis_clics', 'postgres'),
+   ('proprietaire', 'avis_clics_id_seq', 'postgres'),
+   ('proprietaire', 'clients', 'postgres'),
+@@ -196,7 +196,7 @@ SELECT 0 AS ordre, 'VERDICT' AS categorie,
+             THEN 'IDENTIQUE au dépôt (hors plateforme)' ELSE 'ÉCART — à examiner' END AS objet,
+        (SELECT count(*) FROM classes WHERE classe = 'ECART') || ' écart(s) · '
+        || (SELECT count(*) FROM classes WHERE classe = 'plateforme') || ' plateforme' AS production,
+-       'dépôt jusqu''à migration_049_cron_passages.sql' AS depot, NULL AS lecture
++       'dépôt jusqu''à migration_050_execution_fonctions.sql' AS depot, NULL AS lecture
+ UNION ALL
+ SELECT 1, c.categorie, c.n || ' objets comparés',
+        coalesce((SELECT count(*) FROM classes k WHERE k.categorie = c.categorie), 0) || ' écart(s)', NULL, NULL

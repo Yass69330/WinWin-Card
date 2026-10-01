@@ -6,8 +6,8 @@
 -- SQL Editor de Supabase, puis « Run ». Moins de 40 lignes rendues.
 --
 -- État du dépôt figé ci-dessous (VALUES « depot ») : base rejouée depuis le
--- dépôt, 50 fichiers (schema.sql, migrations jusqu'à
--- migration_049_cron_passages.sql, rgpd_effacement.sql), PostgreSQL local.
+-- dépôt, 51 fichiers (schema.sql, migrations jusqu'à
+-- migration_050_execution_fonctions.sql, rgpd_effacement.sql), PostgreSQL local.
 -- La requête photographie la base où elle tourne et ne rend que les ÉCARTS :
 --   plateforme : TRUNCATE / REFERENCES / TRIGGER hérités des privilèges par
 --                défaut de Supabase — non consignés, décision du 2026-09-29 ;
@@ -37,14 +37,14 @@ WITH depot(categorie, objet, valeur) AS (VALUES
   ('droits_donnees', 'workflow_executions → service_role', 'rawd'),
   ('droits_donnees', 'workflows → service_role', 'rawd'),
   ('evenement', 'ensure_rls', 'ddl_command_end | O | CREATE TABLE,CREATE TABLE AS,SELECT INTO | rls_auto_enable() | postgres'),
-  ('fonction', 'admin_marchands_stats()', 'jsonb | sql | definer=false | s | - | code=ca8a05d052 | exec=111 | postgres'),
-  ('fonction', 'annuler_scan(p_scan_id uuid, p_marchand_id uuid)', 'jsonb | plpgsql | definer=false | v | - | code=3b108bb459 | exec=111 | postgres'),
-  ('fonction', 'credit_referral(p_parrain_client_id uuid, p_bonus_points integer)', 'TABLE(stored_value_avant integer, stored_value_apres integer) | plpgsql | definer=false | v | - | code=3a1baf914f | exec=111 | postgres'),
-  ('fonction', 'effacer_client(p_client_id uuid, p_marchand_id uuid)', 'void | plpgsql | definer=true | v | - | code=e0cc0950ba | exec=111 | postgres'),
-  ('fonction', 'group_stats(p_marchand_id uuid)', 'jsonb | sql | definer=false | s | - | code=46c933a208 | exec=111 | postgres'),
-  ('fonction', 'increment_stored_value(p_client_id uuid, p_max_value integer, p_amount integer, p_type_programme text)', 'TABLE(stored_value_avant integer, stored_value_apres integer, is_reset boolean) | plpgsql | definer=false | v | - | code=d4b664ce21 | exec=111 | postgres'),
-  ('fonction', 'rls_auto_enable()', 'event_trigger | plpgsql | definer=true | v | search_path=pg_catalog | code=2965a64617 | exec=111 | postgres'),
-  ('fonction', 'set_updated_at()', 'trigger | plpgsql | definer=false | v | - | code=d258fba5fe | exec=111 | postgres'),
+  ('fonction', 'admin_marchands_stats()', 'jsonb | sql | definer=false | s | - | code=ca8a05d052 | exec=001 | postgres'),
+  ('fonction', 'annuler_scan(p_scan_id uuid, p_marchand_id uuid)', 'jsonb | plpgsql | definer=false | v | - | code=3b108bb459 | exec=001 | postgres'),
+  ('fonction', 'credit_referral(p_parrain_client_id uuid, p_bonus_points integer)', 'TABLE(stored_value_avant integer, stored_value_apres integer) | plpgsql | definer=false | v | - | code=3a1baf914f | exec=001 | postgres'),
+  ('fonction', 'effacer_client(p_client_id uuid, p_marchand_id uuid)', 'void | plpgsql | definer=true | v | - | code=e0cc0950ba | exec=001 | postgres'),
+  ('fonction', 'group_stats(p_marchand_id uuid)', 'jsonb | sql | definer=false | s | - | code=46c933a208 | exec=001 | postgres'),
+  ('fonction', 'increment_stored_value(p_client_id uuid, p_max_value integer, p_amount integer, p_type_programme text)', 'TABLE(stored_value_avant integer, stored_value_apres integer, is_reset boolean) | plpgsql | definer=false | v | - | code=d4b664ce21 | exec=001 | postgres'),
+  ('fonction', 'rls_auto_enable()', 'event_trigger | plpgsql | definer=true | v | search_path=pg_catalog | code=2965a64617 | exec=001 | postgres'),
+  ('fonction', 'set_updated_at()', 'trigger | plpgsql | definer=false | v | - | code=d258fba5fe | exec=001 | postgres'),
   ('proprietaire', 'avis_clics', 'postgres'),
   ('proprietaire', 'avis_clics_id_seq', 'postgres'),
   ('proprietaire', 'clients', 'postgres'),
@@ -196,7 +196,7 @@ SELECT 0 AS ordre, 'VERDICT' AS categorie,
             THEN 'IDENTIQUE au dépôt (hors plateforme)' ELSE 'ÉCART — à examiner' END AS objet,
        (SELECT count(*) FROM classes WHERE classe = 'ECART') || ' écart(s) · '
        || (SELECT count(*) FROM classes WHERE classe = 'plateforme') || ' plateforme' AS production,
-       'dépôt jusqu''à migration_049_cron_passages.sql' AS depot, NULL AS lecture
+       'dépôt jusqu''à migration_050_execution_fonctions.sql' AS depot, NULL AS lecture
 UNION ALL
 SELECT 1, c.categorie, c.n || ' objets comparés',
        coalesce((SELECT count(*) FROM classes k WHERE k.categorie = c.categorie), 0) || ' écart(s)', NULL, NULL

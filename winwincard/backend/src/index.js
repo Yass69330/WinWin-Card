@@ -14,6 +14,22 @@ if (missingEnv.length > 0) {
   process.exit(1);
 }
 
+// Secret des cartes Apple (services/apple-pass.js, étape 7, point 10). Une copie
+// de JWT_SECRET qui n'en diffère que par des espaces au début ou à la fin
+// (copier-coller) figerait toutes les cartes iPhone : démarrage refusé, donc
+// déploiement en échec au healthcheck et ancienne version maintenue en ligne.
+// Le journal dit quelle variable signe les cartes, jamais sa valeur.
+if (process.env.APPLE_PASS_SECRET) {
+  const identique = process.env.APPLE_PASS_SECRET === process.env.JWT_SECRET;
+  if (!identique && process.env.APPLE_PASS_SECRET.trim() === process.env.JWT_SECRET.trim()) {
+    console.error('[boot] APPLE_PASS_SECRET ne diffère de JWT_SECRET que par des espaces : copie fautive, démarrage refusé');
+    process.exit(1);
+  }
+  console.log(`[boot] Cartes Apple signées avec APPLE_PASS_SECRET (identique à JWT_SECRET : ${identique ? 'oui' : 'non'})`);
+} else {
+  console.log('[boot] Cartes Apple signées avec JWT_SECRET (APPLE_PASS_SECRET absent)');
+}
+
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');

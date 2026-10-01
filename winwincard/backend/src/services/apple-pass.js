@@ -21,9 +21,23 @@ const {
 } = require('./avis');
 
 // ── Auth token ───────────────────────────────────────────────
+// HMAC du numéro de série, gravé dans chaque carte installée (pass.json,
+// authenticationToken) et renvoyé par Apple à chaque appel du webservice.
+//
+// SECRET DÉDIÉ (étape 7, point 10) : APPLE_PASS_SECRET, repli sur JWT_SECRET
+// tant qu'il n'est pas posé. Les cartes déjà installées ont été signées avec
+// JWT_SECRET : APPLE_PASS_SECRET doit en être la copie EXACTE. Il permet ensuite
+// de changer JWT_SECRET (jetons admin, marchand, caisse) sans toucher aux cartes :
+// APPLE_PASS_SECRET garde l'ancienne valeur. Un seul caractère de différence et
+// toutes les cartes iPhone cessent de se mettre à jour (401 du webservice).
+// Contrôle au démarrage : index.js.
+function secretCartes() {
+  return process.env.APPLE_PASS_SECRET || process.env.JWT_SECRET;
+}
+
 function computeAuthToken(serialNumber) {
   return crypto
-    .createHmac('sha256', process.env.JWT_SECRET)
+    .createHmac('sha256', secretCartes())
     .update(serialNumber)
     .digest('hex')
     .slice(0, 32);
