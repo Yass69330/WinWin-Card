@@ -656,6 +656,7 @@ zones dangereuses §5, contrat §7 s'appliquent toujours.*
 | 047 | `marchands.lien_avis_google` + CHECK du registre élargi à `'avis'` + table `avis_clics` | Chantier avis Google (§15 sexies). |
 | 048 | Consignation de ce qui vivait en production hors dépôt : droits `service_role` sur 7 tables, RLS sur 4 tables, `rls_auto_enable()` + déclencheur `ensure_rls` | Étape 9 (§15 octies). **Sans effet en production** (chaque bloc n'agit que si l'élément manque) ; indispensable à toute base rejouée depuis le dépôt. |
 | 049 | Table `cron_passages` + index + RLS + GRANT (SELECT, INSERT, UPDATE ; séquence) | Suivi du passage quotidien du cron, lu par `/health/cron` (§15 nonies). Une ligne par jour, pas de purge. |
+| 050 | `EXECUTE` des fonctions de `public` réservé à `service_role` (existantes et futures) | Étape 7, point 5 (§15 undecies). **NON EXÉCUTÉE, NON POSÉE (décision de Yass, 01/10)** : fichier sur la branche `relecture/etape7-points-5-10` seulement. **Numéro réservé : la prochaine migration de production est la 051.** |
 
 ## 9. LE MODÈLE MULTI-BOUTIQUES
 
@@ -1601,6 +1602,9 @@ sont en place.
   la désactivation des clés historiques ne ferme rien (`sb_publishable_` = même rôle).
   **Risque** : un `service_role` privé d'exécution arrêterait tous les scans → banc
   PostgREST + requête d'écarts régénérée avant exécution.
+  **NON POSÉ — décision de Yass (01/10).** Écrit et testé (32/32), rangé sur la branche
+  `relecture/etape7-points-5-10` (non déployée) avec son dossier de relecture. **À la place :**
+  suppression des clés publiques inutilisées (détail ci-dessous).
 - **6. Mot de passe admin comparé à temps constant — FAIT** : poussé `98b9605`,
   « vérifié » par Yass le 30/09 (détail ci-dessous).
 - **7. Service worker de l'admin — FAIT** : poussé `4604fb6`, « vérifié » par Yass le 30/09
@@ -1613,6 +1617,8 @@ sont en place.
 - **10. Secret des cartes Apple séparé** *(dossier extérieur)* (`apple-pass.js:26-30`) :
   nouvelle variable reprenant EXACTEMENT la valeur actuelle de `JWT_SECRET`, repli sur
   `JWT_SECRET`. **Risque élevé** : un caractère de différence = 1 104 cartes iPhone figées.
+  **NON POSÉ — RISQUE ACCEPTÉ par Yass (01/10) sur `JWT_SECRET`.** Écrit et testé
+  (32/32), rangé sur la branche `relecture/etape7-points-5-10` (non déployée). Détail ci-dessous.
 - **11. Logo de secours Google** (`google-pass.js:65`, seule référence au dépôt dans le
   code) déplacé, classes concernées resynchronisées ; **puis** décision sur la visibilité
   du dépôt. **PIÈGE (doc GitHub) : sur l'offre gratuite, GitHub Pages et la protection de
@@ -1785,6 +1791,80 @@ s'affiche, la fiche n'a pas de coordonnées (comme avant à l'écran).
 
 **Retour arrière.** `git revert` du commit, puis push.
 
+### Points 5 et 10 — écrits, testés, NON POSÉS (décisions de Yass, 01/10)
+
+**Où est le travail.** Branche **`relecture/etape7-points-5-10`**, partie de la branche de production :
+`migration_050_execution_fonctions.sql`, requête d'écarts régénérée pour 050, code du point
+10 (`apple-pass.js`, `index.js`), dossiers et patchs dans `docs/relecture/`. **Railway ne la
+déploie pas** (il ne suit que `claude/keen-goldberg-MXslu`) ; ne pas ouvrir de pull request
+vers la production sans décision. **Le numéro 050 est RÉSERVÉ** : la prochaine migration de
+production prendra 051 (sinon deux « 050 » le jour où la branche serait reprise).
+
+**Point 5 remplacé, pour l'instant, par la suppression des clés publiques.** Yass désactive
+les clés historiques (`anon`, `service_role` au format `eyJ`) vers le 03/10 et supprime la
+clé publishable « default » si Supabase le permet. Vérifié le 01/10 :
+- **Aucune clé publique utilisée.** Le serveur ne lit que `SUPABASE_URL` et
+  `SUPABASE_SERVICE_KEY` (`services/supabase.js`, seul client) ; aucune page (`public/`),
+  aucun script, aucune configuration ne contient de clé ni n'appelle Supabase ; aucun
+  jeton `eyJ` ni clé `sb_` dans les 60 commits de l'historique. Pas de Supabase Auth, ni
+  Realtime, ni Edge Functions dans le code.
+- **Ce que la suppression ne casse pas.** Les images (logos, bandeaux des cartes) sont
+  lues par des URL publiques de Storage (`getPublicUrl`), qui ne demandent aucune clé ;
+  le serveur écrit avec sa clé secrète. Le tableau de bord Supabase n'utilise pas la clé
+  publishable du projet.
+- **Ce qu'on ne peut pas vérifier d'ici.** Un outil extérieur (automatisation, tableur,
+  script sur un poste) qui aurait reçu la clé publique : à vérifier par Yass. Que Supabase
+  autorise la suppression de la clé « default » : non documenté (doc Supabase relue ; le
+  site supabase.com est inaccessible depuis le conteneur).
+- **Limite.** Sans aucune clé publique valide, `anon` et `authenticated` ne peuvent plus
+  joindre l'API : la faille d'`effacer_client` n'est plus atteignable. Mais les droits en
+  base restent ouverts (`exec=111`) : **toute clé publishable recréée plus tard (par un
+  outil, un tutoriel, le bouton « Connect » de Supabase) rouvre la faille**. Si la clé
+  « default » ne peut pas être supprimée, la faille reste ouverte à quiconque la détient
+  (elle n'est affichée que dans le tableau de bord Supabase). La migration 050 reste prête.
+
+**Point 10 — risque accepté sur `JWT_SECRET`.** Tant que le point 10 n'est pas posé, les
+cartes iPhone (≈ 1 104) sont signées avec `JWT_SECRET` : le changer, même après une fuite,
+figerait toutes ces cartes. **Si un jour il faut changer `JWT_SECRET` : poser D'ABORD le
+point 10 avec l'ANCIENNE valeur** (branche `relecture/etape7-points-5-10`, procédure du dossier),
+vérifier le journal « identique : oui », puis seulement changer `JWT_SECRET`. Copie de
+`JWT_SECRET` hors de Railway : toujours non confirmée.
+
+**Règle de pilotage (30/09), appliquée :** code écrit et testé sans push, puis un dossier
+d'une page pour un développeur extérieur (contexte, diff, tests, 3 questions, temps
+estimé), remis à Yass le 01/10.
+
+**Point 5 — migration 050.** Pour chaque fonction de `public` appartenant au rôle qui
+exécute (postgres) et hors extension : `EXECUTE` retiré à `PUBLIC`, `anon`,
+`authenticated`, accordé à `service_role` ; mêmes règles pour les fonctions futures
+(défaut global pour `PUBLIC` — un défaut par schéma ne peut pas le retirer) ;
+`NOTIFY pgrst`. Échec explicite si aucune fonction n'est traitée (mauvais rôle).
+Vérification (4 × true) et retour arrière dans le fichier, **testés tels qu'écrits**.
+Banc avec les privilèges par défaut de Supabase simulés : faille reproduite (`anon` efface
+un client par `effacer_client`), puis fermée ; les 6 appels du serveur passent par les
+vraies routes ; déclencheurs intacts. Les suites existantes (règle 2, règle 3, point 8)
+donnent des résultats identiques ligne à ligne avec et sans 050. Requête d'écarts
+régénérée **sur la branche de relecture seulement** : seules les 8 lignes `exec=111`
+deviennent `exec=001`. La requête de la branche de production reste celle de 049, valable
+tant que 050 n'est pas exécutée. Aucun code ne change : la
+migration s'exécute seule, puis son fichier et la requête régénérée se poussent.
+
+**Point 10 — secret des cartes Apple.** `secretCartes()` dans `apple-pass.js` :
+`APPLE_PASS_SECRET`, repli sur `JWT_SECRET`. Au démarrage (`index.js`) : refus si la
+variable ne diffère de `JWT_SECRET` que par des espaces ; le journal dit quelle variable
+signe les cartes et si elle est identique à `JWT_SECRET` (jamais de valeur). Déployé sans
+la variable : aucun changement. Ordre : code, puis variable (journal « identique : oui »),
+puis scan cobaye sur une carte iPhone. **Préalable toujours non confirmé : copie de
+`JWT_SECRET` hors de Railway.** La rotation de `JWT_SECRET` elle-même reste une opération
+distincte, qui déconnecte tous les dashboards et toutes les caisses.
+
+**Hypothèses.** 050 : exécutée par `postgres` dans le SQL Editor ; aucun composant Supabase
+n'appelle les fonctions de `public` avec `anon` ou `authenticated` (question posée). Point
+10 : `computeAuthToken` reste l'unique source du jeton (`pass.json` et webservice).
+
+**Limite.** Une branche non suivie vieillit : avant de la reprendre, la fusionner avec la
+production, rejouer les deux bancs et régénérer la requête d'écarts.
+
 ## 15 duodecies. FORFAITS ALIGNÉS SUR L'OFFRE COMMERCIALE (2026-09-30)
 
 **Décisions de Yass (30/09).**
@@ -1861,7 +1941,11 @@ de consentement de la landing est inchangé. Le serveur ne valide pas la valeur 
 manuel (§16). Un quota manuel à 0 renvoie le message existant « not available on the
 Basic plan », quel que soit le forfait (message non modifié).
 
-**Étape 4, pour Yass (après le push).** Pour chaque commerçant français à repasser en
+**DÉCISION DE YASS (01/10) : les commerçants français RESTENT en Pro+ pour l'instant.**
+Yass les repassera en Pro le jour où une fonction Pro+ sera ajoutée. D'ici là, rien à
+faire ; la procédure ci-dessous sert ce jour-là.
+
+**Étape 4, pour Yass (le jour venu).** Pour chaque commerçant français à repasser en
 Pro : ouvrir sa fiche dans l'admin, forfait → Pro, **cocher « Landing page premium »**
 s'il doit continuer à récolter et voir les coordonnées et à envoyer l'anniversaire,
 enregistrer. Il garde les relances, passe à 5 notifications manuelles par mois (aucun
@@ -1944,6 +2028,12 @@ token marchand mono-site toujours non révocable).
   seuls le champ du formulaire (`min="0"`) et `quotaManuel()` écartent un négatif ou un
   non-entier. Sans effet depuis l'admin ; un appel direct pourrait enregistrer -1 (qui
   bloque tout envoi) ou 2.5.
+- **Désinscription d'un appareil Apple sans contrôle du jeton** (découvert le 2026-10-01,
+  point 10). `DELETE /v1/devices/:deviceId/registrations/:passTypeId/:serial`
+  (`apple-wallet.js:65-77`) ne vérifie pas l'en-tête `ApplePass`, contrairement à
+  l'inscription et au téléchargement. N'importe qui connaissant un identifiant d'appareil
+  et un numéro de série peut couper les mises à jour poussées d'une carte. Question posée
+  dans le dossier du point 10.
 - **`railway.toml` cesse d'être lu le 2026-12-01 — ÉCHÉANCE ABSENTE DE L'AUDIT
   (découverte le 2026-09-29).** Documentation Railway (`railwayapp/docs`,
   `infrastructure-as-code.md:41`) : « Existing Config as Code files stop being read on
@@ -1998,6 +2088,14 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-10-01 par la session « SETUP 4 », septième chantier : étape 7, points
+5 (migration 050) et 10 (secret des cartes Apple), écrits et testés (32/32 chacun), NON
+POSÉS par décision de Yass, rangés sur la branche `relecture/etape7-points-5-10` (non déployée) avec
+leurs dossiers de relecture. Point 5 remplacé par la suppression des clés publiques (aucune
+utilisée, vérifié) ; point 10 : risque accepté sur `JWT_SECRET`. Décision de Yass : les commerçants
+français restent en Pro+ (§15 duodecies). Dette découverte : désinscription Apple sans
+contrôle du jeton (§16).*
 
 *Mis à jour le 2026-09-30 par la session « SETUP 4 », sixième chantier : forfaits
 alignés sur l'offre commerciale (§15 duodecies). Règles 2 (landing premium en Pro et Pro+,
