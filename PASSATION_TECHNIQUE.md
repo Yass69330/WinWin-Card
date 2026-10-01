@@ -1278,8 +1278,8 @@ le registre ne bloquant jamais un envoi (§15 quinquies).
 Chantier ouvert par l'échéance n° 1 de l'audit (99 §6) : la clé historique
 `service_role` (format `eyJ…`) sera supprimée par Supabase fin 2026 (date exacte non
 annoncée). Roadmap : étape 1 (garde-fou) **livrée**, étape 2 (bascule) **faite par Yass
-le 29/09 au soir** — clés historiques encore actives, désactivation prévue vers le 03/10
-(voir B, état).
+le 29/09 au soir**. **Clés historiques (`anon`, `service_role` au format `eyJ`)
+DÉSACTIVÉES par Yass le 01/10 vers 08:15 UTC, vérifications OK** (voir B, état).
 
 **Où vit la clé — une seule, côté serveur.** `SUPABASE_SERVICE_KEY` n'est lue que dans
 `services/supabase.js:8-14` (client unique, 17 fichiers l'importent, base ET Storage).
@@ -1800,9 +1800,12 @@ déploie pas** (il ne suit que `claude/keen-goldberg-MXslu`) ; ne pas ouvrir de 
 vers la production sans décision. **Le numéro 050 est RÉSERVÉ** : la prochaine migration de
 production prendra 051 (sinon deux « 050 » le jour où la branche serait reprise).
 
-**Point 5 remplacé, pour l'instant, par la suppression des clés publiques.** Yass désactive
-les clés historiques (`anon`, `service_role` au format `eyJ`) vers le 03/10 et supprime la
-clé publishable « default » si Supabase le permet. Vérifié le 01/10 :
+**Point 5 remplacé, pour l'instant, par la suppression des clés publiques.** **Fait le
+01/10 :** clés historiques désactivées vers 08:15 UTC, vérifications OK (Yass). **La clé
+publishable « default » ne peut pas être supprimée dans Supabase : elle est gardée.** La
+faille du point 5 reste donc **théorique** : exploitable seulement par qui détient cette
+clé, affichée uniquement dans le tableau de bord Supabase, jamais publiée par WinWin.
+Vérifié le 01/10 :
 - **Aucune clé publique utilisée.** Le serveur ne lit que `SUPABASE_URL` et
   `SUPABASE_SERVICE_KEY` (`services/supabase.js`, seul client) ; aucune page (`public/`),
   aucun script, aucune configuration ne contient de clé ni n'appelle Supabase ; aucun
@@ -1960,6 +1963,61 @@ sans la case : ni champs, ni bouton, ni coordonnées. Onglet notifications d'un 
 **Retour arrière.** `git revert` du commit, puis push. Les cases cochées en Pro restent en
 base, sans effet avec l'ancien code (qui exige le Pro+).
 
+## 15 terdecies. ÉTAPE 8 : NODE FIGÉ, RÉGLAGES RAILWAY AVANT LE 01/12 — EN COURS (01/10)
+
+**Diagnostic (01/10, aucun réglage touché).**
+- **Node.** `engines.node` valait `>=22.0.0` et `.nvmrc` `22`. Nixpacks (déclaré par
+  `railway.toml`) lit `NIXPACKS_NODE_VERSION`, puis `engines`, puis `.nvmrc`, prend la
+  version paire la plus récente de sa table qui recoupe la plage (24) et installe celle de
+  son archive épinglée : **24.10.0** (code source de Nixpacks, `src/providers/node/mod.rs`,
+  relu le 01/10). Railpack lit `RAILPACK_NODE_VERSION`, `devEngines`, puis `engines`, puis
+  `.nvmrc`, et résout la plage avec mise (documentation de Railpack, relue le 01/10) :
+  `>=22.0.0` laisserait passer la version la plus haute, donc 26. **Le saut menace dès que
+  le constructeur change, pas seulement après le 28/10.**
+- **Constructeur.** La documentation de Railway ne propose plus que Railpack (par défaut) et
+  Dockerfile ; Nixpacks n'est utilisé que parce que `railway.toml` le demande. **Ce que
+  propose la liste « Builder » du service : à relever par Yass (capture).**
+- **Signature des cartes Apple.** Elle appelle le programme `openssl` de l'image
+  (`apple-pass.js:290`). Présence d'`openssl` dans l'image Railpack : HYPOTHÈSE à tester
+  (sinon `RAILPACK_DEPLOY_APT_PACKAGES=openssl`). **Le healthcheck `/health/db` ne verrait
+  pas une signature cassée** : il faut tester une vraie carte.
+- **Les 5 réglages de `railway.toml`** → tableau de bord (service → Settings) : Build →
+  Builder ; Deploy → Custom Start Command `npm start` ; Healthcheck Path `/health/db` ;
+  Healthcheck Timeout `30` (ou variable `RAILWAY_HEALTHCHECK_TIMEOUT_SEC`) ; Restart Policy
+  On Failure, 3. **Tant que le fichier est lu, il l'emporte à chaque déploiement** et ne
+  modifie pas le tableau de bord (doc Railway, Config as Code) : saisir les valeurs
+  maintenant est sans effet ; la page d'un déploiement marque d'une icône de fichier les
+  réglages venus du fichier.
+
+**Plan proposé (ordre, risque, retour arrière).**
+1. Figer Node — **FAIT** (ci-dessous).
+2. Captures des réglages actuels et de la liste Builder (Yass) — aucun risque.
+3. Saisie des réglages Deploy dans le tableau de bord (Yass) — sans effet tant que le fichier
+   existe ; au plus un redémarrage si Railway redéploie à l'application. Retour : ressaisir
+   les valeurs des captures.
+4. Constructeur : Nixpacks si encore proposé (sursis : en maintenance depuis le 24/11/2025,
+   plus aucun correctif de Node) ; sinon Railpack ou Dockerfile **essayés dans un
+   environnement temporaire** (il reprend les variables de production — même base, mêmes
+   certificats, même cron de 08:00 UTC : le faire tourner hors de 08:00, sans le domaine
+   `app.winwin-card.com`, le supprimer le jour même).
+5. Retrait de `railway.toml` par un commit, vers la mi-novembre : premier déploiement lu
+   depuis le tableau de bord, à notre date. Retour : revert (le fichier revient, valable
+   jusqu'au 30/11 seulement).
+**Décision de Yass attendue pour 2 à 5.** Autre voie possible, sans urgence :
+`railway config migrate` (réglages dans `.railway/railway.ts`, versionnés).
+
+**Geste 1 — Node figé à 24.10.0 (01/10, feu vert de Yass).** `engines.node` : `24.10.0`
+(exact) ; `.nvmrc` : `24.10.0` (les deux sources disent enfin la même chose) ;
+`package-lock.json` régénéré par npm (`--package-lock-only`) : seule la ligne `engines` de
+la racine change. Exact plutôt que `24.x` : le jour du changement de constructeur, Node ne
+doit pas bouger en même temps ; les correctifs de Node viendront à part (étape 20).
+Simulation des deux règles (bibliothèque semver de npm, liste de versions fictive) :
+Nixpacks → `nodejs_24` (24.10.0, inchangé) ; Railpack → exactement 24.10.0, contre la plus
+haute version avec `>=22.0.0`. **Hypothèses** : mise et la bibliothèque semver de Nixpacks
+traitent une version exacte comme npm ; Nixpacks garde son archive épinglée. **Limite** :
+Node reste sans correctif de sécurité depuis octobre 2025 (inchangé). **Vérification après
+déploiement** : `/health` → `"node":"v24.10.0"`. **Retour arrière** : revert du commit.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
@@ -2045,7 +2103,7 @@ token marchand mono-site toujours non révocable).
   la version de Node changerait sans commit (audit 99, étape 8). Parade minimale :
   recopier les cinq réglages dans le tableau de bord. Parade complète : migrer
   (`railway config migrate`, Infrastructure as Code). **Décision de pilotage à prendre
-  avant le 01/12.**
+  avant le 01/12.** Diagnostic et plan au §15 terdecies (01/10) ; Node figé à 24.10.0.
 
 **Toujours reportés (raison valable) :** #4 (re-sync Google, arbitrage), #5, #6, #8,
 #10, #11 (corriger listing+horloge ENSEMBLE, jamais séparément), #13 (parké).
@@ -2088,6 +2146,12 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-10-01 par la session « SETUP 4 », huitième chantier : étape 8
+(§15 terdecies), diagnostic des réglages Railway avant le 01/12 ; geste 1 fait : Node figé à
+24.10.0 (`engines`, `.nvmrc`, lockfile). Clés historiques Supabase désactivées par Yass le
+01/10 ; clé publishable « default » gardée (non supprimable), faille du point 5 théorique.
+Gestes 2 à 5 : décision de Yass attendue.*
 
 *Mis à jour le 2026-10-01 par la session « SETUP 4 », septième chantier : étape 7, points
 5 (migration 050) et 10 (secret des cartes Apple), écrits et testés (32/32 chacun), NON
