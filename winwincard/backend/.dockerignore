@@ -1,0 +1,7 @@
+# Jamais dans l'image : dépendances locales (réinstallées par npm ci), secrets
+# locaux, journaux.
+node_modules
+.env
+.env.*
+!.env.example
+npm-debug.log*

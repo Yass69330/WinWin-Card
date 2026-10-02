@@ -2006,6 +2006,31 @@ base, sans effet avec l'ancien code (qui exige le Pro+).
 **Décision de Yass attendue pour 2 à 5.** Autre voie possible, sans urgence :
 `railway config migrate` (réglages dans `.railway/railway.ts`, versionnés).
 
+**Relevé et décision de Yass (01/10).** Captures : Builder = Nixpacks, marqué
+« Deprecated » ; Start command `npm start`, Healthcheck `/health/db` et 30, Restart On
+Failure et 3 — **tous verrouillés par `railway.toml`** (champs non modifiables, la liste
+Builder ne s'ouvre pas), valeurs correctes. Déploiement `b3ba6f8` vert, `/health` →
+`v24.10.0`. **Décision : on garde Nixpacks ; changement de constructeur reporté à
+l'étape 20**, testé ce jour-là avec une vérification de carte iPhone sur le téléphone de
+Yass.
+
+**Ce que le verrou cache (01/10).** L'écran affiche les valeurs du FICHIER ; les valeurs
+ENREGISTRÉES pour le service (celles qui serviront sans le fichier) sont invisibles tant
+qu'il existe. La saisie dans le tableau de bord, prévue au geste 3, est impossible.
+Nixpacks sélectionnable après retrait : **non démontré, probablement non** — la
+documentation de Railway ne liste plus que Railpack et Dockerfile (Config as Code, relu le
+01/10) et le paramètre `builder` n'apparaît plus dans les champs documentés de
+`serviceInstanceUpdate` (API publique) ; une réponse du forum Railway, vue en résumé de
+recherche (page inaccessible depuis le conteneur), dit Nixpacks non sélectionnable. **Ce
+qui décidera : la valeur `builder` ENREGISTRÉE du service**, lisible par une requête en
+lecture seule de l'API publique (`serviceInstance`). Si elle vaut `NIXPACKS`, retirer le
+fichier garde Nixpacks. Sinon, **garder Nixpacks après le 01/12 est impossible** (le
+fichier cesse d'être lu ce jour-là) et l'étape 20 devra être faite avant le 01/12.
+Procédure transmise à Yass le 01/10 : 1. requête de lecture ; 2. si besoin, mise à jour
+des 4 réglages Deploy enregistrés par l'API pendant que le fichier, prioritaire, les
+neutralise ; 3. retrait de `railway.toml` par un commit (feu vert), vérifications ;
+retour : revert, valable jusqu'au 30/11.
+
 **Geste 1 — Node figé à 24.10.0 (01/10, feu vert de Yass).** `engines.node` : `24.10.0`
 (exact) ; `.nvmrc` : `24.10.0` (les deux sources disent enfin la même chose) ;
 `package-lock.json` régénéré par npm (`--package-lock-only`) : seule la ligne `engines` de
@@ -2017,6 +2042,112 @@ haute version avec `>=22.0.0`. **Hypothèses** : mise et la bibliothèque semver
 traitent une version exacte comme npm ; Nixpacks garde son archive épinglée. **Limite** :
 Node reste sans correctif de sécurité depuis octobre 2025 (inchangé). **Vérification après
 déploiement** : `/health` → `"node":"v24.10.0"`. **Retour arrière** : revert du commit.
+
+### Geste 2 — Dockerfile à la place de Nixpacks (préparé et testé le 02/10, NON poussé)
+
+**Décision de Yass (02/10).** Passage à un Dockerfile : Nixpacks ne tiendra pas après le
+01/12. Requête GraphiQL non faite. Champ « Railway Config File » relevé **vide** par Yass :
+`railway.toml` est lu à sa place par défaut (racine du dossier source) ; rien à vider le
+jour J.
+
+**Documentation Railway (relue le 02/10, dépôt `railwayapp/docs`).** Railway utilise un
+fichier nommé exactement `Dockerfile` à la racine du dossier source (`winwincard/backend`)
+et l'annonce par « Using detected Dockerfile! » ; il construit toujours avec un Dockerfile
+s'il en trouve un (le réglage Builder ne compte plus). Watch Paths : motifs depuis la racine
+du dépôt, `/winwincard/backend/**` couvre le Dockerfile ; aucun réglage à changer.
+
+**Contenu.** `winwincard/backend/Dockerfile` : image officielle **complète**
+`node:24.10.0-trixie` épinglée par empreinte (Debian 13) ; `ENV NODE_ENV=production` ;
+`npm ci --omit=dev` ; `CMD ["npm", "start"]`. `.dockerignore` (dépendances locales,
+`.env`, journaux).
+
+**EN DEUX PUSHS (proposition de Yass, retenue le 02/10).**
+- **2a.** Dockerfile + `.dockerignore`, et `railway.toml` **gardé** avec
+  `builder = "DOCKERFILE"` (valeur documentée par Railway, Config as Code). Le healthcheck
+  `/health/db` (30 s), le redémarrage On Failure (3) et la commande de démarrage restent
+  dans le fichier : la nouvelle image part **sous le garde-fou**.
+- **2b, un autre jour, avant la mi-novembre.** Suppression de `railway.toml`, puis
+  healthcheck et redémarrage remis dans le tableau de bord.
+- **Pourquoi c'est mieux qu'un seul push.** Le changement risqué, c'est-à-dire l'image,
+  est protégé par le healthcheck. Le déploiement sans garde-fou ne change plus que la
+  source des réglages, avec une image déjà éprouvée en production. Une seule chose
+  change à la fois.
+- **Pourquoi l'image complète et pas « slim ».** La version « slim » n'a pas le programme
+  `openssl` qui signe les cartes Apple (vérifié dans les deux images « slim »). L'installer
+  par `apt-get` à chaque construction fonctionnerait chez Railway, mais n'a pas pu être
+  essayé ici (miroirs Debian refusés par la politique réseau de l'environnement de
+  session) et ferait varier la version d'`openssl` d'une construction à l'autre. L'image
+  complète contient OpenSSL 3.5.1, figé par l'empreinte. Coût : 2,02 Go non compressés.
+- **Ce que Nixpacks posait sans le dire** (code source, `get_node_environment_variables`) :
+  `NODE_ENV=production` — **repris**, car il choisit le serveur de notifications Apple de
+  production (`apns.js:65`) ; `CI=true` et `NPM_CONFIG_PRODUCTION=false` — non repris
+  (aucun usage dans le code ; seule dépendance de développement : nodemon).
+
+**Essais (02/10, Docker 29.3.1 sur la machine de session).**
+- **Construction.** Le Dockerfile du contexte de construction est identique, octet pour
+  octet, à celui du dépôt. L'essai l'utilise avec **deux lignes de plus**, placées après
+  `FROM` : le certificat du proxy de la session, indispensable ici et absent en production.
+  Résultat : 213 paquets npm, image de 2,02 Go.
+- **Dans l'image, sans réseau.** Node v24.10.0, OpenSSL 3.5.1, `NODE_ENV=production`.
+- **Carte Apple signée par l'`openssl` de l'image,** avec une fausse chaîne de
+  certificats (fausse racine, faux WWDR, faux certificat de signature à phrase secrète) :
+  - empreintes du manifeste toutes justes ;
+  - signature vérifiée par un `openssl` indépendant (3.0.13, celui de la machine), avec un
+    condensat SHA-256 et la chaîne embarquée ;
+  - un manifeste altéré d'un octet est refusé.
+- **Bandeaux.** Trois thèmes (tampons, illustration, points) en trois tailles : les
+  9 images sont identiques, octet pour octet, au rendu fait hors de l'image (sharp 0.33.5,
+  resvg 2.6.2). Vérifiées à l'œil, polices comprises.
+- **Serveur.** Démarré par la commande de l'image (`npm start` → `node src/index.js`)
+  sur une base rejouée : `/health` → v24.10.0, `/health/db` → 200, et la vraie route
+  `/api/passes/:serial/apple` → 200 (`application/vnd.apple.pkpass`), signature vérifiée.
+
+**Hypothèses et limites.**
+- Les vrais certificats Apple ne sont pas testables ici : la carte iPhone de Yass, le jour
+  J, est la seule preuve possible.
+- Le système et OpenSSL sont figés par l'empreinte : aucun correctif de sécurité Debian
+  sans commit (comme sous Nixpacks aujourd'hui) ; la mise à jour relève de l'étape 20.
+- `npm start` tourne en processus principal ; l'arrêt propre relève de l'étape 14.
+- Une variable Railway `NODE_ENV` éventuelle l'emporte sur celle de l'image.
+- La première construction sera plus longue que d'habitude, l'image de base pesant environ
+  400 Mo compressés.
+
+**Premier déploiement sans `railway.toml` (push 2b) : réglages probables.**
+- Constructeur : ignoré (le Dockerfile l'emporte).
+- Commande de démarrage : probablement vide, donc `npm start` de l'image.
+- Healthcheck : probablement aucun.
+- Redémarrage : défaut de Railway, On Failure avec 10 essais.
+
+**Risque de ce déploiement (2b).** Sans healthcheck, Railway rend le nouveau conteneur actif
+dès son démarrage, au lieu d'attendre `/health/db`. Un conteneur qui ne démarrerait pas, ou
+ne lirait pas la base, remplacerait donc l'ancien au lieu d'être refusé : coupure jusqu'au
+retour arrière. Avec le découpage, c'est **très peu probable** : l'image sera déjà
+éprouvée en production par 2a, et seule la source des réglages change. Quelques requêtes
+peuvent aussi échouer pendant la bascule.
+
+**Push 2a (hors 07:30–09:15 UTC, à l'heure donnée par Yass).**
+1. Journal de construction : « Using detected Dockerfile! ».
+2. Le déploiement passe le healthcheck `/health/db`, toujours dans le fichier.
+3. `/health` → v24.10.0.
+4. Vérification d'une carte iPhone par Yass : une nouvelle carte installée (signature),
+   puis un scan, et la carte se met à jour (notification Apple de production).
+5. Le lendemain : `/health/cron` (cron de 08:00 UTC dans la nouvelle image).
+
+**Push 2b (un autre jour, avant la mi-novembre).**
+1. Suppression de `railway.toml`.
+2. Après le déploiement, dans Settings, désormais déverrouillés :
+   - Healthcheck Path `/health/db`, Timeout `30` ;
+   - Restart Policy On Failure, `3` ;
+   - commande de démarrage vide ou `npm start`, sinon prévenir.
+3. Appliquer et déployer : le second déploiement doit passer le healthcheck.
+4. Contrôler la page du déploiement : plus d'icône de fichier, bonnes valeurs.
+
+**Retour arrière.**
+- **2a :** Railway → Deployments → déploiement précédent (`b3ba6f8`, Nixpacks) →
+  Rollback, qui restaure son image et ses variables (si l'image est encore conservée par
+  l'offre). Puis `git revert` : retour à `builder = "nixpacks"`, valable jusqu'au 30/11.
+- **2b :** Rollback vers le déploiement 2a, puis `git revert` : le fichier revient,
+  valable jusqu'au 30/11.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
