@@ -414,6 +414,32 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt }) {
     verifier('fonction crediter_scan, carte d\'un autre marchand : refus « client_introuvable », rien écrit',
       [sql(`SELECT crediter_scan('${c.id}', '${M.points}', NULL, 500, 10, 'points', NULL, 'r', 'g', 'p') ->> 'reason'`), solde(c.id), lignes(c.id)], ['client_introuvable', 3, 0]);
   }
+
+  // ── 11. Renouvellement de session (étape 12a) ─────────────────────────────
+  titre('11. Renouvellement silencieux de la session');
+  {
+    const maintenant = Math.floor(Date.now() / 1000);
+    const longue = (claims, resteJours) => jwt.sign({ ...claims, iat: maintenant - (365 - resteJours) * 86400,
+      exp: maintenant + resteJours * 86400 }, secretJwt);
+    const boutique = { role: 'scanner', marchand_id: M.reseau, point_de_vente_id: B.b1, nom: 'Boutique 1', tv: 1 };
+    const r = await api('POST', '/api/scanner/renouveler', longue(boutique, 30));
+    const neuf = r.corps && r.corps.token ? jwt.verify(r.corps.token, secretJwt) : {};
+    const { iat: _i, exp: _e, ...champs } = neuf;
+    verifier('session longue à 30 jours de l\'échéance : renouvelée pour un an, mêmes champs',
+      [r.statut, champs, Math.round((neuf.exp - maintenant) / 86400)], [200, boutique, 365]);
+    verifier('… le jeton neuf scanne', (await scan(r.corps.token, client(M.reseau).serial)).statut, 200);
+    const marchand = { role: 'marchand', marchand_id: M.tampons, nom: 'Filet Tampons', tv: 1 };
+    const rm = await api('POST', '/api/scanner/renouveler', longue(marchand, 10));
+    verifier('session marchand (dashboard) : renouvelée aussi', [rm.statut, jwt.decode(rm.corps.token || '')?.role], [200, 'marchand']);
+    const courte = jwt.sign(marchand, secretJwt, { expiresIn: '7d' });
+    verifier('session courte (7 jours, « ne pas se souvenir ») : jamais prolongée',
+      [(await api('POST', '/api/scanner/renouveler', courte)).corps.error], ['session_courte']);
+    verifier('session révoquée par l\'admin : refusée (403)',
+      (await api('POST', '/api/scanner/renouveler', longue({ ...marchand, tv: 0 }, 30))).statut, 403);
+    const expiree = jwt.sign({ ...marchand, iat: maintenant - 366 * 86400, exp: maintenant - 60 }, secretJwt);
+    verifier('session déjà expirée : refusée (401), il faut se reconnecter',
+      (await api('POST', '/api/scanner/renouveler', expiree)).statut, 401);
+  }
 }
 
 module.exports = { FIXTURES, jouer, M, B };

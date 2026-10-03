@@ -2412,6 +2412,78 @@ tests/lancer.js` (variable `FILET_EN_PLUS` ajoutée à `lancer.js`).
 - L'étape 12 reste à faire : ne pas reproposer la carte après une erreur, le dire,
   délai maximal, 401/403/429.
 
+## 15 sexdecies. ÉTAPE 12 : LA CAISSE APRÈS UNE ERREUR (préparée le 03/10, NON POUSSÉE)
+
+**Diagnostic (03/10, observé dans le vrai écran, captures sur le banc).** Erreur réseau :
+« Erreur réseau : Failed to fetch » 3 s, puis la carte tenue est reproposée aussitôt.
+Pas de réponse : « Traitement… » sans fin (aucun délai). Session expirée (dont l'échéance
+d'un an, premières le 26/05/2027), révoquée, compte suspendu : message brut (« Token
+invalide ou expiré », « session_revoked », « account_suspended »), puis « ✓ Carte déjà
+scannée » alors que rien n'est passé, et la même erreur à chaque scan. Boutique coupée :
+écran de scan caméra éteinte, figé. Limiteur : « Erreur réseau : Unexpected token 'T'… »
+(le limiteur global répondait en texte).
+
+**Décisions de Yass (03/10).** Validées : renouvellement silencieux de la session (1),
+un nouvel essai automatique avant le panneau (2), délai maximal de 15 s (3), découpage
+12a puis 12b (5). **Refusée : toute vérification de session à l'ouverture ou au retour
+au premier plan (4).** Contrainte absolue : aucune requête régulière en plus, aucun
+ralentissement ; le scan normal ne change en rien (ni tap, ni écran, ni temps) ; seuls
+appels en plus autorisés : le renouvellement (rare) et le nouvel essai (après une
+erreur). Yass juge ces correctifs non primordiaux. Calendrier : push 2b de l'étape 8
+d'abord, seul ; 12a et 12b un autre jour.
+
+**12a — serveur.** (1) Le limiteur global répond en JSON `{ error: 'rate_limited' }`
+(`index.js`), avec `Retry-After`. (2) `POST /api/scanner/renouveler` (`scanner-auth.js`) :
+mêmes contrôles que le scan (`authScanner` : expiré 401, révoqué ou suspendu 403), rend
+un jeton neuf d'un an avec exactement les mêmes champs ; une session courte (7 jours,
+« ne pas se souvenir ») n'est jamais prolongée (400 `session_courte`). Filet : bloc 11,
+6 vérifications ; `npm test` 92/92.
+
+**12b — écrans** (scanner et onglet scanner du dashboard, même règle).
+- Scan normal inchangé : un appel, mêmes écrans ; les ajouts (minuteur, lecture de la
+  date d'expiration dans le jeton, sans requête) ne coûtent rien.
+- Délai maximal de 15 s pour tout le passage. Échec passager (réseau, 5xx, limiteur)
+  arrivé avant : UN nouvel essai automatique après 1 s, même clé (jamais de double
+  crédit). S'il échoue encore, ou si le délai est écoulé : panneau « Connexion perdue —
+  ce passage n'est peut-être pas enregistré », Réessayer (même clé, sans retaper le
+  montant) / Annuler ; la détection est en pause, la carte n'est plus reproposée.
+- 401, `session_revoked` : panneau « Session expirée » → écran de connexion, identifiant
+  pré-rempli (`ww_scanner_identifiant`, jamais le mot de passe). `account_suspended` :
+  « Compte suspendu ». `access_disabled` : « Caisse désactivée » (plus d'écran figé).
+  Limiteur : « Trop de demandes — réessayez dans N min ».
+- Bandeau de la carte tenue : « ✓ Prénom — déjà scanné » seulement après un vrai crédit ;
+  « Carte non enregistrée » après un refus ou « Annuler » ; « ⚠️ Passage non confirmé »
+  après une connexion perdue.
+- Refus restants en mots simples : carte inconnue, code invalide, montant.
+- Renouvellement : après un scan RÉUSSI seulement, si la session longue expire dans
+  moins de 60 jours (lu dans le jeton) ; au plus une tentative par chargement, après la
+  réponse. Une fois par an et par appareil.
+
+**Tests.** Nouveau `tests/navigateur/caisse_erreurs.js` : les cas du diagnostic dans le
+vrai écran, plus la contrainte (aucune requête à l'ouverture, une seule par scan normal,
+renouvellement seulement quand il faut). `cle_ecrans.js` adapté (un échec seul est
+désormais rattrapé par le nouvel essai automatique). `FILET_EN_PLUS` accepte plusieurs
+modules. **133/133**, 3 passages, Node 24.10.0 :
+`NODE_PATH=$(npm root -g) FILET_EN_PLUS=tests/navigateur/cle_ecrans.js,tests/navigateur/caisse_erreurs.js node tests/lancer.js`.
+Preuve : sur les écrans et le serveur d'avant, la route de renouvellement n'existe pas
+(6 KO) et le test navigateur s'arrête au premier comportement manquant (aucun nouvel
+essai automatique).
+
+**Hypothèses et limites.**
+- Une caisse qui ne réussit aucun scan pendant les 60 jours avant l'échéance (commerce
+  fermé deux mois) n'est pas renouvelée : elle affichera « Session expirée » et l'écran
+  de connexion. Le dashboard n'est renouvelé que par les scans de son onglet : une
+  session de dashboard sans scan expire au bout d'un an (écran de connexion, inchangé).
+- Session volée : valable tant qu'elle sert (hypothèse acceptée, décision 1) ; la
+  révocation par l'admin la coupe.
+- Le nouvel essai sur un 429 échoue presque toujours (fenêtre de 15 min) : une requête
+  de plus, sans effet. Le limiteur lui-même (compte par adresse du proxy de Railway)
+  reste l'étape 17.
+- Les messages simples reposent sur les textes d'erreur du serveur (« Invalid code… »,
+  « points must be… », « Accès refusé ») ; les tests les surveillent.
+- Rangement : commits locaux sur la branche `etape12` (non poussée), pour que le push
+  2b parte seul sur la branche de production.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
@@ -2547,6 +2619,15 @@ plus `landing_premium`, un enregistrement Pro+ le contient toujours.
 pilotage. Elles envoient bien des pushes ; les omettre aurait laissé des trous dans
 le registre. Rattachées aux sources `ajustement`, `annulation` et `scan`.
 
+**2026-10-03 — choix de réalisation de l'étape 12, pris sans pilotage.** Dans le
+périmètre validé : (1) le renouvellement se déclenche après un scan réussi, jamais à
+l'ouverture (cohérent avec le refus de la décision 4) ; (2) le nouvel essai automatique
+vaut aussi pour le limiteur (une requête de plus, sans effet le plus souvent) ; (3)
+l'identifiant de connexion est gardé en `localStorage` pour être pré-rempli (jamais le
+mot de passe) ; (4) une session courte de 7 jours n'est jamais prolongée ; (5)
+« Accès refusé » (rôle) est traité comme une session expirée ; (6) textes des panneaux et
+du bandeau. Raisons au §15 sexdecies.
+
 **2026-10-03 — choix de réalisation de l'étape 11a, pris sans pilotage.** Dans le
 périmètre validé, mais non tranchés par Yass : (1) un renvoi (même clé) renvoie la
 poussée Apple et la mise à jour de l'objet Google, pas le message Google ; (2) le renvoi
@@ -2561,6 +2642,14 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-10-03 par la session « SETUP 4 », onzième chantier : étape 12
+(§15 sexdecies), la caisse après une erreur : 12a (limiteur en JSON, renouvellement de
+session) et 12b (délai de 15 s, un nouvel essai automatique, panneaux en mots simples,
+bandeau juste) écrits et testés, 133/133 ; NON POUSSÉS, commits locaux sur la branche
+`etape12`. Décisions de Yass : 1, 2, 3 et 5 validées, 4 refusée (aucune vérification de
+session à l'ouverture), aucune requête régulière en plus. Push 2b de l'étape 8 d'abord,
+seul.*
 
 *Mis à jour le 2026-10-03 par la session « SETUP 4 », dixième chantier : étape 11
 (§15 quindecies). 11a, le crédit incassable : migration 051 (exécutée par Yass avant le

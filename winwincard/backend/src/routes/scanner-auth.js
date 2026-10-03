@@ -3,6 +3,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const supabase = require('../services/supabase');
 const asyncHandler = require('../utils/asyncHandler');
+const { authScanner } = require('../middleware/auth');
 
 // POST /api/scanner/login — login unifié de la PWA scanner (multi-boutiques, 3c)
 //
@@ -106,5 +107,31 @@ router.post('/login', asyncHandler(async (req, res) => {
     type_programme: marchand.type_programme,
   });
 }));
+
+// POST /api/scanner/renouveler — renouvellement silencieux de la session (étape 12a)
+//
+// Une caisse ne doit pas tomber un matin parce que sa session d'un an arrive à
+// échéance (premières échéances : 26/05/2027). L'écran appelle cette route
+// APRÈS un scan réussi, et seulement si sa session longue expire dans moins de
+// 60 jours : une fois par an et par appareil, jamais au chargement, jamais en
+// boucle. Aucun autre appel n'est ajouté au scan.
+//
+// Mêmes contrôles que le scan (authScanner) : jeton expiré → 401 ; révoqué ou
+// marchand suspendu → 403. Rend un jeton neuf d'un an, avec EXACTEMENT les
+// mêmes champs (rôle, marchand, boutique, nom, version de jeton). Une session
+// courte (« ne pas se souvenir », 7 jours, ordinateur partagé) n'est jamais
+// prolongée : elle doit expirer.
+// HYPOTHÈSE acceptée (décision du 03/10) : une session volée reste valable tant
+// qu'elle sert ; la révocation par l'admin (token_version) la coupe.
+const SESSION_LONGUE_MIN_S = 300 * 24 * 3600;
+
+router.post('/renouveler', authScanner, (req, res) => {
+  const { iat, exp, ...champs } = jwt.decode(req.headers.authorization.slice(7)) || {};
+  if (!iat || !exp || exp - iat < SESSION_LONGUE_MIN_S) {
+    return res.status(400).json({ error: 'session_courte' });
+  }
+  const token = jwt.sign(champs, process.env.JWT_SECRET, { expiresIn: '365d' });
+  res.json({ token });
+});
 
 module.exports = router;
