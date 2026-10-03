@@ -2364,6 +2364,54 @@ qu'après le retour arrière du code.
 - Hors périmètre : ajustement sans ligne (étape 13), parrainage (14), route machines
   (P6), clé obligatoire (après 11b, quand les journaux montrent 100 % de scans avec clé).
 
+**11a POUSSÉ et VÉRIFIÉ (03/10).** `0a28d37`, poussé à 12:50 UTC. Tests de Yass en
+production : Hamza Salon (tampons, carte « Test Docker » de Yass) — scan, remise,
+annulation, refus d'annuler un scan antérieur à un ajustement : conformes ; chiffre de
+la carte posé par la base (« +1 — … : 2/9 pts ») ; Pizza Sabbioni (points) : franchissement
+et remise avec report conformes ; code de secours ; aucun 500. Deux constats, tous deux
+hors 11a : un ajustement jusqu'au seuil envoie « Points mis à jour », pas « Merci pour ta
+fidélité » (question produit pour l'étape 13) ; annuler une remise n'annule pas la
+demande d'avis programmée (§16).
+
+### 11b — les écrans envoient la clé (03/10)
+
+**Ce que fait 11b** (`scanner/index.html`, `dashboard/index.html`, aucun code serveur) :
+chaque scan voulu (carte + montant) reçoit une clé, envoyée avec le scan. La clé est
+**gardée** tant qu'aucune réponse claire n'est arrivée (erreur réseau, réponse
+illisible, 5xx) : un nouvel essai sur la même carte (serial complet ou code de secours)
+avec le même montant reprend la même clé, et le serveur répond « déjà enregistré » au
+lieu de recréditer. Elle est **effacée** dès qu'une réponse claire arrive (succès ou
+refus) : le scan suivant, même de la même carte (« + Ajouter un tampon »), est un nouveau
+scan. Gardée 10 min au plus, en `localStorage` (survit au réflexe « fermer/rouvrir ») ;
+UUID par `crypto.randomUUID`, repli `getRandomValues` (iOS < 15.4). Les écrans affichent
+« Déjà enregistré — … rien n'a été ajouté », et des messages clairs pour les refus
+`scan_cancelled` et `idempotency_conflict`.
+
+**Tests.** `npm test` : 86/86 (serveur inchangé). **Test navigateur** (nouveau,
+`tests/navigateur/cle_ecrans.js`, hors `npm test` car il exige Playwright, présent dans
+le conteneur cloud) : les vrais écrans dans Chromium, contre le serveur et la base du
+filet ; le serveur crédite et la réponse est coupée avant l'écran. 15/15 (101/101 avec
+le filet, 3 passages) : réponse perdue puis nouvel essai, erreur 500 puis « + Ajouter un
+tampon », écran rechargé entre-temps, nouvel essai par code de secours, clé de plus de
+10 min (nouveau scan), scan annulé entre-temps (refus clair, puis le suivant crédite),
+points (même montant : une fois ; autre montant : nouveau scan), onglet du dashboard.
+**Preuve** : sur les écrans d'avant, le nouvel essai crédite deux fois (`2|2`).
+Lancement : `NODE_PATH=$(npm root -g) FILET_EN_PLUS=tests/navigateur/cle_ecrans.js node
+tests/lancer.js` (variable `FILET_EN_PLUS` ajoutée à `lancer.js`).
+
+**Hypothèses et limites.**
+- Un même achat retapé dans les 10 min après une erreur sans réponse est pris pour un
+  nouvel essai (« déjà enregistré » si le premier est passé). Si c'était vraiment un
+  second achat, la caissière rescanne : la réponse claire a effacé la clé, le scan
+  suivant crédite.
+- Un autre montant, une autre carte scannée entre-temps, ou plus de 10 min = un nouveau
+  scan : un double crédit reste possible dans ces cas, visible dans l'historique et
+  annulable.
+- Un écran resté ouvert depuis avant le push n'envoie pas de clé jusqu'à son
+  rechargement (TRANSITION, acceptée par le serveur).
+- L'étape 12 reste à faire : ne pas reproposer la carte après une erreur, le dire,
+  délai maximal, 401/403/429.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
@@ -2456,8 +2504,13 @@ token marchand mono-site toujours non révocable).
   l'admin reçoit un 500 avec le texte de PostgreSQL. Un 400 clair dans `admin.js`
   (seuil entier ≥ 1) reste à faire. Mineur : Yass est le seul utilisateur de l'admin.
 - **Demandes de scan sans clé acceptées : TRANSITION (03/10).** Tant qu'elles le sont,
-  un renvoi sans clé crédite deux fois (deux lignes, annulable). À rendre obligatoire
-  après 11b, quand les journaux montrent 100 % de scans avec clé.
+  un renvoi sans clé crédite deux fois (deux lignes, annulable). Les écrans envoient la
+  clé depuis 11b ; à rendre obligatoire quand la part des scans avec clé
+  (`scans.cle_idempotence`, par jour) reste à 100 % plusieurs jours.
+- **Annuler une remise n'annule pas la demande d'avis programmée (03/10, mineur).**
+  Constaté par Yass sur Hamza Salon : la remise programme la demande d'avis à +30 min
+  (minuteur en mémoire, `services/avis.js`) ; l'annulation du scan ne la retire pas. Le
+  client reçoit donc la demande d'avis d'une récompense annulée. Antérieur à l'étape 11.
 
 **Toujours reportés (raison valable) :** #4 (re-sync Google, arbitrage), #5, #6, #8,
 #10, #11 (corriger listing+horloge ENSEMBLE, jamais séparément), #13 (parké).
@@ -2509,11 +2562,13 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 
 ---
 
-*Mis à jour le 2026-10-03 par la session « SETUP 4 », dixième chantier : étape 11a
-(§15 quindecies), le crédit incassable : migration 051 (`crediter_scan`, clé
-d'idempotence, garde-fous), `scan.js` en un seul appel ; filet 86/86 sous Node 24.10.0.
-Dette découverte : message brut de l'admin sur un seuil ≤ 0 ; demandes sans clé en
-transition (§16). Push 2b de l'étape 8 reporté au 04/10.*
+*Mis à jour le 2026-10-03 par la session « SETUP 4 », dixième chantier : étape 11
+(§15 quindecies). 11a, le crédit incassable : migration 051 (exécutée par Yass avant le
+push, écarts IDENTIQUE), `scan.js` en un seul appel (`0a28d37`, vérifié par Yass en
+production). 11b : les écrans envoient la clé et la gardent après une erreur ; filet
+86/86 et test navigateur 15/15. Dette découverte : message brut de l'admin sur un seuil
+≤ 0 ; demandes sans clé en transition ; annuler une remise n'annule pas la demande
+d'avis (§16). Push 2b de l'étape 8 reporté au 04/10.*
 
 *Mis à jour le 2026-10-02 par la session « SETUP 4 », neuvième chantier : étape 10
 (§15 quaterdecies), filet de tests argent et scan, `npm test`, 62/62 ; il attrape les trois

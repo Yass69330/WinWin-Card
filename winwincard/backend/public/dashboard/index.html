@@ -491,6 +491,8 @@
           </div>
         </div>
         <div id="sc-reset-banner" class="sc-reset-banner" style="display:none" data-i18n="counterReset">↩️ Counter reset</div>
+        <!-- Renvoi d'un scan déjà crédité (étape 11b) : rien n'a été ajouté -->
+        <div id="sc-deja" class="sc-reset-banner" style="display:none"></div>
         <div id="sc-error" class="sc-result-error" style="display:none"></div>
         <!-- Désambiguïsation collision backup code : boutons prénom cliquables -->
         <div id="sc-candidates" style="display:none;flex-direction:column;gap:10px;margin-bottom:8px">
@@ -757,6 +759,9 @@ const I18N = {
     lockedScannedAnon:'✓ Card already scanned',
     lockedHint:'Move the card away to scan the next client',
     addStamp:'+ Add a stamp', addPoints:'+ Add points',
+    dejaEnregistre:'Already recorded — this visit had gone through, nothing was added.',
+    refusAnnule:'This visit was undone in the meantime. Scan again to record it.',
+    refusConflit:'Conflicting request — nothing was recorded. Scan again.',
     cameraError:({msg})=>'Cannot access camera: '+msg, cameraErrorName:'Camera error',
     unknownError:'Unknown error', errorName:'Error',
     pushNotifs:'Push notifications',
@@ -835,6 +840,9 @@ const I18N = {
     lockedScannedAnon:'✓ Carte déjà scannée',
     lockedHint:'Écartez la carte pour scanner le client suivant',
     addStamp:'+ Ajouter un tampon', addPoints:'+ Ajouter des points',
+    dejaEnregistre:'Déjà enregistré — ce passage avait bien été pris en compte, rien n\'a été ajouté.',
+    refusAnnule:'Ce passage a été annulé entre-temps. Rescannez pour l\'enregistrer.',
+    refusConflit:'Demande en conflit — rien n\'a été enregistré. Rescannez.',
     cameraError:({msg})=>"Impossible d'accéder à la caméra : "+msg, cameraErrorName:'Erreur caméra',
     unknownError:'Erreur inconnue', errorName:'Erreur',
     pushNotifs:'Notifications push',
@@ -1597,6 +1605,52 @@ document.getElementById('modal-sc-confirm').addEventListener('click', e => {
   }
 });
 
+// ── Clé d'idempotence (étape 11b) — même règle que scanner/index.html ──────
+// Une clé par scan VOULU (carte + montant), envoyée avec le scan : le serveur ne
+// crédite jamais deux fois la même clé (migration 051). GARDÉE tant qu'aucune
+// réponse claire n'est arrivée (erreur réseau, réponse illisible, 5xx) : un
+// nouvel essai sur la même carte avec le même montant reprend la même clé.
+// EFFACÉE dès qu'une réponse claire arrive : le scan suivant en prend une neuve.
+// CLE_DUREE_MS au plus ; localStorage pour survivre à un rechargement.
+const CLE_DUREE_MS = 10 * 60 * 1000;
+const CLE_STOCKAGE = 'ww_dashboard_cle_en_attente';
+let _cleEnAttente = null;
+
+function nouvelleCle() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  // iOS < 15.4 : UUID v4 tiré de getRandomValues.
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
+// Même carte, serial complet (caméra) ou code de secours (6 derniers caractères).
+function memeCarte(a, b) {
+  a = String(a || '').toLowerCase(); b = String(b || '').toLowerCase();
+  if (!a || !b) return false;
+  return a === b || (a.length >= 6 && b.length >= 6 && (a.endsWith(b) || b.endsWith(a)));
+}
+
+function cleDuScan(serial, points) {
+  let e = _cleEnAttente;
+  if (!e) { try { e = JSON.parse(localStorage.getItem(CLE_STOCKAGE) || 'null'); } catch { e = null; } }
+  const montant = points == null ? null : points;
+  if (e && e.cle && memeCarte(e.serial, serial) && e.points === montant
+      && Date.now() - e.cree < CLE_DUREE_MS) {
+    _cleEnAttente = e;
+    return e.cle;
+  }
+  _cleEnAttente = { serial, points: montant, cle: nouvelleCle(), cree: Date.now() };
+  try { localStorage.setItem(CLE_STOCKAGE, JSON.stringify(_cleEnAttente)); } catch {}
+  return _cleEnAttente.cle;
+}
+
+function oublierCle() {
+  _cleEnAttente = null;
+  try { localStorage.removeItem(CLE_STOCKAGE); } catch {}
+}
+
 async function submitScanDashboard(serial, points) {
   if (SC.processing) return;
   SC.processing = true;
@@ -1604,7 +1658,7 @@ async function submitScanDashboard(serial, points) {
   statusEl.textContent = t('processing'); statusEl.style.display = 'block';
   try { navigator.vibrate && navigator.vibrate(50); } catch {}
   try {
-    const body = { serial_number: serial };
+    const body = { serial_number: serial, cle_idempotence: cleDuScan(serial, points) };
     if (points != null) body.points = points;
     const res = await fetch('/api/scan', {
       method: 'POST',
@@ -1612,6 +1666,9 @@ async function submitScanDashboard(serial, points) {
       body: JSON.stringify(body),
     });
     const data = await res.json();
+    // Réponse claire (succès ou refus) : la clé a servi. 5xx : le crédit a pu
+    // passer malgré l'erreur → clé gardée pour un nouvel essai sur cette carte.
+    if (res.status < 500) oublierCle();
     statusEl.style.display = 'none';
     SC.scanning = false;
     S.scans = null; // invalidate scan history cache
@@ -1661,9 +1718,11 @@ function showScanResult(data, ok, serial) {
   document.getElementById('sc-reset-banner').style.display  = 'none';
   document.getElementById('sc-error').style.display         = 'none';
   document.getElementById('sc-progress-section').style.display = ok ? '' : 'none';
+  document.getElementById('sc-deja').style.display = 'none';
 
   if (!ok) {
-    document.getElementById('sc-error').textContent = data.error || t('unknownError');
+    const refusNomme = { scan_cancelled: 'refusAnnule', idempotency_conflict: 'refusConflit' }[data.error];
+    document.getElementById('sc-error').textContent = refusNomme ? t(refusNomme) : (data.error || t('unknownError'));
     document.getElementById('sc-error').style.display = 'block';
     document.getElementById('sc-name').textContent = t('errorName');
     document.getElementById('sc-avatar').textContent = '✗';
@@ -1690,6 +1749,13 @@ function showScanResult(data, ok, serial) {
 
   document.getElementById('sc-name').textContent   = prenom || '–';
   document.getElementById('sc-serial').textContent = serial;
+
+  // Renvoi d'un scan déjà crédité (même clé) : même résultat, rien n'a été ajouté.
+  if (data.deja_enregistre) {
+    const deja = document.getElementById('sc-deja');
+    deja.textContent = t('dejaEnregistre');
+    deja.style.display = 'block';
+  }
 
   // Texte non clampé : un scan points peut franchir le seuil en un coup (ex.
   // 480 + 50 = 530 pour un seuil à 500) → on affiche la valeur réelle "530/500"

@@ -416,4 +416,4 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt }) {
   }
 }
 
-module.exports = { FIXTURES, jouer };
+module.exports = { FIXTURES, jouer, M, B };
