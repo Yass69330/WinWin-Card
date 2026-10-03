@@ -214,58 +214,124 @@ router.get('/:id([0-9a-f\\-]{36})', authMarchand, asyncHandler(async (req, res) 
     client.date_anniversaire = null;
   }
 
-  const { data: scans, error: errScans } = await supabase
-    .from('scans')
-    .select('id, date_scan, stored_value_avant, stored_value_apres, point_de_vente_id, points_de_vente(nom), annule_le')
-    .eq('client_id', id)
-    .order('date_scan', { ascending: false })
-    .limit(10);
+  // Scans et ajustements (étape 13b) lus EN PARALLÈLE : la fiche n'attend pas
+  // plus longtemps qu'avant. Les ajustements ne sont pas des visites : ils
+  // vivent dans leur propre table et ne sont mêlés aux scans qu'à l'affichage.
+  const [
+    { data: scans, error: errScans },
+    { data: ajustements, error: errAjustements },
+  ] = await Promise.all([
+    supabase
+      .from('scans')
+      .select('id, date_scan, stored_value_avant, stored_value_apres, point_de_vente_id, points_de_vente(nom), annule_le')
+      .eq('client_id', id)
+      .order('date_scan', { ascending: false })
+      .limit(10),
+    supabase
+      .from('ajustements')
+      .select('id, date_ajustement, stored_value_avant, stored_value_apres, annule_le')
+      .eq('client_id', id)
+      .eq('marchand_id', req.marchandId)
+      .order('date_ajustement', { ascending: false })
+      .limit(10),
+  ]);
 
   if (errScans) return res.status(500).json({ error: errScans.message });
+  // Journal illisible : la fiche s'affiche quand même, sans les ajustements.
+  if (errAjustements) console.error('[clients] fiche : ajustements illisibles :', errAjustements.message);
 
-  res.json({ client, scans: scans || [] });
+  res.json({ client, scans: scans || [], ajustements: ajustements || [] });
 }));
 
 // PATCH /api/clients/:id — modifier prénom et/ou points
+//
+// Points (étape 13b) : ajustement VÉRIFIÉ et TRACÉ, en une transaction
+// (ajuster_solde, migration 052). L'écran envoie le solde qu'il affichait
+// (stored_value_attendu) : si un scan est passé entre-temps, refus 409
+// 'solde_change' avec le solde actuel, rien d'écrit — plus de scan effacé.
+// Sans stored_value_attendu (écran d'avant l'étape 13b) : ajusté sans
+// vérification, mais tracé (TRANSITION).
 router.patch('/:id([0-9a-f\\-]{36})', authMarchand, asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { prenom, stored_value } = req.body;
+  const { prenom, stored_value, stored_value_attendu } = req.body;
 
-  const updates = {};
+  let prenomPropre;
   if (prenom !== undefined) {
-    const prenomPropre = String(prenom).trim().slice(0, 50);
+    prenomPropre = String(prenom).trim().slice(0, 50);
     if (!prenomPropre) return res.status(400).json({ error: 'Invalid first name' });
-    updates.prenom = prenomPropre;
   }
+  let nouveau;
   if (stored_value !== undefined) {
-    const val = parseInt(stored_value, 10);
-    if (isNaN(val) || val < 0 || val > 1000000) return res.status(400).json({ error: 'stored_value must be an integer between 0 and 1000000' });
-    updates.stored_value = val;
+    nouveau = parseInt(stored_value, 10);
+    if (isNaN(nouveau) || nouveau < 0 || nouveau > 1000000) return res.status(400).json({ error: 'stored_value must be an integer between 0 and 1000000' });
   }
-  if (Object.keys(updates).length === 0) {
+  let attendu = null;
+  if (stored_value_attendu !== undefined && stored_value_attendu !== null) {
+    attendu = parseInt(stored_value_attendu, 10);
+    if (isNaN(attendu) || attendu < 0) return res.status(400).json({ error: 'stored_value_attendu must be a non-negative integer' });
+  }
+  if (prenomPropre === undefined && nouveau === undefined) {
     return res.status(400).json({ error: 'At least one field required: prenom or stored_value' });
   }
 
-  // UPDATE atomique : la vérification d'appartenance est dans le WHERE (id +
-  // marchand_id + deleted_at). Plus de read-then-write : une seule requête.
-  const { data: updated, error: errUpdate } = await supabase
-    .from('clients')
-    .update(updates)
-    .eq('id', id)
-    .eq('marchand_id', req.marchandId)
-    .is('deleted_at', null)
-    .select('id, prenom, stored_value, created_at, pass_serial_number')
-    .single();
+  let ajustement = null;
+  if (nouveau !== undefined) {
+    const { data: aj, error: errAj } = await supabase.rpc('ajuster_solde', {
+      p_client_id: id, p_marchand_id: req.marchandId, p_attendu: attendu, p_nouveau: nouveau,
+    });
+    if (errAj) return res.status(500).json({ error: errAj.message });
+    if (!aj || aj.ok !== true) {
+      if (aj && aj.reason === 'solde_change') {
+        return res.status(409).json({ error: 'solde_change', stored_value: aj.stored_value });
+      }
+      return res.status(404).json({ error: 'Client not found' });
+    }
+    ajustement = aj;
+  }
+
+  // Prénom : UPDATE atomique, appartenance vérifiée dans le WHERE. Sans prénom,
+  // simple relecture pour rendre la fiche à jour.
+  const CHAMPS = 'id, prenom, stored_value, created_at, pass_serial_number';
+  let requete = prenomPropre !== undefined
+    ? supabase.from('clients').update({ prenom: prenomPropre })
+    : supabase.from('clients').select(CHAMPS);
+  requete = requete.eq('id', id).eq('marchand_id', req.marchandId).is('deleted_at', null);
+  if (prenomPropre !== undefined) requete = requete.select(CHAMPS);
+  const { data: updated, error: errUpdate } = await requete.single();
 
   if (errUpdate || !updated) return res.status(404).json({ error: 'Client not found' });
 
-  // Si stored_value modifié : mettre à jour le pass Apple en arrière-plan
-  if (updates.stored_value !== undefined && updated.pass_serial_number) {
-    syncPassAfterAdjustment(updated.pass_serial_number, req.marchandId, updated.prenom, updates.stored_value)
+  // Solde réellement modifié : mettre à jour la carte en arrière-plan (message
+  // « Points mis à jour », inchangé — décision de Yass du 03/10).
+  if (ajustement && !ajustement.inchange && updated.pass_serial_number) {
+    syncPassAfterAdjustment(updated.pass_serial_number, req.marchandId, updated.prenom, ajustement.stored_value)
       .catch(e => console.error('[clients] sync pass:', e.message));
   }
 
-  res.json({ id: updated.id, prenom: updated.prenom, stored_value: updated.stored_value, created_at: updated.created_at });
+  res.json({
+    id: updated.id, prenom: updated.prenom, stored_value: updated.stored_value, created_at: updated.created_at,
+    ajustement_id: ajustement ? ajustement.ajustement_id || null : null,
+  });
+}));
+
+// POST /api/clients/ajustements/:ajId/annuler — annuler un ajustement (étape 13b)
+// S'il est le dernier mouvement actif du client et que le solde n'a pas bougé
+// depuis (annuler_ajustement, migration 052) ; sinon 409 avec la raison. Même
+// resynchronisation de la carte que l'annulation d'un scan.
+router.post('/ajustements/:ajId([0-9a-f\\-]{36})/annuler', authMarchand, asyncHandler(async (req, res) => {
+  const { data, error } = await supabase.rpc('annuler_ajustement', {
+    p_ajustement_id: req.params.ajId, p_marchand_id: req.marchandId,
+  });
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data || data.ok !== true) {
+    return res.status(409).json({ ok: false, reason: (data && data.reason) || 'refus' });
+  }
+
+  const { data: client } = await supabase.from('clients').select('prenom').eq('id', data.client_id).single();
+  syncPassAfterAdjustment(data.serial, req.marchandId, client?.prenom || '', data.stored_value, 'annulation')
+    .catch(e => console.error('[clients] annulation ajustement resync:', e.message));
+
+  res.json({ ok: true, stored_value: data.stored_value });
 }));
 
 // `source` : 'ajustement' (édition des points depuis le dashboard) ou

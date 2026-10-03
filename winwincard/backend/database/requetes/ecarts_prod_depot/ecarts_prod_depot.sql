@@ -6,8 +6,8 @@
 -- SQL Editor de Supabase, puis « Run ». Moins de 40 lignes rendues.
 --
 -- État du dépôt figé ci-dessous (VALUES « depot ») : base rejouée depuis le
--- dépôt, 51 fichiers (schema.sql, migrations jusqu'à
--- migration_051_credit_incassable.sql, rgpd_effacement.sql), PostgreSQL local.
+-- dépôt, 52 fichiers (schema.sql, migrations jusqu'à
+-- migration_052_ajustements_traces.sql, rgpd_effacement.sql), PostgreSQL local.
 -- La requête photographie la base où elle tourne et ne rend que les ÉCARTS :
 --   plateforme : TRUNCATE / REFERENCES / TRIGGER hérités des privilèges par
 --                défaut de Supabase — non consignés, décision du 2026-09-29 ;
@@ -17,6 +17,7 @@
 -- ============================================================================
 WITH depot(categorie, objet, valeur) AS (VALUES
   ('droits_colonnes', 'droits posés colonne par colonne', '0'),
+  ('droits_donnees', 'ajustements → service_role', 'rawd'),
   ('droits_donnees', 'avis_clics → service_role', 'rawd'),
   ('droits_donnees', 'avis_clics_id_seq → service_role', 'rU'),
   ('droits_donnees', 'clients → service_role', 'rawd'),
@@ -38,7 +39,9 @@ WITH depot(categorie, objet, valeur) AS (VALUES
   ('droits_donnees', 'workflows → service_role', 'rawd'),
   ('evenement', 'ensure_rls', 'ddl_command_end | O | CREATE TABLE,CREATE TABLE AS,SELECT INTO | rls_auto_enable() | postgres'),
   ('fonction', 'admin_marchands_stats()', 'jsonb | sql | definer=false | s | - | code=ca8a05d052 | exec=111 | postgres'),
-  ('fonction', 'annuler_scan(p_scan_id uuid, p_marchand_id uuid)', 'jsonb | plpgsql | definer=false | v | - | code=3b108bb459 | exec=111 | postgres'),
+  ('fonction', 'ajuster_solde(p_client_id uuid, p_marchand_id uuid, p_attendu integer, p_nouveau integer)', 'jsonb | plpgsql | definer=false | v | search_path=public | code=fde225517c | exec=001 | postgres'),
+  ('fonction', 'annuler_ajustement(p_ajustement_id uuid, p_marchand_id uuid)', 'jsonb | plpgsql | definer=false | v | search_path=public | code=f04ae7f4dd | exec=001 | postgres'),
+  ('fonction', 'annuler_scan(p_scan_id uuid, p_marchand_id uuid)', 'jsonb | plpgsql | definer=false | v | - | code=4b3c2114c1 | exec=111 | postgres'),
   ('fonction', 'credit_referral(p_parrain_client_id uuid, p_bonus_points integer)', 'TABLE(stored_value_avant integer, stored_value_apres integer) | plpgsql | definer=false | v | - | code=3a1baf914f | exec=111 | postgres'),
   ('fonction', 'crediter_scan(p_client_id uuid, p_marchand_id uuid, p_point_de_vente_id uuid, p_max_value integer, p_montant integer, p_type_programme text, p_cle uuid, p_msg_remise text, p_msg_recompense text, p_msg_progression text)', 'jsonb | plpgsql | definer=false | v | search_path=public | code=e6adbd0420 | exec=001 | postgres'),
   ('fonction', 'effacer_client(p_client_id uuid, p_marchand_id uuid)', 'void | plpgsql | definer=true | v | - | code=e0cc0950ba | exec=111 | postgres'),
@@ -46,6 +49,7 @@ WITH depot(categorie, objet, valeur) AS (VALUES
   ('fonction', 'increment_stored_value(p_client_id uuid, p_max_value integer, p_amount integer, p_type_programme text)', 'TABLE(stored_value_avant integer, stored_value_apres integer, is_reset boolean) | plpgsql | definer=false | v | - | code=d4b664ce21 | exec=111 | postgres'),
   ('fonction', 'rls_auto_enable()', 'event_trigger | plpgsql | definer=true | v | search_path=pg_catalog | code=2965a64617 | exec=111 | postgres'),
   ('fonction', 'set_updated_at()', 'trigger | plpgsql | definer=false | v | - | code=d258fba5fe | exec=111 | postgres'),
+  ('proprietaire', 'ajustements', 'postgres'),
   ('proprietaire', 'avis_clics', 'postgres'),
   ('proprietaire', 'avis_clics_id_seq', 'postgres'),
   ('proprietaire', 'clients', 'postgres'),
@@ -64,6 +68,7 @@ WITH depot(categorie, objet, valeur) AS (VALUES
   ('proprietaire', 'scans', 'postgres'),
   ('proprietaire', 'workflow_executions', 'postgres'),
   ('proprietaire', 'workflows', 'postgres'),
+  ('rls', 'ajustements', 'true/false'),
   ('rls', 'avis_clics', 'true/false'),
   ('rls', 'clients', 'true/false'),
   ('rls', 'consentements', 'true/false'),
@@ -79,6 +84,7 @@ WITH depot(categorie, objet, valeur) AS (VALUES
   ('rls', 'scans', 'true/false'),
   ('rls', 'workflow_executions', 'true/false'),
   ('rls', 'workflows', 'true/false'),
+  ('structure', 'ajustements', 'r 24a4fd5aa1 ea6c831f11 3d0ff8b0d3 d41d8cd98f d41d8cd98f'),
   ('structure', 'avis_clics', 'r 15e41f26a9 fa2939e75d afba50eedb d41d8cd98f d41d8cd98f'),
   ('structure', 'avis_clics_id_seq', 'S'),
   ('structure', 'clients', 'r 3a7d704fac 8d1263d6ed 718580fca1 cd81ee2ec6 92c8f318d5'),
@@ -197,7 +203,7 @@ SELECT 0 AS ordre, 'VERDICT' AS categorie,
             THEN 'IDENTIQUE au dépôt (hors plateforme)' ELSE 'ÉCART — à examiner' END AS objet,
        (SELECT count(*) FROM classes WHERE classe = 'ECART') || ' écart(s) · '
        || (SELECT count(*) FROM classes WHERE classe = 'plateforme') || ' plateforme' AS production,
-       'dépôt jusqu''à migration_051_credit_incassable.sql' AS depot, NULL AS lecture
+       'dépôt jusqu''à migration_052_ajustements_traces.sql' AS depot, NULL AS lecture
 UNION ALL
 SELECT 1, c.categorie, c.n || ' objets comparés',
        coalesce((SELECT count(*) FROM classes k WHERE k.categorie = c.categorie), 0) || ' écart(s)', NULL, NULL

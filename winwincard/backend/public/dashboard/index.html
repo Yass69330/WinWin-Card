@@ -822,6 +822,11 @@ const I18N = {
     annulRefusDernier:'Cannot undo: this is no longer the last movement for this client.',
     annulRefusSolde:'Cannot undo: the balance changed since this visit (adjustment).',
     annulRefusDeja:'Already undone.',
+    ajustementLibelle:'adjustment',
+    annulAjustementConfirm:({avant})=>`Undo this adjustment? The balance goes back to ${avant}.`,
+    soldeChange:({val})=>`A scan just went through: the balance is now ${val}. Check and try again.`,
+    newBalancePoints:({max})=>`New balance (threshold ${max} pts, can be exceeded)`,
+    ajustAuDessusSeuil:({val, max})=>`The balance (${val}) will be above the threshold (${max}): the reward will be due on the next visit. Confirm?`,
     adjustPoints:'Adjust points', newBalance:({max})=>`New balance (0 – ${max} pts)`,
     confirm:'Confirm', valueBetween:({max})=>`Value between 0 and ${max}`,
     signOutConfirm:'Sign out?', sessionExpired:'Session expired, please sign in again',
@@ -925,6 +930,11 @@ const I18N = {
     annulRefusDernier:'Annulation impossible : ce n\'est plus le dernier mouvement de ce client.',
     annulRefusSolde:'Annulation impossible : le solde a changé depuis ce passage (ajustement).',
     annulRefusDeja:'Déjà annulé.',
+    ajustementLibelle:'ajustement',
+    annulAjustementConfirm:({avant})=>`Annuler cet ajustement ? Le solde revient à ${avant}.`,
+    soldeChange:({val})=>`Un scan vient de passer : le solde est maintenant de ${val}. Vérifiez et recommencez.`,
+    newBalancePoints:({max})=>`Nouveau solde (seuil ${max} pts, dépassable)`,
+    ajustAuDessusSeuil:({val, max})=>`Le solde (${val}) dépassera le seuil (${max}) : la récompense sera à remettre au prochain passage. Confirmer ?`,
     adjustPoints:'Ajuster les points', newBalance:({max})=>`Nouveau solde (0 – ${max} pts)`,
     confirm:'Confirmer', valueBetween:({max})=>`Valeur entre 0 et ${max}`,
     signOutConfirm:'Se déconnecter ?', sessionExpired:'Session expirée, reconnectez-vous',
@@ -2210,7 +2220,7 @@ function closeClientSheet() {
   S.clientId = null; S.clientData = null;
 }
 
-function renderClientSheet({ client, scans }) {
+function renderClientSheet({ client, scans, ajustements }) {
   const displayMax = S.displayMax;
   const full       = client.stored_value >= S.maxValue;
   const pct        = Math.min(client.stored_value / Math.max(displayMax, 1) * 100, 100);
@@ -2252,43 +2262,64 @@ function renderClientSheet({ client, scans }) {
   }
 
   const sl = document.getElementById('cs-scans-list');
-  if (!scans || scans.length === 0) {
+  // Historique de la fiche : scans ET ajustements (étape 13b), mêlés par date,
+  // du plus récent au plus ancien. Les ajustements ne sont pas des visites :
+  // ils viennent de leur propre journal et ne sont mêlés aux scans qu'ici.
+  const mouvements = [
+    ...(scans || []).map(s => ({ ...s, type: 'scan', date: s.date_scan })),
+    ...(ajustements || []).map(a => ({ ...a, type: 'ajustement', date: a.date_ajustement })),
+  ].sort((a, b) => new Date(b.date) - new Date(a.date));
+  if (mouvements.length === 0) {
     sl.innerHTML = `<div class="cs-no-scans">${t('noScansClient')}</div>`;
     return;
   }
-  // « Annuler » sur le passage actif le plus récent du client (étape 13a), comme
-  // au scanner : la liste est triée du plus récent au plus ancien. Le serveur
-  // revalide de toute façon (annuler_scan : dernier passage, solde inchangé).
-  const dernierActif = scans.find(s => !s.annule_le);
-  sl.innerHTML = scans.map(s => {
+  // « Annuler » sur le mouvement actif le plus récent du client — scan ou
+  // ajustement — : on annule toujours dans l'ordre inverse (migration 052). Le
+  // serveur revalide de toute façon.
+  const dernierActif = mouvements.find(m => !m.annule_le);
+  sl.innerHTML = mouvements.map(s => {
+    const annule = !!s.annule_le;
+    const dateStr = new Date(s.date).toLocaleDateString(dateLocale(), { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+    const bouton = s === dernierActif
+      ? `<button class="cs-undo" data-type="${s.type}" data-id="${s.id}" data-avant="${s.stored_value_avant}">${t('annulerPassage')}</button>` : '';
+    if (s.type === 'ajustement') {
+      return `<div class="cs-scan-row"${annule ? ' style="opacity:.5"' : ''}>
+      <span class="cs-scan-icon">${annule ? '↩️' : '✎'}</span>
+      <div style="flex:1">
+        <span class="cs-scan-delta"${annule ? ' style="text-decoration:line-through"' : ''}>${s.stored_value_avant} → ${s.stored_value_apres} pts</span>
+        <span class="cs-scan-date">${dateStr} · ${t('ajustementLibelle')}${annule ? ' · ' + t('scanAnnule') : ''}</span>
+      </div>
+      ${bouton}
+    </div>`;
+    }
     const isReset  = s.stored_value_apres === 0 && s.stored_value_avant > 0;
     const isReward = !isReset && s.stored_value_apres >= S.maxValue;
     const icon = isReset ? '↩️' : isReward ? '🎉' : '✅';
-    const dateStr = new Date(s.date_scan).toLocaleDateString(dateLocale(), { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
     const lieu = s.points_de_vente && s.points_de_vente.nom;  // null pour un scan mono-site
-    const annule = !!s.annule_le;
     return `<div class="cs-scan-row"${annule ? ' style="opacity:.5"' : ''}>
       <span class="cs-scan-icon">${annule ? '↩️' : icon}</span>
       <div style="flex:1">
         <span class="cs-scan-delta"${annule ? ' style="text-decoration:line-through"' : ''}>${s.stored_value_avant} → ${s.stored_value_apres} pts</span>
         <span class="cs-scan-date">${dateStr}${lieu ? ' · ' + esc(lieu) : ''}${annule ? ' · ' + t('scanAnnule') : ''}</span>
       </div>
-      ${s === dernierActif ? `<button class="cs-undo" data-scan="${s.id}" data-avant="${s.stored_value_avant}">${t('annulerPassage')}</button>` : ''}
+      ${bouton}
     </div>`;
   }).join('');
 }
 
-// Annuler le dernier passage depuis la fiche (étape 13a). Même route que le
-// scanner (POST /api/scan/:id/annuler, qui accepte la session du marchand).
+// Annuler le dernier mouvement depuis la fiche (étapes 13a et 13b). Un scan :
+// même route que le scanner (POST /api/scan/:id/annuler, qui accepte la session
+// du marchand). Un ajustement : POST /api/clients/ajustements/:id/annuler.
 // Une seule requête, au tap ; puis la fiche est rechargée.
 document.getElementById('cs-scans-list').addEventListener('click', async e => {
   const b = e.target.closest('.cs-undo');
   if (!b || !S.clientId) return;
-  if (!confirm(t('annulPassageConfirm', { avant: b.dataset.avant }))) return;
+  const ajustement = b.dataset.type === 'ajustement';
+  if (!confirm(t(ajustement ? 'annulAjustementConfirm' : 'annulPassageConfirm', { avant: b.dataset.avant }))) return;
   const id = S.clientId;
   b.disabled = true;
   try {
-    const res = await api(`/api/scan/${b.dataset.scan}/annuler`, { method: 'POST' });
+    const res = await api(ajustement ? `/api/clients/ajustements/${b.dataset.id}/annuler` : `/api/scan/${b.dataset.id}/annuler`, { method: 'POST' });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) {
       alert({ pas_le_dernier: t('annulRefusDernier'), solde_incoherent: t('annulRefusSolde'),
@@ -2362,7 +2393,10 @@ document.getElementById('cs-btn-adjust').addEventListener('click', () => {
   // t('newBalance') rend le libellé complet (valeur du seuil incluse). On écrit
   // dans adjust-label (élément stable sans enfant) — plus de <span id="adjust-max">
   // à détruire puis relire (cause du bug « le bouton Points ne répond plus »).
-  document.getElementById('adjust-label').textContent = t('newBalance', { max: S.maxValue });
+  // Points : plus de plafond au seuil (étape 13b), confirmation au-delà. Tampons :
+  // plafond au seuil inchangé.
+  document.getElementById('adjust-label').textContent =
+    t(S.typeProgramme === 'points' ? 'newBalancePoints' : 'newBalance', { max: S.maxValue });
   document.getElementById('adjust-err').style.display = 'none';
   document.getElementById('modal-adjust').classList.add('open');
   setTimeout(() => document.getElementById('adjust-input').focus(), 100);
@@ -2377,15 +2411,35 @@ document.getElementById('adjust-confirm').addEventListener('click', async () => 
   const val   = parseInt(document.getElementById('adjust-input').value);
   const errEl = document.getElementById('adjust-err');
   errEl.style.display = 'none';
-  if (isNaN(val) || val < 0 || val > S.maxValue) {
-    errEl.textContent = t('valueBetween', { max: S.maxValue }); errEl.style.display = 'block'; return;
+  if (!S.clientData) return;
+  const points = S.typeProgramme === 'points';
+  const plafond = points ? 1000000 : S.maxValue;
+  if (isNaN(val) || val < 0 || val > plafond) {
+    errEl.textContent = t('valueBetween', { max: plafond }); errEl.style.display = 'block'; return;
   }
+  if (points && val > S.maxValue && !confirm(t('ajustAuDessusSeuil', { val, max: S.maxValue }))) return;
+  // Le solde affiché à l'ouverture de la fiche : si un scan est passé depuis,
+  // le serveur refuse (étape 13b) au lieu d'effacer ce scan.
+  const attendu = S.clientData.client.stored_value;
   const btn = document.getElementById('adjust-confirm');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
   try {
-    const res  = await api(`/api/clients/${S.clientId}`, { method: 'PATCH', body: JSON.stringify({ stored_value: val }) });
+    const res  = await api(`/api/clients/${S.clientId}`, { method: 'PATCH', body: JSON.stringify({ stored_value: val, stored_value_attendu: attendu }) });
     const data = await res.json();
+    if (res.status === 409 && data.error === 'solde_change') {
+      // Rien n'a été écrit : on montre le nouveau solde et on relit la fiche.
+      document.getElementById('adjust-input').value = data.stored_value;
+      errEl.textContent = t('soldeChange', { val: data.stored_value }); errEl.style.display = 'block';
+      openClientSheet(S.clientId);
+      return;
+    }
     if (!res.ok) throw new Error(data.error || t('errorGeneric'));
+    // Ligne du journal ajoutée sur place (aucune relecture de la fiche).
+    if (S.clientData && data.ajustement_id) {
+      S.clientData.ajustements = [{ id: data.ajustement_id, date_ajustement: new Date().toISOString(),
+        stored_value_avant: attendu, stored_value_apres: data.stored_value, annule_le: null },
+        ...(S.clientData.ajustements || [])];
+    }
     if (S.clientData) S.clientData.client = { ...S.clientData.client, ...data };
     if (S.clients) { const idx = S.clients.findIndex(c => c.id === S.clientId); if (idx >= 0) S.clients[idx].stored_value = data.stored_value; }
     document.getElementById('modal-adjust').classList.remove('open');

@@ -667,6 +667,7 @@ zones dangereuses §5, contrat §7 s'appliquent toujours.*
 | 049 | Table `cron_passages` + index + RLS + GRANT (SELECT, INSERT, UPDATE ; séquence) | Suivi du passage quotidien du cron, lu par `/health/cron` (§15 nonies). Une ligne par jour, pas de purge. |
 | 050 | `EXECUTE` des fonctions de `public` réservé à `service_role` (existantes et futures) | Étape 7, point 5 (§15 undecies). **NON EXÉCUTÉE, NON POSÉE (décision de Yass, 01/10)** : fichier sur la branche `relecture/etape7-points-5-10` seulement. **Numéro réservé : la prochaine migration de production est la 051.** |
 | 051 | `scans.cle_idempotence` + index unique `(marchand_id, clé)` ; **fonction `crediter_scan(uuid, uuid, uuid, integer, integer, text, uuid, text, text, text) RETURNS jsonb`** ; CHECK `clients.stored_value >= 0` et `marchands.max_value > 0` | Étape 11a, le crédit incassable (§15 quindecies) : crédit, ligne et carte en une transaction ; appelle `increment_stored_value` telle quelle. Fermée à `anon`/`authenticated`. Additive : l'ancien code marche avec. |
+| 052 | Table `ajustements` (journal, RLS, GRANT service_role) ; **fonctions `ajuster_solde(uuid, uuid, integer, integer)` et `annuler_ajustement(uuid, uuid)` RETURNS jsonb** ; `annuler_scan` re-CREATE OR REPLACE (même signature) avec la règle de l'ordre inverse | Étape 13b (§15 septdecies). Ajustements hors des scans (ce ne sont pas des visites). Additive : le code 13a (`424d3e8`) passe 139/139 sur une base qui la porte. **Exécutée par Yass le 04/10, AVANT le push de 13b** : contrôle 6 × `true`, écarts IDENTIQUE (0 écart · 48 plateforme). |
 
 ## 9. LE MODÈLE MULTI-BOUTIQUES
 
@@ -2501,6 +2502,84 @@ essai automatique).
 - Rangement : commits locaux sur la branche `etape12` (non poussée), pour que le push
   2b parte seul sur la branche de production.
 
+## 15 septdecies. ÉTAPE 13 : ANNULER ET AJUSTER DEPUIS LE DASHBOARD (13a et 13b poussés le 04/10)
+
+**Décisions de Yass (03/10).** Validées : (1) bouton « Annuler » dans la **fiche client**
+du dashboard, pas dans l'onglet Scans ; (2) ajustements tracés dans une **table à part**,
+annulables dans l'ordre inverse avec les scans ; (3) ajustement **vérifié** (refusé si
+un scan vient de passer) et **sans plafond en points**, avec une confirmation à l'écran
+au-delà du seuil ; plafond inchangé en tampons. **Refusée (4) : aucun changement de
+message — « Points mis à jour » pour tout ajustement.** Scanner inchangé. Découpage 13a
+(sans migration) puis 13b (migration 052). Contrainte : aucune requête régulière en
+plus, rien de plus lourd pour la caissière. Calendrier : 2b, puis 12, puis 13.
+
+**13a — le bouton.** Fiche client : « Annuler » sur le passage actif le plus récent du
+client, confirmation « Le solde revient à N », refus en mots simples. Même route que le
+scanner (`POST /api/scan/:id/annuler`, qui acceptait déjà la session du marchand) :
+aucun code serveur, aucune requête à l'ouverture de la fiche, une au tap. La fiche
+montre les 10 derniers scans du client : plus de limite des 100 derniers. Sur un
+réseau, le gérant annule le passage de n'importe quelle boutique (décision du 29/09 ;
+le test du filet n'est plus un « ÉTAT ACTUEL »).
+
+**13b — le journal des ajustements.**
+- **Migration 052** : table `ajustements` (avant, après, date, annulé le) ;
+  `ajuster_solde` (verrou de la carte ; refus `solde_change` si le solde a bougé depuis
+  la lecture de l'écran ; même valeur → rien d'écrit ; sinon solde + ligne, une
+  transaction) ; `annuler_ajustement` (dernier mouvement actif du client — ni scan ni
+  ajustement actif après lui — et solde inchangé) ; `annuler_scan` refuse aussi un scan
+  suivi d'un ajustement actif (`pas_le_dernier`).
+- **Serveur** : `PATCH /api/clients/:id` passe par `ajuster_solde` avec
+  `stored_value_attendu` (409 `solde_change` + solde actuel) ; sans ce champ (écran
+  d'avant), ajusté sans vérification mais tracé (TRANSITION) ; même valeur → aucune
+  poussée de carte. `POST /api/clients/ajustements/:id/annuler` (session marchand). La
+  fiche (`GET /api/clients/:id`) lit scans et ajustements EN PARALLÈLE : pas plus
+  longue qu'avant ; journal illisible → fiche sans ajustements.
+- **Écran** : la fiche mêle scans et ajustements par date (« ✎ 2 → 9 pts ·
+  ajustement ») ; « Annuler » sur le dernier mouvement actif, scan ou ajustement.
+  Ajustement : envoie le solde affiché ; si un scan vient de passer : « Un scan vient de
+  passer : le solde est maintenant de N. Vérifiez et recommencez. », rien d'écrit ; la
+  ligne du journal est ajoutée sur place (pas de relecture). Points : plafond 1 000 000,
+  confirmation au-delà du seuil. Tampons : plafond au seuil, inchangé.
+- **Ordre inverse, exemple** (le cas de Hamza Salon) : scan 1→2, ajustement 2→10,
+  remise 10→0 : annuler la remise (→ 10), puis l'ajustement (→ 2), puis le scan (→ 1).
+
+**Tests.** Filet 105/105 : bloc 5 réécrit (ajustement tracé, refus si un scan vient de
+passer, ajustement et scan au même instant sans jamais effacer le scan, TRANSITION),
+bloc « 5 bis » (ordre inverse, déjà annulé, solde modifié hors journal, autre marchand,
+droits ; deux ajustements revenus au solde du scan : seule la règle de l'ordre inverse
+le protège). Navigateur `tests/navigateur/fiche_annulation.js` : 13 vérifications (13a
+et 13b). Tout ensemble : **159/159** (3 passages à 158/158, puis 1 à 159/159 après l'ajout du
+dernier test du bloc « 5 bis »), Node 24.10.0 —
+`NODE_PATH=$(npm root -g) FILET_EN_PLUS=tests/navigateur/cle_ecrans.js,tests/navigateur/fiche_annulation.js,tests/navigateur/caisse_erreurs.js node tests/lancer.js`.
+**Preuves** : sur le code 13a, le filet s'arrête (table absente) ; sans la règle de
+l'ordre inverse dans `annuler_scan`, 2 KO, dont le scan annulé derrière deux
+ajustements (solde 4, journal « 5→8, 8→5 » incohérent).
+
+**Ordre du jour J (13b).** Vérification : `SELECT to_regclass('public.ajustements') IS
+NULL, to_regprocedure('public.annuler_scan(uuid,uuid)') IS NOT NULL;` → `true | true` ;
+migration 052 ; contrôle en fin de fichier (6 × `true`) ; requête d'écarts régénérée
+(IDENTIQUE) ; push ; tests sur Pizza Sabbioni (points) et une carte de test en tampons.
+
+**État (04/10).** 13a poussé seul (`424d3e8`, en avance rapide sur `2b31c92`) et
+**vérifié par Yass le 04/10**. 13b remis sur `424d3e8` : **159/159 deux fois**. Fenêtre
+entre la migration et le push : le code 13a, sur une base rejouée avec la 052 en plus
+(52 fichiers), passe **139/139** — l'ancien `PATCH` écrit le solde sans ligne au journal,
+`annuler_scan` ne trouve aucun ajustement et se comporte comme avant. **Migration 052
+exécutée par Yass le 04/10, AVANT le push** : vérification `true | true`, migration OK,
+contrôle 6 × `true`, requête d'écarts `IDENTIQUE au dépôt (hors plateforme) | 0 écart(s)
+· 48 plateforme` (45 + les 3 droits hérités de la nouvelle table, comme 42 → 45 à la
+049). 13b poussé ensuite, sur son feu vert. Vérification de 13b : à suivre.
+
+**Hypothèses et limites.**
+- Un ajustement d'AVANT la 052 n'a pas de ligne : le scan qui le précède reste refusé
+  par le contrôle du solde, comme aujourd'hui.
+- L'ordre des mouvements repose sur les dates (`clock_timestamp()` sous le verrou de la
+  carte pour les ajustements et les scans de `crediter_scan`).
+- La fiche montre les 10 derniers scans et les 10 derniers ajustements.
+- Hors périmètre : la caisse mono-site, connectée avec la session du marchand, peut
+  ajuster et annuler un ajustement (droits, audit segment 3) ; l'onglet Scans du
+  dashboard garde son affichage (pas d'ajustements, pas de bouton).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
@@ -2636,6 +2715,15 @@ plus `landing_premium`, un enregistrement Pro+ le contient toujours.
 pilotage. Elles envoient bien des pushes ; les omettre aurait laissé des trous dans
 le registre. Rattachées aux sources `ajustement`, `annulation` et `scan`.
 
+**2026-10-03 — choix de réalisation de l'étape 13, pris sans pilotage.** Dans le
+périmètre validé : (1) un ajustement à la même valeur n'écrit rien et ne pousse pas la
+carte ; (2) un écran d'avant 13b (sans solde attendu) reste accepté, ajustement tracé
+mais non vérifié (TRANSITION) ; (3) l'annulation d'un ajustement passe par une route du
+dashboard (session marchand) ; (4) après un refus « un scan vient de passer », la fiche
+est relue (une requête, après le refus) ; après un ajustement réussi, la ligne est
+ajoutée sur place (aucune requête) ; (5) icône « ✎ » et libellés. Raisons au §15
+septdecies.
+
 **2026-10-03 — choix de réalisation de l'étape 12, pris sans pilotage.** Dans le
 périmètre validé : (1) le renouvellement se déclenche après un scan réussi, jamais à
 l'ouverture (cohérent avec le refus de la décision 4) ; (2) le nouvel essai automatique
@@ -2660,6 +2748,12 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 
 ---
 
+*Mis à jour le 2026-10-04 par la session « SETUP 4 » : 13a (`424d3e8`) vérifié par Yass.
+13b (§15 septdecies) remis sur la production : 159/159 deux fois ; le code 13a passe
+139/139 sur une base qui porte la 052. Migration 052 exécutée par Yass AVANT le push
+(contrôle 6 × `true`, écarts IDENTIQUE, 0 écart · 48 plateforme), puis 13b poussé.
+Vérification de 13b en production : à suivre.*
+
 *Mis à jour le 2026-10-04 par la session « SETUP 4 » : étape 12 close (12a `ebe0d81` et
 12b `2b31c92` vérifiés par Yass). Étape 13a : bouton « Annuler » sur le dernier passage
 actif, dans la fiche client du dashboard (même route que le scanner, qui acceptait déjà
@@ -2671,6 +2765,14 @@ venir.*
 supprimé, §15 terdecies) ; réglages à reposer par Yass dans le tableau de bord, commande
 de démarrage VIDE. Les branches `etape12` (poussée en relecture) et `etape13` (locale)
 portent les étapes 12 et 13, non déployées.*
+
+*Mis à jour le 2026-10-03 par la session « SETUP 4 », douzième chantier : étape 13
+(§15 septdecies), annuler et ajuster depuis le dashboard : 13a (bouton « Annuler » dans
+la fiche client, sans migration) et 13b (migration 052 : ajustements tracés, vérifiés,
+annulables dans l'ordre inverse ; sans plafond en points, confirmation au-delà du seuil)
+écrits et testés, 159/159 ; NON POUSSÉS, commits locaux sur la branche `etape13` (remise
+sur la production le 04/10, après 12). Décisions de Yass : 1, 2, 3 validées, 4 refusée (« Points mis à jour »
+inchangé).*
 
 *Mis à jour le 2026-10-03 par la session « SETUP 4 », onzième chantier : étape 12
 (§15 sexdecies), la caisse après une erreur : 12a (limiteur en JSON, renouvellement de

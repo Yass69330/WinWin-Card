@@ -247,7 +247,8 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt }) {
     await scan(tT, j.serial); await scan(tT, j.serial);
     await api('PATCH', `/api/clients/${j.id}`, tT, { stored_value: 7 });
     const a5 = await annuler(tT, derniereLigne(j.id));
-    verifier('après un ajustement : refusé (solde différent de la ligne), rien ne bouge', [a5.statut, a5.corps.reason, solde(j.id)], [409, 'solde_incoherent', 7]);
+    // Étape 13b : l'ajustement est un mouvement tracé, plus récent que le scan.
+    verifier('après un ajustement : refusé (ce n\'est plus le dernier mouvement), rien ne bouge', [a5.statut, a5.corps.reason, solde(j.id)], [409, 'pas_le_dernier', 7]);
 
     const k = client(M.tampons);
     await scan(tT, k.serial); await scan(tT, k.serial);
@@ -284,19 +285,83 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt }) {
 
   // ── 5. Ajustement (dashboard) ─────────────────────────────────────────────
   titre('5. Ajustement du solde depuis le dashboard');
+  const journal = id => sql(`SELECT coalesce(string_agg(stored_value_avant || '→' || stored_value_apres || (CASE WHEN annule_le IS NULL THEN '' ELSE '(annulé)' END), ',' ORDER BY date_ajustement), '')
+                             FROM ajustements WHERE client_id = '${id}'`);
+  const ajuster = (jt, id, valeur, attendu) => api('PATCH', `/api/clients/${id}`, jt,
+    attendu === undefined ? { stored_value: valeur } : { stored_value: valeur, stored_value_attendu: attendu });
   {
     const c = client(M.tampons, { solde: 3 });
-    const r = await api('PATCH', `/api/clients/${c.id}`, tT, { stored_value: 7 });
-    verifier('ajustement à 7 : accepté', [r.statut, solde(c.id)], [200, 7]);
-    verifier('ÉTAT ACTUEL — aucune ligne de journal pour l\'ajustement', lignes(c.id), 0);
+    const r = await ajuster(tT, c.id, 7, 3);
+    verifier('ajustement vérifié 3 → 7 : accepté', [r.statut, solde(c.id)], [200, 7]);
+    verifier('… tracé au journal des ajustements (pas parmi les scans : ce n\'est pas une visite)', [journal(c.id), lignes(c.id)], ['3→7', 0]);
     const p = client(M.points, { solde: 100 });
-    verifier('ÉTAT ACTUEL — en points, ajustement au-dessus du seuil (900 > 500) accepté par le serveur (l\'écran le refuse)',
-      [(await api('PATCH', `/api/clients/${p.id}`, tP, { stored_value: 900 })).statut, solde(p.id)], [200, 900]);
+    verifier('en points, ajustement au-dessus du seuil (900 > 500) : accepté et tracé',
+      [(await ajuster(tP, p.id, 900, 100)).statut, solde(p.id), journal(p.id)], [200, 900, '100→900']);
     verifier('valeurs refusées (−1, 1 000 001) : 400',
-      [(await api('PATCH', `/api/clients/${p.id}`, tP, { stored_value: -1 })).statut, (await api('PATCH', `/api/clients/${p.id}`, tP, { stored_value: 1000001 })).statut], [400, 400]);
+      [(await ajuster(tP, p.id, -1, 900)).statut, (await ajuster(tP, p.id, 1000001, 900)).statut], [400, 400]);
+    const m = client(M.tampons, { solde: 4 });
+    verifier('même valeur : rien d\'écrit au journal', [(await ajuster(tT, m.id, 4, 4)).statut, journal(m.id)], [200, '']);
+
+    // Un scan passe entre l'ouverture de la fiche (solde lu : 2) et la validation.
     const s = client(M.tampons, { solde: 2 });
-    await Promise.all([api('PATCH', `/api/clients/${s.id}`, tT, { stored_value: 5 }), scan(tT, s.serial)]);
-    verifier('ajustement à 5 pendant un scan : résultat 5 ou 6 selon l\'ordre d\'arrivée', [5, 6].includes(solde(s.id)), true);
+    await scan(tT, s.serial);
+    const refus = await ajuster(tT, s.id, 5, 2);
+    verifier('un scan vient de passer : ajustement REFUSÉ (409), solde actuel rendu, le scan n\'est pas effacé',
+      [refus.statut, refus.corps.error, refus.corps.stored_value, solde(s.id), journal(s.id)], [409, 'solde_change', 3, 3, '']);
+    const t = client(M.tampons, { solde: 2 });
+    const [ra] = await Promise.all([ajuster(tT, t.id, 5, 2), scan(tT, t.serial)]);
+    verifier('ajustement et scan au même instant : jamais de scan effacé (ajusté puis +1 = 6, ou refusé et 3)',
+      (ra.statut === 200 && solde(t.id) === 6 && journal(t.id) === '2→5') || (ra.statut === 409 && solde(t.id) === 3 && journal(t.id) === ''), true);
+    const u = client(M.tampons, { solde: 2 });
+    verifier('TRANSITION — écran d\'avant 13b (sans solde attendu) : ajusté sans vérification, mais tracé',
+      [(await ajuster(tT, u.id, 8)).statut, solde(u.id), journal(u.id)], [200, 8, '2→8']);
+  }
+
+  // ── 5 bis. Annulation dans l'ordre inverse (étape 13b) ────────────────────
+  titre('5 bis. Ajustements et scans : annulation dans l\'ordre inverse');
+  {
+    const annulerAjustement = (jt, ajId) => api('POST', `/api/clients/ajustements/${ajId}/annuler`, jt);
+    const dernierAjustement = id => sql(`SELECT id FROM ajustements WHERE client_id = '${id}' ORDER BY date_ajustement DESC LIMIT 1`);
+    // Le cas de Hamza Salon : scan 1→2, ajustement 2→10, remise 10→0.
+    const c = client(M.tampons, { solde: 1 });
+    await scan(tT, c.serial);
+    await ajuster(tT, c.id, 10, 2);
+    await scan(tT, c.serial);
+    const scanAvant = sql(`SELECT id FROM scans WHERE client_id = '${c.id}' ORDER BY date_scan LIMIT 1`);
+    const aj = dernierAjustement(c.id);
+    verifier('scan d\'avant l\'ajustement, tant que l\'ajustement est actif : refusé (pas le dernier)',
+      [(await annuler(tT, scanAvant)).corps.reason, solde(c.id)], ['pas_le_dernier', 0]);
+    verifier('ajustement suivi d\'une remise : refusé tant que la remise est active',
+      [(await annulerAjustement(tT, aj)).corps.reason, solde(c.id)], ['pas_le_dernier', 0]);
+    verifier('1. annuler la remise : 0 → 10', [(await annuler(tT, derniereLigne(c.id))).statut, solde(c.id)], [200, 10]);
+    const ra = await annulerAjustement(tT, aj);
+    verifier('2. annuler l\'ajustement : 10 → 2, marqué annulé au journal', [ra.statut, ra.corps.stored_value, solde(c.id), journal(c.id)], [200, 2, 2, '2→10(annulé)']);
+    verifier('3. annuler le scan d\'avant : 2 → 1 (la chaîne est de nouveau juste)', [(await annuler(tT, scanAvant)).statut, solde(c.id)], [200, 1]);
+    verifier('ajustement déjà annulé : refusé', (await annulerAjustement(tT, aj)).corps.reason, 'deja_annule');
+
+    // Deux ajustements qui reviennent au solde du scan : seul l'ordre inverse
+    // protège ici (le contrôle du solde, lui, passerait).
+    const f = client(M.tampons, { solde: 4 });
+    await scan(tT, f.serial);                              // 4 → 5
+    await ajuster(tT, f.id, 8, 5); await ajuster(tT, f.id, 5, 8);
+    verifier('scan suivi de deux ajustements revenus au même solde : le scan reste refusé tant qu\'ils sont actifs',
+      [(await annuler(tT, derniereLigne(f.id))).corps.reason, solde(f.id), journal(f.id)], ['pas_le_dernier', 5, '5→8,8→5']);
+
+    const d = client(M.tampons, { solde: 4 });
+    await ajuster(tT, d.id, 6, 4);
+    sql(`UPDATE clients SET stored_value = 9 WHERE id = '${d.id}'`);   // modification hors journal
+    verifier('solde modifié hors journal depuis l\'ajustement : refusé (solde incohérent), rien ne bouge',
+      [(await annulerAjustement(tT, dernierAjustement(d.id))).corps.reason, solde(d.id)], ['solde_incoherent', 9]);
+    const e = client(M.tampons, { solde: 4 });
+    await ajuster(tT, e.id, 6, 4);
+    verifier('ajustement d\'un AUTRE marchand : introuvable, rien ne bouge',
+      [(await annulerAjustement(tP, dernierAjustement(e.id))).corps.reason, solde(e.id)], ['introuvable', 6]);
+    verifier('droits : ajuster_solde et annuler_ajustement exécutables par le serveur seul ; table lisible par le serveur', sql(`
+      SELECT has_function_privilege('service_role', 'public.ajuster_solde(uuid,uuid,integer,integer)', 'EXECUTE')
+             AND NOT has_function_privilege('anon', 'public.ajuster_solde(uuid,uuid,integer,integer)', 'EXECUTE')
+             AND has_function_privilege('service_role', 'public.annuler_ajustement(uuid,uuid)', 'EXECUTE')
+             AND NOT has_function_privilege('anon', 'public.annuler_ajustement(uuid,uuid)', 'EXECUTE')
+             AND has_table_privilege('service_role', 'public.ajustements', 'INSERT')`), 't');
   }
 
   // ── 6. Code de secours (6 derniers caractères du numéro de carte) ────────

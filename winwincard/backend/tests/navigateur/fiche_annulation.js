@@ -1,7 +1,7 @@
 'use strict';
 
 // ════════════════════════════════════════════════════════════════════════════
-// TEST NAVIGATEUR — annuler depuis la fiche client du dashboard (étape 13)
+// TEST NAVIGATEUR — la fiche client du dashboard : annuler, ajuster (étape 13)
 //
 // La vraie fiche client, dans Chromium, contre le serveur et la base du filet.
 // Hors `npm test` : exige Playwright. Lancement, depuis winwincard/backend :
@@ -50,7 +50,18 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     await ecran.page.evaluate(id => openClientSheet(id), clientId);
     await ecran.page.waitForFunction(() => S.clientData && document.querySelector('#cs-scans-list .cs-scan-row'));
   }
-  const boutons = ecran => ecran.page.evaluate(() => [...document.querySelectorAll('#cs-scans-list .cs-undo')].map(b => b.dataset.scan));
+  const boutons = ecran => ecran.page.evaluate(() => [...document.querySelectorAll('#cs-scans-list .cs-undo')].map(b => b.dataset.id));
+  const journal = id => sql(`SELECT coalesce(string_agg(stored_value_avant || '→' || stored_value_apres || (CASE WHEN annule_le IS NULL THEN '' ELSE '(annulé)' END), ',' ORDER BY date_ajustement), '')
+                             FROM ajustements WHERE client_id = '${id}'`);
+  // Fenêtre « Ajuster les points » de la fiche : saisir une valeur, valider.
+  async function ajusterDansFiche(ecran, valeur) {
+    await ecran.page.click('#cs-btn-adjust');
+    await ecran.page.fill('#adjust-input', String(valeur));
+    await ecran.page.click('#adjust-confirm');
+    await ecran.page.waitForTimeout(600);
+  }
+  const erreurAjustement = ecran => ecran.page.evaluate(() => getComputedStyle(document.getElementById('adjust-err')).display !== 'none'
+    && document.getElementById('adjust-err').textContent);
   async function annulerDansFiche(ecran, clientId) {
     await ecran.page.click('#cs-scans-list .cs-undo');
     await ecran.page.waitForFunction(() => S.clientData);   // fiche rechargée (ou inchangée si refus)
@@ -100,6 +111,63 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     await annulerDansFiche(r, cr.id);
     verifier('réseau : le gérant annule depuis sa fiche le passage fait dans une boutique', [solde(cr.id), lignesActives(cr.id).length], [0, 0]);
     await r.page.context().close();
+
+    // ── 13b : ajustements tracés, vérifiés, annulables dans l'ordre ─────────
+    titre('Navigateur : ajustements dans la fiche (étape 13b)');
+    const e2 = await ouvrir(M.tampons, 'filet-tampons');
+    const g = client(M.tampons, 1);
+    await api('POST', '/api/scan', tT, { serial_number: g.serial });       // 1 → 2
+    await fiche(e2, g.id);
+    await ajusterDansFiche(e2, 9);
+    const ajId = sql(`SELECT id FROM ajustements WHERE client_id = '${g.id}'`);
+    verifier('ajustement 2 → 9 depuis la fiche : tracé, visible « ✎ 2 → 9 pts · ajustement », « Annuler » dessus',
+      [journal(g.id), await e2.page.evaluate(() => {
+        const ligne = document.querySelector('#cs-scans-list .cs-scan-row').textContent.replace(/\s+/g, ' ').trim();
+        return ligne.startsWith('✎ 2 → 9 pts') && ligne.includes('· ajustement');
+      }), await boutons(e2)],
+      ['2→9', true, [ajId]]);
+    e2.dialogues.length = 0;
+    await annulerDansFiche(e2, g.id);
+    await e2.page.waitForFunction(() => S.clientData && S.clientData.client.stored_value === 2);
+    verifier('« Annuler » l\'ajustement : « Annuler cet ajustement ? Le solde revient à 2. », solde 2, bouton passé au scan',
+      [e2.dialogues[0], journal(g.id), (await boutons(e2)).length === 1 && (await boutons(e2))[0] !== ajId], ['Annuler cet ajustement ? Le solde revient à 2.', '2→9(annulé)', true]);
+    await annulerDansFiche(e2, g.id);
+    await e2.page.waitForFunction(() => S.clientData && S.clientData.client.stored_value === 1);
+    verifier('… puis le scan d\'avant : 2 → 1 (plus de blocage « solde incohérent »)', solde(g.id), 1);
+
+    const h = client(M.tampons, 2);
+    await fiche(e2, h.id).catch(() => {});
+    await e2.page.evaluate(id => openClientSheet(id), h.id);
+    await e2.page.waitForFunction(id => S.clientData && S.clientData.client.id === id, h.id);
+    await api('POST', '/api/scan', tT, { serial_number: h.serial });       // un scan passe : 2 → 3
+    await ajusterDansFiche(e2, 5);
+    verifier('un scan passe pendant que la fiche est ouverte : ajustement refusé, message clair, le scan est gardé',
+      [await erreurAjustement(e2), solde(h.id), journal(h.id)],
+      ['Un scan vient de passer : le solde est maintenant de 3. Vérifiez et recommencez.', 3, '']);
+    await e2.page.click('#adjust-cancel');
+
+    const k = client(M.tampons, 4);
+    await e2.page.evaluate(id => openClientSheet(id), k.id);
+    await e2.page.waitForFunction(id => S.clientData && S.clientData.client.id === id, k.id);
+    await ajusterDansFiche(e2, 11);
+    verifier('tampons : au-dessus du seuil refusé, comme avant (plafond inchangé)', [await erreurAjustement(e2), solde(k.id)], ['Valeur entre 0 et 10', 4]);
+    await e2.page.context().close();
+
+    const ep = await ouvrir(M.points, 'filet-points', { ww_dash_type_programme: 'points' });
+    await ep.page.waitForFunction(() => S.typeProgramme === 'points');
+    const q = client(M.points, 100);
+    await ep.page.evaluate(id => openClientSheet(id), q.id);
+    await ep.page.waitForFunction(id => S.clientData && S.clientData.client.id === id, q.id);
+    ep.accepter = false; ep.dialogues.length = 0;
+    await ajusterDansFiche(ep, 900);
+    verifier('points : 900 > seuil 500 → confirmation à l\'écran ; « Non » : rien d\'écrit',
+      [ep.dialogues[0], solde(q.id), journal(q.id)],
+      ['Le solde (900) dépassera le seuil (500) : la récompense sera à remettre au prochain passage. Confirmer ?', 100, '']);
+    ep.accepter = true;
+    await ep.page.click('#adjust-confirm');
+    await ep.page.waitForTimeout(600);
+    verifier('… « Oui » : 900 accepté et tracé (plus de plafond au seuil en points)', [solde(q.id), journal(q.id)], [900, '100→900']);
+    await ep.page.context().close();
   } finally {
     await nav.close();
   }
