@@ -5,18 +5,30 @@ const asyncHandler = require('../utils/asyncHandler');
 const { authScanner, authMarchand } = require('../middleware/auth');
 const { notif } = require('../i18n/messages');
 
+// Clé d'idempotence (étape 11) : un identifiant par scan voulu, fourni par
+// l'écran. FACULTATIVE pendant la transition (un écran ouvert depuis avant 11b
+// n'en envoie pas) ; présente, elle doit être un UUID.
+const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 // POST /scan — scan d'un pass en caisse
-// Corps : { serial_number }
+// Corps : { serial_number, points?, cle_idempotence? }
 //   ⚠️ Le champ `serial_number` du body n'est PAS forcément un serial : c'est
 //   une ENTRÉE à résoudre — soit un UUID complet (caméra), soit un code de
 //   secours 6 caractères (saisie manuelle). D'où le nom local `serial_input`.
 //   Ne JAMAIS s'en servir pour agir sur une entité (passes, device_tokens,
 //   objet Google) : utiliser `client.pass_serial_number` (le serial résolu).
 router.post('/', authScanner, asyncHandler(async (req, res) => {
-  const { serial_number: serial_input, points } = req.body;
+  const { serial_number: serial_input, points, cle_idempotence } = req.body;
 
   if (!serial_input) {
     return res.status(400).json({ error: 'serial_number required' });
+  }
+  let cle = null;
+  if (cle_idempotence !== undefined && cle_idempotence !== null && cle_idempotence !== '') {
+    cle = String(cle_idempotence).trim().toLowerCase();
+    if (!RE_UUID.test(cle)) {
+      return res.status(400).json({ error: 'cle_idempotence must be a UUID' });
+    }
   }
 
   // ── Multi-boutiques (3c) : attribution + coupure + durcissement ────────────
@@ -61,7 +73,7 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   const raw = String(serial_input).trim().toLowerCase();
   let client = null;
 
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(raw)) {
+  if (RE_UUID.test(raw)) {
     const { data } = await supabase
       .from('clients').select(SELECT_CLIENT)
       .eq('pass_serial_number', raw)
@@ -113,78 +125,74 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
     amount = parsed;
   }
 
-  // Incrément atomique côté Postgres (SELECT … FOR UPDATE) — évite la perte de
-  // points si deux scans simultanés lisent puis écrivent la même valeur.
-  // p_type_programme : mode tampons (défaut) → v_apres reset à 0 comme avant,
-  // strictement inchangé. Mode points → le scan de redemption reporte le
-  // surplus au lieu de repartir à 0 (migration_022_points_report.sql).
-  const { data: incr, error: errIncr } = await supabase.rpc('increment_stored_value', {
-    p_client_id: client.id,
-    p_max_value: maxValue,
-    p_amount: amount,
-    p_type_programme: client.marchands.type_programme || 'stamps',
+  // Message de la carte selon l'issue du scan. isReset : mode tampons → vraie
+  // remise à 0, message passReset. Mode points → remise avec report (le solde
+  // après vaut le surplus, jamais 0) : passReset dirait « 0/max », faux ; on
+  // envoie passProgress avec la vraie valeur reportée — « +100 — Sarah : 130/500 ».
+  const lang = client.marchands.langue;
+  const messageScan = (reset, recomp, valeur) => reset
+    ? (isPointsMode
+        ? notif('passProgress', lang, { prenom: client.prenom, value: valeur, max: displayMaxValue, amount })
+        : notif('passReset',    lang, { prenom: client.prenom, max: displayMaxValue }))
+    : recomp
+      ? notif('passReward',   lang, { prenom: client.prenom })
+      : notif('passProgress', lang, { prenom: client.prenom, value: valeur, max: displayMaxValue, amount });
+
+  // Crédit, ligne de journal et carte en UNE transaction (crediter_scan,
+  // migration 051) : tout ou rien. Plus de solde crédité sans ligne, plus de
+  // lignes dans le désordre, et une clé déjà enregistrée rend le premier
+  // résultat au lieu de recréditer. La règle (report, remise, seuil) reste dans
+  // increment_stored_value, que la fonction appelle telle quelle.
+  // Les trois messages possibles sont préparés ici (les textes vivent dans
+  // i18n) ; la base pose celui de l'issue réelle, « {{solde}} » remplacé par le
+  // solde après le scan.
+  const { data: credit, error: errCredit } = await supabase.rpc('crediter_scan', {
+    p_client_id:         client.id,
+    p_marchand_id:       req.marchandId,
+    p_point_de_vente_id: pointDeVenteId,
+    p_max_value:         maxValue,
+    p_montant:           amount,
+    p_type_programme:    client.marchands.type_programme || 'stamps',
+    p_cle:               cle,
+    p_msg_remise:        notif('passReset',    lang, { prenom: client.prenom, max: displayMaxValue }),
+    p_msg_recompense:    notif('passReward',   lang, { prenom: client.prenom }),
+    p_msg_progression:   notif('passProgress', lang, { prenom: client.prenom, value: '{{solde}}', max: displayMaxValue, amount }),
   });
 
-  if (errIncr) return res.status(500).json({ error: errIncr.message });
+  if (errCredit) {
+    // 23505 : la même clé vient d'être enregistrée pour un AUTRE client, au
+    // même instant. La transaction entière est annulée : rien n'est écrit.
+    if (errCredit.code === '23505') return res.status(409).json({ error: 'idempotency_conflict' });
+    return res.status(500).json({ error: errCredit.message });
+  }
+  if (!credit || credit.ok !== true) {
+    const raison = credit && credit.reason;
+    if (raison === 'client_introuvable') return res.status(404).json({ error: 'Pass not found or unauthorized' });
+    // Clé déjà enregistrée pour un scan annulé depuis : jamais recrédité.
+    if (raison === 'scan_annule') return res.status(409).json({ error: 'scan_cancelled' });
+    // Clé déjà enregistrée pour une autre carte ou un autre montant.
+    return res.status(409).json({ error: 'idempotency_conflict' });
+  }
 
-  const row = Array.isArray(incr) ? incr[0] : incr;
-  if (!row) return res.status(500).json({ error: 'Increment failed' });
-
-  const avantScan  = row.stored_value_avant;
-  const apresScan  = row.stored_value_apres;
-  const isReset    = row.is_reset;
+  // deja_enregistre : renvoi d'une demande déjà créditée (même clé). Même
+  // réponse que la première fois, rien de recrédité.
+  const dejaEnregistre = credit.deja_enregistre === true;
+  const avantScan  = credit.stored_value_avant;
+  const apresScan  = credit.stored_value_apres;
+  const isReset    = credit.is_reset === true;
   const recompense = !isReset && apresScan >= maxValue;
-
-  // Colonnes de mesure (migration_031) — remplies ICI, jamais dans la RPC
-  // (increment_stored_value reste intacte → hors du mode d'échec de juillet).
-  //   • montant_credite : points/tampons réellement AJOUTÉS par ce scan, jamais
-  //     négatif. 0 sur une redemption en tampons (reset, rien n'est ajouté) ;
-  //     amount sinon — en points, une redemption crédite bien amount, le surplus
-  //     étant reporté (migration_022). Sommer = total distribué propre, sans les
-  //     négatifs des resets.
-  //   • recompense_distribuee : TRUE sur le scan de REDEMPTION (is_reset) — le
-  //     moment où la boutique remet le cadeau. C'est l'événement « récompense
-  //     distribuée » ; c'est cette boutique qui en est créditée.
-  const montantCredite       = (isReset && !isPointsMode) ? 0 : amount;
-  const recompenseDistribuee = isReset;
-
-  const lang = client.marchands.langue;
-  // isReset : mode tampons → vraie remise à 0, message passReset inchangé.
-  // Mode points → "redemption" avec report (apresScan = surplus, jamais 0) :
-  // passReset dirait littéralement "0/max" (faux, surtout le texte FR "remise
-  // à zéro"). On envoie passProgress avec la vraie valeur reportée à la
-  // place — le client voit "+100 — Sarah : 130/500", jamais un mensonge.
-  const scanMessage = isReset
-    ? (isPointsMode
-        ? notif('passProgress', lang, { prenom: client.prenom, value: apresScan, max: displayMaxValue, amount })
-        : notif('passReset',    lang, { prenom: client.prenom, max: displayMaxValue }))
-    : recompense
-      ? notif('passReward',   lang, { prenom: client.prenom })
-      : notif('passProgress', lang, { prenom: client.prenom, value: apresScan, max: displayMaxValue, amount });
-
-  // Message de notification du pass + log du scan en parallèle.
-  // On agit sur le serial RÉSOLU (client.pass_serial_number), jamais sur
-  // l'entrée brute : sinon un scan par code de secours ne matcherait aucune ligne.
+  const scanMessage = messageScan(isReset, recompense, apresScan);
+  // Serial RÉSOLU (client.pass_serial_number), jamais l'entrée brute : sinon un
+  // scan par code de secours ne correspondrait à aucune carte.
   const serial = client.pass_serial_number;
-  await Promise.all([
-    supabase.from('passes')
-      .update({ notification_message: scanMessage, updated_at: new Date().toISOString() })
-      .eq('serial_number', serial)
-      .eq('marchand_id', req.marchandId),
-    supabase.from('scans').insert({
-      client_id: client.id,
-      marchand_id: req.marchandId,
-      stored_value_avant: avantScan,
-      stored_value_apres: apresScan,
-      montant_credite:       montantCredite,
-      recompense_distribuee: recompenseDistribuee,
-      point_de_vente_id:     pointDeVenteId,
-    }),
-  ]);
 
-  // Mises à jour Apple + Google Wallet en parallèle, sans bloquer la réponse
+  // Mises à jour Apple + Google Wallet en parallèle, sans bloquer la réponse.
+  // Aussi sur un renvoi : le premier envoi a pu ne jamais partir (réponse de la
+  // base perdue → 500, audit 02 §3.2 ligne c). Les deux sont sans effet si la
+  // carte est déjà à jour — sauf le message Google, qui s'afficherait deux fois
+  // sur Android : il n'est envoyé qu'au premier passage.
   notifierMiseAJourPass(serial, req.marchandId).catch(e => console.error('[scan] push Apple:', e.message));
-  mettreAJourGoogleWallet(serial, req.marchandId, apresScan, maxValue, displayMaxValue, scanMessage, client.marchands.images_tiers, client.prenom, client.marchands.couleur_fond, client.marchands.couleur_fond_reward, client.marchands).catch(e => console.error('[scan] push Google:', e.message));
+  mettreAJourGoogleWallet(serial, req.marchandId, apresScan, maxValue, displayMaxValue, scanMessage, client.marchands.images_tiers, client.prenom, client.marchands.couleur_fond, client.marchands.couleur_fond_reward, client.marchands, { message: !dejaEnregistre }).catch(e => console.error('[scan] push Google:', e.message));
 
   // Parrainage — crédit au parrain au premier tampon/point du filleul, UNE
   // SEULE FOIS à vie. avantScan === 0 est le déclencheur (plutôt que
@@ -193,7 +201,7 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   // zéro manuelle — ces re-déclenchements sont refusés par le ticket unique
   // posé dans creditReferrerIfApplicable (index referral_credits_filleul_unique,
   // migration_024), jamais re-crédités.
-  if (avantScan === 0 && client.marchands.referral_enabled) {
+  if (!dejaEnregistre && avantScan === 0 && client.marchands.referral_enabled) {
     creditReferrerIfApplicable(client.id, req.marchandId, client.marchands.referral_bonus_points || 1)
       .catch(e => console.error('[scan] referral credit:', e.message));
   }
@@ -214,6 +222,9 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
     // donc l'heuristique « solde === 0 » du dashboard était aveugle.
     is_reset: isReset,
     message: scanMessage,
+    // deja_enregistre : cette demande avait déjà été créditée (même clé) ; la
+    // réponse est celle du premier passage, rien n'a été recrédité.
+    deja_enregistre: dejaEnregistre,
   });
 
   // ── Demande d'avis Google, 30 min plus tard ─────────────────────────────
@@ -226,7 +237,8 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   //
   // planifier() est synchrone, ne lit rien et ne lève jamais ; elle rend false
   // (sans bruit) si le marchand n'a pas de lien d'avis — l'unique interrupteur.
-  if (isReset) {
+  // Pas sur un renvoi : la demande d'avis du premier passage est déjà planifiée.
+  if (isReset && !dejaEnregistre) {
     require('../services/avis').planifier({
       marchand: client.marchands,
       prenom:   client.prenom,
@@ -257,7 +269,9 @@ async function notifierMiseAJourPass(serialNumber, marchandId) {
   await lot.ecrire();
 }
 
-async function mettreAJourGoogleWallet(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, scanMessage, imagesTiers, prenom, couleurFond, couleurFondReward, marchand) {
+// options.message = false : met à jour l'objet (solde, visuel) sans ajouter de
+// message — renvoi d'un scan déjà enregistré (le message s'afficherait deux fois).
+async function mettreAJourGoogleWallet(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, scanMessage, imagesTiers, prenom, couleurFond, couleurFondReward, marchand, { message = true } = {}) {
   const { updateLoyaltyObjectPoints, addMessageToLoyaltyObject } = require('../services/google-pass');
   const registre = require('../services/notif-registre');
   const lot = registre.creerLot('scan', marchandId);
@@ -271,10 +285,12 @@ async function mettreAJourGoogleWallet(serialNumber, marchandId, storedValue, ma
     .catch(e => { errUpd = e; console.error('[scan] Google updateObject:', e.message); });
   lot.ajouter({ plateforme: 'google', serialNumber, erreur: errUpd });
 
-  let errMsg = null;
-  await addMessageToLoyaltyObject(serialNumber, null, scanMessage)
-    .catch(e => { errMsg = e; console.error('[scan] Google addMessage:', e.message); });
-  lot.ajouter({ plateforme: 'google', serialNumber, erreur: errMsg });
+  if (message) {
+    let errMsg = null;
+    await addMessageToLoyaltyObject(serialNumber, null, scanMessage)
+      .catch(e => { errMsg = e; console.error('[scan] Google addMessage:', e.message); });
+    lot.ajouter({ plateforme: 'google', serialNumber, erreur: errMsg });
+  }
 
   await lot.ecrire();
 }

@@ -6,8 +6,8 @@
 -- SQL Editor de Supabase, puis « Run ». Moins de 40 lignes rendues.
 --
 -- État du dépôt figé ci-dessous (VALUES « depot ») : base rejouée depuis le
--- dépôt, 50 fichiers (schema.sql, migrations jusqu'à
--- migration_049_cron_passages.sql, rgpd_effacement.sql), PostgreSQL local.
+-- dépôt, 51 fichiers (schema.sql, migrations jusqu'à
+-- migration_051_credit_incassable.sql, rgpd_effacement.sql), PostgreSQL local.
 -- La requête photographie la base où elle tourne et ne rend que les ÉCARTS :
 --   plateforme : TRUNCATE / REFERENCES / TRIGGER hérités des privilèges par
 --                défaut de Supabase — non consignés, décision du 2026-09-29 ;
@@ -40,6 +40,7 @@ WITH depot(categorie, objet, valeur) AS (VALUES
   ('fonction', 'admin_marchands_stats()', 'jsonb | sql | definer=false | s | - | code=ca8a05d052 | exec=111 | postgres'),
   ('fonction', 'annuler_scan(p_scan_id uuid, p_marchand_id uuid)', 'jsonb | plpgsql | definer=false | v | - | code=3b108bb459 | exec=111 | postgres'),
   ('fonction', 'credit_referral(p_parrain_client_id uuid, p_bonus_points integer)', 'TABLE(stored_value_avant integer, stored_value_apres integer) | plpgsql | definer=false | v | - | code=3a1baf914f | exec=111 | postgres'),
+  ('fonction', 'crediter_scan(p_client_id uuid, p_marchand_id uuid, p_point_de_vente_id uuid, p_max_value integer, p_montant integer, p_type_programme text, p_cle uuid, p_msg_remise text, p_msg_recompense text, p_msg_progression text)', 'jsonb | plpgsql | definer=false | v | search_path=public | code=e6adbd0420 | exec=001 | postgres'),
   ('fonction', 'effacer_client(p_client_id uuid, p_marchand_id uuid)', 'void | plpgsql | definer=true | v | - | code=e0cc0950ba | exec=111 | postgres'),
   ('fonction', 'group_stats(p_marchand_id uuid)', 'jsonb | sql | definer=false | s | - | code=46c933a208 | exec=111 | postgres'),
   ('fonction', 'increment_stored_value(p_client_id uuid, p_max_value integer, p_amount integer, p_type_programme text)', 'TABLE(stored_value_avant integer, stored_value_apres integer, is_reset boolean) | plpgsql | definer=false | v | - | code=d4b664ce21 | exec=111 | postgres'),
@@ -80,20 +81,20 @@ WITH depot(categorie, objet, valeur) AS (VALUES
   ('rls', 'workflows', 'true/false'),
   ('structure', 'avis_clics', 'r 15e41f26a9 fa2939e75d afba50eedb d41d8cd98f d41d8cd98f'),
   ('structure', 'avis_clics_id_seq', 'S'),
-  ('structure', 'clients', 'r 3a7d704fac e5703d37ae 718580fca1 cd81ee2ec6 92c8f318d5'),
+  ('structure', 'clients', 'r 3a7d704fac 8d1263d6ed 718580fca1 cd81ee2ec6 92c8f318d5'),
   ('structure', 'consentements', 'r 6522d2d2b5 47372e7a27 2c19580a47 d41d8cd98f d41d8cd98f'),
   ('structure', 'cron_passages', 'r 153b7679bb 3e4c5482d2 4c493ae770 d41d8cd98f d41d8cd98f'),
   ('structure', 'cron_passages_id_seq', 'S'),
   ('structure', 'device_tokens', 'r e30b39da5b cfe0042077 562cf11d3a d41d8cd98f ef98a53312'),
   ('structure', 'diagnostics_camera', 'r 81c6e53263 ca71463871 495fdbec43 d41d8cd98f d41d8cd98f'),
-  ('structure', 'marchands', 'r ec310c2d79 c44777a8e3 b96831cf15 d8c0ed18e6 ba2c64374a'),
+  ('structure', 'marchands', 'r ec310c2d79 a989e54260 b96831cf15 d8c0ed18e6 ba2c64374a'),
   ('structure', 'notification_envois', 'r 6172a47dca e2628ff5df eca7c370e4 d41d8cd98f d41d8cd98f'),
   ('structure', 'notification_envois_id_seq', 'S'),
   ('structure', 'notification_logs', 'r ac25dbfa84 407348e994 fd86b47603 d41d8cd98f d41d8cd98f'),
   ('structure', 'passes', 'r 2fa65e1dc6 0dde65652c fe86087221 7ccca379fe f5ac52b87d'),
   ('structure', 'points_de_vente', 'r cd0720260d 7c093a7de5 7d4735111c d41d8cd98f d41d8cd98f'),
   ('structure', 'referral_credits', 'r 9d35856bf2 8b229706ca 1c32aca53e d41d8cd98f d41d8cd98f'),
-  ('structure', 'scans', 'r 9020bbaef1 eae213ba36 f644bcf823 d41d8cd98f 78bfcdeee5'),
+  ('structure', 'scans', 'r 5cbc9144a1 eae213ba36 2394842826 d41d8cd98f 78bfcdeee5'),
   ('structure', 'workflow_executions', 'r 593dc5810c 78fff07096 aaacb2ced5 d41d8cd98f d41d8cd98f'),
   ('structure', 'workflows', 'r 51f418dd71 89d292be10 26b595d7e8 d41d8cd98f d41d8cd98f'),
   ('types', 'types personnalisés', '(aucun)')
@@ -196,7 +197,7 @@ SELECT 0 AS ordre, 'VERDICT' AS categorie,
             THEN 'IDENTIQUE au dépôt (hors plateforme)' ELSE 'ÉCART — à examiner' END AS objet,
        (SELECT count(*) FROM classes WHERE classe = 'ECART') || ' écart(s) · '
        || (SELECT count(*) FROM classes WHERE classe = 'plateforme') || ' plateforme' AS production,
-       'dépôt jusqu''à migration_049_cron_passages.sql' AS depot, NULL AS lecture
+       'dépôt jusqu''à migration_051_credit_incassable.sql' AS depot, NULL AS lecture
 UNION ALL
 SELECT 1, c.categorie, c.n || ' objets comparés',
        coalesce((SELECT count(*) FROM classes k WHERE k.categorie = c.categorie), 0) || ' écart(s)', NULL, NULL

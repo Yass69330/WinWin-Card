@@ -69,6 +69,21 @@ function psqlSocket(sqlTexte, base = BASE) {
   return r.stdout.trim();
 }
 
+// Même accès, sans bloquer : pour tenir une transaction ouverte pendant qu'une
+// route s'exécute (course provoquée, ordre garanti).
+function psqlEnFond(sqlTexte, base = BASE) {
+  return new Promise((resolve, reject) => {
+    const p = spawn('sh', ['-c', `${PSQL} -X -q -t -A -v ON_ERROR_STOP=1 -p ${PGPORT} -d ${base}`], {
+      env: { ...process.env, PGOPTIONS: '-c client_min_messages=warning' },
+    });
+    let erreur = '';
+    p.stderr.on('data', d => { erreur += d; });
+    p.stdout.resume();
+    p.on('close', code => (code === 0 ? resolve() : reject(new Error(`psql : ${erreur.trim()}`))));
+    p.stdin.end(sqlTexte);
+  });
+}
+
 function demarrerPostgresSiBesoin() {
   try { psqlSocket('SELECT 1', 'postgres'); return; } catch { /* on tente de démarrer */ }
   const liste = spawnSync('pg_lsclusters', ['-h'], { encoding: 'utf8' });
@@ -234,6 +249,7 @@ function nettoyer() {
 
   const ctx = {
     sql: psqlSocket,
+    sqlEnFond: psqlEnFond,
     verifier,
     secretJwt: SECRET_JWT,
     async api(methode, chemin, jeton, corps) {

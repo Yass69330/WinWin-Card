@@ -577,7 +577,7 @@ Avant d'attaquer un chantier, valider l'état de départ :
 3. Un scan caméra ET un scan backup code sur le cobaye Pizza Sabbioni (voir son état,
    dette #7) : solde + notif + pass rafraîchi dans les deux cas.
 4. `type_programme` de Wam N Fade = `'points'`, des autres marchands = `'stamps'`.
-5. `cd winwincard/backend && npm ci && npm test` → « 62/62 OK » au 02/10 (filet de
+5. `cd winwincard/backend && npm ci && npm test` → « 86/86 OK » au 03/10 (filet de
    l'étape 10, §15 quaterdecies).
 
 ## 7. MÉTHODE DE TRAVAIL AVEC LE FONDATEUR (le contrat)
@@ -666,6 +666,7 @@ zones dangereuses §5, contrat §7 s'appliquent toujours.*
 | 048 | Consignation de ce qui vivait en production hors dépôt : droits `service_role` sur 7 tables, RLS sur 4 tables, `rls_auto_enable()` + déclencheur `ensure_rls` | Étape 9 (§15 octies). **Sans effet en production** (chaque bloc n'agit que si l'élément manque) ; indispensable à toute base rejouée depuis le dépôt. |
 | 049 | Table `cron_passages` + index + RLS + GRANT (SELECT, INSERT, UPDATE ; séquence) | Suivi du passage quotidien du cron, lu par `/health/cron` (§15 nonies). Une ligne par jour, pas de purge. |
 | 050 | `EXECUTE` des fonctions de `public` réservé à `service_role` (existantes et futures) | Étape 7, point 5 (§15 undecies). **NON EXÉCUTÉE, NON POSÉE (décision de Yass, 01/10)** : fichier sur la branche `relecture/etape7-points-5-10` seulement. **Numéro réservé : la prochaine migration de production est la 051.** |
+| 051 | `scans.cle_idempotence` + index unique `(marchand_id, clé)` ; **fonction `crediter_scan(uuid, uuid, uuid, integer, integer, text, uuid, text, text, text) RETURNS jsonb`** ; CHECK `clients.stored_value >= 0` et `marchands.max_value > 0` | Étape 11a, le crédit incassable (§15 quindecies) : crédit, ligne et carte en une transaction ; appelle `increment_stored_value` telle quelle. Fermée à `anon`/`authenticated`. Additive : l'ancien code marche avec. |
 
 ## 9. LE MODÈLE MULTI-BOUTIQUES
 
@@ -2270,6 +2271,99 @@ code servi est inchangé ; l'image contient le dossier `tests/`, jamais exécut�
 les tests ne redéploie pas (négation documentée par Railway, qui exige une règle
 d'inclusion avant elle).
 
+## 15 quindecies. ÉTAPE 11a : LE CRÉDIT INCASSABLE (03/10)
+
+**Décisions de Yass (03/10).** Étape 11 faite sans développeur extérieur, en deux pushs :
+11a (base et serveur, écrans inchangés) puis 11b (écrans : clé envoyée, et gardée après
+une erreur) ; demandes sans clé acceptées pendant la transition ; 11a le 03/10, push vers
+12:30 UTC au plus tôt (après le rush du midi en France) ; push 2b de l'étape 8 reporté au
+lendemain.
+
+**Le défaut (audit 02 §3.2, §4.1 à §4.3).** Un scan écrivait le solde
+(`increment_stored_value`), PUIS la ligne de journal et la carte, en deux autres
+écritures. Une coupure entre elles laissait un solde crédité sans ligne (et la caisse
+voyait parfois « succès ») ; deux scans du même client écrivaient leurs lignes dans le
+désordre (le dernier ne s'annulait plus) ; un renvoi créditait deux fois. **Mesuré sur le
+banc le 03/10** : 10 scans simultanés → journal dans le désordre 4 fois sur 5.
+
+**Ce que fait 11a.**
+- **Migration 051** : fonction `crediter_scan`, une transaction : verrou de la carte,
+  renvoi reconnu par sa clé, crédit par `increment_stored_value` (la règle reste à un
+  seul endroit, inchangée), ligne de journal, carte (message et date). Tout ou rien.
+  L'heure de la ligne est prise APRÈS le verrou (`clock_timestamp()`) : l'ordre des
+  dates suit l'ordre des crédits. Clé d'idempotence `scans.cle_idempotence`, unique par
+  marchand. Garde-fous : solde jamais négatif, seuil jamais nul ni négatif. Fonction
+  fermée à `anon` et `authenticated`.
+- **`scan.js`** : un seul appel à `crediter_scan` au lieu de trois écritures (un échange
+  avec la base de moins par scan, ≈ 0,2 s, HYPOTHÈSE à mesurer). Clé facultative
+  (`cle_idempotence`, UUID). Renvoi d'une clé déjà enregistrée : même réponse, marquée
+  `deja_enregistre`, rien recrédité, ni parrainage ni demande d'avis relancés.
+- Les messages de la carte restent écrits par i18n : le serveur prépare les trois
+  messages possibles, la base pose celui de l'issue réelle (« {{solde}} » remplacé).
+
+**Réponses nouvelles de `POST /api/scan`** (aucune n'arrive tant qu'aucun écran
+n'envoie de clé, donc pas avant 11b) : 400 clé mal formée ; 409 `idempotency_conflict`
+(même clé pour une autre carte ou un autre montant) ; 409 `scan_cancelled` (renvoi d'un
+scan annulé depuis : jamais recrédité). Champ `deja_enregistre` dans la réponse.
+
+**Tests (filet, `npm test`) : 86/86** (4 passages sous Node 24.10.0, la version de
+production, et 1 sous Node 22, celle du conteneur ; versions intermédiaires du filet :
+84/84 × 6, 85/85 × 5). Inversés : renvoi (même
+clé → un crédit), crédit sans ligne (panne forcée dans la transaction → rien d'écrit),
+désordre (10 scans simultanés → chaîne dans l'ordre des dates). Nouveaux : 10 envois
+simultanés de la même clé, même clé pour deux cartes en même temps (dont une course
+provoquée qui fait refuser la base, erreur 23505 → 409), clé d'une autre carte / d'un
+autre montant / d'un autre marchand, clé mal formée, renvoi d'une remise, renvoi d'un scan annulé, panne à
+l'écriture de la carte, message de la carte, garde-fous, droits de la fonction.
+**Preuves** : le nouveau filet (84 vérifications à ce stade) sur l'ANCIEN `scan.js` → 68/84, dont « panne à
+l'écriture de la ligne → 200, solde +1, aucune ligne » (la caisse voyait un succès) ;
+`clock_timestamp()` remplacé par `now()` → désordre revu 2 fois sur 3. L'ancien code sur
+la nouvelle base passe les 62 vérifications d'avant : la migration est sans risque pour
+le code en place et pour un retour arrière.
+
+**Migration 051 EXÉCUTÉE par Yass le 03/10, avant le push.** Vérification : `0 | 0 |
+true | false | false` ; contrôle : 7 × `true` ; requête d'écarts : **IDENTIQUE au dépôt**,
+0 écart, 45 droits « plateforme » (Dxt hérités, 15 objets × 3 rôles, regroupés en 3
+lignes), dont `crediter_scan` identique (code, droits `exec=001`, `search_path`). Pizza
+Sabbioni confirmé en points, seuil 500.
+
+**Ordre du jour J.** 1. Requête de vérification (soldes négatifs, seuils ≤ 0 : 0 et 0) ;
+2. migration 051 dans Supabase ; 3. requête de contrôle (7 × `true`) ; 4. requête
+d'écarts régénérée (`IDENTIQUE`, 3 lignes plateforme) ; 5. push sur feu vert ; 6. tests
+manuels sur Pizza Sabbioni (iPhone et Android) ; 7. si bons, 11b le même jour.
+
+**Retour arrière.** Railway → Rollback vers le déploiement précédent, puis `git revert`.
+La migration reste : l'ancien code marche avec (prouvé par le filet). Les lignes de
+retrait (contraintes, fonction, colonne) sont en fin de `migration_051`, à n'utiliser
+qu'après le retour arrière du code.
+
+**Hypothèses (ce qui ferait casser) et limites.**
+- Une clé = un scan voulu. Un écran qui réutiliserait une clé pour une autre carte ou un
+  autre montant est refusé (409, rien d'écrit) ; pour le même montant sur la même carte,
+  le second scan voulu serait pris pour un renvoi (11b doit changer de clé après chaque
+  réponse claire).
+- Les messages restent du texte simple où « {{solde}} » n'apparaît qu'à sa place (un
+  prénom contenant « {{solde}} » afficherait un nombre : sans conséquence).
+- Envois Apple et Google toujours APRÈS la réponse, hors transaction : un plantage juste
+  après l'écriture laisse la carte non rafraîchie jusqu'au scan suivant (argent juste).
+  Sur un renvoi, Apple et l'objet Google sont renvoyés (sans effet si à jour), pas le
+  message Google (il s'afficherait deux fois sur Android).
+- L'ordre des dates est garanti pour les lignes écrites par `crediter_scan` ; l'historique
+  ancien reste tel quel.
+- La transaction garde la carte verrouillée pendant l'écriture de la ligne, qui touche
+  la ligne du marchand (clé étrangère). `credit_referral` verrouille le client PUIS le
+  marchand (mesuré le 03/10 sur PostgreSQL 16 : le crédit du parrain attend la fin du
+  scan, aucun blocage croisé). Si cet ordre changeait, un parrain scanné pendant le
+  crédit de son filleul pourrait se bloquer une seconde, et PostgreSQL annulerait l'une
+  des deux opérations. L'étape 14 retire le verrou du marchand (audit 02 P4).
+- Le test de l'ordre des dates détecte une régression par probabilité (2 fois sur 3 avec
+  `now()`), pas à chaque passage.
+- `npm test` prend le Node du PATH. Le conteneur a Node 22 : pour la parité avec la
+  production, lancer le filet sous Node 24.10.0 (archive officielle nodejs.org,
+  empreinte vérifiée).
+- Hors périmètre : ajustement sans ligne (étape 13), parrainage (14), route machines
+  (P6), clé obligatoire (après 11b, quand les journaux montrent 100 % de scans avec clé).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
@@ -2357,6 +2451,14 @@ token marchand mono-site toujours non révocable).
   (`railway config migrate`, Infrastructure as Code). **Décision de pilotage à prendre
   avant le 01/12.** Diagnostic et plan au §15 terdecies (01/10) ; Node figé à 24.10.0.
 
+- **Seuil ≤ 0 saisi dans l'admin : refusé par la base, message brut (03/10).** Depuis
+  la migration 051, l'enregistrement échoue (seuil inchangé, vérifié par le filet), mais
+  l'admin reçoit un 500 avec le texte de PostgreSQL. Un 400 clair dans `admin.js`
+  (seuil entier ≥ 1) reste à faire. Mineur : Yass est le seul utilisateur de l'admin.
+- **Demandes de scan sans clé acceptées : TRANSITION (03/10).** Tant qu'elles le sont,
+  un renvoi sans clé crédite deux fois (deux lignes, annulable). À rendre obligatoire
+  après 11b, quand les journaux montrent 100 % de scans avec clé.
+
 **Toujours reportés (raison valable) :** #4 (re-sync Google, arbitrage), #5, #6, #8,
 #10, #11 (corriger listing+horloge ENSEMBLE, jamais séparément), #13 (parké).
 
@@ -2392,12 +2494,26 @@ plus `landing_premium`, un enregistrement Pro+ le contient toujours.
 pilotage. Elles envoient bien des pushes ; les omettre aurait laissé des trous dans
 le registre. Rattachées aux sources `ajustement`, `annulation` et `scan`.
 
+**2026-10-03 — choix de réalisation de l'étape 11a, pris sans pilotage.** Dans le
+périmètre validé, mais non tranchés par Yass : (1) un renvoi (même clé) renvoie la
+poussée Apple et la mise à jour de l'objet Google, pas le message Google ; (2) le renvoi
+d'un scan annulé depuis est refusé (409 `scan_cancelled`) plutôt que recrédité ; (3) les
+messages de la carte sont préparés par le serveur et posés par la base (« {{solde}} ») ;
+(4) codes de refus 400 / 409 `idempotency_conflict` / 409 `scan_cancelled`. Raisons au
+§15 quindecies. Aucun n'est visible avant 11b (aucun écran n'envoie de clé).
+
 **2026-09-29 — copie locale avancée sans demande.** Au début de la session « SETUP 4 »,
 la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MXslu`
 (dont `docs/audit/99-synthese.md`, à lire). Avancée en avance rapide
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-10-03 par la session « SETUP 4 », dixième chantier : étape 11a
+(§15 quindecies), le crédit incassable : migration 051 (`crediter_scan`, clé
+d'idempotence, garde-fous), `scan.js` en un seul appel ; filet 86/86 sous Node 24.10.0.
+Dette découverte : message brut de l'admin sur un seuil ≤ 0 ; demandes sans clé en
+transition (§16). Push 2b de l'étape 8 reporté au 04/10.*
 
 *Mis à jour le 2026-10-02 par la session « SETUP 4 », neuvième chantier : étape 10
 (§15 quaterdecies), filet de tests argent et scan, `npm test`, 62/62 ; il attrape les trois

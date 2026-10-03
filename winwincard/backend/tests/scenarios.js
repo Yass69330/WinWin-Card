@@ -6,6 +6,8 @@
 //
 // Règle : chaque scénario décrit ce que fait le code AUJOURD'HUI. Un défaut
 // connu est écrit comme tel, avec l'étape qui l'inversera (« ÉTAT ACTUEL »).
+// « TRANSITION » : comportement toléré pendant un passage de version, retiré
+// à une étape nommée.
 // Deux niveaux : les fonctions SQL qui écrivent le solde, appelées directement
 // en base, et les routes, appelées à travers le vrai serveur.
 // Chaque scénario crée ses propres clients : aucun ne dépend d'un autre.
@@ -42,7 +44,7 @@ INSERT INTO points_de_vente (id, marchand_id, nom, actif, deleted_at, scanner_lo
  ('${B.archivee}', '${M.reseau}', 'Archivée',   true,  now(), 'filet-archivee');
 `;
 
-async function jouer({ sql, verifier, api, secretJwt }) {
+async function jouer({ sql, sqlEnFond, verifier, api, secretJwt }) {
   // ── Outils ────────────────────────────────────────────────────────────────
   const jeton = (marchandId, pointDeVenteId) => jwt.sign(pointDeVenteId
     ? { role: 'scanner', marchand_id: marchandId, point_de_vente_id: pointDeVenteId, tv: 1 }
@@ -60,7 +62,11 @@ async function jouer({ sql, verifier, api, secretJwt }) {
   const lignes = id => Number(sql(`SELECT count(*) FROM scans WHERE client_id = '${id}'`));
   const derniereLigne = id => sql(`SELECT id FROM scans WHERE client_id = '${id}' AND annule_le IS NULL ORDER BY date_scan DESC, id DESC LIMIT 1`);
   const scan = (jt, serial, points) => api('POST', '/api/scan', jt, points === undefined ? { serial_number: serial } : { serial_number: serial, points });
+  const scanCle = (jt, serial, cle, points) => api('POST', '/api/scan', jt,
+    points === undefined ? { serial_number: serial, cle_idempotence: cle } : { serial_number: serial, points, cle_idempotence: cle });
   const annuler = (jt, scanId) => api('POST', `/api/scan/${scanId}/annuler`, jt);
+  const messageCarte = serial => sql(`SELECT notification_message FROM passes WHERE serial_number = '${serial}'`);
+  const refuseParLaBase = requete => { try { sql(requete); return false; } catch { return true; } };
   const attendre = async (fn, ms = 4000) => {
     const t0 = Date.now();
     while (Date.now() - t0 < ms) { if (await fn()) return true; await new Promise(r => setTimeout(r, 100)); }
@@ -80,6 +86,10 @@ async function jouer({ sql, verifier, api, secretJwt }) {
                 AND has_table_privilege('service_role', 'public.' || t, 'DELETE'))
     FROM unnest(ARRAY['marchands','clients','passes','scans','device_tokens','consentements','workflows']) t`), 't');
   verifier('le serveur lit la base avec sa clé (/health/db)', (await api('GET', '/health/db')).statut, 200);
+  verifier('crediter_scan : exécutable par le serveur, fermée à la clé publique (anon, authenticated)', sql(`
+    SELECT has_function_privilege('service_role', p, 'EXECUTE') || '|' || has_function_privilege('anon', p, 'EXECUTE')
+           || '|' || has_function_privilege('authenticated', p, 'EXECUTE')
+      FROM (SELECT 'public.crediter_scan(uuid,uuid,uuid,integer,integer,text,uuid,text,text,text)'::regprocedure AS p) f`), 'true|false|false');
 
   // ── 1. Tampons ────────────────────────────────────────────────────────────
   titre('1. Tampons (seuil 10)');
@@ -88,6 +98,7 @@ async function jouer({ sql, verifier, api, secretJwt }) {
     const r = await scan(tT, c.serial);
     verifier('scan normal : 0 → 1, ni récompense ni remise', [r.statut, r.corps.stored_value_avant, r.corps.stored_value_apres, r.corps.recompense, r.corps.is_reset], [200, 0, 1, false, false]);
     verifier('ligne de journal : +1 crédité, pas de récompense remise', sql(`SELECT montant_credite || '|' || recompense_distribuee FROM scans WHERE client_id = '${c.id}'`), '1|false');
+    verifier('la carte reçoit le message du scan, écrit avec le crédit', [messageCarte(c.serial), r.corps.message], [r.corps.message, '+1 — Filet : 1/10 pts']);
     const r2 = await scan(tT, c.serial, 50);
     verifier('en tampons, un montant envoyé est ignoré : toujours +1', [r2.corps.stored_value_avant, r2.corps.stored_value_apres], [1, 2]);
     sql(`UPDATE clients SET stored_value = 9 WHERE id = '${c.id}'`);
@@ -95,6 +106,7 @@ async function jouer({ sql, verifier, api, secretJwt }) {
     verifier('scan gagnant : 9 → 10, récompense acquise, PAS encore remise', [r3.corps.stored_value_apres, r3.corps.recompense, r3.corps.is_reset], [10, true, false]);
     const r4 = await scan(tT, c.serial);
     verifier('passage suivant : remise, retour à 0', [r4.corps.stored_value_avant, r4.corps.stored_value_apres, r4.corps.is_reset, r4.corps.recompense], [10, 0, true, false]);
+    verifier('message de la carte : seuil franchi, puis remise', [r3.corps.message, messageCarte(c.serial)], ['Merci pour ta fidélité Filet — Récompense au prochain passage', 'Carte remise à zéro — Filet : 0/10 pts']);
     verifier('ligne de la remise : 0 crédité, récompense remise', sql(`SELECT montant_credite || '|' || recompense_distribuee FROM scans WHERE client_id = '${c.id}' ORDER BY date_scan DESC, id DESC LIMIT 1`), '0|true');
   }
 
@@ -109,6 +121,7 @@ async function jouer({ sql, verifier, api, secretJwt }) {
     verifier('seuil franchi d\'un coup : 480 + 50 = 530, récompense acquise', [r2.corps.stored_value_apres, r2.corps.recompense, r2.corps.is_reset], [530, true, false]);
     const r3 = await scan(tP, c.serial, 50);
     verifier('remise avec report : 530 → 80 (530 − 500 + 50)', [r3.corps.stored_value_avant, r3.corps.stored_value_apres, r3.corps.is_reset], [530, 80, true]);
+    verifier('message de la carte en points : solde reporté écrit par la base', [messageCarte(c.serial), r3.corps.message], ['+50 — Filet : 80/500 pts', '+50 — Filet : 80/500 pts']);
     verifier('ligne de la remise en points : 50 crédités, récompense remise', sql(`SELECT montant_credite || '|' || recompense_distribuee FROM scans WHERE client_id = '${c.id}' ORDER BY date_scan DESC, id DESC LIMIT 1`), '50|true');
 
     const k = client(M.points, { solde: 530 });
@@ -137,10 +150,79 @@ async function jouer({ sql, verifier, api, secretJwt }) {
     verifier('10 scans simultanés de 7 points : tous acceptés', rs.every(r => r.statut === 200), true);
     verifier('… aucun point perdu : 70 (verrou sur la carte)', solde(c.id), 70);
     verifier('… 10 lignes de journal, chaîne 0 → 70 complète', sql(`SELECT string_agg(stored_value_avant::text, ',' ORDER BY stored_value_avant) FROM scans WHERE client_id = '${c.id}'`), '0,7,14,21,28,35,42,49,56,63');
+    // Étape 11 : avant, cassée 4 fois sur 5 (lignes écrites après le crédit, hors verrou).
+    verifier('… et dans l\'ordre des DATES (journal jamais dans le désordre)', sql(`SELECT string_agg(stored_value_avant::text, ',' ORDER BY date_scan, id) FROM scans WHERE client_id = '${c.id}'`), '0,7,14,21,28,35,42,49,56,63');
 
+    // Renvoi d'une même demande (même clé) : étape 11, inversé.
     const d = client(M.tampons);
-    await scan(tT, d.serial); await scan(tT, d.serial);
-    verifier('ÉTAT ACTUEL — même demande envoyée deux fois : DEUX crédits (étape 11 : un seul)', [solde(d.id), lignes(d.id)], [2, 2]);
+    const k1 = crypto.randomUUID();
+    const p1 = await scanCle(tT, d.serial, k1), p2 = await scanCle(tT, d.serial, k1);
+    verifier('même demande envoyée deux fois (même clé) : UN crédit, une ligne', [solde(d.id), lignes(d.id)], [1, 1]);
+    const { deja_enregistre: de1, ...corps1 } = p1.corps, { deja_enregistre: de2, ...corps2 } = p2.corps;
+    verifier('… le renvoi reçoit la même réponse, marquée « déjà enregistrée »', [p2.statut, de1, de2, corps2], [200, false, true, corps1]);
+
+    const e = client(M.points);
+    const k2 = crypto.randomUUID();
+    const rafale = await Promise.all(Array.from({ length: 10 }, () => scanCle(tP, e.serial, k2, 40)));
+    verifier('10 envois simultanés de la même clé : un seul crédit, une ligne', [solde(e.id), lignes(e.id)], [40, 1]);
+    verifier('… tous répondent 200, un seul « premier passage »', [rafale.every(r => r.statut === 200), rafale.filter(r => r.corps.deja_enregistre === false).length], [true, 1]);
+
+    const f = client(M.tampons);
+    await scan(tT, f.serial); await scan(tT, f.serial);
+    verifier('TRANSITION — sans clé (écran d\'avant 11b) : deux crédits, acceptés jusqu\'à la clé obligatoire', [solde(f.id), lignes(f.id)], [2, 2]);
+
+    const g = client(M.tampons), h = client(M.tampons);
+    const k3 = crypto.randomUUID();
+    await scanCle(tT, g.serial, k3);
+    const autreCarte = await scanCle(tT, h.serial, k3);
+    verifier('même clé pour une AUTRE carte : 409, rien écrit', [autreCarte.statut, autreCarte.corps.error, solde(h.id), lignes(h.id)], [409, 'idempotency_conflict', 0, 0]);
+    const n = client(M.points);
+    const k4 = crypto.randomUUID();
+    await scanCle(tP, n.serial, k4, 30);
+    const autreMontant = await scanCle(tP, n.serial, k4, 31);
+    verifier('même clé, AUTRE montant (points) : 409, rien de plus', [autreMontant.statut, solde(n.id), lignes(n.id)], [409, 30, 1]);
+    const o = client(M.points);
+    const ailleurs = await scanCle(tP, o.serial, k3, 20);
+    verifier('même clé chez un AUTRE marchand : indépendante, créditée', [ailleurs.statut, ailleurs.corps.deja_enregistre, solde(o.id)], [200, false, 20]);
+    // Même clé, deux cartes, en même temps : la base tranche (index unique,
+    // erreur 23505 ou refus « autre scan » selon l'arrivée), une seule carte créditée.
+    const u = client(M.tampons), v = client(M.tampons);
+    const k7 = crypto.randomUUID();
+    const croises = await Promise.all(Array.from({ length: 6 }, (_, i) => scanCle(tT, (i % 2 ? u : v).serial, k7)));
+    verifier('même clé envoyée en même temps pour DEUX cartes : un seul crédit, l\'autre carte refusée (409)',
+      [solde(u.id) + solde(v.id), lignes(u.id) + lignes(v.id), croises.map(r => r.statut).sort().join(','),
+       croises.filter(r => r.statut === 409).every(r => r.corps.error === 'idempotency_conflict')],
+      [1, 1, '200,200,200,409,409,409', true]);
+    // Course provoquée, ordre garanti : une transaction tient la clé (carte w)
+    // sans valider ; le scan de la carte x avec la même clé attend sur l'index
+    // unique, puis la base refuse (23505) quand la première valide.
+    const w = client(M.tampons), x = client(M.tampons);
+    const k8 = crypto.randomUUID();
+    const tenue = sqlEnFond(`BEGIN;
+      INSERT INTO scans (client_id, marchand_id, stored_value_avant, stored_value_apres, cle_idempotence)
+        VALUES ('${w.id}', '${M.tampons}', 0, 0, '${k8}');
+      SELECT pg_sleep(1.5); COMMIT;`);
+    await new Promise(r => setTimeout(r, 400));
+    const course = await scanCle(tT, x.serial, k8);
+    await tenue;
+    verifier('clé prise au même instant pour une autre carte (refus 23505 de la base) : 409, rien écrit',
+      [course.statut, course.corps.error, solde(x.id), lignes(x.id)], [409, 'idempotency_conflict', 0, 0]);
+    const q = client(M.tampons);
+    const malFormee = await scanCle(tT, q.serial, 'pas-une-cle');
+    verifier('clé mal formée : 400, rien écrit', [malFormee.statut, solde(q.id), lignes(q.id)], [400, 0, 0]);
+
+    const r = client(M.tampons, { solde: 10 });
+    const k5 = crypto.randomUUID();
+    const remise1 = await scanCle(tT, r.serial, k5), remise2 = await scanCle(tT, r.serial, k5);
+    verifier('renvoi d\'une remise : même réponse (remettez la récompense), pas de seconde remise', [remise2.corps.is_reset, remise2.corps.stored_value_avant, remise2.corps.stored_value_apres, solde(r.id), lignes(r.id)], [true, 10, 0, 0, 1]);
+    verifier('… la première réponse était bien la remise', [remise1.corps.is_reset, remise1.corps.deja_enregistre], [true, false]);
+
+    const t = client(M.tampons);
+    const k6 = crypto.randomUUID();
+    await scanCle(tT, t.serial, k6);
+    await annuler(tT, derniereLigne(t.id));
+    const apresAnnulation = await scanCle(tT, t.serial, k6);
+    verifier('renvoi d\'un scan annulé depuis : 409, jamais recrédité', [apresAnnulation.statut, apresAnnulation.corps.error, solde(t.id)], [409, 'scan_cancelled', 0]);
   }
 
   // ── 4. Annulation du dernier scan (scanner ET dashboard) ─────────────────
@@ -289,24 +371,48 @@ async function jouer({ sql, verifier, api, secretJwt }) {
   }
 
   // ── 9. Coupures et journal ────────────────────────────────────────────────
-  titre('9. Coupures et journal dans le désordre');
+  titre('9. Coupures : tout ou rien');
   {
-    // Coupure entre le crédit et la ligne de journal : on appelle la fonction seule.
+    // Panne simulée au milieu de la transaction, APRÈS le crédit : un
+    // déclencheur fait échouer l'écriture de la ligne (puis de la carte).
     const c = client(M.tampons);
-    await scan(tT, c.serial);
-    sql(`SELECT * FROM increment_stored_value('${c.id}', 10, 1, 'stamps')`);
-    verifier('ÉTAT ACTUEL — crédit sans ligne : solde 2, une seule ligne (étape 11 : tout ou rien)', [solde(c.id), lignes(c.id)], [2, 1]);
+    sql(`CREATE FUNCTION filet_panne() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'panne simulée'; END $$;
+         CREATE TRIGGER filet_panne_ligne BEFORE INSERT ON scans FOR EACH ROW
+           WHEN (NEW.client_id = '${c.id}') EXECUTE FUNCTION filet_panne();`);
+    const panne = await scan(tT, c.serial);
+    verifier('panne à l\'écriture de la ligne : erreur, solde INCHANGÉ, aucune ligne (étape 11 : tout ou rien)', [panne.statut, solde(c.id), lignes(c.id)], [500, 0, 0]);
+    sql(`DROP TRIGGER filet_panne_ligne ON scans;
+         CREATE TRIGGER filet_panne_carte BEFORE UPDATE ON passes FOR EACH ROW
+           WHEN (NEW.serial_number = '${c.serial}') EXECUTE FUNCTION filet_panne();`);
+    const panne2 = await scan(tT, c.serial);
+    verifier('panne à l\'écriture de la carte : erreur, solde INCHANGÉ, aucune ligne', [panne2.statut, solde(c.id), lignes(c.id)], [500, 0, 0]);
+    sql(`DROP TRIGGER filet_panne_carte ON passes; DROP FUNCTION filet_panne();`);
+    const reprise = await scan(tT, c.serial);
+    verifier('… le scan suivant est juste : 0 → 1, une ligne', [reprise.statut, solde(c.id), lignes(c.id)], [200, 1, 1]);
     const a = await annuler(tT, derniereLigne(c.id));
-    verifier('… le dernier scan ne peut plus être annulé', [a.statut, a.corps.reason], [409, 'solde_incoherent']);
+    verifier('… et son dernier scan reste annulable', [a.statut, solde(c.id)], [200, 0]);
 
-    // Deux lignes dont l'ordre des dates contredit la chaîne des soldes.
+    // Historique ANCIEN (écrit avant l'étape 11) : deux lignes dont l'ordre des
+    // dates contredit la chaîne des soldes. L'annulation refuse, sans rien toucher.
     const d = client(M.tampons, { solde: 2 });
     const l1 = crypto.randomUUID(), l2 = crypto.randomUUID();
     sql(`INSERT INTO scans (id, client_id, marchand_id, stored_value_avant, stored_value_apres, date_scan) VALUES
          ('${l1}', '${d.id}', '${M.tampons}', 0, 1, now()),
          ('${l2}', '${d.id}', '${M.tampons}', 1, 2, now() - interval '1 second')`);
     const r1 = await annuler(tT, l1), r2 = await annuler(tT, l2);
-    verifier('ÉTAT ACTUEL — journal dans le désordre : aucune des deux lignes ne s\'annule', [r1.corps.reason, r2.corps.reason, solde(d.id)], ['solde_incoherent', 'pas_le_dernier', 2]);
+    verifier('historique ancien dans le désordre : aucune des deux lignes ne s\'annule, rien ne bouge', [r1.corps.reason, r2.corps.reason, solde(d.id)], ['solde_incoherent', 'pas_le_dernier', 2]);
+  }
+
+  // ── 10. Garde-fous en base (étape 11) ─────────────────────────────────────
+  titre('10. Garde-fous en base');
+  {
+    const c = client(M.tampons, { solde: 3 });
+    verifier('un solde négatif est refusé par la base', [refuseParLaBase(`UPDATE clients SET stored_value = -1 WHERE id = '${c.id}'`), solde(c.id)], [true, 3]);
+    verifier('un seuil à 0 est refusé par la base', [refuseParLaBase(`UPDATE marchands SET max_value = 0 WHERE id = '${M.tampons}'`), Number(sql(`SELECT max_value FROM marchands WHERE id = '${M.tampons}'`))], [true, 10]);
+    const adm = await api('PATCH', `/api/admin/marchands/${M.tampons}`, jetonAdmin, { max_value: -5 });
+    verifier('seuil négatif saisi dans l\'admin : refusé, seuil inchangé', [adm.statut >= 400, Number(sql(`SELECT max_value FROM marchands WHERE id = '${M.tampons}'`))], [true, 10]);
+    verifier('fonction crediter_scan, carte d\'un autre marchand : refus « client_introuvable », rien écrit',
+      [sql(`SELECT crediter_scan('${c.id}', '${M.points}', NULL, 500, 10, 'points', NULL, 'r', 'g', 'p') ->> 'reason'`), solde(c.id), lignes(c.id)], ['client_introuvable', 3, 0]);
   }
 }
 
