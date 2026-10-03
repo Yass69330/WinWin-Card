@@ -2427,7 +2427,9 @@ tests/lancer.js` (variable `FILET_EN_PLUS` ajoutée à `lancer.js`).
 **État (04/10).** 12a poussé seul (`ebe0d81`), **vérifié par Yass** : déploiement vert,
 healthcheck OK, scan et annulation au scanner, scan depuis le dashboard, aucun 500. 12b
 poussé ensuite, sur son feu vert, après 133/133 sur la branche `etape12` remise sur la
-production (`5630092`). Vérification de 12b : à suivre.
+production (`5630092`). **12b vérifié par Yass le 04/10** (`2b31c92`) : scan normal
+inchangé, « + Ajouter un tampon », bandeau « Carte non enregistrée », panneau « Connexion
+perdue » en mode avion, scan depuis le dashboard, aucun 500. **L'étape 12 est close.**
 
 **Diagnostic (03/10, observé dans le vrai écran, captures sur le banc).** Erreur réseau :
 « Erreur réseau : Failed to fetch » 3 s, puis la carte tenue est reproposée aussitôt.
@@ -2657,6 +2659,13 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-10-04 par la session « SETUP 4 » : étape 12 close (12a `ebe0d81` et
+12b `2b31c92` vérifiés par Yass). Étape 13a : bouton « Annuler » sur le dernier passage
+actif, dans la fiche client du dashboard (même route que le scanner, qui acceptait déjà
+la session du marchand ; aucun code serveur, aucune migration ; test navigateur
+`tests/navigateur/fiche_annulation.js`). 13b (journal des ajustements, migration 052) à
+venir.*
 
 *Mis à jour le 2026-10-04 par la session « SETUP 4 » : étape 8, push 2b (`railway.toml`
 supprimé, §15 terdecies) ; réglages à reposer par Yass dans le tableau de bord, commande

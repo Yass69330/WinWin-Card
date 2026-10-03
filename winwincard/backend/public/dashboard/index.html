@@ -337,6 +337,8 @@
     .cs-scan-icon { font-size:15px; width:26px; text-align:center; flex-shrink:0; }
     .cs-scan-delta { font-size:14px; font-weight:600; display:block; }
     .cs-scan-date { font-size:12px; color:var(--muted); display:block; }
+    /* Annuler le dernier passage depuis la fiche (étape 13a) */
+    .cs-undo { flex-shrink:0; background:none; border:1px solid var(--border); color:var(--muted); border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer; }
     .cs-no-scans { color:var(--muted); font-size:13px; text-align:center; padding:16px 0; }
     .cs-footer { flex-shrink:0; padding:12px 16px; border-top:1px solid var(--border); padding-bottom:max(12px,env(safe-area-inset-bottom)); }
     .cs-contact-box { background:var(--surface2); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
@@ -815,6 +817,11 @@ const I18N = {
     memberSince:({date})=>'Member since '+date, noScansClient:'No scans recorded for this client.', scanAnnule:'undone',
     editFirstName:'Edit first name', newFirstName:'New first name', firstNamePh2:'First name…',
     save:'Save', firstNameRequired:'First name required', errorGeneric:'Error',
+    annulerPassage:'Undo',
+    annulPassageConfirm:({avant})=>`Undo this visit? The balance goes back to ${avant}.`,
+    annulRefusDernier:'Cannot undo: this is no longer the last movement for this client.',
+    annulRefusSolde:'Cannot undo: the balance changed since this visit (adjustment).',
+    annulRefusDeja:'Already undone.',
     adjustPoints:'Adjust points', newBalance:({max})=>`New balance (0 – ${max} pts)`,
     confirm:'Confirm', valueBetween:({max})=>`Value between 0 and ${max}`,
     signOutConfirm:'Sign out?', sessionExpired:'Session expired, please sign in again',
@@ -913,6 +920,11 @@ const I18N = {
     memberSince:({date})=>'Membre depuis le '+date, noScansClient:'Aucun scan enregistré pour ce client.', scanAnnule:'annulé',
     editFirstName:'Modifier le prénom', newFirstName:'Nouveau prénom', firstNamePh2:'Prénom…',
     save:'Enregistrer', firstNameRequired:'Prénom requis', errorGeneric:'Erreur',
+    annulerPassage:'Annuler',
+    annulPassageConfirm:({avant})=>`Annuler ce passage ? Le solde revient à ${avant}.`,
+    annulRefusDernier:'Annulation impossible : ce n\'est plus le dernier mouvement de ce client.',
+    annulRefusSolde:'Annulation impossible : le solde a changé depuis ce passage (ajustement).',
+    annulRefusDeja:'Déjà annulé.',
     adjustPoints:'Ajuster les points', newBalance:({max})=>`Nouveau solde (0 – ${max} pts)`,
     confirm:'Confirmer', valueBetween:({max})=>`Valeur entre 0 et ${max}`,
     signOutConfirm:'Se déconnecter ?', sessionExpired:'Session expirée, reconnectez-vous',
@@ -2244,6 +2256,10 @@ function renderClientSheet({ client, scans }) {
     sl.innerHTML = `<div class="cs-no-scans">${t('noScansClient')}</div>`;
     return;
   }
+  // « Annuler » sur le passage actif le plus récent du client (étape 13a), comme
+  // au scanner : la liste est triée du plus récent au plus ancien. Le serveur
+  // revalide de toute façon (annuler_scan : dernier passage, solde inchangé).
+  const dernierActif = scans.find(s => !s.annule_le);
   sl.innerHTML = scans.map(s => {
     const isReset  = s.stored_value_apres === 0 && s.stored_value_avant > 0;
     const isReward = !isReset && s.stored_value_apres >= S.maxValue;
@@ -2257,9 +2273,36 @@ function renderClientSheet({ client, scans }) {
         <span class="cs-scan-delta"${annule ? ' style="text-decoration:line-through"' : ''}>${s.stored_value_avant} → ${s.stored_value_apres} pts</span>
         <span class="cs-scan-date">${dateStr}${lieu ? ' · ' + esc(lieu) : ''}${annule ? ' · ' + t('scanAnnule') : ''}</span>
       </div>
+      ${s === dernierActif ? `<button class="cs-undo" data-scan="${s.id}" data-avant="${s.stored_value_avant}">${t('annulerPassage')}</button>` : ''}
     </div>`;
   }).join('');
 }
+
+// Annuler le dernier passage depuis la fiche (étape 13a). Même route que le
+// scanner (POST /api/scan/:id/annuler, qui accepte la session du marchand).
+// Une seule requête, au tap ; puis la fiche est rechargée.
+document.getElementById('cs-scans-list').addEventListener('click', async e => {
+  const b = e.target.closest('.cs-undo');
+  if (!b || !S.clientId) return;
+  if (!confirm(t('annulPassageConfirm', { avant: b.dataset.avant }))) return;
+  const id = S.clientId;
+  b.disabled = true;
+  try {
+    const res = await api(`/api/scan/${b.dataset.scan}/annuler`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      alert({ pas_le_dernier: t('annulRefusDernier'), solde_incoherent: t('annulRefusSolde'),
+              deja_annule: t('annulRefusDeja') }[data.reason] || data.error || t('errorGeneric'));
+    } else if (S.clients) {
+      const idx = S.clients.findIndex(c => c.id === id);
+      if (idx >= 0) { S.clients[idx].stored_value = data.stored_value; renderClients(document.getElementById('search-clients').value); }
+    }
+  } catch (err) {
+    alert(err.message);
+  }
+  S.scans = null;   // historique de l'onglet Scans à relire
+  if (S.clientId === id) openClientSheet(id);
+});
 
 document.getElementById('cs-close').addEventListener('click', closeClientSheet);
 document.getElementById('modal-client').addEventListener('click', e => {

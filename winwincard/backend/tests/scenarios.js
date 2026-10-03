@@ -263,7 +263,9 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt }) {
     verifier('jeton boutique : scan d\'une AUTRE boutique refusé', [(await annuler(tB2, sr)).statut, solde(r.id)], [403, 1]);
     verifier('jeton boutique : son propre dernier scan annulé', [(await annuler(tB1, sr)).statut, solde(r.id)], [200, 0]);
     await scan(tB1, r.serial);
-    verifier('ÉTAT ACTUEL — jeton marchand sur un réseau : annule le scan d\'une boutique', [(await annuler(tR, derniereLigne(r.id))).statut, solde(r.id)], [200, 0]);
+    // Voulu depuis l'étape 13a (décision du 29/09) : le gérant annule depuis la
+    // fiche client du dashboard le passage de n'importe quelle boutique.
+    verifier('jeton marchand sur un réseau (dashboard du gérant) : annule le scan d\'une boutique', [(await annuler(tR, derniereLigne(r.id))).statut, solde(r.id)], [200, 0]);
 
     // Dernier scan d'un client plus ancien que les 100 derniers scans de la boutique.
     const v = client(M.reseau);
