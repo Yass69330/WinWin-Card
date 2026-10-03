@@ -395,6 +395,15 @@
       align-items: flex-end;
     }
     #modal-confirm.open { display: flex; }
+    /* Panneau d'incident (étape 12b) : même feuille que la confirmation. */
+    #modal-incident {
+      display: none;
+      position: fixed; inset: 0; z-index: 110;
+      background: rgba(0,0,0,.7);
+      align-items: flex-end;
+    }
+    #modal-incident.open { display: flex; }
+    #incident-principal { font-size: 18px; padding: 20px; }
     #confirm-scan-btn { font-size: 18px; padding: 20px; }
 
     .modal-sheet {
@@ -594,6 +603,17 @@
   </div>
 </div>
 
+<!-- Incident (étape 12b) : connexion perdue, limiteur, session, compte. Un seul
+     panneau, des textes selon le cas ; la caméra est en pause tant qu'il est ouvert. -->
+<div id="modal-incident">
+  <div class="modal-sheet">
+    <div class="modal-title" id="incident-titre"></div>
+    <div class="modal-sub" id="incident-texte"></div>
+    <button class="btn btn-primary" id="incident-principal"></button>
+    <button class="btn btn-ghost"   id="incident-secondaire"></button>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script>
 // ═══════════════════════════════════════════════════════
@@ -608,6 +628,7 @@ const state = {
   processing: false,
   awaitingPoints: false,
   awaitingConfirm: false,
+  awaitingIncident: false,   // panneau d'incident ouvert : détection en pause (étape 12b)
   stream: null,
   rafId: null,
   // ── Verrou de carte (A) + réarmement par sortie du champ (B) ──────────
@@ -620,6 +641,10 @@ const state = {
   // caissier « fermer/rouvrir » reste auto-réparateur (même filet que awaitingConfirm).
   lockedSerial: null,
   lockedPrenom: null,
+  // Issue du dernier passage de la carte verrouillée (étape 12b) : 'ok' (crédité),
+  // 'refus' (non enregistré : refus clair, ou annulé par la caissière),
+  // 'incertain' (connexion perdue : peut-être enregistré). Décide du bandeau.
+  lockedEtat: null,
   lockClearSince: null,   // 1ʳᵉ image sans QR depuis la pose du verrou (ms)
 };
 
@@ -674,6 +699,24 @@ const I18N = {
     dejaEnregistre:'Already recorded — this visit had gone through, nothing was added.',
     refusAnnule:'This visit was undone in the meantime. Scan again to record it.',
     refusConflit:'Conflicting request — nothing was recorded. Scan again.',
+    nouvelEssai:'⏳ New attempt…',
+    connexionPerdueTitre:'Connection lost',
+    connexionPerdueTexte:'This visit may not have been recorded. Retry: it will never be counted twice.',
+    limiteurTitre:'Too many requests',
+    limiteurTexte:({min})=>`This visit was not recorded. Retry in about ${min} min.`,
+    reessayer:'Retry',
+    sessionExpireeTitre:'Session expired',
+    sessionExpireeTexte:'This visit was not recorded. Sign in again to continue.',
+    seReconnecter:'Sign in again',
+    compteSuspenduTitre:'Account suspended',
+    compteSuspenduTexte:'This visit was not recorded. Contact WinWin.',
+    caisseDesactiveeTitre:'Till disabled',
+    caisseDesactiveeTexte:'This visit was not recorded. Contact head office.',
+    lockedNonEnregistre:'Card not recorded',
+    lockedIncertain:'⚠️ Visit not confirmed',
+    lockedIncertainHint:'Tap below to retry — never counted twice',
+    carteInconnue:'Unknown card for this shop',
+    codeInvalide:'Invalid code — scan the QR or type the 6-character backup code',
   },
   fr: {
     appTitle:'Scanner WinWin', loginSub:'Connectez-vous pour scanner',
@@ -712,6 +755,24 @@ const I18N = {
     dejaEnregistre:'Déjà enregistré — ce passage avait bien été pris en compte, rien n\'a été ajouté.',
     refusAnnule:'Ce passage a été annulé entre-temps. Rescannez pour l\'enregistrer.',
     refusConflit:'Demande en conflit — rien n\'a été enregistré. Rescannez.',
+    nouvelEssai:'⏳ Nouvel essai…',
+    connexionPerdueTitre:'Connexion perdue',
+    connexionPerdueTexte:'Ce passage n\'est peut-être pas enregistré. Réessayez : il ne sera jamais compté deux fois.',
+    limiteurTitre:'Trop de demandes',
+    limiteurTexte:({min})=>`Ce passage n'a pas été enregistré. Réessayez dans ${min} min environ.`,
+    reessayer:'Réessayer',
+    sessionExpireeTitre:'Session expirée',
+    sessionExpireeTexte:'Ce passage n\'a pas été enregistré. Reconnectez-vous pour continuer.',
+    seReconnecter:'Se reconnecter',
+    compteSuspenduTitre:'Compte suspendu',
+    compteSuspenduTexte:'Ce passage n\'a pas été enregistré. Contactez WinWin.',
+    caisseDesactiveeTitre:'Caisse désactivée',
+    caisseDesactiveeTexte:'Ce passage n\'a pas été enregistré. Contactez le siège.',
+    lockedNonEnregistre:'Carte non enregistrée',
+    lockedIncertain:'⚠️ Passage non confirmé',
+    lockedIncertainHint:'Appuyez ci-dessous pour réessayer — jamais compté deux fois',
+    carteInconnue:'Carte inconnue chez ce commerce',
+    codeInvalide:'Code invalide — scannez le QR ou tapez les 6 caractères du code de secours',
   },
 };
 
@@ -819,6 +880,8 @@ document.getElementById('login-form').addEventListener('submit', async () => {
       throw new Error(data.error || t('invalidCreds'));
     }
     saveSession(data.token, data.slug || slug, data.nom || slug, data.langue, data.type_programme);
+    // Identifiant gardé (pas le mot de passe) : pré-rempli si la session expire.
+    try { localStorage.setItem('ww_scanner_identifiant', slug); } catch {}
     startScanner();
   } catch (e) {
     showLoginError(e.message);
@@ -856,6 +919,7 @@ async function startScanner() {
   state.processing = false;
   closeConfirm();
   closePointsPad();
+  fermerIncident();
 
   // Stop any previous stream
   if (state.stream) state.stream.getTracks().forEach(t => t.stop());
@@ -886,7 +950,7 @@ function stopScanner() {
 function scanLoop() {
   if (!state.scanning) return;
   state.rafId = requestAnimationFrame(scanLoop);
-  if (state.processing || state.awaitingPoints || state.awaitingConfirm) return;
+  if (state.processing || state.awaitingPoints || state.awaitingConfirm || state.awaitingIncident) return;
 
   const video = document.getElementById('video');
   if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
@@ -933,9 +997,10 @@ function isLockedSerial(serial) {
 // showCardLock). Déclaré AVANT ses usages : setCardLock/clearCardLock y touchent.
 let _lockedShownFor = null;
 
-function setCardLock(serial, prenom) {
+function setCardLock(serial, prenom, etat) {
   state.lockedSerial   = serial || null;
   state.lockedPrenom   = prenom || null;
+  state.lockedEtat     = etat || (prenom ? 'ok' : 'refus');
   state.lockClearSince = null;
   _lockedShownFor = null;
   document.getElementById('locked-card').classList.remove('open');
@@ -944,6 +1009,7 @@ function setCardLock(serial, prenom) {
 function clearCardLock() {
   state.lockedSerial   = null;
   state.lockedPrenom   = null;
+  state.lockedEtat     = null;
   state.lockClearSince = null;
   _lockedShownFor = null;
   document.getElementById('locked-card').classList.remove('open');
@@ -957,9 +1023,15 @@ function showCardLock() {
   const el = document.getElementById('locked-card');
   if (_lockedShownFor === state.lockedSerial && el.classList.contains('open')) return;
   _lockedShownFor = state.lockedSerial;
-  document.getElementById('locked-card-title').textContent =
-    state.lockedPrenom ? t('lockedScanned', { prenom: state.lockedPrenom }) : t('lockedScannedAnon');
-  document.getElementById('locked-card-hint').textContent = t('lockedHint');
+  // « Déjà scannée » seulement après un vrai crédit (étape 12b) : après un refus
+  // ou une annulation, la carte n'est PAS enregistrée ; après une connexion
+  // perdue, on ne sait pas — un nouvel essai ne comptera jamais deux fois.
+  const titre = state.lockedEtat === 'incertain' ? t('lockedIncertain')
+    : state.lockedEtat === 'refus' ? t('lockedNonEnregistre')
+    : state.lockedPrenom ? t('lockedScanned', { prenom: state.lockedPrenom }) : t('lockedScannedAnon');
+  document.getElementById('locked-card-title').textContent = titre;
+  document.getElementById('locked-card-hint').textContent =
+    state.lockedEtat === 'incertain' ? t('lockedIncertainHint') : t('lockedHint');
   document.getElementById('locked-card-add').textContent =
     state.typeProgramme === 'points' ? t('addPoints') : t('addStamp');
   el.classList.add('open');
@@ -978,7 +1050,7 @@ document.getElementById('locked-card-add').addEventListener('click', () => {
 });
 
 async function handleScannedData(raw) {
-  if (state.processing || state.awaitingPoints || state.awaitingConfirm) return;
+  if (state.processing || state.awaitingPoints || state.awaitingConfirm || state.awaitingIncident) return;
   // Extract serial number from URL or raw string
   // Expected formats: serial-xxx, or https://api.example.com/... (ignore URLs without serial)
   let serial = raw.trim();
@@ -1110,6 +1182,49 @@ function oublierCle() {
   try { localStorage.removeItem(CLE_STOCKAGE); } catch {}
 }
 
+// ═══════════════════════════════════════════════════════
+// APRÈS UNE ERREUR (étape 12b)
+// ═══════════════════════════════════════════════════════
+// Le scan normal ne change pas : un seul appel, mêmes écrans. Seuls les échecs
+// changent :
+//   • délai maximal DELAI_SCAN_MS pour tout le passage (plus de « Traitement… »
+//     sans fin) ;
+//   • échec passager (réseau, 5xx, limiteur) arrivé avant ce délai : UN nouvel
+//     essai automatique, même clé — jamais de double crédit (migration 051) ;
+//   • s'il échoue encore : panneau « Connexion perdue » (Réessayer / Annuler),
+//     caméra en pause — la carte n'est plus reproposée toute seule ;
+//   • session expirée ou révoquée, compte suspendu, caisse désactivée : un
+//     panneau en mots simples, puis l'écran de connexion.
+const DELAI_SCAN_MS = 15000;
+const PAUSE_AVANT_ESSAI_MS = 1000;
+
+// Un envoi. Rend { res, data, passager } ; res = null si aucune réponse
+// (réseau coupé, ou délai écoulé). passager : un nouvel essai a un sens.
+async function envoyerScan(serial, points, cle, limite) {
+  const body = { serial_number: serial, cle_idempotence: cle };
+  if (points != null) body.points = points;
+  const ctrl = new AbortController();
+  const minuteur = setTimeout(() => ctrl.abort(), Math.max(0, limite - Date.now()));
+  try {
+    const res = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${state.token}` },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    let data = null;
+    try { data = await res.json(); } catch {
+      if (ctrl.signal.aborted) return { res: null, data: null, passager: false };
+    }
+    return { res, data, passager: res.status >= 500 || res.status === 429 };
+  } catch {
+    // Délai écoulé : pas de nouvel essai, le temps de la caissière est compté.
+    return { res: null, data: null, passager: !ctrl.signal.aborted };
+  } finally {
+    clearTimeout(minuteur);
+  }
+}
+
 async function submitScan(serial, points) {
   if (state.processing) return;
   state.processing = true;
@@ -1121,45 +1236,158 @@ async function submitScan(serial, points) {
   // Vibrate on mobile
   try { navigator.vibrate && navigator.vibrate(50); } catch {}
 
-  try {
-    const body = { serial_number: serial, cle_idempotence: cleDuScan(serial, points) };
-    if (points != null) body.points = points;
-    const res = await fetch('/api/scan', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${state.token}` },
-      body: JSON.stringify(body)
-    });
-    const data = await res.json();
-    // Réponse claire (succès ou refus) : la clé a servi. 5xx : le crédit a pu
-    // passer malgré l'erreur → clé gardée pour un nouvel essai sur cette carte.
-    if (res.status < 500) oublierCle();
-
-    statusEl.style.display = 'none';
-    state.scanning = false;
-    stopScanner();
-    // Refus multi-boutiques (3c) : boutique coupée/archivée, ou réseau exigeant
-    // le login boutique. use_boutique_login → le token courant n'est plus valable
-    // pour scanner : on déconnecte pour forcer une reconnexion avec le bon login.
-    if (res.status === 403 && (data.error === 'access_disabled' || data.error === 'use_boutique_login')) {
-      if (data.error === 'use_boutique_login') {
-        showScanError(t('useBoutiqueLogin'));
-        setTimeout(() => { clearSession(); location.reload(); }, 3500);
-      } else {
-        showScanError(t('accessDisabled'));
-      }
-      return;
-    }
-    if (res.status === 409 && data.candidates) { showCandidates(data.candidates); return; }
-    // Réponse définitive du serveur (succès OU refus) : la carte est traitée, on
-    // la verrouille. Le prénom vient de la réponse — aucune lecture supplémentaire
-    // n'est faite pour l'afficher (le QR ne contient toujours que le serial).
-    setCardLock(serial, res.ok ? data.prenom : null);
-    showResult(data, res.ok, serial);
-  } catch (e) {
-    statusEl.style.display = 'none';
-    state.processing = false;
-    showScanError(t('networkError', { msg: e.message }));
+  const cle = cleDuScan(serial, points);
+  const limite = Date.now() + DELAI_SCAN_MS;
+  let r = await envoyerScan(serial, points, cle, limite);
+  if (r.passager && Date.now() + PAUSE_AVANT_ESSAI_MS < limite) {
+    statusEl.textContent = t('nouvelEssai');
+    await new Promise(ok => setTimeout(ok, PAUSE_AVANT_ESSAI_MS));
+    r = await envoyerScan(serial, points, cle, limite);
   }
+  statusEl.style.display = 'none';
+  const { res } = r;
+  const data = r.data || {};
+
+  // Pas de réponse claire : peut-être crédité. Clé GARDÉE (Réessayer la reprend).
+  if (!res || res.status >= 500 || res.status === 429) {
+    state.processing = false;
+    if (res && res.status === 429) {
+      const s = Number(res.headers.get('Retry-After') || res.headers.get('RateLimit-Reset')) || 60;
+      ouvrirIncident('limiteur', { serial, points, min: Math.max(1, Math.ceil(s / 60)) });
+    } else {
+      ouvrirIncident('connexion', { serial, points });
+    }
+    return;
+  }
+
+  // Réponse claire (succès ou refus) : la clé a servi.
+  oublierCle();
+  state.scanning = false;
+  stopScanner();
+
+  // Refus de session ou de compte : rien n'a été écrit, la caisse ne peut plus
+  // scanner avec cette session → panneau en mots simples, puis connexion.
+  const code = data.error;
+  if (res.status === 401 || (res.status === 403 && (code === 'session_revoked' || code === 'Accès refusé'))) {
+    ouvrirIncident('session', { serial });
+    return;
+  }
+  if (res.status === 403 && (code === 'account_suspended' || code === 'Merchant account suspended')) {
+    ouvrirIncident('suspendu', { serial });
+    return;
+  }
+  if (res.status === 403 && code === 'access_disabled') {
+    ouvrirIncident('desactivee', { serial });
+    return;
+  }
+  // Réseau : le token courant n'est plus valable pour scanner → reconnexion
+  // avec le login de la boutique (multi-boutiques 3c).
+  if (res.status === 403 && code === 'use_boutique_login') {
+    showScanError(t('useBoutiqueLogin'));
+    setTimeout(() => { clearSession(); location.reload(); }, 3500);
+    return;
+  }
+  if (res.status === 409 && data.candidates) { showCandidates(data.candidates); return; }
+  // Réponse définitive du serveur (succès OU refus) : la carte est traitée, on
+  // la verrouille. Le prénom vient de la réponse — aucune lecture supplémentaire
+  // n'est faite pour l'afficher (le QR ne contient toujours que le serial).
+  setCardLock(serial, res.ok ? data.prenom : null);
+  showResult(res.ok ? data : { error: messageRefus(res.status, data) }, res.ok, serial);
+  if (res.ok) renouvelerSessionSiBesoin();
+}
+
+// Refus du serveur en mots simples ; à défaut, le texte du serveur.
+function messageRefus(status, data) {
+  const code = (data && data.error) || '';
+  if (code === 'scan_cancelled') return t('refusAnnule');
+  if (code === 'idempotency_conflict') return t('refusConflit');
+  if (status === 404) return t('carteInconnue');
+  if (status === 400 && code.startsWith('Invalid code')) return t('codeInvalide');
+  if (status === 400 && code.startsWith('points must be')) return t('invalidPoints');
+  return code || t('unknownError');
+}
+
+// ── Panneau d'incident ───────────────────────────────────────────────────
+let _incident = null;
+
+function ouvrirIncident(type, contexte) {
+  _incident = { type, ...contexte };
+  state.awaitingIncident = true;
+  const [titre, texte, principal, secondaire] = {
+    connexion:  [t('connexionPerdueTitre'), t('connexionPerdueTexte'), t('reessayer'), t('cancel')],
+    limiteur:   [t('limiteurTitre'), t('limiteurTexte', { min: contexte.min }), t('reessayer'), t('cancel')],
+    session:    [t('sessionExpireeTitre'), t('sessionExpireeTexte'), t('seReconnecter'), null],
+    suspendu:   [t('compteSuspenduTitre'), t('compteSuspenduTexte'), t('signOut'), null],
+    desactivee: [t('caisseDesactiveeTitre'), t('caisseDesactiveeTexte'), t('signOut'), null],
+  }[type];
+  document.getElementById('incident-titre').textContent = titre;
+  document.getElementById('incident-texte').textContent = texte;
+  document.getElementById('incident-principal').textContent = principal;
+  const sec = document.getElementById('incident-secondaire');
+  sec.textContent = secondaire || '';
+  sec.style.display = secondaire ? '' : 'none';
+  document.getElementById('modal-incident').classList.add('open');
+}
+
+function fermerIncident() {
+  document.getElementById('modal-incident').classList.remove('open');
+  state.awaitingIncident = false;
+  _incident = null;
+}
+
+document.getElementById('incident-principal').addEventListener('click', () => {
+  const i = _incident;
+  fermerIncident();
+  if (!i) return;
+  // Réessayer : même carte, même montant, même clé — jamais compté deux fois.
+  if (i.type === 'connexion' || i.type === 'limiteur') { submitScan(i.serial, i.points); return; }
+  // Session, compte, caisse : déconnexion vers l'écran de connexion.
+  stopScanner();
+  clearSession();
+  clearCardLock();
+  state.processing = false;
+  state.awaitingConfirm = false;
+  preremplirIdentifiant();
+  setScreen('screen-login');
+});
+
+document.getElementById('incident-secondaire').addEventListener('click', () => {
+  const i = _incident;
+  fermerIncident();
+  // Annuler : la carte est mise de côté. Connexion perdue → peut-être
+  // enregistrée ; limiteur → sûrement pas (refusée avant toute écriture).
+  if (i) setCardLock(i.serial, null, i.type === 'limiteur' ? 'refus' : 'incertain');
+});
+
+function preremplirIdentifiant() {
+  const champ = document.getElementById('input-slug');
+  try { if (!champ.value) champ.value = localStorage.getItem('ww_scanner_identifiant') || ''; } catch {}
+}
+
+// ── Renouvellement silencieux de la session (étape 12a) ───────────────────
+// Après un scan réussi SEULEMENT, et seulement si la session longue expire dans
+// moins de RENOUVELER_SOUS_MS : un appel par an et par appareil, après la
+// réponse (n'allonge jamais un scan), au plus une tentative par chargement. Lu
+// dans le jeton lui-même : aucune requête pour décider.
+const RENOUVELER_SOUS_MS = 60 * 24 * 3600 * 1000;
+const SESSION_LONGUE_MIN_S = 300 * 24 * 3600;
+let _renouvellementTente = false;
+
+function renouvelerSessionSiBesoin() {
+  if (_renouvellementTente || !state.token) return;
+  let p;
+  try { p = JSON.parse(atob(state.token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); } catch { return; }
+  if (!p.iat || !p.exp || p.exp - p.iat < SESSION_LONGUE_MIN_S) return;
+  if (p.exp * 1000 - Date.now() > RENOUVELER_SOUS_MS) return;
+  _renouvellementTente = true;
+  fetch('/api/scanner/renouveler', { method: 'POST', headers: { 'Authorization': `Bearer ${state.token}` } })
+    .then(r => (r.ok ? r.json() : null))
+    .then(d => {
+      if (!d || !d.token) return;
+      state.token = d.token;
+      try { localStorage.setItem('ww_token', d.token); } catch {}
+    })
+    .catch(() => {});
 }
 
 function showScanError(msg) {
@@ -1213,8 +1441,7 @@ function showResult(data, ok, serial) {
 
   if (!ok) {
     const errEl = document.getElementById('result-error');
-    const refusNomme = { scan_cancelled: 'refusAnnule', idempotency_conflict: 'refusConflit' }[data.error];
-    errEl.textContent = refusNomme ? t(refusNomme) : (data.error || t('unknownError'));
+    errEl.textContent = data.error || t('unknownError');
     errEl.style.display = 'block';
     document.getElementById('result-name').textContent = t('errorName');
     document.getElementById('result-avatar').textContent = '✗';
@@ -1481,6 +1708,8 @@ applyI18n();
 
 if (restoreSession()) {
   startScanner();
+} else {
+  preremplirIdentifiant();
 }
 </script>
 </body>
