@@ -602,6 +602,17 @@
   </div>
 </div>
 
+<!-- Incident (étape 12b) — même panneau que public/scanner/index.html -->
+<div id="modal-sc-incident" class="modal-overlay">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="sc-incident-titre"></div>
+    <div style="font-size:13px;color:var(--muted)" id="sc-incident-texte"></div>
+    <button class="btn btn-primary" id="sc-incident-principal"></button>
+    <button class="btn btn-ghost"   id="sc-incident-secondaire"></button>
+  </div>
+</div>
+
 <div id="modal-sc-points" class="modal-overlay">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
@@ -707,7 +718,9 @@ const S = {
 const SC = {
   stream: null, rafId: null, scanning: false, processing: false,
   awaitingPoints: false, awaitingConfirm: false,
-  lockedSerial: null, lockedPrenom: null, lockClearSince: null,
+  awaitingIncident: false,   // panneau d'incident ouvert : détection en pause (étape 12b)
+  // lockedEtat : 'ok' | 'refus' | 'incertain' — décide du bandeau (étape 12b).
+  lockedSerial: null, lockedPrenom: null, lockedEtat: null, lockClearSince: null,
 };
 
 // Délai SANS aucun QR dans le champ avant que le verrou tombe tout seul (B).
@@ -762,6 +775,23 @@ const I18N = {
     dejaEnregistre:'Already recorded — this visit had gone through, nothing was added.',
     refusAnnule:'This visit was undone in the meantime. Scan again to record it.',
     refusConflit:'Conflicting request — nothing was recorded. Scan again.',
+    nouvelEssai:'⏳ New attempt…',
+    connexionPerdueTitre:'Connection lost',
+    connexionPerdueTexte:'This visit may not have been recorded. Retry: it will never be counted twice.',
+    limiteurTitre:'Too many requests',
+    limiteurTexte:({min})=>`This visit was not recorded. Retry in about ${min} min.`,
+    reessayer:'Retry',
+    sessionExpireeTitre:'Session expired',
+    sessionExpireeTexte:'This visit was not recorded. Sign in again to continue.',
+    seReconnecter:'Sign in again',
+    compteSuspenduTitre:'Account suspended',
+    compteSuspenduTexte:'This visit was not recorded. Contact WinWin.',
+    useBoutiqueLogin:'Scan with your store login (Scanner app)',
+    lockedNonEnregistre:'Card not recorded',
+    lockedIncertain:'⚠️ Visit not confirmed',
+    lockedIncertainHint:'Tap below to retry — never counted twice',
+    carteInconnue:'Unknown card for this shop',
+    codeInvalide:'Invalid code — scan the QR or type the 6-character backup code',
     cameraError:({msg})=>'Cannot access camera: '+msg, cameraErrorName:'Camera error',
     unknownError:'Unknown error', errorName:'Error',
     pushNotifs:'Push notifications',
@@ -843,6 +873,23 @@ const I18N = {
     dejaEnregistre:'Déjà enregistré — ce passage avait bien été pris en compte, rien n\'a été ajouté.',
     refusAnnule:'Ce passage a été annulé entre-temps. Rescannez pour l\'enregistrer.',
     refusConflit:'Demande en conflit — rien n\'a été enregistré. Rescannez.',
+    nouvelEssai:'⏳ Nouvel essai…',
+    connexionPerdueTitre:'Connexion perdue',
+    connexionPerdueTexte:'Ce passage n\'est peut-être pas enregistré. Réessayez : il ne sera jamais compté deux fois.',
+    limiteurTitre:'Trop de demandes',
+    limiteurTexte:({min})=>`Ce passage n'a pas été enregistré. Réessayez dans ${min} min environ.`,
+    reessayer:'Réessayer',
+    sessionExpireeTitre:'Session expirée',
+    sessionExpireeTexte:'Ce passage n\'a pas été enregistré. Reconnectez-vous pour continuer.',
+    seReconnecter:'Se reconnecter',
+    compteSuspenduTitre:'Compte suspendu',
+    compteSuspenduTexte:'Ce passage n\'a pas été enregistré. Contactez WinWin.',
+    useBoutiqueLogin:'Scannez avec l\'identifiant de la boutique (appli Scanner)',
+    lockedNonEnregistre:'Carte non enregistrée',
+    lockedIncertain:'⚠️ Passage non confirmé',
+    lockedIncertainHint:'Appuyez ci-dessous pour réessayer — jamais compté deux fois',
+    carteInconnue:'Carte inconnue chez ce commerce',
+    codeInvalide:'Code invalide — scannez le QR ou tapez les 6 caractères du code de secours',
     cameraError:({msg})=>"Impossible d'accéder à la caméra : "+msg, cameraErrorName:'Erreur caméra',
     unknownError:'Erreur inconnue', errorName:'Erreur',
     pushNotifs:'Notifications push',
@@ -1403,6 +1450,7 @@ function startScannerTab() {
   SC.processing = false;
   closeConfirmDashboard();
   closePointsPadDashboard();
+  fermerIncidentDashboard();
   scClearLock();
   document.getElementById('sc-result-sheet').classList.remove('visible');
   document.getElementById('sc-status').style.display = 'none';
@@ -1448,7 +1496,7 @@ function stopScannerTab() {
 function scLoop() {
   if (!SC.scanning) return;
   SC.rafId = requestAnimationFrame(scLoop);
-  if (SC.processing || SC.awaitingPoints || SC.awaitingConfirm) return;
+  if (SC.processing || SC.awaitingPoints || SC.awaitingConfirm || SC.awaitingIncident) return;
   const video = document.getElementById('sc-video');
   if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
   const canvas = document.getElementById('sc-canvas');
@@ -1489,9 +1537,10 @@ function scIsLocked(serial) {
 // Déclaré AVANT ses usages : scSetLock/scClearLock y touchent.
 let _scLockedShownFor = null;
 
-function scSetLock(serial, prenom) {
+function scSetLock(serial, prenom, etat) {
   SC.lockedSerial   = serial || null;
   SC.lockedPrenom   = prenom || null;
+  SC.lockedEtat     = etat || (prenom ? 'ok' : 'refus');
   SC.lockClearSince = null;
   _scLockedShownFor = null;
   document.getElementById('sc-locked').classList.remove('open');
@@ -1500,6 +1549,7 @@ function scSetLock(serial, prenom) {
 function scClearLock() {
   SC.lockedSerial   = null;
   SC.lockedPrenom   = null;
+  SC.lockedEtat     = null;
   SC.lockClearSince = null;
   _scLockedShownFor = null;
   document.getElementById('sc-locked').classList.remove('open');
@@ -1511,9 +1561,13 @@ function scShowLock() {
   const el = document.getElementById('sc-locked');
   if (_scLockedShownFor === SC.lockedSerial && el.classList.contains('open')) return;
   _scLockedShownFor = SC.lockedSerial;
+  // « Déjà scannée » seulement après un vrai crédit (étape 12b), comme la PWA.
   document.getElementById('sc-locked-title').textContent =
-    SC.lockedPrenom ? t('lockedScanned', { prenom: SC.lockedPrenom }) : t('lockedScannedAnon');
-  document.getElementById('sc-locked-hint').textContent = t('lockedHint');
+    SC.lockedEtat === 'incertain' ? t('lockedIncertain')
+    : SC.lockedEtat === 'refus' ? t('lockedNonEnregistre')
+    : SC.lockedPrenom ? t('lockedScanned', { prenom: SC.lockedPrenom }) : t('lockedScannedAnon');
+  document.getElementById('sc-locked-hint').textContent =
+    SC.lockedEtat === 'incertain' ? t('lockedIncertainHint') : t('lockedHint');
   document.getElementById('sc-locked-add').textContent =
     S.typeProgramme === 'points' ? t('addPoints') : t('addStamp');
   el.classList.add('open');
@@ -1531,7 +1585,7 @@ document.getElementById('sc-locked-add').addEventListener('click', () => {
 });
 
 async function handleScanQR(raw) {
-  if (SC.processing || SC.awaitingPoints || SC.awaitingConfirm) return;
+  if (SC.processing || SC.awaitingPoints || SC.awaitingConfirm || SC.awaitingIncident) return;
   let serial = raw.trim();
   try {
     const url = new URL(serial);
@@ -1651,36 +1705,169 @@ function oublierCle() {
   try { localStorage.removeItem(CLE_STOCKAGE); } catch {}
 }
 
+// ── Après une erreur (étape 12b) — même règle que public/scanner/index.html ──
+// Scan normal inchangé. Délai maximal pour tout le passage ; échec passager
+// (réseau, 5xx, limiteur) : UN nouvel essai automatique, même clé ; s'il échoue
+// encore : panneau « Connexion perdue ». Session ou compte refusés : panneau en
+// mots simples, puis l'écran de connexion.
+const DELAI_SCAN_MS = 15000;
+const PAUSE_AVANT_ESSAI_MS = 1000;
+
+async function envoyerScanDashboard(serial, points, cle, limite) {
+  const body = { serial_number: serial, cle_idempotence: cle };
+  if (points != null) body.points = points;
+  const ctrl = new AbortController();
+  const minuteur = setTimeout(() => ctrl.abort(), Math.max(0, limite - Date.now()));
+  try {
+    const res = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.token}` },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    let data = null;
+    try { data = await res.json(); } catch {
+      if (ctrl.signal.aborted) return { res: null, data: null, passager: false };
+    }
+    return { res, data, passager: res.status >= 500 || res.status === 429 };
+  } catch {
+    return { res: null, data: null, passager: !ctrl.signal.aborted };
+  } finally {
+    clearTimeout(minuteur);
+  }
+}
+
 async function submitScanDashboard(serial, points) {
   if (SC.processing) return;
   SC.processing = true;
   const statusEl = document.getElementById('sc-status');
   statusEl.textContent = t('processing'); statusEl.style.display = 'block';
   try { navigator.vibrate && navigator.vibrate(50); } catch {}
-  try {
-    const body = { serial_number: serial, cle_idempotence: cleDuScan(serial, points) };
-    if (points != null) body.points = points;
-    const res = await fetch('/api/scan', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.token}` },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    // Réponse claire (succès ou refus) : la clé a servi. 5xx : le crédit a pu
-    // passer malgré l'erreur → clé gardée pour un nouvel essai sur cette carte.
-    if (res.status < 500) oublierCle();
-    statusEl.style.display = 'none';
-    SC.scanning = false;
-    S.scans = null; // invalidate scan history cache
-    if (res.status === 409 && data.candidates) { showScanCandidates(data.candidates); return; }
-    // Réponse définitive du serveur (succès OU refus) : la carte est traitée, on la
-    // verrouille. Le prénom vient de la réponse — aucune lecture supplémentaire.
-    scSetLock(serial, res.ok ? data.prenom : null);
-    showScanResult(data, res.ok, serial);
-  } catch (e) {
-    statusEl.textContent = '⚠️ ' + e.message;
-    setTimeout(() => { statusEl.style.display = 'none'; SC.processing = false; }, 3000);
+
+  const cle = cleDuScan(serial, points);
+  const limite = Date.now() + DELAI_SCAN_MS;
+  let r = await envoyerScanDashboard(serial, points, cle, limite);
+  if (r.passager && Date.now() + PAUSE_AVANT_ESSAI_MS < limite) {
+    statusEl.textContent = t('nouvelEssai');
+    await new Promise(ok => setTimeout(ok, PAUSE_AVANT_ESSAI_MS));
+    r = await envoyerScanDashboard(serial, points, cle, limite);
   }
+  statusEl.style.display = 'none';
+  const { res } = r;
+  const data = r.data || {};
+
+  // Pas de réponse claire : peut-être crédité. Clé GARDÉE (Réessayer la reprend).
+  if (!res || res.status >= 500 || res.status === 429) {
+    SC.processing = false;
+    if (res && res.status === 429) {
+      const s = Number(res.headers.get('Retry-After') || res.headers.get('RateLimit-Reset')) || 60;
+      ouvrirIncidentDashboard('limiteur', { serial, points, min: Math.max(1, Math.ceil(s / 60)) });
+    } else {
+      ouvrirIncidentDashboard('connexion', { serial, points });
+    }
+    return;
+  }
+
+  // Réponse claire (succès ou refus) : la clé a servi.
+  oublierCle();
+  SC.scanning = false;
+  S.scans = null; // invalidate scan history cache
+
+  const code = data.error;
+  if (res.status === 401 || (res.status === 403 && (code === 'session_revoked' || code === 'Accès refusé'))) {
+    ouvrirIncidentDashboard('session', { serial });
+    return;
+  }
+  if (res.status === 403 && (code === 'account_suspended' || code === 'Merchant account suspended')) {
+    ouvrirIncidentDashboard('suspendu', { serial });
+    return;
+  }
+  if (res.status === 409 && data.candidates) { showScanCandidates(data.candidates); return; }
+  // Réponse définitive du serveur (succès OU refus) : la carte est traitée, on la
+  // verrouille. Le prénom vient de la réponse — aucune lecture supplémentaire.
+  scSetLock(serial, res.ok ? data.prenom : null);
+  showScanResult(res.ok ? data : { error: messageRefusDashboard(res.status, data) }, res.ok, serial);
+  if (res.ok) renouvelerSessionDashboardSiBesoin();
+}
+
+function messageRefusDashboard(status, data) {
+  const code = (data && data.error) || '';
+  if (code === 'scan_cancelled') return t('refusAnnule');
+  if (code === 'idempotency_conflict') return t('refusConflit');
+  if (code === 'use_boutique_login') return t('useBoutiqueLogin');
+  if (status === 404) return t('carteInconnue');
+  if (status === 400 && code.startsWith('Invalid code')) return t('codeInvalide');
+  if (status === 400 && code.startsWith('points must be')) return t('invalidPoints');
+  return code || t('unknownError');
+}
+
+let _incidentDashboard = null;
+
+function ouvrirIncidentDashboard(type, contexte) {
+  _incidentDashboard = { type, ...contexte };
+  SC.awaitingIncident = true;
+  const [titre, texte, principal, secondaire] = {
+    connexion: [t('connexionPerdueTitre'), t('connexionPerdueTexte'), t('reessayer'), t('cancel')],
+    limiteur:  [t('limiteurTitre'), t('limiteurTexte', { min: contexte.min }), t('reessayer'), t('cancel')],
+    session:   [t('sessionExpireeTitre'), t('sessionExpireeTexte'), t('seReconnecter'), null],
+    suspendu:  [t('compteSuspenduTitre'), t('compteSuspenduTexte'), t('signOut'), null],
+  }[type];
+  document.getElementById('sc-incident-titre').textContent = titre;
+  document.getElementById('sc-incident-texte').textContent = texte;
+  document.getElementById('sc-incident-principal').textContent = principal;
+  const sec = document.getElementById('sc-incident-secondaire');
+  sec.textContent = secondaire || '';
+  sec.style.display = secondaire ? '' : 'none';
+  document.getElementById('modal-sc-incident').classList.add('open');
+}
+
+function fermerIncidentDashboard() {
+  document.getElementById('modal-sc-incident').classList.remove('open');
+  SC.awaitingIncident = false;
+  _incidentDashboard = null;
+}
+
+document.getElementById('sc-incident-principal').addEventListener('click', () => {
+  const i = _incidentDashboard;
+  fermerIncidentDashboard();
+  if (!i) return;
+  if (i.type === 'connexion' || i.type === 'limiteur') { submitScanDashboard(i.serial, i.points); return; }
+  // Session ou compte : retour à l'écran de connexion, identifiant pré-rempli.
+  const slug = S.marchandSlug;
+  clearSession();
+  showLogin();
+  const champ = document.getElementById('in-slug');
+  if (!champ.value && slug) champ.value = slug;
+});
+
+document.getElementById('sc-incident-secondaire').addEventListener('click', () => {
+  const i = _incidentDashboard;
+  fermerIncidentDashboard();
+  if (i) scSetLock(i.serial, null, i.type === 'limiteur' ? 'refus' : 'incertain');
+});
+
+// Renouvellement silencieux de la session (étape 12a) : après un scan réussi
+// seulement, si la session longue expire dans moins de 60 jours ; au plus une
+// tentative par chargement, après la réponse. Aucune requête pour décider.
+const RENOUVELER_SOUS_MS = 60 * 24 * 3600 * 1000;
+const SESSION_LONGUE_MIN_S = 300 * 24 * 3600;
+let _renouvellementTente = false;
+
+function renouvelerSessionDashboardSiBesoin() {
+  if (_renouvellementTente || !S.token) return;
+  let p;
+  try { p = JSON.parse(atob(S.token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); } catch { return; }
+  if (!p.iat || !p.exp || p.exp - p.iat < SESSION_LONGUE_MIN_S) return;
+  if (p.exp * 1000 - Date.now() > RENOUVELER_SOUS_MS) return;
+  _renouvellementTente = true;
+  fetch('/api/scanner/renouveler', { method: 'POST', headers: { 'Authorization': `Bearer ${S.token}` } })
+    .then(r => (r.ok ? r.json() : null))
+    .then(d => {
+      if (!d || !d.token) return;
+      S.token = d.token;
+      try { localStorage.setItem('ww_dash_token', d.token); } catch {}
+    })
+    .catch(() => {});
 }
 
 // Collision backup code : prénoms candidats en boutons. Un tap re-soumet le
@@ -1721,8 +1908,7 @@ function showScanResult(data, ok, serial) {
   document.getElementById('sc-deja').style.display = 'none';
 
   if (!ok) {
-    const refusNomme = { scan_cancelled: 'refusAnnule', idempotency_conflict: 'refusConflit' }[data.error];
-    document.getElementById('sc-error').textContent = refusNomme ? t(refusNomme) : (data.error || t('unknownError'));
+    document.getElementById('sc-error').textContent = data.error || t('unknownError');
     document.getElementById('sc-error').style.display = 'block';
     document.getElementById('sc-name').textContent = t('errorName');
     document.getElementById('sc-avatar').textContent = '✗';

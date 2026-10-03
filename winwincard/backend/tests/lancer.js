@@ -26,9 +26,10 @@
 //   PGPORT        port du PostgreSQL local (défaut 5432) ;
 //   FILET_CACHE   dossier où garder PostgREST (défaut ~/.cache/winwin-filet) ;
 //   FILET_GARDER  =1 pour garder la base et les journaux à la fin (enquête) ;
-//   FILET_EN_PLUS chemin d'un module de tests supplémentaire, joué après les
-//                 scénarios sur la même base et le même serveur (ex. les tests
-//                 navigateur de tests/navigateur/, qui exigent Playwright).
+//   FILET_EN_PLUS chemins de modules de tests supplémentaires, séparés par des
+//                 virgules, joués dans l'ordre après les scénarios, sur la même
+//                 base et le même serveur (ex. les tests navigateur de
+//                 tests/navigateur/, qui exigent Playwright).
 // Limite connue : la production tourne sous PostgreSQL 17.6 (00a §8).
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -266,7 +267,9 @@ function nettoyer() {
     },
   };
   await scenarios.jouer(ctx);
-  if (process.env.FILET_EN_PLUS) await require(path.resolve(process.env.FILET_EN_PLUS))(ctx);
+  for (const module of (process.env.FILET_EN_PLUS || '').split(',').filter(Boolean)) {
+    await require(path.resolve(module))(ctx);
+  }
 
   const ok = resultats.filter(Boolean).length;
   console.log(`\n${ok}/${resultats.length} OK`);

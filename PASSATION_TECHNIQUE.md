@@ -2422,7 +2422,12 @@ tests/lancer.js` (variable `FILET_EN_PLUS` ajoutée à `lancer.js`).
 - L'étape 12 reste à faire : ne pas reproposer la carte après une erreur, le dire,
   délai maximal, 401/403/429.
 
-## 15 sexdecies. ÉTAPE 12 : LA CAISSE APRÈS UNE ERREUR (préparée le 03/10, NON POUSSÉE)
+## 15 sexdecies. ÉTAPE 12 : LA CAISSE APRÈS UNE ERREUR (12a et 12b poussés le 04/10)
+
+**État (04/10).** 12a poussé seul (`ebe0d81`), **vérifié par Yass** : déploiement vert,
+healthcheck OK, scan et annulation au scanner, scan depuis le dashboard, aucun 500. 12b
+poussé ensuite, sur son feu vert, après 133/133 sur la branche `etape12` remise sur la
+production (`5630092`). Vérification de 12b : à suivre.
 
 **Diagnostic (03/10, observé dans le vrai écran, captures sur le banc).** Erreur réseau :
 « Erreur réseau : Failed to fetch » 3 s, puis la carte tenue est reproposée aussitôt.
