@@ -39,11 +39,15 @@ app.use(express.json({ limit: '2mb' }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 // Rate limiting global
+// message : réponse en JSON, comme les autres limiteurs (étape 12a). Sans lui,
+// la bibliothèque répond en texte et les écrans de caisse affichaient une
+// « erreur réseau » illisible. Délai avant réouverture : en-têtes RateLimit-*.
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000, // 15 min
   max: 300,
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  message: { error: 'rate_limited' },
 }));
 
 // Rate limiters dédiés (anti brute-force logins).
