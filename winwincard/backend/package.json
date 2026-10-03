@@ -5,7 +5,8 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "dev": "nodemon src/index.js",
+    "test": "node tests/lancer.js"
   },
   "dependencies": {
     "@fontsource/dm-sans": "^5.0.0",

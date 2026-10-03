@@ -577,6 +577,8 @@ Avant d'attaquer un chantier, valider l'état de départ :
 3. Un scan caméra ET un scan backup code sur le cobaye Pizza Sabbioni (voir son état,
    dette #7) : solde + notif + pass rafraîchi dans les deux cas.
 4. `type_programme` de Wam N Fade = `'points'`, des autres marchands = `'stamps'`.
+5. `cd winwincard/backend && npm ci && npm test` → « 62/62 OK » au 02/10 (filet de
+   l'étape 10, §15 quaterdecies).
 
 ## 7. MÉTHODE DE TRAVAIL AVEC LE FONDATEUR (le contrat)
 
@@ -597,6 +599,13 @@ manuel ; le reset immédiat abandonné avant code). La respecter :
 6. **Parler clair.** Le fondateur n'est pas développeur : expliquer le jargon, dire
    franchement ce qu'on ne sait pas (ex. : les délais de propagation Google), signaler
    spontanément ce qu'on découvre en chemin.
+7. **`npm test` avant tout push qui touche l'argent, le scan, les migrations ou
+   l'authentification** (règle de Yass, 02/10). Dans `winwincard/backend`, le filet doit
+   finir sur « N/N OK » ; le résultat figure dans le rapport avant push. Un KO bloque le
+   push : on corrige le code, ou, si le changement de comportement est VOULU (étape de la
+   roadmap validée), on inverse le scénario « ÉTAT ACTUEL » dans le même commit et on le
+   dit. Une migration passe le filet AVANT d'être donnée à Yass pour Supabase (le filet
+   rejoue toutes les migrations du dépôt). Détail : §15 quaterdecies.
 
 ---
 
@@ -2133,6 +2142,13 @@ peuvent aussi échouer pendant la bascule.
    puis un scan, et la carte se met à jour (notification Apple de production).
 5. Le lendemain : `/health/cron` (cron de 08:00 UTC dans la nouvelle image).
 
+**Push 2a FAIT et VÉRIFIÉ (02/10, `6f8f596`, poussé à 12:13 UTC).** Vérifié par Yass :
+déploiement vert sous garde-fou (healthcheck `/health/db` de `railway.toml`), `/health` →
+v24.10.0, carte iPhone créée, scannée et mise à jour. Les journaux « pass was unchanged »
+d'Apple existaient déjà avant (relance de 08:00 UTC) : sans lien avec le Dockerfile, **à
+reprendre aux étapes 23-24** (cartes régénérées sans changement, 02 §11). **Push 2b prévu
+vers le 05/10.**
+
 **Push 2b (un autre jour, avant la mi-novembre).**
 1. Suppression de `railway.toml`.
 2. Après le déploiement, dans Settings, désormais déverrouillés :
@@ -2148,6 +2164,111 @@ peuvent aussi échouer pendant la bascule.
   l'offre). Puis `git revert` : retour à `builder = "nixpacks"`, valable jusqu'au 30/11.
 - **2b :** Rollback vers le déploiement 2a, puis `git revert` : le fichier revient,
   valable jusqu'au 30/11.
+
+## 15 quaterdecies. ÉTAPE 10 : LE FILET DE TESTS ARGENT ET SCAN (02/10)
+
+**Ce que c'est.** Une commande, `npm test` dans `winwincard/backend`, rejoue la base depuis
+le dépôt dans un PostgreSQL local jetable, démarre le vrai serveur et vérifie 62
+comportements de l'argent et du scan. Résultat en une ligne : « N/N OK ». Rien de réel n'est
+touché (ni Supabase, ni Railway, ni Apple, ni Google). Durée : 10 à 12 s ; le premier
+lancement télécharge en plus PostgREST depuis GitHub, empreinte vérifiée. Fichiers :
+`tests/lancer.js` (orchestration) et `tests/scenarios.js` (scénarios). **Aucun code de
+production modifié** ; `package.json` reçoit le script `test`, le lockfile est inchangé.
+
+**Comment il marche.**
+1. Base `winwin_filet` recréée : prélude Supabase (rôles anon, authenticated, service_role ;
+   extensions), puis `schema.sql`, les migrations dans l'ordre, `rgpd_effacement.sql`. C'est
+   la méthode de `database/requetes/ecarts_prod_depot/generer.sh` (§15 octies) : une
+   nouvelle migration du dépôt est rejouée sans rien changer au filet.
+2. PostgREST v12.2.12 (l'API que Supabase met devant la base) derrière le préfixe
+   `/rest/v1`, avec une clé service_role locale.
+3. Le vrai `src/index.js`, lancé depuis un dossier temporaire VIDE : un `.env` présent sur la
+   machine n'est jamais lu. Preuve du 02/10 : un `.env` piège contenant un `SENTRY_DSN` →
+   journal du serveur « SENTRY_DSN absent ». Sans clés Apple ni Google, les envois
+   échouent proprement en local.
+4. À la fin : base supprimée, processus arrêtés (`FILET_GARDER=1` les garde pour enquêter).
+   Code de sortie 0 si tout est OK, 1 au moindre KO, 2 si le filet n'a pas pu tourner
+   (« FILET INTERROMPU »).
+
+**Les 62 vérifications** (liste validée par Yass le 02/10 ; audit 02 §10, synthèse §4.3).
+
+| Bloc | Ce qui est vérifié |
+|---|---|
+| 0. Préalable | droits de service_role sur les 7 tables centrales (étape 9) ; `/health/db` 200 |
+| 1. Tampons | +1 ; montant envoyé ignoré ; 9→10 récompense acquise non remise ; remise au passage suivant ; lignes de journal |
+| 2. Points | +50 ; franchissement ; report du surplus (530→80) ; report en cascade (630→140) ; montants refusés sans écriture ; borne 100 000 ; fonction SQL appelée seule |
+| 3. Simultanés, renvoi | 10 scans simultanés : rien de perdu, chaîne du journal complète ; renvoi (ÉTAT ACTUEL) |
+| 4. Annulation | jeton marchand ET jeton boutique (écart A) : dernier scan seulement, une seule fois, répétable, refus après ajustement, deux annulations simultanées, autre boutique refusée |
+| 5. Ajustement | accepté ; bornes refusées ; ajustement pendant un scan |
+| 6. Code de secours | crédit ; code partagé par deux clients (409, aucun crédit) ; inconnu ; format |
+| 7. Refus avant écriture | boutique coupée ; archivée ; jeton marchand sur un réseau ; carte d'un autre marchand ; marchand suspendu puis réactivé |
+| 8. Parrainage | inscription avec le lien ; crédit unique à vie ; mode points (écart B, ÉTAT ACTUEL) |
+| 9. Coupures | crédit sans ligne ; journal dans le désordre (ÉTAT ACTUEL) |
+
+**Les « ÉTAT ACTUEL » : défauts figés tels quels, et l'étape qui les inversera.** Un
+scénario « ÉTAT ACTUEL » qui passe au rouge signale un changement de comportement : voulu
+(l'étape qui corrige inverse le scénario dans le même commit) ou non (régression).
+
+| Constat figé | Étape |
+|---|---|
+| même demande envoyée deux fois : deux crédits | 11 |
+| crédit sans ligne de journal (coupure) ; journal dans le désordre : rien ne s'annule | 11 |
+| ajustement sans ligne de journal ; ajustement pendant un scan : 5 ou 6 selon l'ordre d'arrivée | 13 (ajustement conditionnel, journalisé) |
+| en points, ajustement au-dessus du seuil accepté par le serveur (l'écran le refuse) | 13 (« sans plafond au seuil » : c'est l'écran qui changera) |
+| annulation d'un dernier scan hors des 100 derniers de la boutique : acceptée par le serveur | 13 (annulation rendue atteignable) |
+| jeton marchand sur un réseau : annule le scan d'une boutique | 13 (bouton du dashboard, écart A) |
+| parrainage en points : parrain crédité (+5), et ramené au seuil s'il est au-dessus (perd 30) | 14 (écart B, `credit_referral`) |
+| parrain en tampons déjà à 10/10 : le tampon est perdu | aucune : règle produit du 27/09 (audit 02 §4.4) |
+
+**Preuve qu'il attrape une casse (02/10).** Trois règles cassées exprès en local, puis
+remises (`git checkout`, rien commité) :
+
+| Casse | Résultat |
+|---|---|
+| `scan.js` : la boutique coupée n'est plus refusée | 60/62 : refus 403 et « rien d'écrit » en KO |
+| `scan.js` : l'annulation d'une autre boutique n'est plus refusée | 60/62 : autre boutique acceptée, KO |
+| migration 023 : le surplus des points n'est plus reporté | 58/62 : les 4 vérifications du report en KO |
+
+Stabilité : 6 passages complets à 62/62 le 02/10, de 10 à 12 s chacun.
+
+**Décisions de Yass (02/10).**
+- **Écart A** : bouton « annuler le dernier scan » dans le dashboard (décision du 29/09),
+  chantier à part à l'étape 13. Le filet teste dès maintenant la route avec les deux jetons.
+- **Écart B** : le filet fige l'état actuel (parrain crédité en points). La règle « jamais
+  en mode points » entrera dans le code à l'étape 14, avec la correction de
+  `credit_referral`. **D'ici là, Yass ne coche jamais la case parrainage d'un marchand en
+  points.**
+- **Règle** : `npm test` avant tout push qui touche l'argent, le scan, les migrations ou
+  l'authentification (§7, règle 7).
+- **Phase 2, REPORTÉE** : GitHub Actions lance le filet à chaque push et Railway attend son
+  résultat (« Wait for CI ») avant de déployer. Après 2 à 3 semaines sans fausse alerte,
+  soit vers le 16-23/10. Rien n'est fait.
+
+**Hypothèses (ce qui ferait casser le filet) et limites.**
+- PostgreSQL 16 dans le conteneur, 17.6 en production (00a §8) ; PostgREST 12.2.12 en
+  local, version de Supabase non vérifiée. Un comportement propre aux versions de
+  production échapperait au filet.
+- Le filet suppose que le dépôt reconstruit la production (étape 9 : requête d'écarts
+  IDENTIQUE le 29/09). Un changement fait à la main dans Supabase, sans migration, lui est
+  invisible : relancer la requête d'écarts après chaque migration.
+- Jetons fabriqués avec le secret local : le filet teste les droits de chaque jeton
+  (marchand, boutique, admin), PAS les écrans de connexion ni les mots de passe.
+- Ni carte Apple ou Google, ni notification, ni écran (dashboard, scanner) : le serveur et
+  la base seulement. Le filet ne remplace pas le test terrain sur cobaye (§7, règle 5).
+- Les données du filet (marchands, boutiques, clients) sont écrites directement en base :
+  une migration qui ajoute une colonne obligatoire à ces tables arrête le filet
+  (« FILET INTERROMPU ») ; compléter alors les données dans `scenarios.js`.
+- Linux x86-64 seulement (binaire PostgREST), PostgreSQL local avec accès
+  superutilisateur, `curl` et `tar`. Réseau vers GitHub au premier lancement :
+  téléchargement réessayé 4 fois (GitHub a répondu 502 une fois le 02/10).
+
+**Déploiement.** Le commit touche `winwincard/backend/` (`tests/`, `package.json`) :
+Railway reconstruit et redéploie (chemins surveillés), sous le garde-fou `/health/db`. Le
+code servi est inchangé ; l'image contient le dossier `tests/`, jamais exécuté par
+`npm start`. Option, non faite : ajouter la ligne `!/winwincard/backend/tests/**` sous
+`/winwincard/backend/**` dans les chemins surveillés, pour qu'un commit qui ne touche que
+les tests ne redéploie pas (négation documentée par Railway, qui exige une règle
+d'inclusion avant elle).
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
@@ -2277,6 +2398,13 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-10-02 par la session « SETUP 4 », neuvième chantier : étape 10
+(§15 quaterdecies), filet de tests argent et scan, `npm test`, 62/62 ; il attrape les trois
+casses provoquées exprès. Aucun code de production touché. Décisions de Yass : écarts A
+(étape 13) et B (étape 14, case parrainage jamais cochée en points d'ici là), règle « npm
+test avant push » (§7, règle 7), phase 2 reportée. Étape 8 : push 2a (Dockerfile sous
+garde-fou, `6f8f596`) vérifié par Yass ; push 2b vers le 05/10.*
 
 *Mis à jour le 2026-10-01 par la session « SETUP 4 », huitième chantier : étape 8
 (§15 terdecies), diagnostic des réglages Railway avant le 01/12 ; geste 1 fait : Node figé à
