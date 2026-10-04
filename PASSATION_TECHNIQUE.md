@@ -2150,12 +2150,19 @@ d'Apple existaient déjà avant (relance de 08:00 UTC) : sans lien avec le Docke
 reprendre aux étapes 23-24** (cartes régénérées sans changement, 02 §11). **Push 2b prévu
 vers le 05/10.**
 
+**Push 2b FAIT le 04/10** (`/health/cron` du 04/10 « fini » avant le push) : `railway.toml`
+supprimé ; commentaire de `src/index.js` mis à jour. Les réglages du fichier sont à
+reposer par Yass dans le tableau de bord, gestes ci-dessous ; vérification à suivre.
+
 **Push 2b (un autre jour, avant la mi-novembre).**
 1. Suppression de `railway.toml`.
 2. Après le déploiement, dans Settings, désormais déverrouillés :
    - Healthcheck Path `/health/db`, Timeout `30` ;
    - Restart Policy On Failure, `3` ;
-   - commande de démarrage vide ou `npm start`, sinon prévenir.
+   - commande de démarrage (« Custom Start Command ») **VIDE**, jamais `npm start` : un
+     champ rempli remplace la commande du Dockerfile (documentation Railway,
+     `deployments/start-command.md`) et rendrait impossible l'arrêt propre de l'étape 14
+     (mesuré le 03/10 : démarré par `npm`, Node ne reçoit pas le signal d'arrêt).
 3. Appliquer et déployer : le second déploiement doit passer le healthcheck.
 4. Contrôler la page du déploiement : plus d'icône de fichier, bonnes valeurs.
 
@@ -2561,6 +2568,11 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-10-04 par la session « SETUP 4 » : étape 8, push 2b (`railway.toml`
+supprimé, §15 terdecies) ; réglages à reposer par Yass dans le tableau de bord, commande
+de démarrage VIDE. Les branches `etape12` (poussée en relecture) et `etape13` (locale)
+portent les étapes 12 et 13, non déployées.*
 
 *Mis à jour le 2026-10-03 par la session « SETUP 4 », dixième chantier : étape 11
 (§15 quindecies). 11a, le crédit incassable : migration 051 (exécutée par Yass avant le

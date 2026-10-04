@@ -125,7 +125,8 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), node: process.version });
 });
 
-// /health/db : healthcheck de DÉPLOIEMENT de Railway (railway.toml). Une version
+// /health/db : healthcheck de DÉPLOIEMENT de Railway (tableau de bord : Settings →
+// Healthcheck Path, depuis le retrait de railway.toml le 04/10). Une version
 // qui ne lit pas la base avec les droits du serveur est refusée, et Railway garde
 // la version en place. Sont refusées :
 //   - clé fausse, révoquée, ou base injoignable → erreur de lecture ;
