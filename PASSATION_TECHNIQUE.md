@@ -2502,7 +2502,7 @@ essai automatique).
 - Rangement : commits locaux sur la branche `etape12` (non poussée), pour que le push
   2b parte seul sur la branche de production.
 
-## 15 septdecies. ÉTAPE 13 : ANNULER ET AJUSTER DEPUIS LE DASHBOARD (13a et 13b poussés le 04/10)
+## 15 septdecies. ÉTAPE 13 : ANNULER ET AJUSTER DEPUIS LE DASHBOARD (close le 04/10)
 
 **Décisions de Yass (03/10).** Validées : (1) bouton « Annuler » dans la **fiche client**
 du dashboard, pas dans l'onglet Scans ; (2) ajustements tracés dans une **table à part**,
@@ -2568,7 +2568,9 @@ entre la migration et le push : le code 13a, sur une base rejouée avec la 052 e
 exécutée par Yass le 04/10, AVANT le push** : vérification `true | true`, migration OK,
 contrôle 6 × `true`, requête d'écarts `IDENTIQUE au dépôt (hors plateforme) | 0 écart(s)
 · 48 plateforme` (45 + les 3 droits hérités de la nouvelle table, comme 42 → 45 à la
-049). 13b poussé ensuite, sur son feu vert. Vérification de 13b : à suivre.
+049). 13b poussé ensuite, sur son feu vert (`bcde845`). **13b vérifié par Yass le 04/10** :
+ordre inverse, ajustement vérifié, points au-dessus du seuil, aucun 500. **L'étape 13
+est close.**
 
 **Hypothèses et limites.**
 - Un ajustement d'AVANT la 052 n'a pas de ligne : le scan qui le précède reste refusé
@@ -2621,9 +2623,9 @@ Le code attend que 2b, 12 et 13 soient en production : c'est le cas du code depu
 - *Décision 1 refusée, en points* : sans la règle, le plafond au seuil reste. Avec la
   décision 2, un parrain au-dessus du seuil garde son solde mais ne reçoit pas le bonus ;
   juste sous le seuil, il n'en reçoit qu'une partie. Depuis 13b, un solde en points peut
-  dépasser le seuil par ajustement. **Question ouverte pour 14b** : créditer le bonus
-  entier en points (cohérent avec « sans plafond en points » de 13b), plafond gardé en
-  tampons.
+  dépasser le seuil par ajustement. **Décision de Yass (04/10) pour 14b : le bonus est
+  crédité EN ENTIER en mode points** (cohérent avec « sans plafond en points » de 13b) ;
+  **plafond au seuil conservé en tampons** (règle du 27/09).
 - **Reporté** : le crédit de parrainage n'écrit aucune ligne au journal ; après lui, le
   dernier scan du parrain ne s'annule plus (« solde incohérent »), et le journal des
   ajustements de 13b ne le voit pas.
@@ -2797,6 +2799,10 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-10-04 par la session « SETUP 4 » : 13b (`bcde845`) vérifié par Yass,
+**étape 13 close**. Étape 14b : bonus de parrainage crédité en entier en points, plafond
+conservé en tampons (décision de Yass). 14a en cours d'écriture, branche locale.*
 
 *Mis à jour le 2026-10-04 par la session « SETUP 4 » : décisions de Yass sur l'étape 14
 (§15 octodecies) : 1 refusée, 2, 3 (sous condition de coût nul), 4 (a) et 5 validées ;
