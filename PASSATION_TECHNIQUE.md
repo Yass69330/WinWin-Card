@@ -2583,7 +2583,7 @@ est close.**
   ajuster et annuler un ajustement (droits, audit segment 3) ; l'onglet Scans du
   dashboard garde son affichage (pas d'ajustements, pas de bouton).
 
-## 15 octodecies. ÉTAPE 14 : PARRAINAGE EN POINTS ET ARRÊT PROPRE (14a vérifié le 04/10 ; 14b poussé le 04/10)
+## 15 octodecies. ÉTAPE 14 : PARRAINAGE EN POINTS ET ARRÊT PROPRE (close le 04/10)
 
 **Diagnostic (03/10, aucun code, aucune branche).**
 - *Parrainage* : `credit_referral` (migration 015) plafonne au seuil, `LEAST(avant +
@@ -2691,7 +2691,7 @@ l'ancien serveur qu'on arrête) : il se voit au redéploiement SUIVANT.
 **14b — le parrainage (écrit et testé le 04/10 ; migration 053 exécutée par Yass AVANT le
 push : vérification `true | true | true`, contrôle 4 × `true`, écarts `IDENTIQUE au dépôt
 (hors plateforme) | 0 écart(s) · 48 plateforme` ; poussé sur son feu vert).**
-Vérification de 14b en production : à suivre.
+**14b vérifié par Yass le 04/10** (`1203d6c`). **L'étape 14 est close.**
 - **Migration 053** : `credit_referral` re-CREATE OR REPLACE, même signature et même
   retour (aucun code serveur à changer ; seul un commentaire de `scan.js`). Tampons :
   `LEAST(avant + bonus, seuil)`, plafond conservé (règle du 27/09). Points : `avant +
@@ -2911,6 +2911,12 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-10-04 par la session « SETUP 4 » : 14b (`1203d6c`) vérifié par Yass,
+**étape 14 close** (14a `acbb82d`, 14b `1203d6c`). Reste reporté : le crédit de
+parrainage sans ligne au journal ; provisoire : les demandes d'avis perdues au
+redéploiement (§15 octodecies). Prochaine étape de la synthèse : 15 (environnement de
+test et test de charge), non commencée.*
 
 *Mis à jour le 2026-10-04 par la session « SETUP 4 », quinzième chantier : 14a
 (`acbb82d`) vérifié par Yass. 14b (§15 octodecies) : migration 053 (`credit_referral` :
