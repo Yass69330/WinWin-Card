@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../services/supabase');
 const asyncHandler = require('../utils/asyncHandler');
+const { suivre } = require('../services/arret');   // envois après la réponse, attendus à l'arrêt (étape 14a)
 const { authScanner, authMarchand } = require('../middleware/auth');
 const { notif } = require('../i18n/messages');
 
@@ -191,8 +192,8 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   // base perdue → 500, audit 02 §3.2 ligne c). Les deux sont sans effet si la
   // carte est déjà à jour — sauf le message Google, qui s'afficherait deux fois
   // sur Android : il n'est envoyé qu'au premier passage.
-  notifierMiseAJourPass(serial, req.marchandId).catch(e => console.error('[scan] push Apple:', e.message));
-  mettreAJourGoogleWallet(serial, req.marchandId, apresScan, maxValue, displayMaxValue, scanMessage, client.marchands.images_tiers, client.prenom, client.marchands.couleur_fond, client.marchands.couleur_fond_reward, client.marchands, { message: !dejaEnregistre }).catch(e => console.error('[scan] push Google:', e.message));
+  suivre(notifierMiseAJourPass(serial, req.marchandId).catch(e => console.error('[scan] push Apple:', e.message)));
+  suivre(mettreAJourGoogleWallet(serial, req.marchandId, apresScan, maxValue, displayMaxValue, scanMessage, client.marchands.images_tiers, client.prenom, client.marchands.couleur_fond, client.marchands.couleur_fond_reward, client.marchands, { message: !dejaEnregistre }).catch(e => console.error('[scan] push Google:', e.message)));
 
   // Parrainage — crédit au parrain au premier tampon/point du filleul, UNE
   // SEULE FOIS à vie. avantScan === 0 est le déclencheur (plutôt que
@@ -202,8 +203,8 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   // posé dans creditReferrerIfApplicable (index referral_credits_filleul_unique,
   // migration_024), jamais re-crédités.
   if (!dejaEnregistre && avantScan === 0 && client.marchands.referral_enabled) {
-    creditReferrerIfApplicable(client.id, req.marchandId, client.marchands.referral_bonus_points || 1)
-      .catch(e => console.error('[scan] referral credit:', e.message));
+    suivre(creditReferrerIfApplicable(client.id, req.marchandId, client.marchands.referral_bonus_points || 1)
+      .catch(e => console.error('[scan] referral credit:', e.message)));
   }
 
   res.json({
@@ -355,13 +356,13 @@ async function creditReferrerIfApplicable(filleulClientId, marchandId, bonusPoin
     .eq('marchand_id', marchandId);
 
   // Push Apple + Google au parrain
-  notifierMiseAJourPass(parrain.pass_serial_number, marchandId)
-    .catch(e => console.error('[scan] referral push Apple:', e.message));
-  mettreAJourGoogleWallet(
+  suivre(notifierMiseAJourPass(parrain.pass_serial_number, marchandId)
+    .catch(e => console.error('[scan] referral push Apple:', e.message)));
+  suivre(mettreAJourGoogleWallet(
     parrain.pass_serial_number, marchandId, newValue, maxValue, displayMax,
     msg, parrain.marchands.images_tiers, parrain.prenom,
     parrain.marchands.couleur_fond, parrain.marchands.couleur_fond_reward, parrain.marchands
-  ).catch(e => console.error('[scan] referral push Google:', e.message));
+  ).catch(e => console.error('[scan] referral push Google:', e.message)));
 
   console.log(`[scan] referral credit OK parrain=${parrainClientId} +${bonusPoints}pts → ${newValue}/${maxValue}`);
 }
@@ -421,8 +422,8 @@ router.post('/:id/annuler', authScanner, asyncHandler(async (req, res) => {
   const { data: client } = await supabase
     .from('clients').select('prenom').eq('id', data.client_id).single();
   const { syncPassAfterAdjustment } = require('./clients');
-  syncPassAfterAdjustment(data.serial, req.marchandId, client?.prenom || '', data.stored_value, 'annulation')
-    .catch(e => console.error('[scan] annulation resync:', e.message));
+  suivre(syncPassAfterAdjustment(data.serial, req.marchandId, client?.prenom || '', data.stored_value, 'annulation')
+    .catch(e => console.error('[scan] annulation resync:', e.message)));
 
   res.json({ ok: true, stored_value: data.stored_value });
 }));

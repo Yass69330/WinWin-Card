@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../services/supabase');
 const asyncHandler = require('../utils/asyncHandler');
+const { suivre } = require('../services/arret');   // envois après la réponse, attendus à l'arrêt (étape 14a)
 const { lienValide } = require('../services/avis');
 
 // GET /avis/:serial — le lien imprimé au dos de la carte (Apple backField,
@@ -59,10 +60,10 @@ router.get('/:serial', asyncHandler(async (req, res) => {
 
   // Après la redirection. Le clic est une mesure, pas un maillon : jamais attendu,
   // jamais bloquant. Même règle que le registre des envois (migration 046).
-  supabase.from('avis_clics')
+  suivre(supabase.from('avis_clics')
     .insert({ marchand_id: client.marchand_id, client_id: client.id, serial_number: serial })
     .then(({ error: errClic }) => { if (errClic) console.error('[avis] insert clic:', errClic.message); })
-    .catch(e => console.error('[avis] insert clic exception:', e.message));
+    .catch(e => console.error('[avis] insert clic exception:', e.message)));
 }));
 
 module.exports = router;

@@ -3,6 +3,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const supabase = require('../services/supabase');
 const asyncHandler = require('../utils/asyncHandler');
+const { suivre } = require('../services/arret');   // envois après la réponse, attendus à l'arrêt (étape 14a)
 const { authMarchand, authAdmin } = require('../middleware/auth');
 const { limiterInscription } = require('../middleware/rateLimiters');
 const { notif } = require('../i18n/messages');
@@ -62,16 +63,16 @@ router.post('/', limiterInscription, asyncHandler(async (req, res) => {
     if (extraFields.telephone)         consentements.push({ client_id: client.id, marchand_id: marchand.id, type: 'telephone',         valeur: true });
     if (extraFields.date_anniversaire) consentements.push({ client_id: client.id, marchand_id: marchand.id, type: 'date_anniversaire', valeur: true });
     if (consentements.length > 0) {
-      supabase.from('consentements').insert(consentements)
+      suivre(supabase.from('consentements').insert(consentements)
         .then()
-        .catch(e => console.error('[clients] consentements insert:', e.message));
+        .catch(e => console.error('[clients] consentements insert:', e.message)));
     }
   }
 
   // Parrainage — lier le filleul au parrain si le ref est valide (fire-and-forget)
   if (ref && typeof ref === 'string' && ref.length === 36) {
-    linkReferral(client.id, marchand.id, ref)
-      .catch(e => console.error('[clients] referral link:', e.message));
+    suivre(linkReferral(client.id, marchand.id, ref)
+      .catch(e => console.error('[clients] referral link:', e.message)));
   }
 
   const apiBase = process.env.API_BASE_URL || 'https://app.winwin-card.com';
@@ -304,8 +305,8 @@ router.patch('/:id([0-9a-f\\-]{36})', authMarchand, asyncHandler(async (req, res
   // Solde réellement modifié : mettre à jour la carte en arrière-plan (message
   // « Points mis à jour », inchangé — décision de Yass du 03/10).
   if (ajustement && !ajustement.inchange && updated.pass_serial_number) {
-    syncPassAfterAdjustment(updated.pass_serial_number, req.marchandId, updated.prenom, ajustement.stored_value)
-      .catch(e => console.error('[clients] sync pass:', e.message));
+    suivre(syncPassAfterAdjustment(updated.pass_serial_number, req.marchandId, updated.prenom, ajustement.stored_value)
+      .catch(e => console.error('[clients] sync pass:', e.message)));
   }
 
   res.json({
@@ -328,8 +329,8 @@ router.post('/ajustements/:ajId([0-9a-f\\-]{36})/annuler', authMarchand, asyncHa
   }
 
   const { data: client } = await supabase.from('clients').select('prenom').eq('id', data.client_id).single();
-  syncPassAfterAdjustment(data.serial, req.marchandId, client?.prenom || '', data.stored_value, 'annulation')
-    .catch(e => console.error('[clients] annulation ajustement resync:', e.message));
+  suivre(syncPassAfterAdjustment(data.serial, req.marchandId, client?.prenom || '', data.stored_value, 'annulation')
+    .catch(e => console.error('[clients] annulation ajustement resync:', e.message)));
 
   res.json({ ok: true, stored_value: data.stored_value });
 }));

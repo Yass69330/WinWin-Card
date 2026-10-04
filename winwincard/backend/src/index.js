@@ -210,7 +210,7 @@ app.use((err, req, res, next) => {
 
 // ── Démarrage ────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+const serveur = app.listen(PORT, () => {
   console.log(`WinWin Card API démarré sur le port ${PORT}`);
   try {
     require('./workers/cron');
@@ -218,6 +218,15 @@ app.listen(PORT, () => {
   } catch (e) {
     console.error('[cron] Échec initialisation — workflows désactivés:', e.message);
   }
+});
+
+// ── Arrêt propre au redéploiement (étape 14a, services/arret.js) ─
+// SIGTERM de Railway : plus de passage du cron, les requêtes et les envois en
+// cours finissent (20 s au plus), puis sortie. Les demandes d'avis en mémoire
+// sont perdues (décision 4 a) : comptées dans le bilan.
+require('./services/arret').brancher(serveur, {
+  avantFermeture: () => require('./workers/cron').arreterPlanification(),
+  bilan: () => ({ "demande(s) d'avis perdue(s)": require('./services/avis').enAttenteCount() }),
 });
 
 module.exports = app;

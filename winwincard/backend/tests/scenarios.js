@@ -44,7 +44,7 @@ INSERT INTO points_de_vente (id, marchand_id, nom, actif, deleted_at, scanner_lo
  ('${B.archivee}', '${M.reseau}', 'Archivée',   true,  now(), 'filet-archivee');
 `;
 
-async function jouer({ sql, sqlEnFond, verifier, api, secretJwt }) {
+async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur }) {
   // ── Outils ────────────────────────────────────────────────────────────────
   const jeton = (marchandId, pointDeVenteId) => jwt.sign(pointDeVenteId
     ? { role: 'scanner', marchand_id: marchandId, point_de_vente_id: pointDeVenteId, tv: 1 }
@@ -506,6 +506,95 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt }) {
     const expiree = jwt.sign({ ...marchand, iat: maintenant - 366 * 86400, exp: maintenant - 60 }, secretJwt);
     verifier('session déjà expirée : refusée (401), il faut se reconnecter',
       (await api('POST', '/api/scanner/renouveler', expiree)).statut, 401);
+  }
+
+  // ── 12. Arrêt propre au redéploiement (étape 14a) ─────────────────────────
+  titre('12. Arrêt propre au redéploiement (étape 14a)');
+  {
+    // Un SECOND serveur, coupé par SIGTERM (le signal de Railway) pendant qu'il
+    // travaille. D'autres sessions tiennent la carte de `c` 1,5 s (son scan
+    // attend dans crediter_scan) et la table des tickets de parrainage 4 s (le
+    // crédit du parrain, lancé APRÈS la réponse au scan du filleul, attend avant
+    // son ticket) : une fois le scan de `c` fini, seul ce crédit retient le
+    // serveur. Avant 14a, le serveur mourait net : réponse perdue, ticket écrit
+    // et crédit jamais fait.
+    const s = await demarrerServeur('serveur-arret');
+    const appel = (jt, corps) => fetch(s.url + '/api/scan', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jt}` }, body: JSON.stringify(corps) })
+      .then(async r => ({ statut: r.status, corps: await r.json().catch(() => null) }),
+            e => ({ statut: `coupé (${(e.cause && e.cause.code) || e.message})`, corps: null }));
+    const nouvelleConnexion = () => new Promise(r => {
+      const k = require('net').connect(Number(new URL(s.url).port), '127.0.0.1');
+      k.on('connect', () => { k.destroy(); r('acceptée'); });
+      k.on('error', e => r(e.code));
+    });
+    const c = client(M.tampons, { solde: 2 });
+    const parrain = client(M.tampons, { solde: 3 });
+    const filleul = client(M.tampons, { parrain: parrain.id });
+    const verrous = Promise.all([
+      sqlEnFond(`BEGIN; SELECT 1 FROM clients WHERE id = '${c.id}' FOR UPDATE; SELECT pg_sleep(1.5); COMMIT;`),
+      sqlEnFond('BEGIN; LOCK TABLE referral_credits IN SHARE MODE; SELECT pg_sleep(4); COMMIT;'),
+    ]);
+    await attendre(() => Number(sql(`SELECT count(*) FROM pg_stat_activity WHERE query LIKE 'SELECT pg_sleep(%'`)) === 2);
+    const rf = await appel(tT, { serial_number: filleul.serial });
+    const enCours = appel(tT, { serial_number: c.serial });
+    // Le signal part quand les DEUX attendent en base : le ticket du parrain et
+    // le scan de c (pas de délai à l'aveugle).
+    await attendre(() => Number(sql(`SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock'`)) === 2);
+    const t0 = Date.now();
+    s.processus.kill('SIGTERM');
+    await attendre(() => s.journal().includes('[arret] SIGTERM reçu'), 2000);
+    const nouvelle = await nouvelleConnexion();
+    const r = await enCours;
+    const fin = await s.sortie;
+    const duree = Date.now() - t0;
+    await verrous.catch(() => {});
+    const j = s.journal();
+    verifier('scan du filleul avant le signal : 200 (le crédit de son parrain part après la réponse)', rf.statut, 200);
+    verifier('SIGTERM pendant un scan : le scan aboutit (200, 2 → 3, une ligne)',
+      [r.statut, r.corps && r.corps.stored_value_apres, solde(c.id), lignes(c.id)], [200, 3, 3, 1]);
+    verifier('… le crédit du parrain, lancé après la réponse, aboutit (3 → 4)', solde(parrain.id), 4);
+    verifier('… pendant l\'arrêt, une nouvelle connexion est refusée', nouvelle, 'ECONNREFUSED');
+    verifier('… puis le serveur s\'arrête seul, code 0, avant la limite de 20 s', [fin.code, fin.signal, duree < 20000], [0, null, true]);
+    verifier('… journal : signal reçu, cron arrêté sans erreur, bilan avec les demandes d\'avis perdues',
+      [j.includes('[arret] SIGTERM reçu'), j.includes('[arret] avant fermeture'),
+       /\[arret\] fini en \d+ ms : \d+ tâche\(s\) attendue\(s\), demande\(s\) d'avis perdue\(s\) : 0/.test(j)], [true, false, true]);
+
+    // Le module seul, avec un faux serveur : ordre, limite, second signal.
+    const neuf = () => { delete require.cache[require.resolve('../src/services/arret')]; return require('../src/services/arret'); };
+    const fauxServeur = () => ({ close(cb) { setTimeout(cb, 30); }, closeIdleConnections() {} });
+    const fauxJournal = () => { const lignes = []; return { lignes, log: m => lignes.push(m), error: m => lignes.push(m) }; };
+    {
+      const a = neuf(), jf = fauxJournal();
+      let cron = 0, code = null;
+      const t1 = Date.now();
+      a.suivre(new Promise(ok => setTimeout(ok, 300)));
+      const arret = a.arreter(fauxServeur(), 'SIGTERM', { avantFermeture: () => cron++, bilan: () => ({ avis: 2 }),
+        journal: jf, sortir: x => { code = x; } });
+      await a.arreter(fauxServeur(), 'SIGTERM', { avantFermeture: () => cron++, journal: jf, sortir: () => { code = 'second'; } });
+      a.suivre(new Promise(ok => setTimeout(ok, 600)));   // lancé PENDANT l'arrêt : attendu aussi
+      await arret;
+      verifier('module d\'arrêt : cron arrêté une fois, deux envois attendus (dont un lancé pendant l\'arrêt), sortie 0, second signal sans effet',
+        [cron, code, Date.now() - t1 >= 600, jf.lignes.some(l => /^\[arret\] fini en \d+ ms : 2 tâche\(s\) attendue\(s\), avis : 2$/.test(l))],
+        [1, 0, true, true]);
+    }
+    {
+      const a = neuf(), jf = fauxJournal();
+      let code = null;
+      const t1 = Date.now();
+      a.suivre(new Promise(() => {}));   // ne finit jamais
+      await a.arreter(fauxServeur(), 'SIGTERM', { limiteMs: 300, journal: jf, sortir: x => { code = x; } });
+      verifier('module d\'arrêt : un envoi qui ne finit jamais ne retient pas le serveur au-delà de la limite',
+        [code, Date.now() - t1 < 1500, jf.lignes.includes('[arret] limite de 0.3 s atteinte : 1 tâche(s) non terminée(s) sur 1')], [0, true, true]);
+    }
+    {
+      const a = neuf(), jf = fauxJournal();
+      let code = null;
+      await a.arreter(fauxServeur(), 'SIGTERM', { avantFermeture: () => { throw new Error('cron absent'); },
+        journal: jf, sortir: x => { code = x; } });
+      verifier('module d\'arrêt : un échec à l\'arrêt du cron n\'empêche pas l\'arrêt', [code, jf.lignes.some(l => l.startsWith('[arret] fini'))], [0, true]);
+    }
+    delete require.cache[require.resolve('../src/services/arret')];
   }
 }
 

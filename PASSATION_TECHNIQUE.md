@@ -2582,7 +2582,7 @@ est close.**
   ajuster et annuler un ajustement (droits, audit segment 3) ; l'onglet Scans du
   dashboard garde son affichage (pas d'ajustements, pas de bouton).
 
-## 15 octodecies. ÉTAPE 14 : PARRAINAGE EN POINTS ET ARRÊT PROPRE (décisions, code à venir)
+## 15 octodecies. ÉTAPE 14 : PARRAINAGE EN POINTS ET ARRÊT PROPRE (14a poussé le 04/10 ; 14b à venir)
 
 **Diagnostic (03/10, aucun code, aucune branche).**
 - *Parrainage* : `credit_referral` (migration 015) plafonne au seuil, `LEAST(avant +
@@ -2631,6 +2631,61 @@ Le code attend que 2b, 12 et 13 soient en production : c'est le cas du code depu
   ajustements de 13b ne le voit pas.
 - **Provisoire (décision 4 a)** : demandes d'avis perdues à chaque redéploiement (Hamza
   Salon seul concerné au 03/10).
+
+**14a — l'arrêt propre (écrit, testé et poussé le 04/10).** Avant le push, Yass a posé
+`RAILWAY_DEPLOYMENT_DRAINING_SECONDS` = 30 (Variables du service ; déploiement vert,
+healthcheck OK) et vérifié « Custom Start Command » vide. Vérification de 14a
+(redéploiement, bilan `[arret]` dans les logs du déploiement retiré) : à suivre.
+- `Dockerfile` : `CMD ["node", "src/index.js"]` (même programme que `npm start`).
+  **Mesuré le 04/10 avec le code 14a** : lancé par `npm start`, npm sort (code 143) et
+  le serveur ne reçoit jamais le signal (0 ligne `[arret]`) ; lancé par `node`, arrêt
+  propre et sortie 0.
+- `src/services/arret.js` (sans dépendance) : `suivre(promesse)` range un travail lancé
+  sans être attendu ; `arreter()` au SIGTERM (et SIGINT) : arrêt de la planification du
+  cron, plus de nouvelle connexion, les requêtes en cours finissent (connexions gardées
+  ouvertes fermées dès qu'elles sont au repos, vérifié : 0,2 s au lieu de 6 s), les
+  travaux suivis sont attendus (y compris ceux lancés pendant l'arrêt), **au plus 20 s**,
+  bilan `[arret] fini en N ms : K tâche(s) attendue(s), demande(s) d'avis perdue(s) : D`
+  ou `[arret] limite de 20 s atteinte : …`, sortie 0.
+- Branché sur les 19 envois lancés après la réponse (cartes Apple et Google du scan, de
+  l'ajustement et des annulations, crédit de parrainage et ses cartes, lien de
+  parrainage, push de bienvenue Apple, consentements, clic d'avis, envoi d'avis à T+30, `notification_logs`,
+  classe Google de l'admin ×3, retrait d'image, purge des bandeaux), sur le passage du
+  cron (`workers/cron.js` : `arreterPlanification()`), et sur `asyncHandler` (un handler
+  qui continue après sa réponse est attendu). Chaque expression est inchangée, seulement
+  enveloppée ; un rejet non attrapé le reste (`finally`, pas `then(f, f)`).
+- **Coût** : aucune requête, aucune écriture, aucun stockage ; en vie normale, un `Set`
+  de promesses. Seul réglage : la variable des 30 s (jour J).
+
+**Tests 14a.** Bloc 12 du filet (9 vérifications) : un SECOND serveur, coupé par
+SIGTERM pendant un scan bloqué en base et pendant le crédit d'un parrain lancé après la
+réponse (tickets verrouillés 4 s) → scan 200 (2 → 3, une ligne), parrain crédité
+(3 → 4), nouvelle connexion refusée, sortie seule code 0, bilan au journal ; le module
+seul (faux serveur) : second signal sans effet, envoi lancé pendant l'arrêt attendu,
+limite tenue, échec de l'arrêt du cron sans effet. Filet complet **168/168 deux fois**
+(Node 24.10.0, tests navigateur compris). **Preuves** : sur le code en production
+(`7319dd9`), 4 KO — réponse coupée (`UND_ERR_SOCKET`, l'argent est crédité quand même
+depuis 11a), parrain NON crédité (3, ticket écrit : le défaut du diagnostic), tué par
+SIGTERM ; sans `suivre()` autour du crédit de parrainage, 1 KO (parrain à 3).
+
+**Hypothèses de 14a (ce qui la ferait casser).**
+- « Custom Start Command » VIDE dans Railway : rempli (`npm start`), il prime sur le
+  Dockerfile et l'arrêt propre ne se déclenche jamais (aucune ligne `[arret]`).
+- 20 s < `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` (30) : sans la variable (défaut 0),
+  Railway tue au signal, comme avant 14a.
+- Un nouvel envoi après réponse écrit SANS `suivre()` n'est pas attendu (règle à suivre
+  pour tout futur fire-and-forget).
+- Railway ne route plus de nouvelle requête vers l'ancien serveur une fois le signal
+  envoyé (documentation : SIGTERM « once the new deployment is online ») ; sinon, refus
+  de connexion, comme avant 14a (12b refait l'essai).
+- Sortie 0 même à la limite : la politique « On Failure » ne relance pas un serveur
+  arrêté par Railway.
+
+**Limites.** Un passage du cron plus long que 20 s (≈ 80 s à 08:00 UTC) est coupé comme
+avant : pas de push entre 08:00 et 08:05 UTC. Les demandes d'avis en mémoire sont
+perdues (comptées au bilan). Les événements Sentry non encore envoyés sont perdus à la
+sortie, comme avant. Le push de 14a lui-même ne profite pas de l'arrêt propre (c'est
+l'ancien serveur qu'on arrête) : il se voit au redéploiement SUIVANT.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
@@ -2767,6 +2822,14 @@ plus `landing_premium`, un enregistrement Pro+ le contient toujours.
 pilotage. Elles envoient bien des pushes ; les omettre aurait laissé des trous dans
 le registre. Rattachées aux sources `ajustement`, `annulation` et `scan`.
 
+**2026-10-04 — choix de réalisation de l'étape 14a, pris sans pilotage.** Dans le
+périmètre validé (décision 3) : (1) limite interne de 20 s, 10 s sous les 30 s de
+Railway, pour écrire le bilan avant l'arrêt forcé ; (2) TOUS les envois lancés après la
+réponse sont suivis (19), pas seulement cartes, registre et parrainage, plus les
+handlers via `asyncHandler` ; (3) sortie 0 même quand la limite est atteinte ; (4)
+SIGINT traité comme SIGTERM (Ctrl-C en local) ; (5) un second serveur dans le filet pour
+le test, sans toucher au serveur des autres scénarios. Raisons au §15 octodecies.
+
 **2026-10-03 — choix de réalisation de l'étape 13, pris sans pilotage.** Dans le
 périmètre validé : (1) un ajustement à la même valeur n'écrit rien et ne pousse pas la
 carte ; (2) un écran d'avant 13b (sans solde attendu) reste accepté, ajustement tracé
@@ -2799,6 +2862,12 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-10-04 par la session « SETUP 4 », quatorzième chantier : étape 14a
+(§15 octodecies), l'arrêt propre : `CMD node`, `services/arret.js`, 19 envois suivis,
+cron arrêté au signal, 20 s au plus ; filet 168/168 deux fois. Variable
+`RAILWAY_DEPLOYMENT_DRAINING_SECONDS` = 30 posée par Yass avant le push ; 14a poussé sur
+son feu vert. Vérification (un redéploiement, bilan `[arret]`) : à suivre.*
 
 *Mis à jour le 2026-10-04 par la session « SETUP 4 » : 13b (`bcde845`) vérifié par Yass,
 **étape 13 close**. Étape 14b : bonus de parrainage crédité en entier en points, plafond

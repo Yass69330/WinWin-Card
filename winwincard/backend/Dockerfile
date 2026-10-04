@@ -24,5 +24,9 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
 COPY . .
 
-# Railway fournit PORT. Même commande de démarrage que l'ancien railway.toml.
-CMD ["npm", "start"]
+# Railway fournit PORT. `node` DIRECTEMENT, et non `npm start` (même programme,
+# package.json) : npm ne transmet pas le SIGTERM du redéploiement (mesuré le
+# 03/10), et l'arrêt propre (étape 14a, src/services/arret.js) ne se déclencherait
+# jamais. Ne rien mettre dans « Custom Start Command » de Railway : ce champ
+# prime sur cette ligne.
+CMD ["node", "src/index.js"]

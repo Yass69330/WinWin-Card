@@ -3,6 +3,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const supabase = require('../services/supabase');
 const asyncHandler = require('../utils/asyncHandler');
+const { suivre } = require('../services/arret');   // envois après la réponse, attendus à l'arrêt (étape 14a)
 
 // Vérifie le token ApplePass envoyé par Apple sur le webservice
 function verifyAppleToken(req, serialNumber) {
@@ -56,8 +57,8 @@ router.post('/v1/devices/:deviceId/registrations/:passTypeId/:serialNumber', asy
   res.status(201).send();
 
   // Welcome push — fire and forget après la réponse 201
-  sendWelcomePush(serialNumber, pushToken, pass.marchand_id)
-    .catch(e => console.error('[apple-wallet] Welcome push:', e.message));
+  suivre(sendWelcomePush(serialNumber, pushToken, pass.marchand_id)
+    .catch(e => console.error('[apple-wallet] Welcome push:', e.message)));
 }));
 
 // DELETE /v1/devices/:deviceId/registrations/:passTypeId/:serialNumber

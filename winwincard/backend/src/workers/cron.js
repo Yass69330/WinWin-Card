@@ -3,6 +3,7 @@ const supabase = require('../services/supabase');
 const { notif } = require('../i18n/messages');
 const registre = require('../services/notif-registre');
 const passages = require('../services/cron-passages');
+const { suivre } = require('../services/arret');
 
 const DEDUP_DAYS   = 7;
 const PURGE_DAYS   = 90;
@@ -16,9 +17,16 @@ const FORFAITS_WORKFLOWS = ['pro', 'pro_plus'];
 
 // Nightly at 08:00 UTC (noon Gulf time — bonne fenêtre pour déclencher des visites)
 // C'est aussi l'heure qu'attend /health/cron (cron-passages.js, HEURE_UTC).
-cron.schedule('0 8 * * *', () => {
-  passageQuotidien().catch(e => console.error('[cron] passage:', e.message));
+// suivre() : un passage en cours est attendu par l'arrêt propre (étape 14a),
+// dans la limite de 20 s ; arreterPlanification() empêche un serveur en partance
+// de lancer le passage de 08:00 (le nouveau serveur le lance).
+const tache = cron.schedule('0 8 * * *', () => {
+  suivre(passageQuotidien().catch(e => console.error('[cron] passage:', e.message)));
 });
+
+function arreterPlanification() {
+  tache.stop();
+}
 
 // Étapes du passage, dans l'ordre d'origine.
 const ETAPES = [
@@ -311,4 +319,4 @@ async function purgeOldExecutions() {
   else if (cE > 0) console.log(`[cron] purge: ${cE} notification_envois supprimée(s)`);
 }
 
-module.exports = { runInactiveWorkflow, runNearRewardWorkflow, runBirthdayWorkflow, passageQuotidien };
+module.exports = { runInactiveWorkflow, runNearRewardWorkflow, runBirthdayWorkflow, passageQuotidien, arreterPlanification };

@@ -3,6 +3,7 @@ const router  = express.Router();
 const jwt     = require('jsonwebtoken');
 const supabase = require('../services/supabase');
 const asyncHandler = require('../utils/asyncHandler');
+const { suivre } = require('../services/arret');   // envois après la réponse, attendus à l'arrêt (étape 14a)
 const { authAdmin } = require('../middleware/auth');
 
 // POST /api/admin/login — authentification admin par mot de passe global
@@ -220,7 +221,7 @@ router.post('/marchands', authAdmin, asyncHandler(async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
 
   const { createOrUpdateLoyaltyClass } = require('../services/google-pass');
-  createOrUpdateLoyaltyClass(data).catch(e => console.error('[Google Wallet] classe:', e.message));
+  suivre(createOrUpdateLoyaltyClass(data).catch(e => console.error('[Google Wallet] classe:', e.message)));
 
   res.status(201).json(data);
 }));
@@ -353,7 +354,7 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
 
   const { createOrUpdateLoyaltyClass } = require('../services/google-pass');
-  createOrUpdateLoyaltyClass(data).catch(e => console.error('[Google Wallet] classe:', e.message));
+  suivre(createOrUpdateLoyaltyClass(data).catch(e => console.error('[Google Wallet] classe:', e.message)));
 
   res.json(data);
 }));
@@ -792,7 +793,7 @@ async function ecrireTiers(marchandId, tiers) {
   if (error) return { error };
 
   const { createOrUpdateLoyaltyClass } = require('../services/google-pass');
-  createOrUpdateLoyaltyClass(data).catch(e => console.error('[Google Wallet] classe:', e.message));
+  suivre(createOrUpdateLoyaltyClass(data).catch(e => console.error('[Google Wallet] classe:', e.message)));
   return { data };
 }
 
@@ -871,9 +872,9 @@ router.delete('/marchands/:id/strip-static', authAdmin, asyncHandler(async (req,
     .from('marchands').select('id, slug').eq('id', req.params.id).single();
   if (errM || !marchand) return res.status(404).json({ error: 'Marchand introuvable' });
 
-  supabase.storage.from('passes')
+  suivre(supabase.storage.from('passes')
     .remove([`marchands/${marchand.slug}/strip_static.png`])
-    .catch(() => {});
+    .catch(() => {}));
 
   const { error: errU } = await supabase
     .from('marchands').update({ image_strip_url: null }).eq('id', req.params.id);

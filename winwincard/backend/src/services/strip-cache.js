@@ -6,6 +6,7 @@
 const supabase = require('./supabase');
 const { render } = require('./strip-generator');
 const { fetchImage } = require('./apple-pass');
+const { suivre } = require('./arret');   // purge attendue à l'arrêt (étape 14a)
 
 const BUCKET = 'passes';
 const MAX_LRU = 120; // ~3 MB max en mémoire (≈25 KB/entrée)
@@ -188,8 +189,8 @@ async function getOrGenerate({ marchand, filledCount, variant }) {
     }));
 
     // 6. Purge ancienne version en fire-and-forget
-    purgeOldVersions(marchand, variant)
-      .catch(e => console.error('[strip-cache] purge:', e.message));
+    suivre(purgeOldVersions(marchand, variant)
+      .catch(e => console.error('[strip-cache] purge:', e.message)));
 
     return buffers[variant];
   })();

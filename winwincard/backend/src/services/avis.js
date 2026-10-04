@@ -31,6 +31,7 @@
 const supabase = require('./supabase');
 const { notif } = require('../i18n/messages');
 const registre  = require('./notif-registre');
+const { suivre } = require('./arret');   // envoi attendu s'il part pendant un arrêt (étape 14a)
 
 const BASE_PUBLIQUE = () => process.env.API_BASE_URL || 'https://app.winwin-card.com';
 
@@ -96,8 +97,8 @@ function planifier({ marchand, prenom, serial }) {
 
     const minuteur = setTimeout(() => {
       enAttente.delete(serial);
-      envoyer({ marchandId: marchand.id, langue: marchand.langue, prenom, serial })
-        .catch(e => console.error('[avis] envoi:', e.message));
+      suivre(envoyer({ marchandId: marchand.id, langue: marchand.langue, prenom, serial })
+        .catch(e => console.error('[avis] envoi:', e.message)));
     }, DELAI_MS);
 
     // unref : le minuteur ne doit pas être ce qui maintient le process en vie.

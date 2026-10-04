@@ -2,6 +2,7 @@ const express  = require('express');
 const router   = express.Router();
 const supabase = require('../services/supabase');
 const asyncHandler = require('../utils/asyncHandler');
+const { suivre } = require('../services/arret');   // envois après la réponse, attendus à l'arrêt (étape 14a)
 const { authMarchand } = require('../middleware/auth');
 const { sendPushUpdate, isApnsConfigured }                    = require('../services/apns');
 const { addMessageToLoyaltyObject, isConfigured: isGoogleConfigured } = require('../services/google-pass');
@@ -146,7 +147,7 @@ router.post('/', authMarchand, asyncHandler(async (req, res) => {
   // §3.9 : supabase-js ne rejette JAMAIS — l'ancien `.then().catch()` était du
   // code mort et tout échec d'écriture de notification_logs (la table dont
   // dépend le dashboard) passait inaperçu. On lit `error`.
-  supabase.from('notification_logs').insert({
+  suivre(supabase.from('notification_logs').insert({
     marchand_id:    req.marchandId,
     message,
     envoyes_apple:  appleResults.filter(r => r.status === 'fulfilled').length,
@@ -155,7 +156,7 @@ router.post('/', authMarchand, asyncHandler(async (req, res) => {
     total_google:   (passes || []).length,
   }).then(({ error }) => {
     if (error) console.error('[notifications] notification_logs insert:', error.message);
-  });
+  }));
 
   res.json({
     apple: {

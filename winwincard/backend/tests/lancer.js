@@ -196,25 +196,29 @@ async function demarrerPostgrest() {
 }
 
 // ── Serveur WinWin ──────────────────────────────────────────────────────────
-async function demarrerServeur(urlSupabase) {
+// `nom` : journal TMP/<nom>.log. Un second serveur (étape 14a) sert au test de
+// l'arrêt propre, qui le coupe sans toucher au serveur des autres scénarios.
+async function demarrerServeur(urlSupabase, nom = 'serveur') {
   const port = await portLibre();
   const cle = jwt.sign({ role: 'service_role' }, SECRET_PGRST);
   // Lancé depuis le dossier temporaire VIDE : dotenv (src/index.js:1) lit le .env
   // du dossier courant, et un vrai .env (clés Apple, Google, Sentry) ne doit
   // jamais entrer dans le filet. Seules les variables ci-dessous existent.
-  lancer('serveur', process.execPath, [path.join(RACINE, 'src', 'index.js')], {
+  const processus = lancer(nom, process.execPath, [path.join(RACINE, 'src', 'index.js')], {
     cwd: TMP,
     env: { PATH: process.env.PATH, PORT: String(port), NODE_ENV: 'test',
       SUPABASE_URL: urlSupabase, SUPABASE_SERVICE_KEY: cle,
       JWT_SECRET: SECRET_JWT, ADMIN_PASSWORD: 'filet-admin' },
   });
+  const sortie = new Promise(r => processus.on('exit', (code, signal) => r({ code, signal })));
+  const fichier = path.join(TMP, `${nom}.log`);
+  const journal = () => (fs.existsSync(fichier) ? fs.readFileSync(fichier, 'utf8') : '');
   const t0 = Date.now();
   while (Date.now() - t0 < 20000) {
-    const j = fs.existsSync(path.join(TMP, 'serveur.log')) ? fs.readFileSync(path.join(TMP, 'serveur.log'), 'utf8') : '';
-    if (j.includes('Workflows planifiés')) return `http://127.0.0.1:${port}`;
+    if (journal().includes('Workflows planifiés')) return { url: `http://127.0.0.1:${port}`, processus, sortie, journal };
     await new Promise(r => setTimeout(r, 150));
   }
-  throw new Error(`le serveur ne démarre pas (journal : ${path.join(TMP, 'serveur.log')})`);
+  throw new Error(`le serveur ne démarre pas (journal : ${fichier})`);
 }
 
 // ── Vérifications ───────────────────────────────────────────────────────────
@@ -249,7 +253,7 @@ function nettoyer() {
   const nb = preparerBase(scenarios.FIXTURES);
   console.log(`base rejouée depuis le dépôt : ${nb} fichiers (schema.sql, migrations, rgpd_effacement.sql) + données du filet`);
   const urlSupabase = await demarrerPostgrest();
-  const urlServeur = await demarrerServeur(urlSupabase);
+  const urlServeur = (await demarrerServeur(urlSupabase)).url;
 
   const ctx = {
     sql: psqlSocket,
@@ -257,6 +261,7 @@ function nettoyer() {
     verifier,
     urlServeur,
     secretJwt: SECRET_JWT,
+    demarrerServeur: nom => demarrerServeur(urlSupabase, nom),
     async api(methode, chemin, jeton, corps) {
       const r = await fetch(urlServeur + chemin, { method: methode,
         headers: { 'Content-Type': 'application/json', ...(jeton ? { Authorization: `Bearer ${jeton}` } : {}) },
