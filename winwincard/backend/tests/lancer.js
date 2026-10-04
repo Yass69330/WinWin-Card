@@ -15,7 +15,7 @@
 //   4. joue les scénarios de tests/scenarios.js.
 //
 // Le filet FIGE L'ÉTAT ACTUEL : un scénario qui constate un défaut connu (double
-// crédit au renvoi, parrain crédité en mode points…) l'écrit tel quel. Il sera
+// crédit au renvoi, parrain ramené au seuil en mode points…) l'écrit tel quel. Il sera
 // inversé par l'étape de la roadmap qui corrige ce défaut.
 //
 // Prérequis : Node (celui du serveur), PostgreSQL 16 ou plus avec un accès

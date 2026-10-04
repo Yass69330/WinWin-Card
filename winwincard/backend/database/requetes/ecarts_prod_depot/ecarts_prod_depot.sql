@@ -6,8 +6,8 @@
 -- SQL Editor de Supabase, puis « Run ». Moins de 40 lignes rendues.
 --
 -- État du dépôt figé ci-dessous (VALUES « depot ») : base rejouée depuis le
--- dépôt, 52 fichiers (schema.sql, migrations jusqu'à
--- migration_052_ajustements_traces.sql, rgpd_effacement.sql), PostgreSQL local.
+-- dépôt, 53 fichiers (schema.sql, migrations jusqu'à
+-- migration_053_parrainage_jamais_de_baisse.sql, rgpd_effacement.sql), PostgreSQL local.
 -- La requête photographie la base où elle tourne et ne rend que les ÉCARTS :
 --   plateforme : TRUNCATE / REFERENCES / TRIGGER hérités des privilèges par
 --                défaut de Supabase — non consignés, décision du 2026-09-29 ;
@@ -42,7 +42,7 @@ WITH depot(categorie, objet, valeur) AS (VALUES
   ('fonction', 'ajuster_solde(p_client_id uuid, p_marchand_id uuid, p_attendu integer, p_nouveau integer)', 'jsonb | plpgsql | definer=false | v | search_path=public | code=fde225517c | exec=001 | postgres'),
   ('fonction', 'annuler_ajustement(p_ajustement_id uuid, p_marchand_id uuid)', 'jsonb | plpgsql | definer=false | v | search_path=public | code=f04ae7f4dd | exec=001 | postgres'),
   ('fonction', 'annuler_scan(p_scan_id uuid, p_marchand_id uuid)', 'jsonb | plpgsql | definer=false | v | - | code=4b3c2114c1 | exec=111 | postgres'),
-  ('fonction', 'credit_referral(p_parrain_client_id uuid, p_bonus_points integer)', 'TABLE(stored_value_avant integer, stored_value_apres integer) | plpgsql | definer=false | v | - | code=3a1baf914f | exec=111 | postgres'),
+  ('fonction', 'credit_referral(p_parrain_client_id uuid, p_bonus_points integer)', 'TABLE(stored_value_avant integer, stored_value_apres integer) | plpgsql | definer=false | v | search_path=public | code=5e175097a9 | exec=111 | postgres'),
   ('fonction', 'crediter_scan(p_client_id uuid, p_marchand_id uuid, p_point_de_vente_id uuid, p_max_value integer, p_montant integer, p_type_programme text, p_cle uuid, p_msg_remise text, p_msg_recompense text, p_msg_progression text)', 'jsonb | plpgsql | definer=false | v | search_path=public | code=e6adbd0420 | exec=001 | postgres'),
   ('fonction', 'effacer_client(p_client_id uuid, p_marchand_id uuid)', 'void | plpgsql | definer=true | v | - | code=e0cc0950ba | exec=111 | postgres'),
   ('fonction', 'group_stats(p_marchand_id uuid)', 'jsonb | sql | definer=false | s | - | code=46c933a208 | exec=111 | postgres'),
@@ -203,7 +203,7 @@ SELECT 0 AS ordre, 'VERDICT' AS categorie,
             THEN 'IDENTIQUE au dépôt (hors plateforme)' ELSE 'ÉCART — à examiner' END AS objet,
        (SELECT count(*) FROM classes WHERE classe = 'ECART') || ' écart(s) · '
        || (SELECT count(*) FROM classes WHERE classe = 'plateforme') || ' plateforme' AS production,
-       'dépôt jusqu''à migration_052_ajustements_traces.sql' AS depot, NULL AS lecture
+       'dépôt jusqu''à migration_053_parrainage_jamais_de_baisse.sql' AS depot, NULL AS lecture
 UNION ALL
 SELECT 1, c.categorie, c.n || ' objets comparés',
        coalesce((SELECT count(*) FROM classes k WHERE k.categorie = c.categorie), 0) || ' écart(s)', NULL, NULL

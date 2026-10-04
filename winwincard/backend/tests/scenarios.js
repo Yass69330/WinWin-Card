@@ -417,24 +417,38 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     await new Promise(r => setTimeout(r, 800));
     verifier('filleul revenu à 0 puis rescanné : parrain PAS recrédité (crédit unique à vie)', solde(parrain.id), 4);
 
-    const plein = client(M.tampons, { solde: 10 });
-    const f2 = client(M.tampons, { parrain: plein.id });
-    await scan(tT, f2.serial);
-    await attendre(() => Number(sql(`SELECT count(*) FROM referral_credits WHERE filleul_client_id = '${f2.id}'`)) === 1);
-    await new Promise(r => setTimeout(r, 300));
-    verifier('ÉTAT ACTUEL — parrain déjà à 10/10 : reste à 10, le tampon est perdu', solde(plein.id), 10);
+    // Crédit du parrain après le premier passage du filleul (route réelle) :
+    // le ticket écrit, puis le solde du parrain tel que credit_referral le rend.
+    const parrainApres = async (marchand, jt, soldeParrain, points) => {
+      const p = client(marchand, { solde: soldeParrain });
+      const f = client(marchand, { parrain: p.id });
+      await scan(jt, f.serial, points);
+      await attendre(() => Number(sql(`SELECT count(*) FROM referral_credits WHERE filleul_client_id = '${f.id}'`)) === 1);
+      await new Promise(r => setTimeout(r, 300));
+      return solde(p.id);
+    };
+    // Tampons : plafond au seuil conservé (règle du 27/09).
+    verifier('tampons, parrain à 9/10 : crédité jusqu\'au seuil (9 → 10)', await parrainApres(M.tampons, tT, 9), 10);
+    verifier('règle du 27/09, inchangée — parrain déjà à 10/10 : reste à 10, le tampon est perdu', await parrainApres(M.tampons, tT, 10), 10);
+    verifier('tampons, parrain AU-DESSUS du seuil (12, seuil baissé) : garde 12, jamais ramené à 10 (étape 14b)',
+      await parrainApres(M.tampons, tT, 12), 12);
+    // Points : parrainage permis (décision 1 de l'étape 14 refusée), bonus entier.
+    verifier('mode points avec parrainage : parrain crédité de 5 (100 → 105)', await parrainApres(M.pointsParr, tPP, 100, 20), 105);
+    verifier('mode points, parrain juste sous le seuil (498) : bonus ENTIER, 503 (étape 14b)', await parrainApres(M.pointsParr, tPP, 498, 20), 503);
+    verifier('mode points, parrain à 530 (au-dessus du seuil) : bonus entier, 535 — plus jamais ramené à 500 (étape 14b)',
+      await parrainApres(M.pointsParr, tPP, 530, 20), 535);
 
-    // Écart B : la règle « jamais de parrainage en mode points » n'est pas dans le code.
-    const pp = client(M.pointsParr, { solde: 100 });
-    const fp = client(M.pointsParr, { parrain: pp.id });
-    await scan(tPP, fp.serial, 20);
-    verifier('ÉTAT ACTUEL — mode points avec parrainage coché : parrain crédité de 5 (étape 14 : jamais)', await attendre(() => solde(pp.id) === 105), true);
-    const haut = client(M.pointsParr, { solde: 530 });
-    const fh = client(M.pointsParr, { parrain: haut.id });
-    await scan(tPP, fh.serial, 20);
-    await attendre(() => Number(sql(`SELECT count(*) FROM referral_credits WHERE filleul_client_id = '${fh.id}'`)) === 1);
-    verifier('ÉTAT ACTUEL — mode points, parrain à 530 (au-dessus du seuil) : ramené à 500, il PERD 30 (credit_referral, étape 14)',
-      await attendre(() => solde(haut.id) === 500), true);
+    // credit_referral en direct : jamais de baisse, verrou du parrain seul.
+    const pn = client(M.pointsParr, { solde: 40 });
+    verifier('credit_referral, bonus négatif (−3) : solde inchangé, jamais de baisse',
+      [sql(`SELECT stored_value_avant || '→' || stored_value_apres FROM credit_referral('${pn.id}', -3)`), solde(pn.id)], ['40→40', 40]);
+    const pv = client(M.tampons, { solde: 2 });
+    const verrou = sqlEnFond(`BEGIN; SELECT 1 FROM marchands WHERE id = '${M.tampons}' FOR UPDATE; SELECT pg_sleep(2); COMMIT;`);
+    await attendre(() => Number(sql(`SELECT count(*) FROM pg_stat_activity WHERE query LIKE 'SELECT pg_sleep(2)%'`)) === 1);
+    const passe = !refuseParLaBase(`SET lock_timeout = '300ms'; SELECT * FROM credit_referral('${pv.id}', 1);`);
+    await verrou;
+    verifier('credit_referral ne verrouille que le parrain : passe pendant qu\'une autre session tient la ligne du marchand (2 → 3)',
+      [passe, solde(pv.id)], [true, 3]);
   }
 
   // ── 9. Coupures et journal ────────────────────────────────────────────────

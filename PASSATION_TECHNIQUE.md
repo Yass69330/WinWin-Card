@@ -668,6 +668,7 @@ zones dangereuses §5, contrat §7 s'appliquent toujours.*
 | 050 | `EXECUTE` des fonctions de `public` réservé à `service_role` (existantes et futures) | Étape 7, point 5 (§15 undecies). **NON EXÉCUTÉE, NON POSÉE (décision de Yass, 01/10)** : fichier sur la branche `relecture/etape7-points-5-10` seulement. **Numéro réservé : la prochaine migration de production est la 051.** |
 | 051 | `scans.cle_idempotence` + index unique `(marchand_id, clé)` ; **fonction `crediter_scan(uuid, uuid, uuid, integer, integer, text, uuid, text, text, text) RETURNS jsonb`** ; CHECK `clients.stored_value >= 0` et `marchands.max_value > 0` | Étape 11a, le crédit incassable (§15 quindecies) : crédit, ligne et carte en une transaction ; appelle `increment_stored_value` telle quelle. Fermée à `anon`/`authenticated`. Additive : l'ancien code marche avec. |
 | 052 | Table `ajustements` (journal, RLS, GRANT service_role) ; **fonctions `ajuster_solde(uuid, uuid, integer, integer)` et `annuler_ajustement(uuid, uuid)` RETURNS jsonb** ; `annuler_scan` re-CREATE OR REPLACE (même signature) avec la règle de l'ordre inverse | Étape 13b (§15 septdecies). Ajustements hors des scans (ce ne sont pas des visites). Additive : le code 13a (`424d3e8`) passe 139/139 sur une base qui la porte. **Exécutée par Yass le 04/10, AVANT le push de 13b** : contrôle 6 × `true`, écarts IDENTIQUE (0 écart · 48 plateforme). |
+| 053 | **`credit_referral(uuid, integer)` re-CREATE OR REPLACE** (même signature, même retour, droits inchangés), `SET search_path = public` | Étape 14b (§15 octodecies) : jamais de baisse ; plafond au seuil en tampons, bonus entier en points ; verrou du parrain seul (`FOR UPDATE OF c`). Le code en place marche avec (même appel). **Exécutée par Yass le 04/10, AVANT le push de 14b** : vérification `true | true | true`, contrôle 4 × `true`, écarts IDENTIQUE (0 écart · 48 plateforme). |
 
 ## 9. LE MODÈLE MULTI-BOUTIQUES
 
@@ -2229,7 +2230,7 @@ scénario « ÉTAT ACTUEL » qui passe au rouge signale un changement de comport
 | en points, ajustement au-dessus du seuil accepté par le serveur (l'écran le refuse) | 13 (« sans plafond au seuil » : c'est l'écran qui changera) |
 | annulation d'un dernier scan hors des 100 derniers de la boutique : acceptée par le serveur | 13 (annulation rendue atteignable) |
 | jeton marchand sur un réseau : annule le scan d'une boutique | 13 (bouton du dashboard, écart A) |
-| parrainage en points : parrain crédité (+5), et ramené au seuil s'il est au-dessus (perd 30) | 14 (écart B, `credit_referral`) |
+| parrainage en points : parrain crédité (+5), et ramené au seuil s'il est au-dessus (perd 30) | 14b (écart B, `credit_referral`) : **inversé** — parrainage permis en points (décision 1 refusée), bonus entier, jamais de baisse |
 | parrain en tampons déjà à 10/10 : le tampon est perdu | aucune : règle produit du 27/09 (audit 02 §4.4) |
 
 **Preuve qu'il attrape une casse (02/10).** Trois règles cassées exprès en local, puis
@@ -2582,7 +2583,7 @@ est close.**
   ajuster et annuler un ajustement (droits, audit segment 3) ; l'onglet Scans du
   dashboard garde son affichage (pas d'ajustements, pas de bouton).
 
-## 15 octodecies. ÉTAPE 14 : PARRAINAGE EN POINTS ET ARRÊT PROPRE (14a poussé le 04/10 ; 14b à venir)
+## 15 octodecies. ÉTAPE 14 : PARRAINAGE EN POINTS ET ARRÊT PROPRE (14a vérifié le 04/10 ; 14b poussé le 04/10)
 
 **Diagnostic (03/10, aucun code, aucune branche).**
 - *Parrainage* : `credit_referral` (migration 015) plafonne au seuil, `LEAST(avant +
@@ -2634,8 +2635,8 @@ Le code attend que 2b, 12 et 13 soient en production : c'est le cas du code depu
 
 **14a — l'arrêt propre (écrit, testé et poussé le 04/10).** Avant le push, Yass a posé
 `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` = 30 (Variables du service ; déploiement vert,
-healthcheck OK) et vérifié « Custom Start Command » vide. Vérification de 14a
-(redéploiement, bilan `[arret]` dans les logs du déploiement retiré) : à suivre.
+healthcheck OK) et vérifié « Custom Start Command » vide. Poussé (`acbb82d`) puis
+**vérifié par Yass le 04/10**.
 - `Dockerfile` : `CMD ["node", "src/index.js"]` (même programme que `npm start`).
   **Mesuré le 04/10 avec le code 14a** : lancé par `npm start`, npm sort (code 143) et
   le serveur ne reçoit jamais le signal (0 ligne `[arret]`) ; lancé par `node`, arrêt
@@ -2686,6 +2687,47 @@ avant : pas de push entre 08:00 et 08:05 UTC. Les demandes d'avis en mémoire so
 perdues (comptées au bilan). Les événements Sentry non encore envoyés sont perdus à la
 sortie, comme avant. Le push de 14a lui-même ne profite pas de l'arrêt propre (c'est
 l'ancien serveur qu'on arrête) : il se voit au redéploiement SUIVANT.
+
+**14b — le parrainage (écrit et testé le 04/10 ; migration 053 exécutée par Yass AVANT le
+push : vérification `true | true | true`, contrôle 4 × `true`, écarts `IDENTIQUE au dépôt
+(hors plateforme) | 0 écart(s) · 48 plateforme` ; poussé sur son feu vert).**
+Vérification de 14b en production : à suivre.
+- **Migration 053** : `credit_referral` re-CREATE OR REPLACE, même signature et même
+  retour (aucun code serveur à changer ; seul un commentaire de `scan.js`). Tampons :
+  `LEAST(avant + bonus, seuil)`, plafond conservé (règle du 27/09). Points : `avant +
+  bonus`, **bonus entier sans plafond** (décision de Yass du 04/10). Puis
+  `GREATEST(après, avant)` dans les deux modes : **jamais de baisse**. Verrou `FOR
+  UPDATE OF c` : le parrain seul, la ligne du marchand n'est que lue (audit 02 P4).
+- Le parrainage reste permis en points (décision 1 refusée) ; rien dans l'admin.
+- **Découvert en testant** : avec la 015, un bonus négatif BAISSAIT le solde (40 → 37) ;
+  la 053 le rend sans effet. Sans risque en pratique : la base refuse un bonus < 1
+  (CHECK `referral_bonus_points_positive`, migration 014) et `scan.js` passe `|| 1` ;
+  seul un appel direct de la fonction y menait.
+
+**Tests 14b.** Bloc 8 réécrit (8 vérifications au lieu de 3 pour `credit_referral`) :
+tampons 9 → 10, 10/10 reste 10 (règle), 12 (seuil baissé) reste 12 ; points 100 → 105,
+498 → 503, 530 → 535 ; bonus −3 sans effet ; crédit qui passe pendant qu'une autre
+session tient la ligne du marchand (`lock_timeout` 300 ms). Filet complet **173/173
+deux fois** (Node 24.10.0, tests navigateur compris). **Preuve** : sur une base sans la
+053 (la production d'aujourd'hui), 5 KO (12 → 10, 498 → 500, 530 → 500, 40 → 37, crédit
+bloqué par le verrou du marchand). Migration rejouée deux fois sur une base qui la porte
+déjà : sans erreur ; contrôle 4 × `true`.
+
+**Ordre du jour J (14b).** Vérification : `true | true | true` (fonction présente, une
+seule version, ancienne version) ; migration 053 ; contrôle (4 × `true`) ; requête
+d'écarts régénérée (attendu IDENTIQUE, 0 écart · 48 plateforme : aucune table en plus) ;
+push ; tests sur une carte de test.
+
+**Hypothèses et limites de 14b.**
+- `type_programme` vaut `stamps` ou `points` (CHECK de la migration 025) ; tout autre
+  mode serait traité comme les tampons (plafond).
+- En points, un parrain peut dépasser le seuil : la récompense se remet au passage
+  suivant, comme après un ajustement (13b).
+- Droits de `credit_referral` inchangés (`exec=111`, comme toutes les fonctions
+  d'avant 051) : la fermeture à la clé publique reste celle de la 050, non posée
+  (décision du 01/10).
+- **Toujours reporté** : le crédit de parrainage n'écrit aucune ligne au journal ; après
+  lui, le dernier scan du parrain ne s'annule plus (« solde incohérent »).
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
@@ -2822,6 +2864,13 @@ plus `landing_premium`, un enregistrement Pro+ le contient toujours.
 pilotage. Elles envoient bien des pushes ; les omettre aurait laissé des trous dans
 le registre. Rattachées aux sources `ajustement`, `annulation` et `scan`.
 
+**2026-10-04 — choix de réalisation de l'étape 14b, pris sans pilotage.** Dans le
+périmètre validé (décision 2 et bonus entier en points) : (1) « jamais de baisse »
+appliqué aussi à un bonus nul ou négatif (sans effet) ; (2) `SET search_path = public`
+ajouté, comme 051 et 052 ; (3) droits de la fonction laissés tels quels (pas de
+fermeture partielle de la 050) ; (4) deux commentaires mis à jour (`scan.js`,
+`tests/lancer.js`). Raisons au §15 octodecies.
+
 **2026-10-04 — choix de réalisation de l'étape 14a, pris sans pilotage.** Dans le
 périmètre validé (décision 3) : (1) limite interne de 20 s, 10 s sous les 30 s de
 Railway, pour écrire le bilan avant l'arrêt forcé ; (2) TOUS les envois lancés après la
@@ -2862,6 +2911,13 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-10-04 par la session « SETUP 4 », quinzième chantier : 14a
+(`acbb82d`) vérifié par Yass. 14b (§15 octodecies) : migration 053 (`credit_referral` :
+jamais de baisse, bonus entier en points, plafond en tampons, verrou du parrain seul),
+filet 173/173 deux fois. Migration 053 exécutée par Yass AVANT le push (vérification et
+contrôle conformes, écarts IDENTIQUE, 0 écart · 48 plateforme), puis 14b poussé sur son
+feu vert. Vérification de 14b en production : à suivre ; l'étape 14 sera close après.*
 
 *Mis à jour le 2026-10-04 par la session « SETUP 4 », quatorzième chantier : étape 14a
 (§15 octodecies), l'arrêt propre : `CMD node`, `services/arret.js`, 19 envois suivis,

@@ -335,7 +335,8 @@ async function creditReferrerIfApplicable(filleulClientId, marchandId, bonusPoin
     throw new Error(`referral_credits insert: ${errTicket.message}`);
   }
 
-  // Crédit atomique — cap à max_value, jamais de reset
+  // Crédit atomique (migration 053) : jamais de baisse ni de reset ; plafond au
+  // seuil en tampons, bonus entier en points ; seul le parrain est verrouillé.
   const { data: credit, error } = await supabase.rpc('credit_referral', {
     p_parrain_client_id: parrainClientId,
     p_bonus_points:      bonusPoints,
