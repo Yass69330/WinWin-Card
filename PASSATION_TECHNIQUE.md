@@ -2580,6 +2580,56 @@ contrôle 6 × `true`, requête d'écarts `IDENTIQUE au dépôt (hors plateforme
   ajuster et annuler un ajustement (droits, audit segment 3) ; l'onglet Scans du
   dashboard garde son affichage (pas d'ajustements, pas de bouton).
 
+## 15 octodecies. ÉTAPE 14 : PARRAINAGE EN POINTS ET ARRÊT PROPRE (décisions, code à venir)
+
+**Diagnostic (03/10, aucun code, aucune branche).**
+- *Parrainage* : `credit_referral` (migration 015) plafonne au seuil, `LEAST(avant +
+  bonus, seuil)` : en points, un parrain AU-DESSUS du seuil est ramené au seuil (530 →
+  500 pour un seuil de 500, « ÉTAT ACTUEL » du filet, bloc 8). Le `FOR UPDATE` sur la
+  jointure verrouille aussi la ligne du marchand (audit D3). En tampons, le parrain déjà
+  à 10/10 perd son tampon : règle produit du 27/09, inchangée.
+- *Redéploiement* : Railway envoie SIGTERM puis tue l'ancien serveur 0 s après
+  (`RAILWAY_DEPLOYMENT_DRAINING_SECONDS`, défaut 0) ; aucun gestionnaire de SIGTERM dans
+  `src/` ; démarré par `npm start` (Dockerfile), Node ne reçoit pas le signal (mesuré
+  avec Node 24.10.0). Coupé à chaque push : les envois faits après la réponse (cartes
+  Apple et Google, registre, **crédit de parrainage, perdu pour de bon** : son ticket est
+  écrit avant le crédit), les demandes d'avis gardées en mémoire, le cron de 08:00 s'il
+  tourne. L'argent d'un scan coupé est protégé depuis 11a et 12b.
+
+**Décisions de Yass (écrites le 03/10, reçues le 04/10).**
+1. **Refusée** : pas d'interdiction du parrainage en points (« avec la décision 2, il
+   n'y a plus de risque de perte »).
+2. **Validée** : `credit_referral` ne baisse jamais un solde et ne verrouille que le
+   parrain.
+3. **Validée, à condition de ne rien coûter en stockage, en requêtes ni en réglages
+   risqués** : `CMD ["node", "src/index.js"]` dans le Dockerfile ; fin des requêtes et
+   des envois en cours ; arrêt du cron ; 30 s (`RAILWAY_DEPLOYMENT_DRAINING_SECONDS`,
+   posée avec 14a, pas avant ; chevauchement laissé à 0).
+4. **(a)** : les demandes d'avis en attente sont perdues au redéploiement, comme
+   aujourd'hui.
+5. **Découpage** : 14a (arrêt propre, sans migration), puis 14b (parrainage, migration
+   053).
+
+Le code attend que 2b, 12 et 13 soient en production : c'est le cas du code depuis le
+04/10 (`bcde845`) ; 14a s'écrit après la vérification de 13b.
+
+**Hypothèses et limites connues à ce jour (à confirmer au code).**
+- *Décision 3* : aucun stockage, aucune requête en plus ; les 30 s sont un maximum (le
+  serveur s'arrête seul dès que les requêtes, les envois et le cron sont finis) et ne
+  retardent pas la mise en service du nouveau serveur. Si l'arrêt bloque, Railway tue au
+  bout de 30 s : le cas d'aujourd'hui.
+- *Décision 1 refusée, en points* : sans la règle, le plafond au seuil reste. Avec la
+  décision 2, un parrain au-dessus du seuil garde son solde mais ne reçoit pas le bonus ;
+  juste sous le seuil, il n'en reçoit qu'une partie. Depuis 13b, un solde en points peut
+  dépasser le seuil par ajustement. **Question ouverte pour 14b** : créditer le bonus
+  entier en points (cohérent avec « sans plafond en points » de 13b), plafond gardé en
+  tampons.
+- **Reporté** : le crédit de parrainage n'écrit aucune ligne au journal ; après lui, le
+  dernier scan du parrain ne s'annule plus (« solde incohérent »), et le journal des
+  ajustements de 13b ne le voit pas.
+- **Provisoire (décision 4 a)** : demandes d'avis perdues à chaque redéploiement (Hamza
+  Salon seul concerné au 03/10).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
@@ -2747,6 +2797,11 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-10-04 par la session « SETUP 4 » : décisions de Yass sur l'étape 14
+(§15 octodecies) : 1 refusée, 2, 3 (sous condition de coût nul), 4 (a) et 5 validées ;
+aucun code. Branche `relecture/etape13` non poussée : son contenu est en production
+(`bcde845`).*
 
 *Mis à jour le 2026-10-04 par la session « SETUP 4 » : 13a (`424d3e8`) vérifié par Yass.
 13b (§15 septdecies) remis sur la production : 159/159 deux fois ; le code 13a passe
