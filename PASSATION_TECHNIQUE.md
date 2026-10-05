@@ -3105,6 +3105,86 @@ la case décochée rejouerait la contre-épreuve sur un vrai Supabase (preuve ut
 l'étape 9) ; ce n'est pas utile à la campagne, et cela coûte trois secrets à reposer.
 `PROCEDURE.md` est corrigée : la case doit être décochée, comme en production.
 
+### D. Test d'adresse sur l'entrée publique de Railway (05/10) — limiteur PARTAGÉ par relais
+
+**Mesures de Yass** (serveur de test, sonde `/__campagne/adresse`) :
+
+| Origine | `X-Forwarded-For` reçu | `x-real-ip` | Retenu par Express (`trust proxy` 1) |
+|---|---|---|---|
+| ordinateur, wifi | `91.73.16.9, 152.233.15.123` | `91.73.16.9` (vraie adresse, confirmée par mon-ip.com) | `152.233.15.123` |
+| téléphone, 4G | `37.168.167.49, 79.127.178.81` | `37.168.167.49` | `79.127.178.81` |
+| pilote (avait ENVOYÉ `X-Forwarded-For: 192.0.2.77`) | `208.77.244.155, 152.233.12.245` | — | `152.233.12.245` |
+
+**Ce qui est prouvé.**
+- **Le limiteur ne compte pas par client mais par relais de Railway.** L'entrée de Railway
+  écrit deux adresses : celle du client, puis celle d'un relais. `trust proxy` 1
+  (`index.js:25`) ne croit qu'un intermédiaire, donc Express retient la dernière adresse,
+  celle du relais.
+- Calcul refait avec les bibliothèques exactes du serveur (`express/lib/utils.js:223-225`
+  pour `compileTrust(1)`, et `proxy-addr`) :
+  - `trust proxy` 1 → le relais, dans les 3 cas ;
+  - `trust proxy` 2 → la vraie adresse, dans les 3 cas (`91.73.16.9`, `37.168.167.49`,
+    `208.77.244.155`).
+- **L'en-tête forgé par le client est REMPLACÉ, pas complété** : le `192.0.2.77` envoyé par
+  le pilote a disparu. On ne peut donc pas contourner le limiteur par `X-Forwarded-For`.
+- Mais tous les clients qui passent par un même relais partagent un même compteur.
+
+**Pourquoi la sonde a conclu « non contournable » (défaut de l'outil, `generateur.js:205-209`).**
+Sa règle supposait qu'un relais partagé aurait une adresse PRIVÉE (10.x, 100.64.x, fd…). Les
+relais de Railway ont des adresses PUBLIQUES (152.233.x.x, 79.127.x.x) : la sonde est
+tombée dans la branche « adresse réelle ». La moitié « non contournable par cet en-tête »
+est juste ; la conclusion « adresse réelle du client » est **fausse**. La bonne règle :
+comparer l'adresse retenue à celle que l'entrée attribue au client (première adresse de
+`X-Forwarded-For`, ou `x-real-ip`). Correction de l'outil : non faite (diagnostic seul).
+
+**La production.**
+- Même code : `index.js` est identique entre la production (`dc4a0ac`) et la branche de
+  campagne.
+- Même entrée : `app.winwin-card.com` est un alias vers Railway, sans Cloudflare
+  (§15 decies, audit 06).
+- Comportement identique attendu (HYPOTHÈSE forte).
+- **Vérification sans risque**, par lecture des journaux de la production : le journal
+  « combined » (`index.js:39`) écrit en tête de chaque ligne l'adresse retenue par Express.
+
+**Les limiteurs touchés : tous, car tous comptent par `req.ip`.**
+- Le global : 300 requêtes par 15 min (`index.js:45-51`), pages, cartes iPhone et santé
+  comprises.
+- Ceux de `rateLimiters.js:4-51`, qui comptent TOUTES les tentatives, réussies comprises :
+  - inscription : 20 par heure ;
+  - connexion marchand et admin : 10 par heure ;
+  - connexion caisse : 20 par heure ;
+  - diagnostic : 30 par heure.
+
+Chaque compteur est partagé par tous les clients du même relais, toutes boutiques et tous
+marchands confondus.
+
+**Impact aujourd'hui (estimation, volumes de l'audit 06 : ≈ 56 crédits et 40 inscriptions
+par jour).**
+- **Limiteur global : risque faible aujourd'hui.** Quelques dizaines de requêtes par quart
+  d'heure de pointe, contre 300 par relais. Le nombre de relais réellement utilisés n'est
+  pas mesuré (au moins 3 adresses vues pour 3 accès) : il se lit dans les journaux de la
+  production, ou par une boucle de requêtes vers le serveur de test.
+- **Inscription, 20 par heure par relais : risque réel lors d'un événement en boutique**
+  (lancement, QR au comptoir). La 21ᵉ inscription de l'heure, tous marchands confondus sur
+  ce relais, reçoit un 429, et le client est perdu.
+- **Blocage volontaire, possible dès aujourd'hui** : 10 requêtes de connexion marchand
+  suffisent à bloquer pendant une heure les connexions au dashboard de tous les marchands
+  qui passent par le même relais (20 pour les caisses). Pas besoin du bon mot de passe.
+  Probabilité faible (il faut vouloir nuire), effet visible.
+- **À la cible (×50)** : ≈ 1 250 requêtes par quart d'heure de pointe (≈ 540 scans par
+  heure, cartes iPhone comprises). Il faudrait au moins 5 relais à charge égale, avant
+  même les pages et les dashboards : **429 quasi certains** sans correctif.
+
+**Classement pour l'étape 17** (« lire la vraie adresse du client », déjà inscrite à la
+synthèse) :
+- **Priorité 1 de l'étape, et préalable à la croissance**, au même titre que le rythme
+  des campagnes. **Pas une urgence de production aujourd'hui**, vu les volumes, sauf le
+  blocage volontaire décrit plus haut.
+- Le correctif est petit (`trust proxy` 2, ou une clé tirée de `x-real-ip`). Mais il
+  n'est sûr qu'une fois vérifié que Railway réécrit aussi un `X-Real-IP` forgé, et que
+  chaque chemin d'entrée a exactement deux étapes. Test proposé sur le serveur de test, à
+  faire par Yass : cette machine n'atteint pas `*.up.railway.app`.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
@@ -3318,6 +3398,12 @@ plus `landing_premium`, un enregistrement Pro+ le contient toujours.
 pilotage. Elles envoient bien des pushes ; les omettre aurait laissé des trous dans
 le registre. Rattachées aux sources `ajustement`, `annulation` et `scan`.
 
+**2026-10-05 — test d'adresse : la sonde a conclu à tort « adresse réelle ».** **Aveu** :
+la règle de conclusion (`generateur.js:205-209`) supposait qu'un relais partagé aurait une
+adresse privée ; ceux de Railway sont publics. Le défaut a été vu par Yass dans le
+navigateur, pas par l'outil. Outil non corrigé (diagnostic seul) ; la règle juste est écrite
+au §15 vicies D.
+
 **2026-10-05 — geste 3 du temps 2 : omission dans la procédure, diagnostic des droits.**
 (1) **Aveu** : `PROCEDURE.md` ne disait rien de la case « Automatically expose new tables »,
 qui figure pourtant dans le relevé du 26/09 (00b) ; la case est restée cochée (reconnu
@@ -3418,6 +3504,13 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-10-05 par la session « SETUP 4 », seizième chantier (suite 4) : test
+d'adresse (§15 vicies D). Railway REMPLACE le `X-Forwarded-For` du client (non contournable),
+mais `trust proxy` 1 fait compter tous les limiteurs PAR RELAIS de Railway, pas par client ;
+`trust proxy` 2 retiendrait la vraie adresse (calcul prouvé). La sonde avait conclu à tort
+(défaut de l'outil, avoué au §17). Production : même code, même entrée, vérification par ses
+journaux. Classement : priorité 1 de l'étape 17, préalable à la croissance. Rien corrigé.*
 
 *Mis à jour le 2026-10-05 par la session « SETUP 4 », seizième chantier (suite 3) : pas
 `droits` du pilote livré après feu vert (retraits seulement, refus si un objet a moins que la
