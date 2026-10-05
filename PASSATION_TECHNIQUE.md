@@ -2922,12 +2922,11 @@ serveur, elle, n'est jamais bloquée plus de 0,9 s d'affilée.
 notifiées, 4 sur 4 à ≈ 750**. Seuil retenu : **500 inscriptions iPhone par campagne**
 (≈ 600 porteurs au profil du banc). Le plus gros marchand actuel (≈ 300 porteurs) est à
 ≈ 240 inscriptions : marge d'un facteur 2.
-- **Déclencheur proposé** pour le chantier « rythme d'envoi » : le premier marchand qui
-  atteint **400 inscriptions iPhone**. Cela laisse le temps de faire le chantier avant le
-  seuil. Le chiffre se lit en lecture seule (SQL Editor) :
-  `SELECT m.nom, count(*) AS inscriptions_iphone FROM device_tokens d JOIN marchands m ON
-  m.id = d.marchand_id GROUP BY m.nom ORDER BY 2 DESC LIMIT 5;`
-- Proposition, **à valider par Yass** : relancer cette requête au début de chaque mois.
+- **Déclencheur du chantier « rythme des campagnes » (décision de Yass, 05/10)** : le
+  **premier marchand à ≈ 500 porteurs, OU la signature d'un réseau**. Pas de requête
+  périodique : le déclencheur se lit dans l'activité commerciale, pas en base. Repère :
+  500 porteurs ≈ 400 inscriptions iPhone au profil du banc (0,81 par porteur), juste sous
+  le seuil mesuré ; un réseau part de ≈ 20 000 porteurs (données du banc), bien au-delà.
 - HYPOTHÈSE : un cœur du banc vaut à peu près un vCPU de Railway. Le temps 2 le dira :
   même campagne, mêmes paliers, sur l'infrastructure réelle.
 
@@ -3024,6 +3023,79 @@ notifiées, 4 sur 4 à ≈ 750**. Seuil retenu : **500 inscriptions iPhone par c
   09:00 UTC.
 - Un push sur la branche de campagne redéploie les trois services : le pilote rejoue sa
   dernière étape, d'où la valeur de repos `attente`.
+
+### C. Temps 2, environnement créé ; geste 3 en ÉCART sur 42 droits (05/10)
+
+**Fait par Yass le 05/10, en suivant `PROCEDURE.md`.**
+- Supabase `winwin-campagne-15` : Paris, Micro, clé `sb_secret_` par défaut, Max rows 1000.
+  Créé avec « Automatically expose new tables » **COCHÉ** et « Enable automatic RLS » décoché.
+- Railway `winwin-campagne-15` : services `serveur`, `imitateur` et `pilote`, à Amsterdam.
+  `JWT_SECRET` et `ADMIN_PASSWORD` neufs. Domaine public du serveur de test :
+  `https://serveur-production-46ae.up.railway.app` (pas un secret).
+- **Durée de vie : jusqu'à la fin de l'étape 18, au plus tard le 31/10/2026** (décision de
+  Yass). Ensuite : suppression des deux projets (`PROCEDURE.md`, dernière section).
+
+**Résultat du geste 3 (pilote, `temoin`).** Image construite : `psql` s'installe, ce qui
+lève la réserve du §15 vicies B. 53 fichiers rejoués en 10 s, la 048 passe sur un projet
+neuf (hypothèse de la 048 vérifiée), témoin en place. Mais **VERDICT ÉCART : 42 écarts sur
+les droits de données**, et 48 lignes « plateforme » comme en production.
+
+**Sens de lecture.** Dans la requête d'écarts, la colonne nommée « production » est la
+base où la requête tourne, ici la base de TEST ; la colonne suivante est le dépôt.
+- `clients → anon | rawd | (aucun droit)` veut donc dire : la base de test donne à `anon`
+  lecture, insertion, modification et suppression ; le dépôt et la production, rien.
+- **La base de test a 42 droits DE PLUS que la production, aucun de moins.**
+- Lecture inverse au premier passage (« anon n'a aucun droit, attendu rawd ») : le nom de
+  colonne induit en erreur dès qu'on quitte la production (dette, §16).
+
+**Cause (PROUVÉE) : les privilèges par défaut du projet neuf.** Case « Automatically expose
+new tables » cochée : toute table créée par `postgres` dans `public` reçoit d'office
+**tous** les droits pour `anon`, `authenticated` et `service_role`, et toute séquence
+`rwU`. En production, ce réglage est **désactivé** (relevé 00b, 26/09) : une table neuve
+n'y reçoit que `Dxtm` (privilèges par défaut relevés en production, 00a P5), puis ses
+GRANT explicites du dépôt. Preuves :
+1. **Le compte tombe juste.** 16 tables × `anon` + 15 × `authenticated` (la 006 lui
+   donne déjà `notification_logs`) + 3 séquences × 2 rôles + 5 objets où le dépôt donne
+   à `service_role` moins que tout (`cron_passages` sans `d`, 049 ; `diagnostics_camera`
+   sans `w`, 042 ; 3 séquences sans `w`) = **42**. Chaque excédent est exactement « tout
+   le reste ».
+2. **Reproduction locale** : dépôt rejoué par `preparer.js` sur une base locale dont le
+   rôle `postgres` donne tout par défaut aux trois rôles → **les 45 lignes du journal de
+   Yass, identiques ligne à ligne** (42 écarts + 3 lignes « plateforme »).
+3. **Contre-épreuve** : même rejeu, privilèges par défaut de la production (`Dxt` sur les
+   tables, rien sur les séquences, exécution de `PUBLIC` conservée sur les fonctions) →
+   **IDENTIQUE, 0 écart · 48 plateforme**, le verdict de la production.
+4. Fonctions : 0 écart dans les deux cas. Supabase conserve l'exécution de `PUBLIC`
+   (discussion #45329, lue par 00b), et les fonctions sensibles retirent ce droit
+   elles-mêmes (051, 052).
+5. **Confirmation sur le projet réel** : le pas `droits` proposé ci-dessous affiche les
+   privilèges par défaut avant correction. Attendu : `anon=arwdDxtm`.
+
+**Ce que la production n'a pas, et dont le code n'a pas besoin.** `cron_passages` :
+insertion, modification, lecture (`cron-passages.js:40-102`), jamais de suppression (049 :
+« rien ne supprime de ligne »). `diagnostics_camera` : insertion et lecture
+(`diag.js:66`, `:87`), jamais de modification. Séquences : `USAGE` suffit aux insertions.
+
+**Correction proposée (rien codé dans le dépôt ; prototype hors dépôt, prouvé en local).**
+Un pas `droits` du pilote, garde-fou du témoin, une seule transaction :
+1. afficher les privilèges par défaut (preuve de la cause sur le projet réel) ;
+2. ramener ceux du rôle `postgres` dans `public` à ceux de la production : retirer
+   `SELECT, INSERT, UPDATE, DELETE` des tables et tout des séquences pour les trois rôles.
+   Fonctions inchangées : l'effet y est déjà le même ;
+3. retirer l'EXCÉDENT seul, calculé ligne à ligne par la requête d'écarts (42 `REVOKE`,
+   affichés). **Jamais d'ajout** : si un objet avait moins que la production, refus et
+   rien n'est fait ;
+4. une table sonde, créée puis annulée : une table future doit recevoir les droits de la
+   production. Cela prouve aussi que le mécanisme est bien le réglage par défaut, et non
+   un déclencheur de la plateforme ;
+5. requête d'écarts rejouée : **IDENTIQUE exigé**.
+
+Prototype sur la copie locale du projet de test : 42 retraits + 2 réglages par défaut →
+**IDENTIQUE, 0 écart · 48 plateforme** ; table sonde : `anon=D authenticated=D
+service_role=D` (aucun `rawd`). **Recréer le projet n'est pas nécessaire.** Recréer avec
+la case décochée rejouerait la contre-épreuve sur un vrai Supabase (preuve utile à
+l'étape 9) ; ce n'est pas utile à la campagne, et cela coûte trois secrets à reposer.
+`PROCEDURE.md` est corrigée : la case doit être décochée, comme en production.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
@@ -3165,6 +3237,46 @@ token marchand mono-site toujours non révocable).
   `index.js:213`) : pleine à ≈ 1 000 inscriptions au banc (1 033 refus). Derrière l'entrée
   de Railway, le comportement peut différer (HYPOTHÈSE, temps 2).
 
+**Découverte pour l'étape 9 (le dépôt reconstruit la base) et l'étape 3 (protection des
+données, restauration) — 05/10, §15 vicies C. Notée ; aucune migration pour la
+production.** Question posée : que casserait une reconstruction de la production depuis
+le dépôt ? Réponse prouvée par deux rejeux locaux et par le projet de test :
+- **Sur un projet réglé comme la production** (« exposition automatique des nouvelles
+  tables » désactivée) : **IDENTIQUE, 0 écart · 48 plateforme**. Rien ne casse ; c'est
+  acquis depuis la 048.
+- **Sur un projet neuf avec la case cochée** (cas du projet de test) : **le code ne casse
+  pas**, car `service_role` a au moins ses droits de production. Mais il y a **42 droits
+  en trop** :
+  - `anon` et `authenticated` peuvent lire, insérer, modifier et supprimer sur les 16
+    tables, et utiliser les 3 séquences ;
+  - `service_role` gagne la suppression sur `cron_passages` et la modification sur
+    `diagnostics_camera` et les séquences.
+  La RLS (active sur les 16 tables, aucune règle d'accès dans le dépôt) devient alors la
+  SEULE barrière entre la clé publique (`sb_publishable_` = `anon`) et les données ; en
+  production, il y en a deux. Rien ne le signale au serveur ; seule la requête d'écarts le
+  voit.
+- **Le dépôt ne consigne pas les réglages du projet** dont dépend la fidélité d'une
+  reconstruction :
+  - l'exposition automatique, c'est-à-dire les privilèges par défaut ;
+  - Max rows 1000 ;
+  - le chemin de recherche `public, extensions`.
+  La requête d'écarts ne compare pas les privilèges par défaut. **Une restauration doit
+  commencer par ces réglages**, sinon elle produit une base plus ouverte que la production.
+- **Point fragile (HYPOTHÈSE, simulé)** : deux fonctions que le serveur appelle n'ont aucun
+  `GRANT EXECUTE` explicite à `service_role`. Elles vivent sur le droit d'exécution de
+  `PUBLIC`, que Supabase conserve aujourd'hui (#45329) :
+  - `credit_referral` (`scan.js:340`) ;
+  - `effacer_client` (`clients.js:173`).
+  Sur un projet qui retirerait ce droit, la simulation les rend inexécutables
+  (`exec=000`) : bonus de parrainage non crédité, **sans bruit** (supabase-js ne lève
+  pas), et effacement RGPD en échec. Les autres fonctions appelées ont leur GRANT (036,
+  038, 039, 044, 051, 052).
+- **L'exemple « purge de `cron_passages` sans DELETE » ne s'applique pas** : aucune purge
+  dans le code, et la production n'a pas ce droit non plus (049).
+- **Nom de colonne trompeur** dans la requête d'écarts : « production » désigne la base
+  examinée. Hors production, il fait lire le résultat à l'envers. À renommer en
+  « base examinée » (`generer.sh`, puis régénérer) ; petit, non fait.
+
 ## 17. DÉCISIONS HORS PILOTAGE
 
 Toute décision prise sans passer par le pilotage (Yass) se note ici : date, décision,
@@ -3197,13 +3309,25 @@ plus `landing_premium`, un enregistrement Pro+ le contient toujours.
 pilotage. Elles envoient bien des pushes ; les omettre aurait laissé des trous dans
 le registre. Rattachées aux sources `ajustement`, `annulation` et `scan`.
 
+**2026-10-05 — geste 3 du temps 2 : omission dans la procédure, diagnostic des droits.**
+(1) **Aveu** : `PROCEDURE.md` ne disait rien de la case « Automatically expose new tables »,
+qui figure pourtant dans le relevé du 26/09 (00b) ; Yass l'a laissée cochée, d'où les 42
+droits en trop. Procédure corrigée. (2) Deux rejeux locaux (privilèges par défaut « tout »
+puis « comme la production ») pour prouver la cause et répondre à « que casserait une
+reconstruction » ; un premier essai trop strict sur les fonctions (exécution de `PUBLIC`
+retirée) a été écarté, car la production garde ce droit (`admin_marchands_stats`, 044,
+exécutable par `anon` en production alors que la 044 ne l'accorde qu'à `service_role`).
+(3) Correction prototypée hors du dépôt (brouillon), **non intégrée au pilote** : diagnostic
+avant code, feu vert de Yass attendu. Raisons au §15 vicies C.
+
 **2026-10-05 — paliers et préparation du temps 2 (étape 15), choix pris sans pilotage.**
 Dans le périmètre des décisions de Yass du 05/10 :
 (1) un palier ≈ 1 000 ajouté aux 4 demandés, puis une seconde série complète et deux
 essais de diagnostic à 750 (sonde de connexion, processeur par processus) : un seul essai
 par palier ne suffisait pas à fixer un seuil (pire scan très variable) ;
-(2) seuil exprimé en inscriptions iPhone (un push par ligne `device_tokens`), avec un
-déclencheur proposé à 400 et une requête de lecture : la décision reste à Yass ;
+(2) seuil exprimé en inscriptions iPhone (un push par ligne `device_tokens`) ; le
+déclencheur proposé (400 inscriptions, requête mensuelle) a été remplacé par la décision de
+Yass : premier marchand à ≈ 500 porteurs ou signature d'un réseau ;
 (3) le témoin sorti dans `temoin.sql`, joué avant `donnees.sql` ;
 (4) une seule image pour les trois services, programme choisi par `CAMPAGNE_PROGRAMME`,
 « Custom Start Command » vide comme en production ;
@@ -3282,11 +3406,21 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 
 ---
 
+*Mis à jour le 2026-10-05 par la session « SETUP 4 », seizième chantier (suite 2) : temps 2
+créé par Yass (Supabase et Railway `winwin-campagne-15`, jusqu'à la fin de l'étape 18, au plus
+tard le 31/10/2026). Geste 3 : image et `psql` OK, 048 passée sur projet neuf, mais ÉCART sur
+42 droits EN TROP dans la base de test (case « Automatically expose new tables » cochée ;
+cause prouvée par reproduction, §15 vicies C). Reconstruction réglée comme la production :
+IDENTIQUE. Découverte pour les étapes 9 et 3 au §16. Correction par un pas `droits` du pilote
+proposée et prouvée en local, non codée. Déclencheur du rythme des campagnes (Yass) : premier
+marchand à ≈ 500 porteurs ou signature d'un réseau.*
+
 *Mis à jour le 2026-10-05 par la session « SETUP 4 », seizième chantier (suite) : étape 15,
 paliers et préparation du temps 2 (§15 vicies). Règle 8 du contrat (§7) : pas de levée du
 plafond de l'étape 21 avant que les campagnes aient un rythme. Seuil mesuré au banc : plus de
 2 s à la caisse dès ≈ 500 inscriptions iPhone par campagne, cause prouvée (le serveur sature
-son unique cœur, la caisse fait la queue derrière les cartes) ; déclencheur proposé à 400.
+son unique cœur, la caisse fait la queue derrière les cartes) ; déclencheur (Yass) :
+premier marchand à ≈ 500 porteurs ou signature d'un réseau.
 Temps 2 prêt, rien créé : Dockerfile de campagne, préparation de base, pilote,
 `tests/charge/PROCEDURE.md` (premier geste : test d'adresse). Garde-fous 33/33, filet
 173/173. Branche `campagne/etape15` poussée comme branche de relecture, jamais déployée.*

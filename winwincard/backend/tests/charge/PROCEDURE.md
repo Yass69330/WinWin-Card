@@ -50,6 +50,10 @@ supprime les deux projets** (voir la dernière section).
      seulement** (un symbole casserait la chaîne de connexion). Garde-le dans
      ton gestionnaire de mots de passe.
    - « Enable Data API » : **coché**. Le serveur passe par elle.
+   - « Automatically expose new tables » : **NON coché**, comme en production
+     (relevé du 26/09). Coché, chaque table reçoit d'office tous les droits pour
+     `anon` et `authenticated`, et la requête d'écarts du geste 3 rend « ÉCART »
+     (42 droits en trop, constaté le 05/10, passation §15 vicies C).
    - « Enable automatic RLS », si l'option est proposée : **NON coché**. La
      migration 048 pose elle-même cette protection. On vérifie justement qu'elle
      le peut sur un projet neuf : c'est une hypothèse écrite dans la 048.
