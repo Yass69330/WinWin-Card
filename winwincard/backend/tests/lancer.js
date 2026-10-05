@@ -29,7 +29,10 @@
 //   FILET_EN_PLUS chemins de modules de tests supplémentaires, séparés par des
 //                 virgules, joués dans l'ordre après les scénarios, sur la même
 //                 base et le même serveur (ex. les tests navigateur de
-//                 tests/navigateur/, qui exigent Playwright).
+//                 tests/navigateur/, qui exigent Playwright) ;
+//   FILET_BASE    nom de la base jetable (défaut winwin_filet).
+// Chargé par require() (banc de charge, tests/charge/), ce fichier ne lance
+// rien : il prête ses outils (base, PostgREST, serveur).
 // Limite connue : la production tourne sous PostgreSQL 17.6 (00a §8).
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -44,7 +47,7 @@ const jwt = require('jsonwebtoken');
 
 const RACINE   = path.resolve(__dirname, '..');
 const DOSSIER_DB = path.join(RACINE, 'database');
-const BASE     = 'winwin_filet';
+const BASE     = process.env.FILET_BASE || 'winwin_filet';
 const PGPORT   = process.env.PGPORT || '5432';
 const SECRET_PGRST = 'filet_secret_postgrest_local_32_caracteres_min';
 const SECRET_JWT   = 'filet-jwt-secret-local';
@@ -171,25 +174,39 @@ function lancer(nom, commande, args, options) {
   return p;
 }
 
-async function demarrerPostgrest() {
+// Options du banc de charge (tests/charge/), absentes pour le filet :
+//   delaiMs  : attente ajoutée à chaque requête vers la base (trajet du serveur à
+//              la base de production) ;
+//   stockage : adresse où renvoyer /storage/v1 (imitation du stockage Supabase) ;
+//   maxLignes : plafond de lignes par lecture, comme Supabase (1 000 en production).
+async function demarrerPostgrest({ delaiMs = 0, stockage = null, maxLignes = null } = {}) {
   const port = await portLibre();
   const conf = path.join(TMP, 'postgrest.conf');
   fs.writeFileSync(conf, [
     `db-uri = "postgres://filet_authenticator:filet_local@127.0.0.1:${PGPORT}/${BASE}"`,
     'db-schemas = "public"', 'db-anon-role = "anon"',
     `jwt-secret = "${SECRET_PGRST}"`, 'server-host = "127.0.0.1"', `server-port = ${port}`,
+    ...(maxLignes ? [`db-max-rows = ${maxLignes}`] : []),
   ].join('\n'));
   lancer('postgrest', binairePostgrest(), [conf]);
   await attendreHttp(`http://127.0.0.1:${port}/`);
   // Préfixe /rest/v1 comme chez Supabase : supabase-js l'ajoute à SUPABASE_URL.
   const portProxy = await portLibre();
   proxy = http.createServer((req, res) => {
-    if (!req.url.startsWith('/rest/v1')) { res.writeHead(404); return res.end('hors filet'); }
-    const amont = http.request({ host: '127.0.0.1', port, method: req.method,
-      path: req.url.slice('/rest/v1'.length) || '/', headers: { ...req.headers, host: `127.0.0.1:${port}` } },
-    r => { res.writeHead(r.statusCode, r.headers); r.pipe(res); });
-    amont.on('error', e => { res.writeHead(502); res.end(e.message); });
-    req.pipe(amont);
+    let cible;
+    if (req.url.startsWith('/rest/v1')) {
+      cible = { host: '127.0.0.1', port, path: req.url.slice('/rest/v1'.length) || '/' };
+    } else if (stockage && req.url.startsWith('/storage/v1')) {
+      const u = new URL(stockage);
+      cible = { host: u.hostname, port: u.port, path: req.url };
+    } else { res.writeHead(404); return res.end('hors filet'); }
+    const envoyer = () => {
+      const amont = http.request({ ...cible, method: req.method, headers: { ...req.headers, host: `${cible.host}:${cible.port}` } },
+        r => { res.writeHead(r.statusCode, r.headers); r.pipe(res); });
+      amont.on('error', e => { res.writeHead(502); res.end(e.message); });
+      req.pipe(amont);
+    };
+    if (delaiMs > 0) { req.pause(); setTimeout(() => { req.resume(); envoyer(); }, delaiMs); } else envoyer();
   });
   await new Promise(r => proxy.listen(portProxy, '127.0.0.1', r));
   return `http://127.0.0.1:${portProxy}`;
@@ -198,7 +215,7 @@ async function demarrerPostgrest() {
 // ── Serveur WinWin ──────────────────────────────────────────────────────────
 // `nom` : journal TMP/<nom>.log. Un second serveur (étape 14a) sert au test de
 // l'arrêt propre, qui le coupe sans toucher au serveur des autres scénarios.
-async function demarrerServeur(urlSupabase, nom = 'serveur') {
+async function demarrerServeur(urlSupabase, nom = 'serveur', envEnPlus = {}) {
   const port = await portLibre();
   const cle = jwt.sign({ role: 'service_role' }, SECRET_PGRST);
   // Lancé depuis le dossier temporaire VIDE : dotenv (src/index.js:1) lit le .env
@@ -208,7 +225,7 @@ async function demarrerServeur(urlSupabase, nom = 'serveur') {
     cwd: TMP,
     env: { PATH: process.env.PATH, PORT: String(port), NODE_ENV: 'test',
       SUPABASE_URL: urlSupabase, SUPABASE_SERVICE_KEY: cle,
-      JWT_SECRET: SECRET_JWT, ADMIN_PASSWORD: 'filet-admin' },
+      JWT_SECRET: SECRET_JWT, ADMIN_PASSWORD: 'filet-admin', ...envEnPlus },
   });
   const sortie = new Promise(r => processus.on('exit', (code, signal) => r({ code, signal })));
   const fichier = path.join(TMP, `${nom}.log`);
@@ -247,7 +264,10 @@ function nettoyer() {
 }
 
 // ── Déroulé ─────────────────────────────────────────────────────────────────
-(async () => {
+module.exports = { TMP, BASE, SECRET_JWT, psqlSocket, psqlEnFond, demarrerPostgresSiBesoin, preparerBase,
+  demarrerPostgrest, demarrerServeur, lancer, portLibre, attendreHttp, nettoyer };
+
+if (require.main === module) (async () => {
   const scenarios = require('./scenarios');
   demarrerPostgresSiBesoin();
   const nb = preparerBase(scenarios.FIXTURES);

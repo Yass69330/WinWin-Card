@@ -2729,6 +2729,135 @@ push ; tests sur une carte de test.
 - **Toujours reporté** : le crédit de parrainage n'écrit aucune ligne au journal ; après
   lui, le dernier scan du parrain ne s'annule plus (« solde incohérent »).
 
+## 15 novodecies. ÉTAPE 15 : CAMPAGNE DE CHARGE — TEMPS 1, BANC LOCAL (05/10, branche `campagne/etape15`, NON POUSSÉE)
+
+**Correction du diagnostic (05/10).** Le diagnostic de l'étape 15 plaçait le serveur en
+Californie, d'après l'audit 00a/06 : faux depuis le 30/09 (serveur à Amsterdam,
+`europe-west4-drams3a`, base à Paris, §15 decies). **Leçon : l'état actuel se lit dans
+cette passation et dans le dépôt, jamais dans l'audit seul.** Conséquences : serveur de
+test à Amsterdam, base de test à Paris (`eu-west-3`) ; « variante Amsterdam » sans objet.
+**La production est en Micro depuis le 05/10** (étape 19 avancée, sans surcoût,
+information de Yass).
+
+**Décisions de Yass (05/10).** (1) Deux temps : banc local, puis projets réels de 3 à 5
+jours. (2) Imitation par un fichier chargé via `NODE_OPTIONS`, **zéro ligne de `src/`
+modifiée**. (3) Générateur par le réseau privé, une adresse par boutique et par iPhone,
+limiteur inchangé ; mesure de l'entrée publique **sur le serveur de test uniquement** ; si
+le limiteur est contournable : noté pour l'étape 17, rien corrigé. (4) `scripts/load-test.js`
+supprimé. (5) Sans objet. (6) Après la campagne, l'outil rejoint la production, **inerte**
+comme le filet : rien dans `src/` ne le charge, il n'entre pas dans l'image Docker.
+**Données** : 100 000 porteurs — un gros réseau (UN marchand, 15 boutiques, ≈ 20 000
+porteurs), un marchand « plafond » par paliers (5 000, 20 000, 50 000), le reste en petits
+commerces. Plafond de 1 000 lignes (étape 21) atteint : le noter et chercher ce qui casse
+APRÈS lui, sans rien corriger. **Limiteur** : plusieurs caisses d'une boutique derrière UNE
+adresse (wifi), clients en 4G ; test de contournement prioritaire (objectif ×50).
+
+**Livré (`winwincard/backend/tests/charge/`, rien dans `src/`, `Dockerfile` ni
+`package*.json`).**
+- `campagne.js`, chargé par le seul serveur de test : garde-fous (marchand témoin en base,
+  `API_BASE_URL` hors production, aucune vraie clé, pas de Sentry), clés factices, APNs et
+  Google redirigés vers l'imitateur, **liste blanche des sorties** (base de test et
+  imitateur), mesures côté serveur, passage complet du cron, sonde de sortie et **sonde
+  d'adresse** (ce que le serveur reçoit en `X-Forwarded-For` et l'adresse qu'Express en
+  retient, par `proxy-addr` et `trust proxy` 1 comme `index.js:25`) — tout sous
+  `/__campagne/*`, clé dérivée du `JWT_SECRET` de test, 404 sans elle.
+- `imitateur.js` : APNs HTTP/2 (50–300 ms, 1 % de 410, 1 000 flux simultanés par
+  connexion), Google (création 1,4 s médiane,
+  2,4 s p90, mesurées en 04 n° 3 ; autres appels 0,4 s, HYPOTHÈSE), stockage en mémoire
+  (banc), **iPhones simulés** (liste puis cartes avec If-Modified-Since, appareil à jour au
+  départ, une adresse 4G chacun) : ≈ 3,3 téléchargements ou vérifications par scan, comme
+  mesuré en production (3,4, 04 §4.2).
+- `donnees.sql` : 100 000 porteurs, 64 % sur iPhone, 1,27 appareil par carte (≈ 2,7 cartes
+  par appareil), ≈ 270 000 scans sur 90 jours (14 % à 08:00 UTC), registre de 800 000
+  lignes, relances (inactifs et « proches ») à l'équilibre, marchand témoin. Généré en
+  ≈ 50 s sur le banc (590 Mo).
+- `generateur.js` : refuse `winwin-card.com` avant toute requête, vérifie le témoin avant
+  toute écriture ; scénarios scan, rush, dashboard, campagne, cron, wifi, adresse ;
+  arrivées au fil de l'eau ; résumé court par scénario.
+- `banc-local.js` (banc complet sur la machine), `garde-fous.js` (preuve, 23 vérifications).
+- `tests/lancer.js` : prête ses outils quand on le charge (base nommée, et en option délai,
+  stockage, plafond de lignes) ; filet inchangé (119/119).
+- `.dockerignore` : `tests/charge` exclu. **Prouvé avec Docker** (export du contexte de
+  construction de l'image de production) : `tests/` y contient `lancer.js`,
+  `scenarios.js`, `navigateur/`, et pas `charge/`.
+
+**Délai du banc : 100 ms par requête base.** Source : §15 decies, 80 à 120 ms par requête
+base vue de Dubaï après le passage à Amsterdam (`/health/db` moins `/health`), minimum
+≈ 40 ms. HYPOTHÈSE, à confirmer au temps 2 : le fichier de campagne y mesure chaque appel
+à la base côté serveur. **Trajet caisse ↔ serveur** (mesures du §15 decies) : Dubaï
+≈ 0,28 s (`/health`, point d'entrée hors d'Europe) ; France NON MESURÉ (HYPOTHÈSE
+≈ 0,05 à 0,1 s ; à mesurer sans code : `/health` depuis un navigateur en France).
+
+**Preuves (`garde-fous.js`, 23/23).** Le serveur de campagne refuse de démarrer sans
+marchand témoin (jamais en écoute), avec l'`API_BASE_URL` de production ou absente, avec
+une vraie clé Apple ou Google, avec `SENTRY_DSN`. Le générateur refuse
+`app.winwin-card.com` et ses sous-domaines **sans aucune requête** (sentinelle : 0 appel),
+et refuse un serveur sans témoin sans rien écrire. Depuis le serveur de test : Google
+(OAuth, Wallet) servi par l'imitateur ; APNs de production et de bac à sable connectés à
+l'imitateur ; `app.winwin-card.com`, `www.apple.com` et tout autre hôte **bloqués et
+comptés**. Sonde d'adresse : elle retient la dernière entrée de `X-Forwarded-For` (la
+première, falsifiable, est ignorée), comme Express avec `trust proxy` 1. Après ces
+changements, filet complet **173/173**.
+
+**Premiers coûts (banc local).** 4 cœurs partagés par PostgreSQL, PostgREST, l'imitateur et
+le générateur : des ordres de grandeur, pas des chiffres de production.
+
+| Scénario | Caisse (scan vu du générateur) | Serveur | Remarques |
+|---|---|---|---|
+| scan seul | méd. 340–455 ms, max 500 | 4 requêtes base ≈ 105 ms chacune | indépendant de la taille du marchand (identique à 50 000 porteurs) |
+| pointe ×3 (1 860 scans/h) | méd. 420 ms, p99 495 | boucle p99 19 ms, max 120 ; 200 Mo | 3,7 requêtes d'iPhone par push |
+| pointe ×10 (6 200 scans/h) | méd. 350 ms, p99 471 | boucle p99 30 ms, max 105 ; 280 Mo | tient sans broncher |
+| dashboard | — | stats 120 ms, réseau (`group_stats`) 250–320 ms, clients 120–160 ms | liste tronquée à 1 000 (50 000 porteurs) |
+| campagne vers 1 000 appareils | **méd. 1,1–2,9 s, p95 14–22 s, max 26 s ; 4 scans coupés** | envoi 4,5–8,6 s ; boucle p99 240–465 ms, **max ≈ 1 s** ; **650 Mo** | 2 700–3 600 requêtes d'iPhone en ≈ 40 s ; jusqu'à 228 connexions d'iPhone refusées |
+| idem, iPhones étalés sur 1 à 60 s | méd. 2,1 s, p95 16,7 s, max 24 s | boucle max 1,3 s ; 690 Mo | **le délai de retour des iPhones ne change pas le constat** |
+| **campagne SANS plafond de lignes** (après l'étape 21), 16 230 appareils | **68 scans coupés sur 82, max 150 s** | envoi 176 s ; **boucle bloquée jusqu'à 37 s** ; **3,1 Go** ; 35 % d'échecs Apple | la plateforme est hors service plusieurs minutes |
+| **cron, passage complet** (palier 50 000) | méd. 430 ms (non gêné) | **3 237 cartes en 2 927 s (49 min), 0,9 s par carte** ; boucle p99 18 ms ; 360 Mo | 2 866 inactifs + 371 « proches » ; 9 458 requêtes d'iPhone (2 573 × 200, 6 885 × 304) |
+| wifi d'une boutique | premier 429 à la **301ᵉ** requête | — | une boutique tient au plus **20 scans/min** sur 15 min |
+
+Coûts unitaires : génération d'une carte Apple 13–20 ms hors base quand le bandeau est en
+cache ; rendu d'un bandeau méd. 25 ms, jusqu'à 110–150 ms (bloque la boucle) ;
+téléchargement d'une carte par l'iPhone ≈ 107 ms en 304 (1 requête base), 340–450 ms en
+200 (3 requêtes base et génération).
+
+**Ce qui casse APRÈS le plafond de 1 000 lignes (constaté, rien corrigé).**
+- **Campagne** : 1 000 appareils seulement (sur ≈ 16 000 au réseau, ≈ 40 000 au plafond à
+  50 000 porteurs) ; mais le `PATCH` touche TOUTES les cartes du marchand (50 000 en
+  1,3 s) : leur date change, et chacune sera re-téléchargée en entier (200 au lieu de 304)
+  à sa prochaine vérification (2 164 × 200 pour 1 394 × 304 au palier 50 000).
+- **Cron** : les lectures de clients, de scans récents et de déduplication sont tronquées
+  à 1 000. Au palier 50 000, il prévoit 957 relances pour le plafond **dont 546 vers des
+  clients actifs**, et n'examine que 957 de ses 20 138 inactifs ; réseau : 913 relances,
+  dont 559 vers des actifs. Sur tout le parc : 2 849 relances d'inactifs prévues, dont
+  1 105 vers des actifs (calcul en lecture sur la base du banc, mêmes lectures que le cron).
+- **Le plafond protège aujourd'hui de la tempête** : à 1 000 appareils, une campagne gèle
+  déjà la caisse jusqu'à 26 s. **Mesuré sans le plafond** (ce que deviendrait l'étape 21
+  sans cadence) : une campagne vers les 16 230 appareils du réseau dure 176 s, coupe 68
+  scans sur 82, bloque le serveur jusqu'à 37 s, monte à 3,1 Go, et 35 % des envois Apple
+  échouent : `apns.js` coupe à 10 s les envois en attente et **détruit toute la
+  connexion** (`apns.js:150-155`), ce qui fait échouer les envois qui la partageaient.
+  **Dépendance à inscrire au calendrier : cadencer les campagnes (et donc les retours
+  d'iPhone) AVANT de lever le plafond de l'étape 21.**
+
+**Limites du temps 1.** Processeur local partagé ; PostgreSQL et PostgREST locaux avec
+un délai fixe (la file de PostgREST, 10 connexions par défaut, gonfle les temps base
+pendant la tempête : à mesurer sur Supabase) ; stockage en mémoire ; délais d'Apple, de
+Google (hors création) et du retour des iPhones (1 à 5 s) **HYPOTHÈSE** (le délai des
+iPhones testé de 1 à 60 s ne change pas le constat) ; la limite de flux simultanés
+d'Apple est imitée à 1 000 par connexion (**HYPOTHÈSE**) ; dans l'essai sans plafond, une
+partie des erreurs des iPhones simulés (EMFILE : trop de fichiers ouverts) vient de la
+machine du banc, pas du serveur ; le logo des marchands n'est pas
+téléchargé (pas d'URL publique sur le banc) ; la sonde d'adresse ne prouve rien en local
+(le générateur y est le dernier proxy) : **elle se joue au temps 2, contre l'entrée
+publique du serveur de test, en priorité**.
+
+**Reste pour le temps 2.** Les services de test ont besoin de leur propre Dockerfile,
+puisque l'outil est exclu de l'image de production (HYPOTHÈSE : `tests/charge/Dockerfile` et
+son `Dockerfile.dockerignore`, pris en compte par Railway). **En premier** : la sonde
+d'adresse contre l'entrée publique du serveur de test (`CHARGE_SCENARIOS=adresse`,
+`CIBLE_PUBLIQUE`) ; une requête suffit à dire si l'adresse vue par le limiteur est
+contournable, partagée par tous (proxy interne) ou réelle. Puis la mesure réelle du
+coût d'une requête base.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
@@ -2832,6 +2961,30 @@ token marchand mono-site toujours non révocable).
 **Toujours reportés (raison valable) :** #4 (re-sync Google, arbitrage), #5, #6, #8,
 #10, #11 (corriger listing+horloge ENSEMBLE, jamais séparément), #13 (parké).
 
+**Dette découverte par l'étape 15, temps 1 (05/10) — notée, rien corrigé (décision de Yass).**
+- **Registre « 200 » sans clés.** Sans clés Apple, `sendPushUpdate` rend sans rien
+  envoyer (`apns.js:185-189`) et le scan inscrit l'envoi comme réussi (`scan.js:266`,
+  `notif-registre.js`, `depuisErreur(null)` → 200). Une variable de clé perdue en
+  production remplirait le registre de faux succès.
+- **Cron non lançable en entier à la main.** `/api/admin/workflows` ne joue que 2 étapes
+  sur 4 (`workflows.js:63-64`) ; seul le passage de 08:00 UTC fait tout. Le banc le lance
+  par `/__campagne/cron`, hors production.
+- **Création du bucket avant chaque envoi au stockage** (`strip-cache.js:137`) : un
+  aller-retour de plus par image (≈ 100 ms au banc), refusé en silence.
+- **Campagne sans cadence.** Tous les envois partent ensemble (`notifications.js:110-118`),
+  puis tous les iPhones reviennent : au banc, 1 000 appareils gèlent la caisse jusqu'à
+  26 s. Et le `PATCH` de toutes les cartes du marchand prépare une vague de
+  re-téléchargements complets.
+- **Cron et plafond de lignes** : relances vers des clients actifs (05 c7), **chiffré** au
+  banc : ≈ 40 % des relances d'inactifs au palier 50 000.
+- **Message Google du cron envoyé à toutes les cartes**, iPhone compris (`cron.js`,
+  `notifyClient` ; déjà connu, étape 23) : **chiffré** au banc à ≈ 0,4 s sur les 0,9 s
+  d'une carte (délai Google imité, HYPOTHÈSE), soit jusqu'à ≈ 28 % du passage pour 64 %
+  de cartes iPhone.
+- **Limiteur et boutiques chargées** : 300 requêtes par quart d'heure et par adresse,
+  soit 20 scans/min tenus par boutique. À ×50, une boutique de franchise à plusieurs
+  caisses peut les dépasser en pointe (étape 17).
+
 ## 17. DÉCISIONS HORS PILOTAGE
 
 Toute décision prise sans passer par le pilotage (Yass) se note ici : date, décision,
@@ -2863,6 +3016,18 @@ plus `landing_premium`, un enregistrement Pro+ le contient toujours.
 `annulation` et le parrainage n'étaient pas dans la liste minimale donnée en
 pilotage. Elles envoient bien des pushes ; les omettre aurait laissé des trous dans
 le registre. Rattachées aux sources `ajustement`, `annulation` et `scan`.
+
+**2026-10-05 — choix de réalisation de l'étape 15, temps 1, pris sans pilotage.** Dans le
+périmètre validé : (1) délai du banc de 100 ms par requête base (milieu de 80–120 ms,
+§15 decies) ; (2) iPhones simulés « à jour » au départ, pour mesurer le régime établi ;
+(3) stockage imité en mémoire sur le banc ; (4) sondes `/__campagne/*` (mesures, cron
+complet, sortie) dans le fichier de campagne, protégées par une clé, 404 sans elle ;
+(5) PostgREST du banc plafonné à 1 000 lignes, comme Supabase ; (6) `tests/lancer.js`
+prête ses outils au banc de charge au lieu de les dupliquer (filet inchangé, 119/119) ;
+(7) démon Docker démarré dans le conteneur pour prouver `.dockerignore` (export du
+contexte, aucune image téléchargée) ; (8) témoin à identifiant fixe
+(`c0ffee15-0000-4000-8000-000000000015`, slug `temoin-campagne-15`). Raisons au §15
+novodecies.
 
 **2026-10-04 — choix de réalisation de l'étape 14b, pris sans pilotage.** Dans le
 périmètre validé (décision 2 et bonus entier en points) : (1) « jamais de baisse »
@@ -2911,6 +3076,15 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-10-05 par la session « SETUP 4 », seizième chantier : étape 15, temps 1
+(§15 novodecies), banc local sur la branche `campagne/etape15` (NON POUSSÉE). Outil
+`tests/charge/` (rien dans `src/`, hors de l'image Docker, prouvé) ; garde-fous 23/23 ;
+redirection Apple et Google prouvée ; premiers coûts : scan ≈ 0,35–0,45 s côté serveur,
+pointe ×10 tenue, **campagne vers 1 000 appareils : caisse gelée jusqu'à 26 s**, sans
+plafond de lignes (étape 21) plateforme hors service plusieurs minutes, cron complet
+49 min pour 3 237 cartes. Correction : serveur à Amsterdam (le diagnostic s'appuyait à
+tort sur l'audit). `scripts/load-test.js` supprimé. Filet 173/173.*
 
 *Mis à jour le 2026-10-04 par la session « SETUP 4 » : 14b (`1203d6c`) vérifié par Yass,
 **étape 14 close** (14a `acbb82d`, 14b `1203d6c`). Reste reporté : le crédit de

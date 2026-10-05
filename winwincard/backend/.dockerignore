@@ -5,3 +5,6 @@ node_modules
 .env.*
 !.env.example
 npm-debug.log*
+# Outil de la campagne de charge (étape 15) : jamais dans l'image de production.
+# Rien dans src/ ne le charge ; seul le serveur de TEST le charge (NODE_OPTIONS).
+tests/charge
