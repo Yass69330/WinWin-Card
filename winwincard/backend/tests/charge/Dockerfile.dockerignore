@@ -1,0 +1,8 @@
+# Image de la CAMPAGNE (tests/charge/Dockerfile) : le .dockerignore de la racine,
+# SANS l'exclusion de tests/charge (l'outil de campagne doit y être).
+# BuildKit lit ce fichier à la place de celui de la racine pour ce Dockerfile.
+node_modules
+.env
+.env.*
+!.env.example
+npm-debug.log*

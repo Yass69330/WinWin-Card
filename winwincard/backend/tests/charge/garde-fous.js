@@ -8,6 +8,9 @@
 //      refuse un serveur sans témoin sans rien écrire.
 //   3. Depuis le serveur de test : Apple et Google arrivent à l'imitateur, la
 //      production et tout autre hôte sont bloqués.
+//   4. Le pilote joue la sonde d'adresse et donne l'adresse pour le navigateur.
+//   5. La préparation de la base de test (preparer.js) refuse toute base qui
+//      n'est ni neuve ni de campagne, et rejoue le dépôt sur une base neuve.
 // Lancement : node tests/charge/garde-fous.js. Sortie 0 si tout est conforme.
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -99,8 +102,7 @@ let imitateur = null;   // arrêté aussi en cas d'interruption
   await ordinaire.sortie;
 
   console.log('\n— 3. Depuis le serveur de test : Apple et Google redirigés, le reste bloqué');
-  banc.psqlSocket(`INSERT INTO marchands (id, nom, slug, forfait, type_programme, max_value, display_max_value, langue)
-    VALUES ('${TEMOIN}', 'Témoin campagne 15', 'temoin-campagne-15', 'basic', 'stamps', 10, 10, 'fr')`);
+  banc.psqlSocket(fs.readFileSync(path.join(__dirname, 'temoin.sql'), 'utf8'));
   const s = await banc.demarrerServeur(urlSupabase, 'serveur-campagne', envCampagne);
   verifier('avec le témoin : le serveur de campagne démarre', /\[campagne\] actif/.test(s.journal()), true);
   const sonde = q => fetch(`${s.url}/__campagne/sortie?${q}`, { headers: { 'x-campagne-cle': CLE } }).then(x => x.json());
@@ -134,9 +136,69 @@ let imitateur = null;   // arrêté aussi en cas d'interruption
   verifier('sonde d\'adresse : seule la dernière entrée est crue (la première, falsifiable, est ignorée)', x.ip_retenue, '192.0.2.77');
   x = await adresse({});
   verifier('sonde d\'adresse : sans en-tête → adresse de la connexion', [x.x_forwarded_for, x.ip_retenue === x.connexion], [null, true]);
+  // Version navigateur : clé dans l'adresse, pour la sonde d'adresse seulement.
+  const brut = async u => { const y = await fetch(`${s.url}${u}`); return [y.status, y.status === 200 ? Boolean((await y.json()).ip_retenue) : null]; };
+  verifier('sonde d\'adresse dans un navigateur : ?cle= juste → 200, adresse retenue rendue',
+    await brut(`/__campagne/adresse?cle=${CLE}`), [200, true]);
+  verifier('?cle= fausse, ou ?cle= sur une autre sonde → 404',
+    [(await brut('/__campagne/adresse?cle=0000'))[0], (await brut(`/__campagne/mesures?cle=${CLE}`))[0]], [404, 404]);
   const mesures = await fetch(`${s.url}/__campagne/mesures`, { headers: { 'x-campagne-cle': CLE } }).then(y => y.json());
   verifier('les sorties bloquées sont comptées par hôte', mesures.sorties_bloquees,
     { 'app.winwin-card.com': 1, 'www.apple.com': 2, 'example.com': 1 });
+
+  console.log('\n— 4. Le pilote : la sonde d\'adresse et son adresse pour le navigateur');
+  const pilote = path.join(ICI, 'pilote.js');
+  r = await jouer([pilote], { CAMPAGNE_ETAPE: 'adresse', CIBLE: s.url, CIBLE_PUBLIQUE: s.url, JWT_SECRET: banc.SECRET_JWT });
+  const lien = (r.sortie.match(/navigateur \(wifi, puis 4G\) : (\S+)/) || [])[1] || '';
+  verifier('pilote « adresse » : sonde jouée, sortie 0, adresse pour le navigateur qui répond 200',
+    [r.code, /\nadresse : /.test(r.sortie), lien ? (await fetch(lien)).status : null], [0, true, 200]);
+  r = await jouer([pilote], { CAMPAGNE_ETAPE: 'adresse', CIBLE: s.url, CIBLE_PUBLIQUE: s.url, JWT_SECRET: `${banc.SECRET_JWT}-faux` });
+  verifier('pilote « adresse » avec un autre JWT_SECRET que le serveur : échec annoncé, aucune conclusion',
+    [r.code !== 0, /SONDE D'ADRESSE EN ÉCHEC/.test(r.sortie), /\nadresse : /.test(r.sortie)], [true, true, false]);
+  r = await jouer([pilote], { CAMPAGNE_ETAPE: 'attente' });
+  const inconnue = await jouer([pilote], { CAMPAGNE_ETAPE: 'n\'importe quoi' });
+  verifier('pilote « attente » : rien, sortie 0 ; étape inconnue : sortie 2', [r.code, inconnue.code], [0, 2]);
+
+  console.log('\n— 5. La préparation de la base de test refuse toute autre base');
+  // Connexion par mot de passe, comme la chaîne « Session pooler » de Supabase.
+  banc.psqlSocket(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'campagne_preparer') THEN
+    CREATE ROLE campagne_preparer LOGIN SUPERUSER PASSWORD 'campagne_local'; END IF; END $$;`, 'postgres');
+  const bases = { prod: `${banc.BASE}_prod`, autre: `${banc.BASE}_autre`, neuve: `${banc.BASE}_neuve` };
+  for (const b of Object.values(bases)) {
+    banc.psqlSocket(`DROP DATABASE IF EXISTS ${b} WITH (FORCE)`, 'postgres');
+    banc.psqlSocket(`CREATE DATABASE ${b}`, 'postgres');
+  }
+  // Le rôle de connexion endosse « postgres », comme la chaîne de Supabase : les
+  // objets rejoués lui appartiennent, ce que la requête d'écarts vérifie.
+  const preparer = (b, mode) => jouer([path.join(ICI, 'preparer.js')], { CAMPAGNE_MODE: mode,
+    CAMPAGNE_DATABASE_URL: `postgresql://campagne_preparer:campagne_local@127.0.0.1:${process.env.PGPORT || 5432}/${b}?options=-c%20role%3Dpostgres` }, 180000);
+  // « Production » simulée : des marchands, pas de témoin.
+  banc.psqlSocket(`CREATE TABLE marchands (id uuid PRIMARY KEY, nom text);
+    INSERT INTO marchands VALUES ('11111111-1111-4111-8111-111111111111', 'Vrai marchand')`, bases.prod);
+  const empreinteProd = () => banc.psqlSocket(`SELECT (SELECT count(*) FROM pg_tables WHERE schemaname = 'public') || '|' || (SELECT string_agg(nom, ',') FROM marchands)`, bases.prod);
+  const avantProd = empreinteProd();
+  r = await preparer(bases.prod, 'temoin');
+  const r2 = await preparer(bases.prod, 'donnees');
+  verifier('base avec des marchands et sans témoin (la production) : refus, sortie 3, rien écrit (temoin comme donnees)',
+    [r.code, /PAS une base de campagne/.test(r.sortie), r2.code, /PAS une base de campagne/.test(r2.sortie), empreinteProd()],
+    [3, true, 3, true, avantProd]);
+  banc.psqlSocket('CREATE TABLE autre (x int)', bases.autre);
+  r = await preparer(bases.autre, 'temoin');
+  verifier('base avec d\'autres tables, sans marchands : refus, sortie 3', [r.code, /ni une base neuve/.test(r.sortie)], [3, true]);
+  r = await preparer(bases.neuve, 'donnees');
+  verifier('base neuve en mode donnees (témoin exigé) : refus, sortie 3, rien écrit',
+    [r.code, /faire d'abord l'étape temoin/.test(r.sortie), banc.psqlSocket(`SELECT count(*) FROM pg_tables WHERE schemaname = 'public'`, bases.neuve)],
+    [3, true, '0']);
+  // Base neuve « comme Supabase » : rôles et extensions déjà là, public vide.
+  banc.psqlSocket(`ALTER DATABASE ${bases.neuve} SET search_path = "$user", public, extensions`, 'postgres');
+  banc.psqlSocket('CREATE SCHEMA extensions; CREATE EXTENSION "uuid-ossp" SCHEMA extensions; CREATE EXTENSION pgcrypto SCHEMA extensions;', bases.neuve);
+  r = await preparer(bases.neuve, 'temoin');
+  verifier('base neuve, mode temoin : dépôt rejoué, témoin posé, requête d\'écarts « IDENTIQUE », sortie 0',
+    [r.code, /dépôt rejoué : \d+ fichiers/.test(r.sortie), /VERDICT : base de test IDENTIQUE au dépôt/.test(r.sortie),
+      banc.psqlSocket(`SELECT count(*) FROM marchands WHERE id = '${TEMOIN}'`, bases.neuve)], [0, true, true, '1']);
+  r = await preparer(bases.neuve, 'temoin');
+  verifier('relancé sur la base prête : rien rejoué, sortie 0', [r.code, /de campagne \(témoin présent\)/.test(r.sortie), /dépôt rejoué/.test(r.sortie)], [0, true, false]);
+  for (const b of Object.values(bases)) banc.psqlSocket(`DROP DATABASE IF EXISTS ${b} WITH (FORCE)`, 'postgres');
 
   imitateur.kill();
   const ok = resultats.filter(Boolean).length;

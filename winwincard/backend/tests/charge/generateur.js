@@ -198,11 +198,14 @@ const SCENARIO = {
     if (publique && /(^|\.)winwin-card\.com$/i.test(new URL(publique).hostname)) throw new Error('CIBLE_PUBLIQUE vise la production');
     const base = publique || CIBLE;
     const r = await fetch(`${base}/__campagne/adresse`, { headers: { 'x-campagne-cle': CLE_CAMPAGNE, 'X-Forwarded-For': '192.0.2.77' } })
-      .then(x => x.json()).catch(e => ({ erreur: e.message }));
+      .then(async x => (x.status === 200 ? x.json() : { erreur: `statut ${x.status}` })).catch(e => ({ erreur: e.message }));
     const ip = r.ip_retenue || '';
+    // Sonde muette (clé fausse = 404, serveur injoignable) : on ne conclut RIEN.
+    if (!ip) throw new Error(`SONDE D'ADRESSE EN ÉCHEC (${r.erreur || 'aucune adresse rendue'}) : rien de conclu. JWT_SECRET identique au serveur ?`);
     const conclusion = !publique ? 'banc local : non probant (le générateur est le dernier proxy)'
       : ip === '192.0.2.77' ? 'CONTOURNABLE : le limiteur suit l\'adresse annoncée par le client'
-      : /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|fd|fc|::ffff:10\.)/i.test(ip)
+      // Plages privées et internes (IPv4, éventuellement « ::ffff: », et IPv6 fc00::/7).
+      : /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|f[cd])/i.test(ip.replace(/^::ffff:/i, ''))
         ? 'ADRESSE PARTAGÉE : le limiteur voit un proxy interne, tous les clients dans un seul compteur'
         : 'adresse réelle du client : non contournable par cet en-tête';
     return { cible: base, recu: r, conclusion };

@@ -606,6 +606,15 @@ manuel ; le reset immédiat abandonné avant code). La respecter :
    roadmap validée), on inverse le scénario « ÉTAT ACTUEL » dans le même commit et on le
    dit. Une migration passe le filet AVANT d'être donnée à Yass pour Supabase (le filet
    rejoue toutes les migrations du dépôt). Détail : §15 quaterdecies.
+8. **On ne lève pas le plafond de l'étape 21 avant que les campagnes aient un rythme**
+   (règle de Yass, 05/10). Aujourd'hui, le plafond de 1 000 lignes limite une campagne à
+   1 000 envois ; c'est lui qui protège la plateforme. Au banc, une campagne vers les
+   16 230 appareils du réseau, sans plafond, coupe 68 scans sur 82 et bloque le serveur
+   jusqu'à 37 s (§15 novodecies). Compte comme une levée : relever « Max rows » dans
+   Supabase (réglage global, il vaut pour toutes les lectures) ; ou lire en plusieurs pages
+   les destinataires d'une campagne (`notifications.js`). Ces deux gestes attendent le
+   chantier « rythme d'envoi des campagnes » (§15 vicies). Paginer une autre lecture, par
+   exemple la liste des clients du dashboard, ne lève pas le plafond des campagnes.
 
 ---
 
@@ -2729,7 +2738,7 @@ push ; tests sur une carte de test.
 - **Toujours reporté** : le crédit de parrainage n'écrit aucune ligne au journal ; après
   lui, le dernier scan du parrain ne s'annule plus (« solde incohérent »).
 
-## 15 novodecies. ÉTAPE 15 : CAMPAGNE DE CHARGE — TEMPS 1, BANC LOCAL (05/10, branche `campagne/etape15`, NON POUSSÉE)
+## 15 novodecies. ÉTAPE 15 : CAMPAGNE DE CHARGE — TEMPS 1, BANC LOCAL (05/10, branche `campagne/etape15`, branche de relecture)
 
 **Correction du diagnostic (05/10).** Le diagnostic de l'étape 15 plaçait le serveur en
 Californie, d'après l'audit 00a/06 : faux depuis le 30/09 (serveur à Amsterdam,
@@ -2856,7 +2865,165 @@ son `Dockerfile.dockerignore`, pris en compte par Railway). **En premier** : la 
 d'adresse contre l'entrée publique du serveur de test (`CHARGE_SCENARIOS=adresse`,
 `CIBLE_PUBLIQUE`) ; une requête suffit à dire si l'adresse vue par le limiteur est
 contournable, partagée par tous (proxy interne) ou réelle. Puis la mesure réelle du
-coût d'une requête base.
+coût d'une requête base. **Suite : §15 vicies (paliers, préparation du temps 2).**
+
+## 15 vicies. ÉTAPE 15 : PALIERS DE CAMPAGNE ET PRÉPARATION DU TEMPS 2 (05/10, branche `campagne/etape15`)
+
+**Décisions de Yass (05/10, après le temps 1).** (1) La branche `campagne/etape15` est poussée
+sur GitHub comme **branche de relecture, jamais déployée**. Aucun push vers la branche de
+production. (2) Gel des campagnes : **pas urgent** (le plus gros marchand actuel a ≈ 300
+porteurs). On mesure au banc une campagne vers 100, 250, 500 et 750 appareils, pour fixer le
+seuil (plus de 2 s à la caisse) qui déclenchera le chantier « rythme d'envoi des
+campagnes ». Rien n'est codé. Règle inscrite au contrat (§7, règle 8) : **pas de levée du
+plafond de l'étape 21 avant que les campagnes aient un rythme**. (3) Temps 2 : Dockerfile de
+campagne et procédure de création pas à pas, avec les noms des variables seulement. Premier
+geste : le test de contournement d'adresse. **Rien n'est créé avant le feu vert de Yass.**
+
+### A. Les paliers (banc local, 05/10)
+
+Méthode : campagne vers le marchand « plafond », dimensionné pour viser N appareils
+(≈ 0,81 inscription iPhone par porteur). Les scans arrivent pendant ce temps au rythme
+pointe ×3. Délai base 100 ms. Deux séries complètes ; 750 rejoué deux fois de plus pour le
+diagnostic. Une campagne envoie **un push par inscription iPhone** du marchand
+(`notifications.js:81`, `:111`) : le compte qui compte, c'est le nombre de lignes
+`device_tokens` du marchand.
+
+| Inscriptions iPhone notifiées | Caisse : médiane | Caisse : pire scan (par essai) | Serveur : temps propre du scan, max | Boucle bloquée, max | Mémoire |
+|---|---|---|---|---|---|
+| ≈ 110 | 0,43 s | 0,53 · 0,77 s | 0,47 · 0,75 s | 0,09 · 0,29 s | 210–230 Mo |
+| ≈ 250 | 0,43–0,44 s | 0,96 · 1,31 s | 0,94 · 1,15 s | 0,12 · 0,33 s | 290–300 Mo |
+| ≈ 520 | 0,43–0,44 s | 1,19 · **3,85 s** | 0,59 · 1,14 s | 0,17 · 0,25 s | 350–370 Mo |
+| ≈ 780 | 0,44–0,45 s | **6,9 · 8,9 · 6,1 · 2,9 s** | ≤ 1,5 s | 0,26 à 0,86 s | 355–420 Mo |
+| ≈ 1 020 | 0,43 · 0,87 s | **9,3 · 10,9 s** | 0,93 · 1,21 s | 0,29 · 0,31 s | 400–425 Mo |
+
+Ces temps sont vus du générateur, sur la machine du banc. Vu d'une caisse à Dubaï, il faut
+ajouter ≈ 0,28 s par scan (§15 decies). **La médiane ne bouge pas** : la plupart des scans
+tombent hors de la tempête, qui dure 10 à 20 s. **Le pire scan, lui, explose dès ≈ 500
+inscriptions.**
+
+**Où passe le temps (diagnostic du 05/10).** Le pire scan de la caisse (6 à 11 s) dépasse de
+loin ce que le serveur mesure lui-même, de la réception à la réponse (≤ 1,5 s). La boucle du
+serveur, elle, n'est jamais bloquée plus de 0,9 s d'affilée.
+- Sonde (connexion neuve toutes les 300 ms pendant une campagne vers 780) : la connexion
+  TCP s'établit tout de suite, mais **333 connexions attendent d'être prises** par le
+  serveur, et la réponse arrive au bout de 4,6 s.
+- Processeur, relevé chaque seconde : pendant 12 s, **le serveur occupe 76 à 90 % de son
+  unique cœur**. La machine, elle, reste à ≈ 70 % de ses 4 cœurs. Ce n'est donc pas la
+  machine du banc qui sature : c'est le serveur, qui travaille sur un seul fil.
+- Conclusion : les iPhones reviennent chercher leurs cartes (≈ 3,7 requêtes par push,
+  génération et signature des cartes). Le serveur est saturé, et **le scan de la caisse
+  fait la queue derrière les cartes**. Ses propres mesures (temps de route, boucle) ne
+  voient pas cette attente : **seul le temps vu du client fait foi**.
+- À ≈ 1 000, s'ajoute la file d'attente du noyau, pleine : **1 033 connexions refusées** et
+  647 tentatives de connexion réémises (compteurs du noyau, série 2), d'où des attentes par
+  paliers de 1, 3 puis 7 s. Rien de tel à 750 et en dessous (0 refus).
+
+**Seuil.** Plus de 2 s à la caisse : **1 essai sur 2 dès ≈ 500 inscriptions iPhone
+notifiées, 4 sur 4 à ≈ 750**. Seuil retenu : **500 inscriptions iPhone par campagne**
+(≈ 600 porteurs au profil du banc). Le plus gros marchand actuel (≈ 300 porteurs) est à
+≈ 240 inscriptions : marge d'un facteur 2.
+- **Déclencheur proposé** pour le chantier « rythme d'envoi » : le premier marchand qui
+  atteint **400 inscriptions iPhone**. Cela laisse le temps de faire le chantier avant le
+  seuil. Le chiffre se lit en lecture seule (SQL Editor) :
+  `SELECT m.nom, count(*) AS inscriptions_iphone FROM device_tokens d JOIN marchands m ON
+  m.id = d.marchand_id GROUP BY m.nom ORDER BY 2 DESC LIMIT 5;`
+- Proposition, **à valider par Yass** : relancer cette requête au début de chaque mois.
+- HYPOTHÈSE : un cœur du banc vaut à peu près un vCPU de Railway. Le temps 2 le dira :
+  même campagne, mêmes paliers, sur l'infrastructure réelle.
+
+**Options pour le chantier (rien codé, à choisir par Yass le moment venu).**
+1. **Rythme d'envoi** : envoyer les pushes par lots (par exemple 100 toutes les 10 s). Le
+   pic ne dépend plus de la taille de la campagne. Risque moyen : une campagne de 6 000
+   envois dure alors 10 min. Un redéploiement en cours de route l'interrompt (arrêt propre
+   limité à 20 s, étape 14a). Il faut donc garder l'avancement en base (registre
+   `notification_envois`) et reprendre sans doublon. C'est la condition de la règle 8.
+2. **Sortir la fabrication des cartes du chemin des caisses**, soit par des fils de calcul
+   (signature et archive hors du fil principal), soit par un service séparé. Risque élevé :
+   l'adresse du serveur est gravée dans chaque carte (`webServiceURL`). Un service à part
+   impose une autre adresse, que seules les cartes re-téléchargées apprendraient. Une
+   erreur = des cartes qui ne se mettent plus à jour, sans bruit (étape 20). Des fils de
+   calcul gardent l'adresse, mais pas la file de la base.
+3. **Alléger chaque retour d'iPhone** : garder en cache la carte signée tant qu'elle ne
+   change pas ; ne plus modifier TOUTES les cartes du marchand à chaque campagne (le
+   `PATCH` de `notifications.js:102-104` force des re-téléchargements complets). Risque
+   faible à moyen (une carte périmée servie par erreur). Gain de 2 à 3 fois. Le pic reste
+   proportionnel à la taille : cette option complète la 1, elle ne la remplace pas.
+4. **Limiter les cartes fabriquées en même temps** (au-delà de N, réponse « réessayez plus
+   tard », code 503). La caisse est protégée tout de suite. Risque : on ne sait pas quand
+   iOS réessaie (HYPOTHÈSE, à tester sur un vrai iPhone) ; la carte se met à jour plus tard.
+5. **Deux répliques Railway** : deux fois plus de processeur. Risque moyen : un cron qui
+   tournerait deux fois, et des états gardés en mémoire (demandes d'avis, cache des
+   bandeaux). Coût mensuel doublé pour le serveur.
+6. **Créneaux de campagne** (pas entre 11 h et 14 h) : sans code. Ne règle pas la taille.
+- **Recommandation** : 1, puis 3 avant de lever le plafond de l'étape 21 ; 4 en filet si le
+  seuil approche avant que 1 soit prête.
+
+### B. Préparation du temps 2 (rien créé : feu vert de Yass attendu)
+
+**Livré dans `winwincard/backend/tests/charge/` (rien dans `src/`, `Dockerfile` racine ni
+`package*.json`).**
+- **`Dockerfile`** de campagne : même image Node que la production (empreinte), client
+  `psql` (paquet Debian `postgresql-client`, pour le pilote), une image pour les trois
+  services. La variable `CAMPAGNE_PROGRAMME` choisit le programme, et « Custom Start
+  Command » reste vide comme en production. `exec node` : Node reçoit lui-même l'ordre
+  d'arrêt.
+- **`Dockerfile.dockerignore`** : celui de la racine sans l'exclusion de `tests/charge`.
+  **Prouvé avec BuildKit** (export des deux contextes) : l'image de campagne contient
+  `tests/charge`, celle de production non ; aucune des deux n'a `node_modules` ni `.env`.
+- **`temoin.sql`** (le témoin seul, rejouable) : joué avant `donnees.sql`, ou seul.
+- **`preparer.js`** : préparation de la base de test par `psql`.
+  - Garde-fou avant toute écriture : la base est neuve, ou elle porte le témoin. Sinon,
+    refus (sortie 3) ; la chaîne de connexion n'est jamais affichée.
+  - `temoin` : rejeu du dépôt (comme le filet, sans le prélude), puis le témoin, puis la
+    requête d'écarts, dont le verdict doit être « IDENTIQUE ». Un « ÉCART » met l'étape en
+    échec.
+  - `donnees` : vide toutes les tables de `public` et recharge le palier, en **une seule
+    transaction** (un échec laisse la base telle qu'avant, prouvé).
+- **`pilote.js`** : un geste = une valeur de `CAMPAGNE_ETAPE` (`attente`, `temoin`,
+  `donnees`, `adresse`, ou une liste de scénarios), puis l'arrêt. Pour `adresse`, il donne
+  aussi l'adresse de la sonde à ouvrir dans un navigateur.
+- Sonde d'adresse : accepte la clé dans l'adresse (`?cle=`, navigateur), pour elle seule ;
+  rend aussi les autres en-têtes d'adresse reçus.
+- **Correctif du générateur** : une sonde d'adresse muette (clé fausse, serveur
+  injoignable) concluait à tort « adresse réelle ». Elle échoue désormais, sans conclure.
+- **`PROCEDURE.md`** : la procédure de Yass. Premier geste mesuré : le test d'adresse.
+- Arrêt propre de l'imitateur et du pilote (premier processus du conteneur).
+
+**Preuves.**
+- Garde-fous **33/33** : les 23 du temps 1, plus la sonde au navigateur, le pilote
+  (adresse, clé fausse, attente, étape inconnue) et la préparation (production simulée
+  refusée en `temoin` comme en `donnees`, base étrangère refusée, base neuve en `donnees`
+  refusée, rejeu sur base neuve « IDENTIQUE », relance sans effet).
+- Chargement `donnees` au palier 5 000 puis 20 000 sur la même base : 44 et 47 s,
+  ≈ 580 Mo. Un chargement cassé laisse la base au palier précédent.
+- **Image construite avec Docker** : `npm ci`, programme par défaut (le serveur), le
+  fichier de campagne chargé par `NODE_OPTIONS` (il refuse sans `API_BASE_URL`), le
+  pilote, l'imitateur, et l'arrêt en 171 ms.
+- **NON vérifié ici** : l'installation de `psql`. Le miroir Debian est bloqué par le réseau
+  de cette machine ; l'image a donc été construite sans cette étape. Le premier
+  déploiement du pilote le vérifie, et l'échec serait bruyant.
+- Filet complet **173/173** (rien ne change hors de `tests/charge/`).
+
+**Hypothèses du temps 2** (la procédure dit quoi faire si l'une est fausse) :
+- Railway prend le Dockerfile par `RAILWAY_DOCKERFILE_PATH`, et le
+  `Dockerfile.dockerignore` voisin. Sinon : « Cannot find module ».
+- La référence `${{serveur.JWT_SECRET}}` recopie la valeur ; les adresses
+  `*.railway.internal` répondent.
+- Le « Session pooler » de Supabase sert `psql` et les tables temporaires ; la connexion
+  directe (IPv6) n'est pas utilisée.
+- La migration 048 peut poser son déclencheur sur un projet neuf (hypothèse écrite dans la
+  048) : c'est pourquoi l'option « automatic RLS » reste décochée.
+- Clé `sb_secret_`, comme la production depuis le 29/09 (§15 septies).
+
+**Limites.**
+- Les iPhones et le générateur passent par le réseau privé (décision 3 du temps 1) : l'entrée
+  publique de Railway, qui regroupe peut-être les connexions, n'est pas sur ce chemin. La
+  file de connexions vue à 1 000 pourrait s'y comporter autrement : à mesurer au temps 2
+  (quelques scans par l'entrée publique, sous le seuil du limiteur).
+- Le cron de 08:00 UTC tourne aussi sur le serveur de test : pas d'essai entre 08:00 et
+  09:00 UTC.
+- Un push sur la branche de campagne redéploie les trois services : le pilote rejoue sa
+  dernière étape, d'où la valeur de repos `attente`.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
@@ -2985,6 +3152,19 @@ token marchand mono-site toujours non révocable).
   soit 20 scans/min tenus par boutique. À ×50, une boutique de franchise à plusieurs
   caisses peut les dépasser en pointe (étape 17).
 
+**Dette découverte par les paliers de campagne (05/10, §15 vicies) — notée, rien corrigé.**
+- **Le serveur ne voit pas l'attente de ses clients.** Pendant une campagne vers ≈ 780
+  inscriptions, la caisse attend jusqu'à 9 s. Le serveur, lui, mesure ≤ 1,5 s par route et
+  une boucle jamais bloquée plus de 0,9 s : l'attente se fait avant que la requête lui
+  parvienne. Ni ses journaux, ni Sentry, ni une sonde toutes les 5 min ne verraient une
+  tempête de 15 s. Seul le temps vu du client fait foi.
+- **Un seul fil pour les caisses et les cartes iPhone.** Signature et archive des cartes,
+  bandeaux, JSON : tout passe sur le même cœur. 12 s à 76–90 % de ce cœur suffisent à
+  mettre les scans en file (options du §15 vicies).
+- **File d'attente des connexions** (511 par défaut dans Node, `app.listen` sans réglage,
+  `index.js:213`) : pleine à ≈ 1 000 inscriptions au banc (1 033 refus). Derrière l'entrée
+  de Railway, le comportement peut différer (HYPOTHÈSE, temps 2).
+
 ## 17. DÉCISIONS HORS PILOTAGE
 
 Toute décision prise sans passer par le pilotage (Yass) se note ici : date, décision,
@@ -3016,6 +3196,31 @@ plus `landing_premium`, un enregistrement Pro+ le contient toujours.
 `annulation` et le parrainage n'étaient pas dans la liste minimale donnée en
 pilotage. Elles envoient bien des pushes ; les omettre aurait laissé des trous dans
 le registre. Rattachées aux sources `ajustement`, `annulation` et `scan`.
+
+**2026-10-05 — paliers et préparation du temps 2 (étape 15), choix pris sans pilotage.**
+Dans le périmètre des décisions de Yass du 05/10 :
+(1) un palier ≈ 1 000 ajouté aux 4 demandés, puis une seconde série complète et deux
+essais de diagnostic à 750 (sonde de connexion, processeur par processus) : un seul essai
+par palier ne suffisait pas à fixer un seuil (pire scan très variable) ;
+(2) seuil exprimé en inscriptions iPhone (un push par ligne `device_tokens`), avec un
+déclencheur proposé à 400 et une requête de lecture : la décision reste à Yass ;
+(3) le témoin sorti dans `temoin.sql`, joué avant `donnees.sql` ;
+(4) une seule image pour les trois services, programme choisi par `CAMPAGNE_PROGRAMME`,
+« Custom Start Command » vide comme en production ;
+(5) base préparée par `psql` depuis le pilote, via le « Session pooler » de Supabase ;
+mode `donnees` en une transaction qui vide toutes les tables de `public` ;
+(6) la procédure fait créer une clé `sb_secret_` (comme la production), pas l'onglet
+Legacy ; elle laisse l'option « automatic RLS » décochée, pour éprouver la 048 ;
+(7) valeur de repos `attente` pour le pilote ;
+(8) sonde d'adresse ouverte au navigateur par `?cle=` (clé du serveur de test seulement) ;
+(9) une sonde d'adresse muette fait désormais échouer le générateur au lieu de conclure
+« adresse réelle » (défaut du temps 1, trouvé en relisant) ;
+(10) image construite avec Docker en local, avec le certificat du proxy de la machine
+ajouté à une COPIE du Dockerfile et sans l'étape apt (miroir Debian bloqué) ; le fichier du
+dépôt n'a pas cet ajout ;
+(11) un rôle de test local endosse `postgres` (`options=-c role=postgres`) pour que la
+requête d'écarts compare les propriétaires comme sur Supabase.
+Raisons au §15 vicies.
 
 **2026-10-05 — choix de réalisation de l'étape 15, temps 1, pris sans pilotage.** Dans le
 périmètre validé : (1) délai du banc de 100 ms par requête base (milieu de 80–120 ms,
@@ -3076,6 +3281,15 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-10-05 par la session « SETUP 4 », seizième chantier (suite) : étape 15,
+paliers et préparation du temps 2 (§15 vicies). Règle 8 du contrat (§7) : pas de levée du
+plafond de l'étape 21 avant que les campagnes aient un rythme. Seuil mesuré au banc : plus de
+2 s à la caisse dès ≈ 500 inscriptions iPhone par campagne, cause prouvée (le serveur sature
+son unique cœur, la caisse fait la queue derrière les cartes) ; déclencheur proposé à 400.
+Temps 2 prêt, rien créé : Dockerfile de campagne, préparation de base, pilote,
+`tests/charge/PROCEDURE.md` (premier geste : test d'adresse). Garde-fous 33/33, filet
+173/173. Branche `campagne/etape15` poussée comme branche de relecture, jamais déployée.*
 
 *Mis à jour le 2026-10-05 par la session « SETUP 4 », seizième chantier : étape 15, temps 1
 (§15 novodecies), banc local sur la branche `campagne/etape15` (NON POUSSÉE). Outil

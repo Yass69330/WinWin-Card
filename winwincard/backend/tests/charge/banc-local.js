@@ -50,7 +50,9 @@ let imitateur = null;   // arrêté aussi en cas d'interruption
 (async () => {
   banc.demarrerPostgresSiBesoin();
   let t0 = Date.now();
-  const donnees = `\\set plafond ${PLAFOND}\n\\set echelle_registre ${ECHELLE}\n`
+  // Le marchand témoin d'abord (le serveur de campagne refuse de démarrer sans lui).
+  const donnees = fs.readFileSync(path.join(ICI, 'temoin.sql'), 'utf8')
+    + `\\set plafond ${PLAFOND}\n\\set echelle_registre ${ECHELLE}\n`
     + fs.readFileSync(path.join(ICI, 'donnees.sql'), 'utf8');
   const nb = banc.preparerBase(donnees);
   const comptes = banc.psqlSocket(`SELECT (SELECT count(*) FROM clients) || ' porteurs, ' || (SELECT count(*) FROM scans)

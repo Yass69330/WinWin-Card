@@ -18,15 +18,12 @@
 -- carte, 3,4 vérifications par scan (audit 04 n° 3 et §4.2), soit ≈ 2,7 cartes
 -- par appareil ; ≈ 2,7 scans par porteur sur 90 jours (synthèse §5.1), 14 % dans
 -- l'heure de pointe (08:00 UTC, midi à Dubaï).
--- Le marchand TÉMOIN (identifiant fixe) prouve au fichier de campagne et au
--- générateur qu'ils parlent à une base de campagne : la production ne l'a pas.
+-- Le marchand TÉMOIN (temoin.sql, joué avant ce fichier) prouve au fichier de
+-- campagne et au générateur qu'ils parlent à une base de campagne : la
+-- production ne l'a pas.
 -- ════════════════════════════════════════════════════════════════════════════
 
 SELECT setseed(0.15);
-
--- ── Témoin ──────────────────────────────────────────────────────────────────
-INSERT INTO marchands (id, nom, slug, forfait, type_programme, max_value, display_max_value, langue)
-VALUES ('c0ffee15-0000-4000-8000-000000000015', 'Témoin campagne 15', 'temoin-campagne-15', 'basic', 'stamps', 10, 10, 'fr');
 
 -- ── Marchands ───────────────────────────────────────────────────────────────
 CREATE TEMP TABLE m_campagne (k int, id uuid, nom text, slug text, forfait text, type_programme text,

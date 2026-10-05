@@ -29,7 +29,8 @@
 //    de la connexion) et l'adresse qu'Express en retient pour le limiteur
 //    (proxy-addr avec la règle qu'Express tire de « trust proxy 1 », index.js:25 :
 //    seul le premier intermédiaire est cru) — étape 17.
-//    Tous exigent l'en-tête x-campagne-cle (dérivé du JWT_SECRET de test).
+//    Tous exigent l'en-tête x-campagne-cle (dérivé du JWT_SECRET de test) ;
+//    la sonde d'adresse accepte aussi ?cle=… (navigateur).
 //
 // Variables : CAMPAGNE_APNS (imitateur APNs, HTTP/2 en clair, ex.
 // http://127.0.0.1:9001), CAMPAGNE_GOOGLE (imitateur Google, ex.
@@ -240,7 +241,11 @@ const emitOrigine = http.Server.prototype.emit;
 http.Server.prototype.emit = function emitCampagne(evenement, req, res) {
   if (evenement !== 'request') return emitOrigine.apply(this, arguments);
   if (req.url.startsWith('/__campagne/')) {
-    if (req.headers['x-campagne-cle'] !== CLE) { res.writeHead(404); res.end(); return true; }
+    // La sonde d'adresse accepte aussi la clé dans l'adresse (?cle=…) : elle
+    // s'ouvre dans un navigateur, qui ne sait pas poser d'en-tête.
+    const cleRecue = req.headers['x-campagne-cle']
+      || (req.url.startsWith('/__campagne/adresse?') ? new URL(req.url, 'http://x').searchParams.get('cle') : null);
+    if (cleRecue !== CLE) { res.writeHead(404); res.end(); return true; }
     try { return sonde(req, res); } catch (e) { res.writeHead(500); res.end(e.message); return true; }
   }
   // Clé lue tout de suite : Express réécrit req.url dans ses routeurs.
@@ -274,10 +279,13 @@ function sonde(req, res) {
       .catch(e => repondre({ url: q.get('url'), resultat: e.message }));
     return true;
   }
-  if (req.method === 'GET' && req.url === '/__campagne/adresse') {
+  if (req.method === 'GET' && req.url.split('?')[0] === '/__campagne/adresse') {
     const proxyaddr = require(require.resolve('proxy-addr', { paths: [SRC] }));
+    // Tous les en-têtes d'adresse que l'entrée de Railway pourrait poser.
+    const adresses = Object.fromEntries(Object.entries(req.headers)
+      .filter(([k]) => /^(x-forwarded-|x-real-ip|x-envoy-|forwarded$)/.test(k) && k !== 'x-forwarded-for'));
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ x_forwarded_for: req.headers['x-forwarded-for'] || null,
+    res.end(JSON.stringify({ x_forwarded_for: req.headers['x-forwarded-for'] || null, autres_entetes: adresses,
       connexion: req.socket.remoteAddress, ip_retenue: proxyaddr(req, (adresse, rang) => rang < 1) }));
     return true;
   }

@@ -180,6 +180,10 @@ const web = http.createServer(async (req, res) => {
   json(res, 404, { error: 'imitateur : chemin inconnu' });
 });
 
+// Premier processus du conteneur sur Railway : sans ce gestionnaire, l'ordre
+// d'arrêt serait ignoré et Railway tuerait l'imitateur au bout du délai.
+process.on('SIGTERM', () => process.exit(0));
+
 const portApns = Number(process.env.IMITATEUR_PORT_APNS || 0);
 const portWeb = Number(process.env.IMITATEUR_PORT_WEB || 0);
 apns.listen(portApns, () => web.listen(portWeb, () => {
