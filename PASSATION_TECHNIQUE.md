@@ -3021,8 +3021,9 @@ notifiées, 4 sur 4 à ≈ 750**. Seuil retenu : **500 inscriptions iPhone par c
   (quelques scans par l'entrée publique, sous le seuil du limiteur).
 - Le cron de 08:00 UTC tourne aussi sur le serveur de test : pas d'essai entre 08:00 et
   09:00 UTC.
-- Un push sur la branche de campagne redéploie les trois services : le pilote rejoue sa
-  dernière étape, d'où la valeur de repos `attente`.
+- Tout redéploiement du pilote rejoue son étape inscrite, d'où la valeur de repos
+  `attente`. Sur Railway, le pilote affiche « Auto deploy unavailable » (constaté le
+  05/10) : un push ne le redéploie pas ; c'est Yass qui déploie.
 
 ### C. Temps 2, environnement créé ; geste 3 en ÉCART sur 42 droits (05/10)
 
@@ -3076,8 +3077,9 @@ insertion, modification, lecture (`cron-passages.js:40-102`), jamais de suppress
 « rien ne supprime de ligne »). `diagnostics_camera` : insertion et lecture
 (`diag.js:66`, `:87`), jamais de modification. Séquences : `USAGE` suffit aux insertions.
 
-**Correction proposée (rien codé dans le dépôt ; prototype hors dépôt, prouvé en local).**
-Un pas `droits` du pilote, garde-fou du témoin, une seule transaction :
+**Correction LIVRÉE (feu vert de Yass, 05/10) : pas `droits` du pilote** (`preparer.js`,
+mode `droits` ; `pilote.js`). Garde-fou du témoin ; les étapes 2 et 3 en une seule
+transaction :
 1. afficher les privilèges par défaut (preuve de la cause sur le projet réel) ;
 2. ramener ceux du rôle `postgres` dans `public` à ceux de la production : retirer
    `SELECT, INSERT, UPDATE, DELETE` des tables et tout des séquences pour les trois rôles.
@@ -3090,9 +3092,15 @@ Un pas `droits` du pilote, garde-fou du témoin, une seule transaction :
    un déclencheur de la plateforme ;
 5. requête d'écarts rejouée : **IDENTIQUE exigé**.
 
-Prototype sur la copie locale du projet de test : 42 retraits + 2 réglages par défaut →
-**IDENTIQUE, 0 écart · 48 plateforme** ; table sonde : `anon=D authenticated=D
-service_role=D` (aucun `rawd`). **Recréer le projet n'est pas nécessaire.** Recréer avec
+Refus aussi si un écart sort des droits de données (RLS, fonction, structure…) : ce pas
+ne touche qu'aux droits. Rejouable : sur une base alignée, 0 retrait.
+
+**Preuves (garde-fous 39/39, dont 6 pour ce pas).** Une base locale « case cochée » donne
+au rejeu l'ÉCART de 42 droits du projet de test. Le pas refuse, sans rien retirer, quand
+un objet a moins que la production ou quand un écart touche la RLS. Sinon : 42 retraits, la
+table sonde n'a aucun droit de lecture ni d'écriture (table et séquence), verdict
+**IDENTIQUE, 0 écart · 48 plateforme**. Relancé : 0 retrait. Production simulée :
+refus. **Recréer le projet n'est pas nécessaire.** Recréer avec
 la case décochée rejouerait la contre-épreuve sur un vrai Supabase (preuve utile à
 l'étape 9) ; ce n'est pas utile à la campagne, et cela coûte trois secrets à reposer.
 `PROCEDURE.md` est corrigée : la case doit être décochée, comme en production.
@@ -3270,7 +3278,8 @@ le dépôt ? Réponse prouvée par deux rejeux locaux et par le projet de test :
   Sur un projet qui retirerait ce droit, la simulation les rend inexécutables
   (`exec=000`) : bonus de parrainage non crédité, **sans bruit** (supabase-js ne lève
   pas), et effacement RGPD en échec. Les autres fonctions appelées ont leur GRANT (036,
-  038, 039, 044, 051, 052).
+  038, 039, 044, 051, 052). **Sur la carte, à trancher après l'étape 15 (décision de Yass,
+  05/10) ; rien corrigé en production.**
 - **L'exemple « purge de `cron_passages` sans DELETE » ne s'applique pas** : aucune purge
   dans le code, et la production n'a pas ce droit non plus (049).
 - **Nom de colonne trompeur** dans la requête d'écarts : « production » désigne la base
@@ -3311,14 +3320,18 @@ le registre. Rattachées aux sources `ajustement`, `annulation` et `scan`.
 
 **2026-10-05 — geste 3 du temps 2 : omission dans la procédure, diagnostic des droits.**
 (1) **Aveu** : `PROCEDURE.md` ne disait rien de la case « Automatically expose new tables »,
-qui figure pourtant dans le relevé du 26/09 (00b) ; Yass l'a laissée cochée, d'où les 42
-droits en trop. Procédure corrigée. (2) Deux rejeux locaux (privilèges par défaut « tout »
+qui figure pourtant dans le relevé du 26/09 (00b) ; la case est restée cochée (reconnu
+côté pilotage : elle avait été laissée cochée sur consigne du pilotage), d'où les 42 droits
+en trop. Procédure corrigée, correction validée par le pilotage. (2) Deux rejeux locaux (privilèges par défaut « tout »
 puis « comme la production ») pour prouver la cause et répondre à « que casserait une
 reconstruction » ; un premier essai trop strict sur les fonctions (exécution de `PUBLIC`
 retirée) a été écarté, car la production garde ce droit (`admin_marchands_stats`, 044,
 exécutable par `anon` en production alors que la 044 ne l'accorde qu'à `service_role`).
-(3) Correction prototypée hors du dépôt (brouillon), **non intégrée au pilote** : diagnostic
-avant code, feu vert de Yass attendu. Raisons au §15 vicies C.
+(3) Correction prototypée hors du dépôt, puis intégrée au pilote (pas `droits`) après le
+feu vert de Yass. Choix de réalisation pris sans pilotage, dans ce périmètre : refus si un
+écart sort des droits de données ; table sonde avec une colonne d'identité, pour éprouver
+aussi les séquences futures ; sorties 1 pour les refus du pas, 3 restant réservé au
+garde-fou du témoin. Raisons au §15 vicies C.
 
 **2026-10-05 — paliers et préparation du temps 2 (étape 15), choix pris sans pilotage.**
 Dans le périmètre des décisions de Yass du 05/10 :
@@ -3405,6 +3418,12 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-10-05 par la session « SETUP 4 », seizième chantier (suite 3) : pas
+`droits` du pilote livré après feu vert (retraits seulement, refus si un objet a moins que la
+production ou si l'écart sort des droits, table sonde, IDENTIQUE exigé) ; garde-fous 39/39,
+filet 173/173 ; branche `campagne/etape15` poussée. À Yass : `CAMPAGNE_ETAPE=droits` sur le
+pilote, puis Deploy. `credit_referral` / `effacer_client` : sur la carte, après l'étape 15.*
 
 *Mis à jour le 2026-10-05 par la session « SETUP 4 », seizième chantier (suite 2) : temps 2
 créé par Yass (Supabase et Railway `winwin-campagne-15`, jusqu'à la fin de l'étape 18, au plus

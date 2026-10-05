@@ -11,6 +11,8 @@
 //   4. Le pilote joue la sonde d'adresse et donne l'adresse pour le navigateur.
 //   5. La préparation de la base de test (preparer.js) refuse toute base qui
 //      n'est ni neuve ni de campagne, et rejoue le dépôt sur une base neuve.
+//   6. Le pas « droits » ramène une base « case cochée » aux droits de la
+//      production : retraits seulement, refus si un objet a moins, IDENTIQUE.
 // Lancement : node tests/charge/garde-fous.js. Sortie 0 si tout est conforme.
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -163,7 +165,7 @@ let imitateur = null;   // arrêté aussi en cas d'interruption
   // Connexion par mot de passe, comme la chaîne « Session pooler » de Supabase.
   banc.psqlSocket(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'campagne_preparer') THEN
     CREATE ROLE campagne_preparer LOGIN SUPERUSER PASSWORD 'campagne_local'; END IF; END $$;`, 'postgres');
-  const bases = { prod: `${banc.BASE}_prod`, autre: `${banc.BASE}_autre`, neuve: `${banc.BASE}_neuve` };
+  const bases = { prod: `${banc.BASE}_prod`, autre: `${banc.BASE}_autre`, neuve: `${banc.BASE}_neuve`, cochee: `${banc.BASE}_cochee` };
   for (const b of Object.values(bases)) {
     banc.psqlSocket(`DROP DATABASE IF EXISTS ${b} WITH (FORCE)`, 'postgres');
     banc.psqlSocket(`CREATE DATABASE ${b}`, 'postgres');
@@ -198,6 +200,38 @@ let imitateur = null;   // arrêté aussi en cas d'interruption
       banc.psqlSocket(`SELECT count(*) FROM marchands WHERE id = '${TEMOIN}'`, bases.neuve)], [0, true, true, '1']);
   r = await preparer(bases.neuve, 'temoin');
   verifier('relancé sur la base prête : rien rejoué, sortie 0', [r.code, /de campagne \(témoin présent\)/.test(r.sortie), /dépôt rejoué/.test(r.sortie)], [0, true, false]);
+
+  console.log('\n— 6. Le pas « droits » : projet créé avec « Automatically expose new tables » coché');
+  // Base neuve comme le projet de test du 05/10 : tout, d'office, aux trois rôles de l'API.
+  banc.psqlSocket(`ALTER DATABASE ${bases.cochee} SET search_path = "$user", public, extensions`, 'postgres');
+  banc.psqlSocket(`CREATE SCHEMA extensions; CREATE EXTENSION "uuid-ossp" SCHEMA extensions; CREATE EXTENSION pgcrypto SCHEMA extensions;
+    ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+    ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+    ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon, authenticated, service_role;`, bases.cochee);
+  r = await preparer(bases.cochee, 'temoin');
+  verifier('rejeu sur la base « case cochée » : ÉCART de 42 droits, comme le projet de test (sortie 1)',
+    [r.code, /\|42 écart\(s\) · 48 plateforme\|/.test(r.sortie)], [1, true]);
+  const droitAnon = () => banc.psqlSocket(`SELECT has_table_privilege('anon', 'public.clients', 'SELECT')`, bases.cochee);
+  // Refus 1 : un objet a MOINS que la production → rien n'est fait, pas même les retraits.
+  banc.psqlSocket('REVOKE INSERT ON public.scans FROM service_role', bases.cochee);
+  r = await preparer(bases.cochee, 'droits');
+  verifier('« droits » : un objet a moins que la production → refus, rien retiré (jamais d\'ajout)',
+    [r.code, /MOINS que la production : scans → service_role/.test(r.sortie), droitAnon()], [1, true, 't']);
+  banc.psqlSocket('GRANT INSERT ON public.scans TO service_role', bases.cochee);
+  // Refus 2 : un écart hors des droits de données → hors du champ du pas.
+  banc.psqlSocket('ALTER TABLE public.avis_clics DISABLE ROW LEVEL SECURITY', bases.cochee);
+  r = await preparer(bases.cochee, 'droits');
+  verifier('« droits » : un écart hors des droits (RLS) → refus, rien retiré',
+    [r.code, /hors des droits de données/.test(r.sortie), droitAnon()], [1, true, 't']);
+  banc.psqlSocket('ALTER TABLE public.avis_clics ENABLE ROW LEVEL SECURITY', bases.cochee);
+  r = await preparer(bases.cochee, 'droits');
+  verifier('« droits » : 42 retraits, table future sans droit, IDENTIQUE, sortie 0',
+    [r.code, /42 retrait\(s\)/.test(r.sortie), /droits table\/séquence : anon=\/ authenticated=\/ service_role=\/$/m.test(r.sortie),
+      /VERDICT : base de test IDENTIQUE/.test(r.sortie), droitAnon()], [0, true, true, true, 'f']);
+  r = await preparer(bases.cochee, 'droits');
+  verifier('« droits » relancé : 0 retrait, IDENTIQUE, sortie 0', [r.code, /0 retrait\(s\)/.test(r.sortie), /IDENTIQUE/.test(r.sortie)], [0, true, true]);
+  r = await preparer(bases.prod, 'droits');
+  verifier('« droits » sur la production simulée : refus, sortie 3', [r.code, /PAS une base de campagne/.test(r.sortie)], [3, true]);
   for (const b of Object.values(bases)) banc.psqlSocket(`DROP DATABASE IF EXISTS ${b} WITH (FORCE)`, 'postgres');
 
   imitateur.kill();

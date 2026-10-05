@@ -185,6 +185,12 @@ Ce qui peut arriver d'autre :
 - **`VERDICT : ÉCART`** (étape en échec, sortie 1) : la base de test n'est
   pas identique au dépôt, donc la mesure ne vaudrait pas pour la production.
   Envoie-moi le journal du pilote et ne lance pas la suite.
+  - Cas connu (05/10) : des droits EN TROP, parce que le projet a été créé
+    avec « Automatically expose new tables » coché. Remède : `CAMPAGNE_ETAPE`
+    = **`droits`**, puis **Deploy**. Le pilote ne fait que retirer l'excédent.
+    Il refuse si un objet a moins que la production. Il doit finir sur
+    `VERDICT : base de test IDENTIQUE au dépôt (droits de la production)`.
+    Ensuite, `CAMPAGNE_ETAPE` = `attente`.
 - **`REFUS : … ce n'est PAS une base de campagne`** : la chaîne de connexion
   vise une autre base que celle du projet de test. Rien n'a été écrit. Vérifie
   `CAMPAGNE_DATABASE_URL`.
@@ -232,8 +238,10 @@ annonçant une fausse adresse ?
      Pas l'adresse elle-même.
 5. Remets `CAMPAGNE_ETAPE` = **`attente`**, puis **Deploy**.
 
-Pourquoi revenir à `attente` : un push sur la branche de campagne redéploie
-le pilote. Avec `attente`, il ne rejoue rien.
+Pourquoi revenir à `attente` : tout redéploiement du pilote rejoue l'étape
+inscrite dans `CAMPAGNE_ETAPE`. Sur Railway, le pilote affiche « Auto deploy
+unavailable » (constaté le 05/10) : un push ne le redéploie pas tout seul,
+mais un redéploiement à la main, si. Avec `attente`, il ne rejoue rien.
 
 *La clé contenue dans l'adresse du navigateur n'ouvre que les sondes du
 serveur de TEST. Elle est dérivée du `JWT_SECRET` de test, pas de celui de la

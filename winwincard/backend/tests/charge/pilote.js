@@ -10,6 +10,9 @@
 //             redéploie le pilote, qui rejouerait sinon la dernière étape)
 //   temoin    prépare la base de test neuve (preparer.js, mode temoin)
 //   donnees   charge les données factices au palier CHARGE_PLAFOND
+//   droits    aligne les droits de la base de test sur ceux de la production
+//             (projet créé avec « Automatically expose new tables » coché) :
+//             retraits seulement, IDENTIQUE exigé (preparer.js, mode droits)
 //   adresse   sonde d'adresse contre l'entrée PUBLIQUE du serveur de test
 //             (CIBLE_PUBLIQUE), puis l'adresse de la même sonde à ouvrir dans
 //             un navigateur
@@ -51,7 +54,7 @@ function lancer(fichier, envEnPlus) {
   let code = 0;
   if (ETAPE === 'attente') {
     dire('rien à faire');
-  } else if (ETAPE === 'temoin' || ETAPE === 'donnees') {
+  } else if (['temoin', 'donnees', 'droits'].includes(ETAPE)) {
     code = await lancer('preparer.js', { CAMPAGNE_MODE: ETAPE });
   } else if (ETAPE === 'adresse') {
     code = await lancer('generateur.js', { CHARGE_SCENARIOS: 'adresse' });
@@ -64,7 +67,7 @@ function lancer(fichier, envEnPlus) {
   } else if (/^[a-z]+(,[a-z]+)*$/.test(ETAPE)) {
     code = await lancer('generateur.js', { CHARGE_SCENARIOS: ETAPE });
   } else {
-    dire('CAMPAGNE_ETAPE inconnue : attente, temoin, donnees, adresse, ou une liste de scénarios (scan,rush,dashboard,campagne,cron,wifi)');
+    dire('CAMPAGNE_ETAPE inconnue : attente, temoin, droits, donnees, adresse, ou une liste de scénarios (scan,rush,dashboard,campagne,cron,wifi)');
     code = 2;
   }
   dire(`FIN de l'étape « ${ETAPE} » : sortie ${code}${code === 0 ? ' (réussie)' : ' (ÉCHEC ou REFUS, voir au-dessus)'}`);
