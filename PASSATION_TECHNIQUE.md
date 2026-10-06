@@ -3253,6 +3253,57 @@ synthèse) :
   préalables sont faites (en-têtes forgés réécrits, deux étapes à chaque relevé, même
   comportement en production). Il passe juste après la clôture de l'étape 15.
 
+### E. Série de mesures du temps 2 — calendrier validé par Yass (06/10)
+
+Le palier 20 000 est retiré : 50 000 est le pire cas, et 20 000 ne sera ajouté que si 50 000
+montre une surprise. Règle : générer la veille, mesurer le lendemain.
+- **Mardi 06/10, 08:15 UTC** : données au palier 5 000, serveur et imitateur arrêtés.
+- **Mercredi 07/10, après 08:30 UTC** (serveur démarré après 08:00, donc aucun cron) :
+  - `scan,dashboard` ;
+  - `rush` ×3, puis `rush` ×10 (300 s chacun) ;
+  - `campagne` vers le réseau, deux fois ;
+  - `campagne` vers le marchand plafond.
+  Puis données au palier 50 000, serveur arrêté.
+- **Jeudi 08/10** :
+  - serveur et imitateur démarrés à 07:45 UTC ;
+  - `rush` ×1 pendant 3 600 s à partir de 07:58, pendant le cron naturel de 08:00 ;
+  - `/health/cron` pour `debut` et `fin` ;
+  - puis `dashboard,campagne` vers le plafond.
+  Ensuite, serveur et imitateur arrêtés.
+
+Pourquoi le cron naturel : le scénario `cron` du générateur lance son propre passage
+(`generateur.js:166`), et le serveur lance le sien à 08:00 (`cron.js:23`) ; rien n'empêche
+deux passages simultanés. **La pointe ×10 se joue au palier 5 000 seulement** : au palier
+50 000, la boutique unique du marchand plafond reçoit la moitié des scans et dépasse le
+limiteur (300 requêtes par 15 min).
+
+**Cadre du rapport final (moins de 30 lignes).** Mesures vues du pilote (Amsterdam, réseau
+privé) ; une caisse à Dubaï ajoute ≈ 0,28 s.
+
+| Mesure | Banc (temps 1) | Réel (temps 2) |
+|---|---|---|
+| requête base côté serveur, méd. / max | 100 ms posés | |
+| scan seul, méd. / max | 340–455 / 500 ms | |
+| pointe ×3, méd. / p99 | 420 / 495 ms | |
+| pointe ×10, méd. / p99 ; boucle max | 350 / 471 ms ; 105 ms | |
+| dashboard : stats / group-stats / clients | 120 / 250–320 / 120–160 ms | |
+| campagne réseau (1 000) : caisse méd. / max ; boucle max ; mémoire | 1,1–2,9 s / 26 s ; ≈ 1 s ; 650 Mo | |
+| campagne plafond 5 000 / 50 000 : caisse max ; `PATCH` des cartes | — ; 50 000 cartes en 1,3 s | |
+| cron complet 50 000 : durée ; cartes ; caisse pendant | 49 min ; 3 237 ; méd. 430 ms | |
+| requêtes d'iPhone par push (200 + 304) | 3,3 à 3,7 | |
+
+Conclusions, une ligne chacune :
+- hypothèses du banc (100 ms par requête base ; un cœur ≈ un vCPU de Railway) ;
+- **rythme des campagnes** : seuil de plus de 2 s à la caisse (banc : ≈ 500 inscriptions) et
+  déclencheur (≈ 500 porteurs ou un réseau), maintenus ou ajustés ;
+- règle 8 (étape 21) ;
+- **étape 16** : délais maximaux proposés d'après les maxima mesurés (base, Google, APNs) ;
+- **étape 17** : `trust proxy` 2 (décidé) ; limite propre au service web Apple, dimensionnée
+  sur les requêtes d'iPhone par push ;
+- **étape 18** : temps de rendu des bandeaux et écritures au stockage par campagne ;
+- coût réel de la série (Railway, Supabase) ;
+- surprises et limites.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
