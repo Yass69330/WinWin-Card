@@ -3330,8 +3330,11 @@ Conclusions, une ligne chacune :
 | idem : requêtes base max ; `GET /v1/passes` méd. ; boucle max ; mémoire | 0,4–0,8 s ; — ; ≈ 1 s ; 650 Mo | **81 s** ; **24,8 s** ; 140 ms ; 560 Mo |
 | passage 2 : scans méd. / max (n = 18) ; requêtes base max | — | **94,6 s / 134 s** ; 85 s |
 
-La mesure n° 5 (campagne vers le marchand plafond) a été annulée. Selon Yass, aucun
-marchand actuel ne lance de campagne : pas d'urgence.
+La mesure n° 5 (campagne vers le marchand plafond) a été annulée par le pilotage : elle était
+redondante, la tempête étant déjà décrite. Elle ira dans la série du seuil (paliers 123, 308
+et 615), plus tard, au calme. Selon Yass, aucun marchand actuel ne lance de campagne : pas
+d'urgence. Décision du pilotage pour le jour du cron : `rush` 3 600 s avec le cron de 08:00,
+puis `dashboard` seul.
 
 **Diagnostic (06–07/10) : ce qui est PROUVÉ.**
 - **Ce n'est pas le serveur.** Sa boucle ne bloque pas plus de 140 ms, contre ≈ 1 s au
@@ -3349,8 +3352,47 @@ marchand actuel ne lance de campagne : pas d'urgence.
   arrivent plus vite que Supabase ne les sert. Le passage 2 (médiane 94,6 s contre 11,7 s)
   a démarré sur la file du passage 1, pas encore vidée.
 
-**Ce qui reste à départager** (HYPOTHÈSES, sans nouvelle mesure : données déjà prises et
-graphiques de Supabase) :
+**Départagé le 06/10 par la ligne JSON du passage 2** (`timestamp` 12:06:07 UTC ; passage
+1 lancé à 11:42 UTC, passage 2 environ 2 min après la fin du 1 ; scans 27/27 puis 18/18 en
+200). La série « mercredi » a en fait été jouée le **mardi 06/10**, après le chargement 5 000
+du matin : 113 s sur Micro, 99 928 porteurs, 578 MB.
+- **La file est dans la chaîne de l'API de données** (PostgREST et sa passerelle), et non
+  dans l'instance, son disque ou l'entrée de Supabase.
+  - Pendant la tempête, le stockage (`stockage GET` : méd. 175 ms, max 3,7 s ;
+    `stockage POST` : méd. 125 ms) est resté rapide. Il passe pourtant par la même
+    instance, la même entrée et le même serveur.
+  - Dans le même temps, chaque requête PostgREST attendait : `base GET clients`,
+    `marchands` et `passes`, méd. ≈ 24 s et p95 ≈ 25 s ; `rpc/crediter_scan`, méd.
+    23,9 s ; `base GET device_tokens`, méd. 44 s. Les listes d'appareils arrivent les
+    premières, au plus fort de la file.
+- **Débit mesuré de l'API de données sous saturation : ≈ 32 requêtes base par seconde**
+  (5 102 servies en 158 s). La file comptait ≈ 770 requêtes (loi de Little : 32/s × 24 s).
+- **≈ 5,1 requêtes base par appareil réveillé** (5 102 pour 995 réveils ; 992 listes,
+  puis 1 945 cartes, dont 770 en 200 et 1 175 en 304).
+- **L'écran du marchand attend lui aussi** : `POST /api/notifications` a mis **51,8 s**.
+  Ses écritures (`notification_logs`, 25 s) passent dans la même file.
+- Ni le serveur ni les tiers ne freinent : boucle max 130 ms, 434 Mo, carte Apple méd.
+  246 ms, push Apple méd. 314 ms, message Google méd. 520 ms.
+- **Reste à lire**, sans risque, dans les graphiques du projet de test de 11:40 à 12:10 UTC
+  le 06/10 : les connexions par rôle (celles de PostgREST plafonnent-elles, et à
+  combien ?), le processeur, le rapport API. Ils diront si la limite est le nombre de
+  connexions de PostgREST (HYPOTHÈSE principale) ou sa passerelle.
+
+**Conséquence pour le chantier « rythme des campagnes »** (estimation sur un seul passage,
+qui portait la file du passage 1) :
+- Pour ne pas créer de file, les retours d'iPhone doivent rester sous ≈ 32 requêtes base
+  par seconde, soit ≈ 6 appareils par seconde au total, caisses comprises.
+- Avec une marge de moitié : ≈ 3 appareils par seconde, donc 100 appareils toutes les
+  30 s. Une campagne de 1 000 appareils durerait ≈ 5 min ; 16 000 (le réseau sans plafond),
+  ≈ 1 h 30.
+- **Le seuil réel pourrait être bien plus bas que les 500 du banc.** Les iPhones imités
+  reviennent en 1 à 5 s, et une file se forme dès que N × 5,1 / 4 s dépasse 32, soit
+  N ≈ 25 appareils (HYPOTHÈSE, à mesurer par la série du seuil). De vrais iPhones
+  reviennent peut-être plus étalés.
+- La pointe ×10 (≈ 1,7 scan/s, ≈ 15 requêtes base/s avec ses retours d'iPhone) tient sous
+  ce plafond. La saturation viendrait vers ×20.
+
+Les quatre hypothèses initiales, pour mémoire :
 - **(a) le groupe de connexions de PostgREST**, fixé par Supabase selon la taille de
   l'instance (quelques dizaines au plus sur Micro, HYPOTHÈSE) ;
 - **(b) le processeur de l'instance Micro** (2 vCPU partagés), qui porte à la fois
