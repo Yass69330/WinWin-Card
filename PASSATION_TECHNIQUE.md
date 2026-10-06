@@ -3468,6 +3468,39 @@ Méthode, en lecture seule :
   coller aux clients d'un seul marchand. Garder 2,7 reste le choix prudent : c'est la
   moyenne de la production, tirée vers le haut par quelques appareils.
 
+**Relevé des réglages, production contre test (Yass, 06/10, lecture seule).**
+- **IDENTIQUES** :
+  - `max_connections` 60, `shared_buffers` 256 MB, `effective_cache_size` 768 MB,
+    `work_mem` 3 500 kB, `statement_timeout` 120 s ;
+  - délais des rôles : `anon` 3 s, `authenticated` et `authenticator` 8 s ;
+  - Max rows 1 000 ; taille du groupe de connexions de PostgREST « Configured
+    automatically » sur les deux.
+- **DIFFÉRENTS** :
+  - taille de la base : 25 MB en production, contre 599 MB au test ;
+  - PostgreSQL 17.6 sur processeur ARM (aarch64) en production, contre 17.11 sur x86_64
+    au test ;
+  - PostgREST nommé « postgrest » en production (6 connexions ouvertes, trafic réel), sans
+    version lisible, contre « PostgREST 14.18 » au test (1 connexion) ;
+  - `pg_net` 0.20.0 contre 0.20.4.
+
+**Lecture du pilotage (06/10) : aucun réglage à aligner.** L'écart vient surtout :
+- **du volume** : la base de test dépasse `shared_buffers`, celle de la production tient en
+  mémoire ;
+- **de la plateforme** : processeur et versions, que Supabase fixe et qui ne s'alignent pas.
+
+**Le seuil mesuré au test est celui de la TAILLE CIBLE**, pas celui de la production
+actuelle. On garde ce cadrage. Les données de test restent à 2,7 cartes par appareil.
+
+**Limites du test qui en découlent** (à reprendre dans le rapport final) :
+- **Processeur ARM (production) contre x86 (test), et versions différentes** (PostgreSQL
+  17.6 contre 17.11 ; PostgREST de version inconnue contre 14.18). Les temps absolus
+  portent donc une incertitude que rien ne mesure ici. Les mécanismes, eux, ne dépendent
+  pas du processeur : file dans l'API de données, taille des rafales, cartes revérifiées.
+- **Un projet NEUF reçoit aujourd'hui la plateforme du test** (x86, versions récentes).
+  C'est le cas d'une restauration ou d'une seconde structure (étapes 3 et 9). Le test
+  préfigure donc aussi la plateforme d'une production reconstruite, ou d'une production
+  que Supabase migrerait.
+
 Les quatre hypothèses initiales, pour mémoire :
 - **(a) le groupe de connexions de PostgREST**, fixé par Supabase selon la taille de
   l'instance (quelques dizaines au plus sur Micro, HYPOTHÈSE) ;
