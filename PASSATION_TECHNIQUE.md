@@ -3316,6 +3316,99 @@ Conclusions, une ligne chacune :
 - coût réel de la série (Railway, Supabase) ;
 - surprises et limites.
 
+### F. Temps 2, premières mesures réelles (palier 5 000) — le goulot est la BASE
+
+**Mesures de Yass** (Railway Amsterdam, Supabase Paris en Micro ; vu du pilote) :
+
+| Mesure | Banc (temps 1) | Réel (temps 2) |
+|---|---|---|
+| requête base, médiane | 100 ms posés | **107 ms** : hypothèse du banc validée |
+| scan seul, méd. / p99 | 340–455 / ≈ 500 ms | 345 / 616 ms ; dashboard < 0,75 s |
+| pointe ×3 : méd. / p99 / max ; boucle max ; mémoire | 420 / 495 ms / — ; 120 ms ; 200 Mo | 297 / 514 / 730 ms (154/154 en 200) ; 53 ms ; 266 Mo |
+| pointe ×10 : méd. / p95 / p99 / max ; boucle max ; mémoire | 350 / — / 471 ms / — ; 105 ms ; 280 Mo | 347 / 648 / 994 / 1 481 ms (547/547 en 200) ; 52 ms ; 307 Mo |
+| campagne réseau (1 000 appareils), passage 1 : scans méd. / max | 1,1–2,9 s / 26 s | **11,7 s / 154 s** |
+| idem : requêtes base max ; `GET /v1/passes` méd. ; boucle max ; mémoire | 0,4–0,8 s ; — ; ≈ 1 s ; 650 Mo | **81 s** ; **24,8 s** ; 140 ms ; 560 Mo |
+| passage 2 : scans méd. / max (n = 18) ; requêtes base max | — | **94,6 s / 134 s** ; 85 s |
+
+La mesure n° 5 (campagne vers le marchand plafond) a été annulée. Selon Yass, aucun
+marchand actuel ne lance de campagne : pas d'urgence.
+
+**Diagnostic (06–07/10) : ce qui est PROUVÉ.**
+- **Ce n'est pas le serveur.** Sa boucle ne bloque pas plus de 140 ms, contre ≈ 1 s au
+  banc, où le processeur saturait.
+- **L'attente est du côté de Supabase.** Les temps « base » sont pris autour de l'appel
+  vers l'hôte Supabase (fichier de campagne, `fetch` mesuré). Or Node 24 n'a pas de file
+  propre vers une même origine : essai local, 500 requêtes envoyées ensemble, servies
+  ensemble (1,6 s pour 500 réponses d'une seconde). Les 81 à 85 s se passent donc entre
+  l'envoi à Supabase et sa réponse.
+- **Le banc ne pouvait pas le voir.** Son délai de 100 ms était ajouté à chaque requête EN
+  PARALLÈLE, sans limite de nombre (`tests/lancer.js:209`), devant un PostgreSQL local à
+  4 cœurs. Il simulait la distance, pas la capacité de la base.
+- **C'est une surcharge qui s'accumule.** ≈ 1 000 pushes × ≈ 3,7 requêtes d'iPhone × 1 à 3
+  requêtes base chacune, soit plusieurs milliers de requêtes base en une minute. Elles
+  arrivent plus vite que Supabase ne les sert. Le passage 2 (médiane 94,6 s contre 11,7 s)
+  a démarré sur la file du passage 1, pas encore vidée.
+
+**Ce qui reste à départager** (HYPOTHÈSES, sans nouvelle mesure : données déjà prises et
+graphiques de Supabase) :
+- **(a) le groupe de connexions de PostgREST**, fixé par Supabase selon la taille de
+  l'instance (quelques dizaines au plus sur Micro, HYPOTHÈSE) ;
+- **(b) le processeur de l'instance Micro** (2 vCPU partagés), qui porte à la fois
+  PostgreSQL, PostgREST, la passerelle et le stockage ;
+- **(c) le budget d'entrées-sorties disque de Micro**, entamé par les chargements de
+  données ;
+- **(d) l'entrée de Supabase**, face à des centaines de connexions chiffrées ouvertes en
+  même temps.
+
+Pour départager :
+- comparer, dans la ligne JSON du passage 1, les temps `stockage GET/POST` (API de
+  stockage : sa propre file, même instance) aux temps `base …`. Le stockage lent lui aussi
+  désigne l'instance (b, c, d) ; le stockage normal désigne le groupe de PostgREST (a) ;
+- lire les graphiques du projet de test (Reports : processeur, disque, connexions, API) sur
+  la fenêtre de la campagne.
+
+**Options du chantier « rythme des campagnes », révisées avec cette cause** (rien codé) :
+1. **Rythme d'envoi**, par lots : reste la réponse principale. La taille des lots se règle
+   désormais sur le débit mesuré de Supabase, et non plus sur le processeur. Risques
+   inchangés : durée, reprise sans doublon après un redéploiement.
+2. **Moins de requêtes base par retour d'iPhone** (remonte en 2) : chaque requête évitée
+   soulage directement la file. Pistes : une lecture groupée (carte, client, marchand) au
+   lieu de trois ; répondre « pas changé » (304) depuis une date en cache ; ne plus
+   modifier toutes les cartes du marchand à chaque campagne. Risque faible à moyen (carte
+   périmée servie).
+3. **File côté serveur, priorité aux caisses** (nouvelle) : plafonner les requêtes base
+   en vol venant des retours d'iPhone (par exemple 10 à 20). Les scans ne passent plus
+   derrière des milliers de requêtes de cartes. Risque moyen : cartes mises à jour plus
+   lentement, réglage à trouver.
+4. **Plus de capacité chez Supabase** (instance supérieure) : seulement si les graphiques
+   montrent le processeur ou le disque saturés. Coût mensuel, et le pic demeure.
+5. **Créneaux de campagne** : sans code.
+
+Rétrogradées :
+- **sortir la fabrication des cartes** du fil principal, et **deux répliques Railway** :
+  elles soulagent le processeur du serveur, qui n'est pas le goulot ;
+- **limiter les fabrications simultanées** (réponse 503) : couvert par l'option 3.
+
+**Règle 8 renforcée** : lever le plafond de 1 000 lignes multiplierait cette tempête sur la
+base.
+
+**Seuil réel : inconnu.** Au banc, plus de 2 s dès ≈ 500 inscriptions ; en réel, 154 s à
+1 000. Le déclencheur (≈ 500 porteurs ou un réseau) est maintenu en attendant la mesure, et
+pourrait devoir baisser.
+
+**Mesurer plus tard le seuil réel, sans code** :
+- un rechargement au palier dimensionné, puis une campagne vers le marchand plafond :
+  `CHARGE_PLAFOND` 123, 308 puis 615 (≈ 100, 250 et 500 inscriptions, comme au banc),
+  `CHARGE_CIBLE_CAMPAGNE=plafond` ;
+- avant chaque campagne, un `scan` de contrôle (médiane revenue à ≈ 350 ms), et au moins
+  10 min entre deux campagnes ;
+- ramener le pire scan, les requêtes base et les graphiques Supabase. Le seuil est le
+  premier palier où le pire scan dépasse 2 s.
+
+Variante, une seule journée et un seul chargement : un petit ajout aux outils (trois
+marchands de 123, 308 et 615 porteurs dans `donnees.sql`, cible de campagne choisie par
+variable). À coder seulement sur feu vert.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
