@@ -3142,9 +3142,13 @@ comparer l'adresse retenue à celle que l'entrée attribue au client (première 
   campagne.
 - Même entrée : `app.winwin-card.com` est un alias vers Railway, sans Cloudflare
   (§15 decies, audit 06).
-- Comportement identique attendu (HYPOTHÈSE forte).
-- **Vérification sans risque**, par lecture des journaux de la production : le journal
-  « combined » (`index.js:39`) écrit en tête de chaque ligne l'adresse retenue par Express.
+- **Comportement identique, PROUVÉ le 06/10 par les journaux de la production.** Le
+  journal « combined » (`index.js:39`) écrit en tête de chaque ligne l'adresse retenue
+  par Express. La visite de Yass sur `/health` (Macintosh, 07:43:17 UTC) y est inscrite
+  sous `152.233.15.123`, et non sous sa vraie adresse `91.73.16.9`. UptimeRobot arrive
+  lui aussi par des relais `152.233.x.x`.
+- **Aucun 429** trouvé dans les journaux réseau de la production (recherche de Yass,
+  06/10), sur la durée que Railway conserve.
 
 **Les limiteurs touchés : tous, car tous comptent par `req.ip`.**
 - Le global : 300 requêtes par 15 min (`index.js:45-51`), pages, cartes iPhone et santé
@@ -3161,9 +3165,12 @@ marchands confondus.
 **Impact aujourd'hui (estimation, volumes de l'audit 06 : ≈ 56 crédits et 40 inscriptions
 par jour).**
 - **Limiteur global : risque faible aujourd'hui.** Quelques dizaines de requêtes par quart
-  d'heure de pointe, contre 300 par relais. Le nombre de relais réellement utilisés n'est
-  pas mesuré (au moins 3 adresses vues pour 3 accès) : il se lit dans les journaux de la
-  production, ou par une boucle de requêtes vers le serveur de test.
+  d'heure de pointe, contre 300 par relais.
+- **Relais mesurés (06/10)** : 20 requêtes du même ordinateur sont passées par **6 relais
+  distincts** (`152.233.15.120/121/123`, `152.233.68.97/98/105`), toutes précédées de
+  `91.73.16.9`. Le limiteur fait donc deux erreurs à la fois. Il **éparpille** un même
+  client sur ≈ 6 compteurs : sa vraie limite devient ≈ 6 × 300. Et il **mélange** dans
+  chaque compteur tous les clients qui passent par ce relais.
 - **Inscription, 20 par heure par relais : risque réel lors d'un événement en boutique**
   (lancement, QR au comptoir). La 21ᵉ inscription de l'heure, tous marchands confondus sur
   ce relais, reçoit un 429, et le client est perdu.
@@ -3176,19 +3183,70 @@ par jour).**
   même les pages et les dashboards : **429 quasi certains** sans correctif.
 
 **Décision de pilotage (06/10) : « lire la vraie adresse du client » est traité JUSTE
-APRÈS la clôture de l'étape 15, AVANT l'étape 16.** Rien n'est codé d'ici là. Préalable :
-le test des en-têtes forgés (`X-Real-IP`, `X-Forwarded-For` à plusieurs entrées) sur le
-serveur de test, et le relevé des journaux de la production.
+APRÈS la clôture de l'étape 15, AVANT l'étape 16.** Rien n'est codé d'ici là. Les deux
+préalables (en-têtes forgés, journaux de la production) sont faits, voir plus bas.
+
+**Test des en-têtes forgés (06/10, Yass, Terminal, serveur de test).** Requête envoyée avec
+`X-Forwarded-For: 192.0.2.77, 192.0.2.78`, `X-Real-IP: 192.0.2.79` et
+`Forwarded: for=192.0.2.80`. Reçu par le serveur :
+
+| En-tête | Reçu | Verdict |
+|---|---|---|
+| `X-Forwarded-For` | `91.73.16.9, 152.233.68.98` | **réécrit** par Railway (les 2 forgés ont disparu) : vraie adresse, puis relais |
+| `X-Real-IP` | `91.73.16.9` | **réécrit** (le forgé a disparu) : vraie adresse |
+| `Forwarded` | `for=192.0.2.80` | **passe TEL QUEL** : falsifiable par n'importe quel client |
+| retenu par Express (`trust proxy` 1) | `152.233.68.98` | le relais |
+
+- Rien dans le code ne lit `Forwarded` aujourd'hui. Express lit seulement
+  `X-Forwarded-For` (`proxy-addr` via `forwarded/index.js:30`). Les limiteurs comptent par
+  `req.ip` (`express-rate-limit`, `dist/index.cjs:655-659`), le journal aussi (`morgan/index.js:519-523`). Aucun `x-real-ip` ni `Forwarded` dans `src/`. Règle au §16 :
+  **jamais `Forwarded`**.
+
+**Recommandation pour le correctif : `trust proxy` 2 plutôt que `x-real-ip`** (proposition,
+à valider au moment du correctif ; rien codé).
+- **Pourquoi `trust proxy` 2.**
+  - Un seul réglage standard d'Express (`index.js:25`), au lieu d'une fonction de clé
+    écrite à la main dans 6 limiteurs.
+  - L'adresse vient d'une seule source, `req.ip`, pour tous les limiteurs, le journal et
+    tout usage futur.
+  - Calcul prouvé : vraie adresse dans les 4 relevés (wifi, 4G, pilote, en-têtes forgés).
+- **Ce qui le ferait casser (hypothèses sur Railway).**
+  - Railway ajoute une étape (3 adresses au lieu de 2) : on retombe sur un relais.
+    C'est le défaut d'aujourd'hui, PAS une faille : rien de falsifiable.
+  - Railway retire une étape ET cesse de réécrire `X-Forwarded-For` : la première adresse
+    viendrait alors du client, donc **falsifiable**. Il faudrait les deux changements à la
+    fois.
+  - Une requête arrive sans passer par l'entrée publique (réseau privé) : l'en-tête est
+    alors celui de l'appelant. Cela n'existe qu'au projet de test.
+- **Pourquoi pas `x-real-ip`.**
+  - Six limiteurs à modifier, et le journal garderait le relais.
+  - Si Railway cessait de RÉÉCRIRE cet en-tête, il deviendrait falsifiable aussitôt, sans
+    bruit. S'il cessait de le POSER, il faudrait un repli, donc du code de plus.
+  - C'est un seul changement chez Railway pour une faille, contre deux pour
+    `trust proxy` 2.
+- **Garde proposée avec le correctif** (petite, à valider) : journaliser une alerte, au
+  plus une fois par heure, si une requête arrive avec un `X-Forwarded-For` qui n'a pas
+  exactement 2 adresses. Le changement de Railway se verrait alors avant de produire ses
+  effets. Rejouer aussi le test d'en-têtes forgés après chaque changement chez Railway.
+- **Limites du correctif.**
+  - Les caisses d'une boutique derrière un même wifi partageront de nouveau un compteur
+    (300 par 15 min, ≈ 20 scans/min par boutique). C'est le reste de l'étape 17 : une
+    limite propre aux cartes Apple, une limite par clé pour les machines.
+  - Avec `express-rate-limit` 7.5.1, la clé d'un client en IPv6 est son adresse complète :
+    une plage IPv6 peut changer d'adresse pour contourner. Regroupement par préfixe à
+    étudier avec le correctif.
+  - Le correctif rend aussi le journal plus parlant : il écrira la vraie adresse du
+    client. C'est une donnée personnelle, déjà présente aujourd'hui dans les journaux de
+    Railway via `X-Forwarded-For`.
 
 **Classement pour l'étape 17** (« lire la vraie adresse du client », déjà inscrite à la
 synthèse) :
 - **Priorité 1 de l'étape, et préalable à la croissance**, au même titre que le rythme
   des campagnes. **Pas une urgence de production aujourd'hui**, vu les volumes, sauf le
   blocage volontaire décrit plus haut.
-- Le correctif est petit (`trust proxy` 2, ou une clé tirée de `x-real-ip`). Mais il
-  n'est sûr qu'une fois vérifié que Railway réécrit aussi un `X-Real-IP` forgé, et que
-  chaque chemin d'entrée a exactement deux étapes. Test proposé sur le serveur de test, à
-  faire par Yass : cette machine n'atteint pas `*.up.railway.app`.
+- Le correctif est petit : `trust proxy` 2, recommandé ci-dessus. Les vérifications
+  préalables sont faites (en-têtes forgés réécrits, deux étapes à chaque relevé, même
+  comportement en production). Il passe juste après la clôture de l'étape 15.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
@@ -3367,6 +3425,16 @@ le dépôt ? Réponse prouvée par deux rejeux locaux et par le projet de test :
   05/10) ; rien corrigé en production.**
 - **L'exemple « purge de `cron_passages` sans DELETE » ne s'applique pas** : aucune purge
   dans le code, et la production n'a pas ce droit non plus (049).
+- **RÈGLE : ne JAMAIS lire l'en-tête `Forwarded`** (ni pour un limiteur, ni pour un
+  journal, ni pour une décision). L'entrée de Railway le laisse passer tel que le client
+  l'envoie : prouvé le 06/10, `for=192.0.2.80` forgé reçu intact (§15 vicies D). Seuls
+  `X-Forwarded-For`, lu par Express avec le bon réglage, et `X-Real-IP` sont réécrits par
+  Railway. Vaut aussi pour tout outil ou bibliothèque ajouté plus tard (vérifier qu'il ne
+  le lit pas).
+- **Limiteurs comptés par relais de Railway** (PROUVÉ en production le 06/10, §15 vicies
+  D). Un même client est éparpillé sur ≈ 6 relais, et chaque relais mélange tous les
+  clients qui y passent. Correctif `trust proxy` 2 recommandé, programmé juste après
+  l'étape 15 (décision de pilotage).
 - **Nom de colonne trompeur** dans la requête d'écarts : « production » désigne la base
   examinée. Hors production, il fait lire le résultat à l'envers. À renommer en
   « base examinée » (`generer.sh`, puis régénérer) ; petit, non fait.
@@ -3509,6 +3577,13 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-10-06 par la session « SETUP 4 », seizième chantier (suite 5) :
+résultats de Yass sur les en-têtes. Railway réécrit `X-Forwarded-For` et `X-Real-IP`, mais
+laisse passer `Forwarded` tel quel : règle « jamais `Forwarded` » au §16. 6 relais pour un
+même ordinateur. Production comptée par relais, PROUVÉ par ses journaux ; aucun 429
+trouvé. Recommandation : `trust proxy` 2, hypothèses et garde au §15 vicies D. Rien codé ;
+correctif juste après la clôture de l'étape 15.*
 
 *Mis à jour le 2026-10-05 par la session « SETUP 4 », seizième chantier (suite 4) : test
 d'adresse (§15 vicies D). Railway REMPLACE le `X-Forwarded-For` du client (non contournable),
