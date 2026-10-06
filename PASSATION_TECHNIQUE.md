@@ -3022,8 +3022,12 @@ notifiées, 4 sur 4 à ≈ 750**. Seuil retenu : **500 inscriptions iPhone par c
 - Le cron de 08:00 UTC tourne aussi sur le serveur de test : pas d'essai entre 08:00 et
   09:00 UTC.
 - Tout redéploiement du pilote rejoue son étape inscrite, d'où la valeur de repos
-  `attente`. Sur Railway, le pilote affiche « Auto deploy unavailable » (constaté le
-  05/10) : un push ne le redéploie pas ; c'est Yass qui déploie.
+  `attente`. **Correction (Yass, 06/10) : chaque push sur `campagne/etape15` redéploie
+  automatiquement les TROIS services de test.** La mention « Auto deploy unavailable »,
+  relevée le 05/10 sur le pilote, ne vaut plus.
+  - Un push relance donc l'étape inscrite au pilote : `donnees` rechargerait la base.
+  - Il redémarre aussi le serveur et l'imitateur, même arrêtés. Un serveur allumé à 08:00
+    UTC fait tourner le cron sans témoin.
 
 ### C. Temps 2, environnement créé ; geste 3 en ÉCART sur 42 droits (05/10)
 
@@ -3270,6 +3274,14 @@ montre une surprise. Règle : générer la veille, mesurer le lendemain.
   - `/health/cron` pour `debut` et `fin` ;
   - puis `dashboard,campagne` vers le plafond.
   Ensuite, serveur et imitateur arrêtés.
+
+**Règle de push jusqu'à la fin de l'étape 15 (Yass, 06/10).**
+- AUCUN push pendant les fenêtres de mesure : mercredi 07/10, 08:30–10:00 UTC ; jeudi
+  08/10, 07:30–09:30 UTC. C'est une fenêtre demandée par le pilotage, au sens du
+  CLAUDE.md.
+- En dehors : commit local, et push seulement sur feu vert.
+- Avant tout push : pilote sur `attente`. Après un push : arrêter de nouveau le serveur
+  et l'imitateur s'ils devaient l'être.
 
 Pourquoi le cron naturel : le scénario `cron` du générateur lance son propre passage
 (`generateur.js:166`), et le serveur lance le sien à 08:00 (`cron.js:23`) ; rien n'empêche

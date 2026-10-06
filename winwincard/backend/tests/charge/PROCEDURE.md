@@ -239,9 +239,10 @@ annonçant une fausse adresse ?
 5. Remets `CAMPAGNE_ETAPE` = **`attente`**, puis **Deploy**.
 
 Pourquoi revenir à `attente` : tout redéploiement du pilote rejoue l'étape
-inscrite dans `CAMPAGNE_ETAPE`. Sur Railway, le pilote affiche « Auto deploy
-unavailable » (constaté le 05/10) : un push ne le redéploie pas tout seul,
-mais un redéploiement à la main, si. Avec `attente`, il ne rejoue rien.
+inscrite dans `CAMPAGNE_ETAPE`. Chaque push sur `campagne/etape15` redéploie
+les trois services de test (constaté le 06/10). Avec `attente`, le pilote ne
+rejoue rien. Après un push, arrête de nouveau le serveur et l'imitateur s'ils
+devaient l'être : un serveur allumé à 08:00 UTC lance le cron.
 
 *La clé contenue dans l'adresse du navigateur n'ouvre que les sondes du
 serveur de TEST. Elle est dérivée du `JWT_SECRET` de test, pas de celui de la
