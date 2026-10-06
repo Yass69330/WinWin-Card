@@ -3202,8 +3202,13 @@ préalables (en-têtes forgés, journaux de la production) sont faits, voir plus
   `req.ip` (`express-rate-limit`, `dist/index.cjs:655-659`), le journal aussi (`morgan/index.js:519-523`). Aucun `x-real-ip` ni `Forwarded` dans `src/`. Règle au §16 :
   **jamais `Forwarded`**.
 
-**Recommandation pour le correctif : `trust proxy` 2 plutôt que `x-real-ip`** (proposition,
-à valider au moment du correctif ; rien codé).
+**DÉCISION DE PILOTAGE (06/10) : le correctif sera `trust proxy` 2, avec la garde (alerte au
+plus une fois par heure si `X-Forwarded-For` n'a pas exactement 2 adresses) et le test
+d'en-têtes forgés rejoué après tout changement chez Railway. Prouvé d'abord sur
+l'environnement de test. Passe juste après la clôture de l'étape 15 ; rien codé d'ici là.**
+
+**Recommandation pour le correctif : `trust proxy` 2 plutôt que `x-real-ip`** (validée
+ci-dessus).
 - **Pourquoi `trust proxy` 2.**
   - Un seul réglage standard d'Express (`index.js:25`), au lieu d'une fonction de clé
     écrite à la main dans 6 limiteurs.
