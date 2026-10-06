@@ -3385,10 +3385,9 @@ qui portait la file du passage 1) :
 - Avec une marge de moitié : ≈ 3 appareils par seconde, donc 100 appareils toutes les
   30 s. Une campagne de 1 000 appareils durerait ≈ 5 min ; 16 000 (le réseau sans plafond),
   ≈ 1 h 30.
-- **Le seuil réel pourrait être bien plus bas que les 500 du banc.** Les iPhones imités
-  reviennent en 1 à 5 s, et une file se forme dès que N × 5,1 / 4 s dépasse 32, soit
-  N ≈ 25 appareils (HYPOTHÈSE, à mesurer par la série du seuil). De vrais iPhones
-  reviennent peut-être plus étalés.
+- ~~Le seuil réel pourrait être bien plus bas que les 500 du banc (≈ 25 appareils).~~
+  **INFIRMÉ le 06/10** par la vérification terrain, plus bas : 32/s était le débit sous
+  surcharge, pas la capacité.
 - La pointe ×10 (≈ 1,7 scan/s, ≈ 15 requêtes base/s avec ses retours d'iPhone) tient sous
   ce plafond. La saturation viendrait vers ×20.
 
@@ -3414,6 +3413,60 @@ Méthode, en lecture seule :
   journaux HTTP de Railway donnent la durée.
 - Si l'étalement réel est mesuré, la série du seuil se rejoue sans code, avec
   `IMITATEUR_IPHONE_MIN_MS` et `IMITATEUR_IPHONE_MAX_MS` réglés sur lui.
+
+**Vérification terrain (Yass, 06/10, production, lecture seule).**
+- **Les campagnes.** La requête trouve 4 campagnes de ce marchand (24/09, 25/09, 30/09,
+  03/10), de 137 à 187 iPhones visés, avec 0 à 3 scans sur toute la plateforme dans les
+  5 min. Les deux premières ont tourné en Nano, avant le comptage Apple au registre.
+- **Campagne du 30/09, 16:20:24 UTC** (167 iPhones) : 133 retours `/v1/devices` entre
+  16:20:22 et 16:20:38, en un seul bloc, avec quelques retardataires jusqu'à 16:45. Puis
+  81 `/v1/passes` servis entre 16:20:23 et 16:20:29, dont 90 % dans la seconde :24 (le
+  journal écrit à la fin de la réponse).
+- **Campagne du 03/10, 19:21:41 UTC** (187 iPhones) : ≈ 165 retours entre 19:22:09 et
+  19:22:51, en 3 vagues. Puis 90 `/v1/passes` entre 19:22:26 et 19:22:59, en 3 vagues.
+- **Aucune file visible.**
+
+**Conclusions.**
+- **Les vrais iPhones reviennent GROUPÉS** : d'un bloc en ≈ 15 s, ou en vagues sur
+  ≈ 40 s. L'imitateur (1 à 5 s) en est le **pire cas**, réaliste.
+- **L'estimation « seuil ≈ 25 appareils » est INFIRMÉE. Aveu** : j'avais pris le débit
+  mesuré PENDANT la surcharge (≈ 32 requêtes base/s, 5 102 en attente) pour la capacité
+  de l'API de données. Or une file qui déborde fait chuter le débit. En charge modérée,
+  la production a servi ≈ 73 cartes, soit ≈ 220 requêtes base, en une seconde (30/09),
+  et en Nano : sa capacité est très au-dessus de 32/s.
+- **Seuil réel : entre ≈ 170 appareils** (production, sans file) **et 1 000** (test,
+  file de 24 à 44 s). C'est la lecture du pilotage.
+
+**Pourquoi le test est plus sévère que ces campagnes de production** (prouvé, sauf mention) :
+- **≈ 7 fois plus d'appareils** (1 000, contre 133 à 187).
+- **≈ 2 à 3 fois plus de cartes revérifiées par appareil** (1 945 cartes pour 992
+  appareils, contre ≈ 0,6 à 1 en production). Cause dans le code :
+  - la route qui rend la liste (`apple-wallet.js:85-92`) filtre `passes.updated_at` sur la
+    carte jointe ;
+  - PostgREST ne filtre alors PAS les lignes de l'appareil : toutes ses cartes sont
+    rendues, puis revérifiées (1 175 réponses 304 au passage 2) ;
+  - les appareils de test portent ≈ 2,7 cartes de marchands tirés au hasard
+    (`donnees.sql:74-80`, ratio de l'audit). Les clients de ce marchand en portent ≈ 1.
+  C'est la dette « revérification de toutes les cartes » (option 2 du rythme).
+- 1 000 messages Google et 1 387 lectures au stockage en même temps.
+- Une base 26 fois plus grosse (578 Mo contre 22 Mo), plus que la mémoire de Micro.
+- Au total, ≈ 12 fois plus de requêtes base que ces campagnes, dans une fenêtre de même
+  durée.
+- **Réglages de l'API de données comparés : NON VÉRIFIÉS.** Taille du groupe de
+  connexions, versions, instance : relevé en lecture seule proposé (dashboard et requête
+  SQL sur les deux projets).
+
+**Alignement proposé** (rien fait) :
+- **D'abord le relevé des réglages.** S'ils diffèrent, aligner le projet de TEST, jamais
+  la production.
+- **Ensuite, la série du seuil** (123, 308 puis 615 porteurs, soit ≈ 100, 250 et 500
+  appareils) :
+  - le palier ≈ 100 à 150 se compare directement à la production. Sans file au test, le
+    test vaut la production ;
+  - les paliers suivants trouvent le coude.
+- **Sur feu vert seulement**, réduire les cartes par appareil dans `donnees.sql`, pour
+  coller aux clients d'un seul marchand. Garder 2,7 reste le choix prudent : c'est la
+  moyenne de la production, tirée vers le haut par quelques appareils.
 
 Les quatre hypothèses initiales, pour mémoire :
 - **(a) le groupe de connexions de PostgREST**, fixé par Supabase selon la taille de
