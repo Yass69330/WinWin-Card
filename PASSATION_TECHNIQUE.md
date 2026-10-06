@@ -3175,6 +3175,11 @@ par jour).**
   heure, cartes iPhone comprises). Il faudrait au moins 5 relais à charge égale, avant
   même les pages et les dashboards : **429 quasi certains** sans correctif.
 
+**Décision de pilotage (06/10) : « lire la vraie adresse du client » est traité JUSTE
+APRÈS la clôture de l'étape 15, AVANT l'étape 16.** Rien n'est codé d'ici là. Préalable :
+le test des en-têtes forgés (`X-Real-IP`, `X-Forwarded-For` à plusieurs entrées) sur le
+serveur de test, et le relevé des journaux de la production.
+
 **Classement pour l'étape 17** (« lire la vraie adresse du client », déjà inscrite à la
 synthèse) :
 - **Priorité 1 de l'étape, et préalable à la croissance**, au même titre que le rythme
