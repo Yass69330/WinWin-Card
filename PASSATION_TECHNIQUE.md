@@ -3392,6 +3392,29 @@ qui portait la file du passage 1) :
 - La pointe ×10 (≈ 1,7 scan/s, ≈ 15 requêtes base/s avec ses retours d'iPhone) tient sous
   ce plafond. La saturation viendrait vers ×20.
 
+**Donnée terrain contraire (Yass, 06/10).** Un marchand de la production (≈ 250 porteurs) a
+envoyé ≈ 3 campagnes en 10 jours, sans souci signalé. Cela contredit l'estimation « ≈ 25
+appareils ». Explications possibles, à départager en lecture seule :
+- **(1) Les vrais iPhones reviennent bien plus étalés** que les 1 à 5 s de l'imitateur
+  (`imitateur.js:34`, HYPOTHÈSE du temps 1). Livraison par Apple, appareils verrouillés ou
+  hors ligne : l'arrivée est alors bien sous 32 requêtes base par seconde. Le seuil suit
+  l'étalement S : ≈ 32 × S / 5 appareils, soit ≈ 770 pour S = 2 min et ≈ 1 900 pour
+  S = 5 min.
+- **(2) Peu d'appareils réellement atteints**, à cause des jetons périmés (410).
+- **(3) Peu de scans dans les minutes qui suivent** : sans scan, « aucun souci signalé »
+  ne prouve rien.
+- **(4) Une partie de ces campagnes date d'avant le 05/10**, quand la production était en
+  Nano, plus petite que Micro.
+
+Méthode, en lecture seule :
+- requête SQL sur la production (`notification_logs` pour l'heure et `total_apple`,
+  `notification_envois` pour les envois acceptés par Apple, `scans.date_scan` sur 5 min) ;
+- journaux de Railway sur la fenêtre de chaque campagne. Le journal « combined » du
+  serveur donne l'heure de chaque requête, mais pas sa durée (`morgan/index.js:178`) ; les
+  journaux HTTP de Railway donnent la durée.
+- Si l'étalement réel est mesuré, la série du seuil se rejoue sans code, avec
+  `IMITATEUR_IPHONE_MIN_MS` et `IMITATEUR_IPHONE_MAX_MS` réglés sur lui.
+
 Les quatre hypothèses initiales, pour mémoire :
 - **(a) le groupe de connexions de PostgREST**, fixé par Supabase selon la taille de
   l'instance (quelques dizaines au plus sur Micro, HYPOTHÈSE) ;
