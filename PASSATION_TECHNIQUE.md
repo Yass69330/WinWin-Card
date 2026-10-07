@@ -3934,6 +3934,68 @@ la transaction** : solde crédité, une ligne. Le renvoi même clé rend 200 san
 - Le stockage est exclu de l'enveloppe (« délai par appel BASE »).
 - Réponse 503 nommée `database_unavailable`.
 
+## 15 quatervicies. ÉTAPE 17 : LIMITEURS, CODÉE (07/10, LOCAL, NON POUSSÉ)
+
+**Décisions de Yass (07/10, diagnostic 17 validé)** : `/v1/*` 1 000 / 15 min / adresse, `/v1/log`
+compris, hors du global ; connexion caisse 20 ÉCHECS / h / adresse (les échecs d'un collègue
+sur la même adresse sont acceptés) ; correctif de la connexion caisse validé (503 sur panne,
+seuls les 4xx comptent) ; inscriptions 60 / h, marchand 10 / h, admin 10 / h, diagnostic
+30 / h inchangés. Aucune migration. **Push : attend le feu vert de Yass.**
+
+**Livré (backend) :**
+- `middleware/rateLimiters.js` : `limiterAppleWallet` (1 000 / 15 min) ; `limiterScannerLogin`
+  avec `skipSuccessfulRequests` et `requestWasSuccessful = statut < 400 OU ≥ 500` : seuls
+  les 4xx (401, 403, 400, 429) comptent comme échecs.
+- `index.js` : le global ignore `req.path` commençant par `/v1/` (`skip`) ;
+  `app.use('/v1', limiterAppleWallet)` juste avant les routes Apple.
+- `routes/scanner-auth.js` : les lectures de la connexion (boutique, marchand par slug puis
+  par e-mail, contrôle réseau du mono-site) lisent `error` → **503 `database_unavailable`**
+  + ligne `[scanner-auth] lecture <étape> impossible`. Avant : 401 « Invalid credentials » à
+  un bon mot de passe (et, pour le contrôle réseau, jeton marchand délivré sans contrôle).
+- Filet : §14 (connexion sur base coupée, relais du §14) et §16 (limiteurs, serveur neuf).
+
+**Preuves (07/10, conteneur) :** `npm test` **166/166** (153 avant). Les mêmes tests sur
+l'ancien `src/` : 9 KO, dont **la bonne connexion refusée en 429 après le retour de la base**
+(25 essais pendant la panne = 25 échecs comptés). Base coupée via le relais : connexion
+bloquée 8 s → 503 vers 5 s ; base en panne, 25 connexions → toutes 503, aucune 429 ; base
+revenue → 200 et jeton. `/v1` : 1 000 requêtes mêlées passent, la 1 001e → 429 JSON ; une
+autre adresse passe ; puis 300 `/health` de la même adresse passent et la 301e → 429
+(le global n'a rien compté de `/v1`, il reste actif ailleurs). Connexion : 30 correctes
+de suite → 200 ; 19 échecs puis bonne connexion → 200 ; 20e échec → 401, 21e tentative →
+429 même avec le bon mot de passe ; autre adresse → 200. Diagnostic : 31e → 429. Scan
+(120 en série, délai base 100 ms, deux tours) : p50 326,6–327,4 ms avant, 326,4 ms après
+(mono-site) ; 324,4–325,6 / 325,2–325,3 ms (boutique) ; **requêtes base par scan
+inchangées (5,25 et 5,00)**.
+
+**Hypothèses et limites :**
+- Compteurs EN MÉMOIRE, par processus : un redéploiement les remet à zéro ; deux instances
+  Railway auraient chacune leurs compteurs (une seule aujourd'hui).
+- Le compteur des échecs est par adresse : 20 échecs d'un tiers sur le même Wi-Fi bloquent
+  aussi la bonne connexion pendant la fenêtre d'une heure (accepté le 07/10).
+- `/v1` : blocage au-delà d'≈ 270 iPhone synchronisés derrière une même adresse en 15 min
+  (≈ 3,6 requêtes par push). Seul cas plausible : un iPhone de test à ≈ 33 cartes (≈ 35
+  requêtes par push, dette n°11) → ≈ 28 pushes en 15 min. Un 429 y retarde une mise à
+  jour de carte, jamais un scan.
+- Le téléchargement initial de carte (`/api/passes/…`) reste sous le global (décidé).
+- **Écran de connexion du scanner non modifié** (`public/scanner/index.html:877-880`) : il
+  affiche le code brut de l'erreur. Sur une panne, la caissière lit donc
+  « database_unavailable » (au lieu de « identifiants invalides » avant) ; sur un 429,
+  « Too many attempts… » comme aujourd'hui. Un message traduit est un correctif d'écran
+  (toute modification du scanner recharge les caisses) : à décider.
+
+**Vérifié seulement (rien corrigé, à décider) — connexions marchand et admin :**
+- **Marchand** : `routes/merchants.js:18-24` ne lit pas `error` (`.single()`). Base lente
+  ou en panne → `marchand` nul → **401 « Invalid credentials »** à un bon mot de passe, et
+  ce 401 est compté par `limiterMarchandLogin` (10 / h, toutes réponses comptées) : 10
+  essais pendant une panne bloquent le dashboard une heure.
+- **Admin** : `routes/admin.js:11-23` ne lit pas la base (mot de passe en variable
+  d'environnement) : pas concerné.
+
+**Décision hors pilotage (07/10) :** le contrôle réseau de la connexion mono-site
+(`scanner-auth.js`, lecture `points_de_vente`) lit aussi `error` → 503, au même titre que
+les deux lectures d'identifiants : sinon une panne y délivrait un jeton marchand à un
+réseau sans le contrôle `use_boutique_login`.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :

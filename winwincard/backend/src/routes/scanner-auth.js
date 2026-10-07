@@ -24,16 +24,24 @@ router.post('/login', asyncHandler(async (req, res) => {
 
   const { comparePassword } = require('../services/auth-utils');
   const expiresIn = remember_device ? '365d' : '7d';
+  // Étape 17 : une lecture en erreur (base lente, coupée à 5 s, ou en panne)
+  // répond 503, jamais 401 « Invalid credentials » à un bon mot de passe. Un
+  // 5xx n'est pas compté comme échec par le limiteur (rateLimiters.js).
+  const baseIndisponible = (etape, error) => {
+    console.error(`[scanner-auth] lecture ${etape} impossible :`, error.message);
+    return res.status(503).json({ error: 'database_unavailable' });
+  };
 
   // ── 1) Login BOUTIQUE ──────────────────────────────────────────────────────
   // scanner_login est stocké en minuscules → match exact sûr (jamais d'ilike,
   // qui traiterait % et _ comme des jokers sur une saisie utilisateur).
-  const { data: boutique } = await supabase
+  const { data: boutique, error: errBoutique } = await supabase
     .from('points_de_vente')
     .select('id, nom, marchand_id, scanner_password_hash, actif, deleted_at, marchands(slug, langue, type_programme, actif, nom, token_version)')
     .eq('scanner_login', ident.toLowerCase())
     .is('deleted_at', null)
     .maybeSingle();
+  if (errBoutique) return baseIndisponible('boutique', errBoutique);
 
   if (boutique && boutique.scanner_password_hash) {
     const valid = await comparePassword(password, boutique.scanner_password_hash);
@@ -61,17 +69,19 @@ router.post('/login', asyncHandler(async (req, res) => {
   }
 
   // ── 2) Repli login MARCHAND (mono-site) — par slug, puis par email ──────────
-  let { data: marchand } = await supabase
+  let { data: marchand, error: errMarchand } = await supabase
     .from('marchands')
     .select('id, nom, slug, langue, type_programme, password_hash, actif, token_version')
     .eq('slug', ident)
     .maybeSingle();
+  if (errMarchand) return baseIndisponible('marchand', errMarchand);
   if (!marchand) {
-    ({ data: marchand } = await supabase
+    ({ data: marchand, error: errMarchand } = await supabase
       .from('marchands')
       .select('id, nom, slug, langue, type_programme, password_hash, actif, token_version')
       .eq('email_contact', ident)
       .maybeSingle());
+    if (errMarchand) return baseIndisponible('marchand', errMarchand);
   }
 
   if (!marchand) return res.status(401).json({ error: 'Invalid credentials' });
@@ -82,13 +92,14 @@ router.post('/login', asyncHandler(async (req, res) => {
   // Durcissement : si ce marchand a AU MOINS une boutique provisionnée
   // (non archivée + login posé), le login marchand n'est pas accepté au scan.
   // S'appuie sur l'index partiel idx_points_de_vente_reseau_actif (migration 034).
-  const { data: reseau } = await supabase
+  const { data: reseau, error: errReseau } = await supabase
     .from('points_de_vente')
     .select('id')
     .eq('marchand_id', marchand.id)
     .is('deleted_at', null)
     .not('scanner_login', 'is', null)
     .limit(1);
+  if (errReseau) return baseIndisponible('réseau', errReseau);
   if (reseau && reseau.length > 0) {
     return res.status(403).json({ error: 'use_boutique_login' });
   }

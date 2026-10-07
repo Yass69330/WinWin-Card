@@ -48,18 +48,22 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 // message : réponse en JSON, comme les autres limiteurs (étape 12a). Sans lui,
 // la bibliothèque répond en texte et les écrans de caisse affichaient une
 // « erreur réseau » illisible. Délai avant réouverture : en-têtes RateLimit-*.
+// skip /v1/ (étape 17) : le service web Apple a son propre limiteur
+// (limiterAppleWallet) ; les iPhone d'un Wi-Fi de boutique n'usent plus le
+// compteur de la caisse.
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000, // 15 min
   max: 300,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'rate_limited' },
+  skip: req => req.path.startsWith('/v1/'),
 }));
 
 // Rate limiters dédiés (anti brute-force logins).
 // limiterInscription est appliqué directement sur POST /api/clients (dans clients.js),
 // pas au niveau du routeur, pour ne pas pénaliser les lectures du dashboard.
-const { limiterAdminLogin, limiterMarchandLogin, limiterScannerLogin } = require('./middleware/rateLimiters');
+const { limiterAdminLogin, limiterMarchandLogin, limiterScannerLogin, limiterAppleWallet } = require('./middleware/rateLimiters');
 
 // ── Routes ───────────────────────────────────────────────────
 const appleWalletRoutes   = require('./routes/apple-wallet');
@@ -109,6 +113,8 @@ app.use('/dashboard', dashboardRoutes);
 app.use('/admin', adminUiRoutes);
 
 // Apple Wallet WebService — chemins standards Apple, pas de préfixe /api
+// Limiteur propre, /v1/log compris (étape 17).
+app.use('/v1', limiterAppleWallet);
 app.use('/', appleWalletRoutes);
 
 // API REST

@@ -32,13 +32,33 @@ const limiterMarchandLogin = rateLimit({
   legacyHeaders: false,
 });
 
-// Anti brute-force login scanner (boutique ou marchand mono-site). Max un peu
-// plus haut que les autres : l'IP d'un comptoir de boutique est partagée par
-// plusieurs vendeurs, mais le login reste rare (token 1 an).
+// Anti brute-force login scanner (boutique ou marchand mono-site). Étape 17 :
+// 20 ÉCHECS par heure et par adresse ; une connexion réussie n'est jamais
+// comptée (skipSuccessfulRequests), une caissière qui se connecte bien n'use
+// donc pas le compteur. Échec = réponse 4xx (identifiants faux, boutique
+// coupée, 429 compris). Un 5xx (base lente ou en panne, 503) n'est PAS un
+// échec : sinon une panne de base bloquerait les caisses une heure après son
+// retour. Limite acceptée (07/10) : les échecs d'un collègue sur la même
+// adresse comptent pour tous.
 const limiterScannerLogin = rateLimit({
   windowMs: 60 * 60 * 1000, // 1h
   max: 20,
+  skipSuccessfulRequests: true,
+  requestWasSuccessful: (req, res) => res.statusCode < 400 || res.statusCode >= 500,
   message: { error: 'Too many attempts, please try again in an hour' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Service web Apple Wallet (/v1/devices, /v1/passes, /v1/log) — étape 17.
+// Limite propre, hors du limiteur global (index.js) : un iPhone fait ≈ 3,6
+// requêtes par push (mesure de l'étape 15), 1 000 par 15 min ≈ 270 iPhone
+// synchronisés derrière une même adresse. Un 429 retarde la mise à jour d'une
+// carte (l'iPhone réessaie), il ne bloque aucun scan.
+const limiterAppleWallet = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 min
+  max: 1000,
+  message: { error: 'rate_limited' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -55,4 +75,4 @@ const limiterDiag = rateLimit({
   message: { error: 'Trop de mesures envoyées, réessayez plus tard' },
 });
 
-module.exports = { limiterInscription, limiterAdminLogin, limiterMarchandLogin, limiterScannerLogin, limiterDiag };
+module.exports = { limiterInscription, limiterAdminLogin, limiterMarchandLogin, limiterScannerLogin, limiterDiag, limiterAppleWallet };

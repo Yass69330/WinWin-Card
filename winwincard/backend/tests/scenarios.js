@@ -761,6 +761,34 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       [adm.statut, adm.ms >= 6000, Array.isArray(adm.corps) && adm.corps.length > 0 && adm.corps.every(x => x.total_clients !== null)],
       [200, true, true]);
 
+    // Connexion caisse sur base coupée (étape 17) : 503, jamais 401, et un 5xx
+    // n'use pas le compteur des échecs (20 par heure et par adresse).
+    let t1;
+    const { hashPassword } = require('../src/services/auth-utils');
+    sql(`UPDATE points_de_vente SET scanner_password_hash = '${hashPassword('filet-mdp-b2')}' WHERE id = '${B.b2}'`);
+    const connexion = (ident, password, xff) => fetch(s14.url + '/api/scanner/login', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': `${xff}, 198.51.100.1` },
+      body: JSON.stringify({ identifiant: ident, password }) })
+      .then(async r => ({ statut: r.status, corps: await r.json().catch(() => null) }));
+    regler(/^\/rest\/v1\/points_de_vente/, 8000);
+    t1 = Date.now();
+    const cLente = await connexion('filet-b2', 'filet-mdp-b2', '203.0.113.60');
+    verifier('connexion caisse, lecture de la boutique bloquée 8 s : 503 database_unavailable vers 5 s (avant : 401 « Invalid credentials »)',
+      [cLente.statut, cLente.corps && cLente.corps.error, dans(Date.now() - t1, 4800, 6500)], [503, 'database_unavailable', true]);
+    regler(/^\/rest\/v1\/points_de_vente/, 0, true);
+    const enPanne = [];
+    for (let i = 0; i < 25; i++) enPanne.push((await connexion('filet-b2', 'filet-mdp-b2', '203.0.113.60')).statut);
+    verifier('… base en panne, 25 connexions de la même adresse : toutes 503, aucune 429 (un 5xx n\'est pas un échec)',
+      [enPanne.every(x => x === 503), enPanne.includes(429)], [true, false]);
+    regler(/^\/rest\/v1\/marchands/, 0, true);
+    const cMarchand = await connexion('filet-tampons', 'peu-importe', '203.0.113.61');
+    verifier('connexion caisse mono-site, lecture du marchand en panne : 503 (avant : 401)', [cMarchand.statut, cMarchand.corps && cMarchand.corps.error], [503, 'database_unavailable']);
+    regler(null, 0);
+    const cRetour = await connexion('filet-b2', 'filet-mdp-b2', '203.0.113.60');
+    verifier('… base revenue : la bonne connexion passe depuis la même adresse (200, jeton rendu)', [cRetour.statut, typeof (cRetour.corps && cRetour.corps.token)], [200, 'string']);
+    verifier('journal : lectures impossibles de la connexion écrites (boutique, marchand)',
+      ['boutique', 'marchand'].map(e => s14.journal().includes(`[scanner-auth] lecture ${e} impossible`)), [true, true]);
+
     // Registre des envois : un lot du cron ou d'une campagne passe par le client
     // long ; un push unique (scan) garde 5 s. Modules chargés ici, dans le
     // processus du test, branchés sur le relais.
@@ -776,7 +804,7 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     const erreurs = []; const consoleError = console.error; console.error = (...a) => erreurs.push(a.join(' '));
     const lotLong = remplir(registre.creerLot('manuel', M.tampons, { long: true }));
     const lotCourt = remplir(registre.creerLot('scan', M.tampons));
-    let t1 = Date.now(); await lotLong.ecrire(); const msLong = Date.now() - t1;
+    t1 = Date.now(); await lotLong.ecrire(); const msLong = Date.now() - t1;
     t1 = Date.now(); await lotCourt.ecrire(); const msCourt = Date.now() - t1;
     console.error = consoleError;
     verifier('registre, lot de campagne ou du cron ({ long: true }) retenu 6 s : écrit (3 lignes), client long',
@@ -817,6 +845,57 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     const renvoi = await scanCle(tT, c.serial, cle);
     verifier('renvoi même clé après la coupure : 200, crédité UNE fois en tout (2 → 3, une ligne)',
       [renvoi.statut, solde(c.id), lignes(c.id)], [200, 3, 1]);
+  }
+  // ── 16. Limiteurs (étape 17) ──────────────────────────────────────────────
+  titre('16. Limiteurs (étape 17)');
+  {
+    // Serveur neuf : compteurs à zéro. Le test joue l'entrée de Railway (« client, relais »).
+    const s16 = await demarrerServeur('limiteurs');
+    const RELAIS = '198.51.100.1';
+    const h = ip => ({ 'X-Forwarded-For': `${ip}, ${RELAIS}` });
+    const req16 = (methode, chemin, ip, corps) => fetch(s16.url + chemin, { method: methode,
+      headers: { 'Content-Type': 'application/json', ...h(ip) }, body: corps && JSON.stringify(corps) })
+      .then(async r => ({ statut: r.status, corps: await r.text() }));
+
+    // /v1/* : un compteur propre, 1 000 par 15 min et par adresse, /v1/log compris.
+    const A = '203.0.113.70';
+    const v1 = [];
+    for (let i = 0; i < 1000; i++) {
+      v1.push(i % 10 === 0
+        ? (await req16('GET', '/v1/devices/filet-appareil/registrations/pass.com.winwincard.loyalty', A)).statut
+        : (await req16('POST', '/v1/log', A, { logs: ['filet'] })).statut);
+    }
+    const v1001 = await req16('POST', '/v1/log', A, { logs: ['filet'] });
+    verifier('/v1/* : 1 000 requêtes (/v1/log et /v1/devices mêlées, un seul compteur) passent, la 1 001e reçoit 429 en JSON',
+      [v1.includes(429), v1001.statut, v1001.corps], [false, 429, '{"error":"rate_limited"}']);
+    verifier('… une autre adresse n\'est pas bloquée sur /v1', (await req16('POST', '/v1/log', '203.0.113.71', { logs: ['filet'] })).statut, 200);
+    // Le global (300 / 15 min) n'a rien compté de ces 1 000 requêtes /v1.
+    const hs = [];
+    for (let i = 0; i < 300; i++) hs.push((await req16('GET', '/health', A)).statut);
+    const h301 = await req16('GET', '/health', A);
+    verifier('global : après 1 000 requêtes /v1, la même adresse fait encore 300 requêtes ailleurs ; la 301e reçoit 429 (global toujours actif hors /v1)',
+      [hs.every(x => x === 200), h301.statut], [true, 429]);
+
+    // Connexion caisse : 20 ÉCHECS par heure et par adresse, réussites jamais comptées.
+    const cx = (ip, password) => req16('POST', '/api/scanner/login', ip, { identifiant: 'filet-b2', password }).then(r => r.statut);
+    const C = '203.0.113.72', D = '203.0.113.73';
+    const bons = [];
+    for (let i = 0; i < 30; i++) bons.push(await cx(C, 'filet-mdp-b2'));
+    verifier('connexion caisse : 30 connexions correctes de suite, toutes 200, aucune 429', [bons.every(x => x === 200), bons.includes(429)], [true, false]);
+    const fauxD = [];
+    for (let i = 0; i < 19; i++) fauxD.push(await cx(D, 'faux'));
+    const apres19 = await cx(D, 'filet-mdp-b2');
+    verifier('connexion caisse : 19 échecs (401) puis la bonne connexion → 200', [fauxD.every(x => x === 401), apres19], [true, 200]);
+    const vingtieme = await cx(D, 'faux');
+    const bloque = await cx(D, 'filet-mdp-b2');
+    verifier('… le 20e échec passe encore (401), puis la 21e tentative reçoit 429 même avec le bon mot de passe', [vingtieme, bloque], [401, 429]);
+    verifier('… une autre adresse se connecte (200)', await cx('203.0.113.74', 'filet-mdp-b2'), 200);
+
+    // Diagnostic : 30 par heure, inchangé (marchand, admin et inscriptions : §13).
+    const dg = [];
+    for (let i = 0; i < 31; i++) dg.push((await req16('POST', '/api/diag/camera', '203.0.113.75', {})).statut);
+    verifier('diagnostic : inchangé, 30 par heure (la 31e reçoit 429)', [dg.slice(0, 30).includes(429), dg[30]], [false, 429]);
+    s16.processus.kill();
   }
 }
 
