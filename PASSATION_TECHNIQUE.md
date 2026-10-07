@@ -3037,8 +3037,10 @@ notifiées, 4 sur 4 à ≈ 750**. Seuil retenu : **500 inscriptions iPhone par c
 - Railway `winwin-campagne-15` : services `serveur`, `imitateur` et `pilote`, à Amsterdam.
   `JWT_SECRET` et `ADMIN_PASSWORD` neufs. Domaine public du serveur de test :
   `https://serveur-production-46ae.up.railway.app` (pas un secret).
-- **Durée de vie : jusqu'à la fin de l'étape 18, au plus tard le 31/10/2026** (décision de
-  Yass). Ensuite : suppression des deux projets (`PROCEDURE.md`, dernière section).
+- **Durée de vie : gardé pour 17a et pour le diagnostic t40, supprimé AU PLUS TARD le
+  31/10/2026** (décision de Yass, corrigée le 07/10 : l'étape 18 est en parking, elle ne
+  borne plus rien). Ensuite : suppression des deux projets (`PROCEDURE.md`, dernière
+  section).
 
 **Résultat du geste 3 (pilote, `temoin`).** Image construite : `psql` s'installe, ce qui
 lève la réserve du §15 vicies B. 53 fichiers rejoués en 10 s, la 048 passe sur un projet
@@ -3616,9 +3618,10 @@ cible : 100 000 porteurs, 599 MB. Temps vus du pilote ; une caisse à Dubaï ajo
 - **Liste « mises à jour depuis »** (`apple-wallet.js:85-92`) : cause de la revérification
   trouvée et mesurée. **Décision du pilotage (07/10) : ce n'est pas une étape à part, c'est
   le PREMIER LEVIER du chantier « rythme des campagnes ».** On ne l'ajoute pas à la feuille
-  de route. Note : la synthèse porte déjà une ligne 24 sur ce sujet
-  (`docs/audit/99-synthese.md:338`). Elle n'a pas été modifiée ; son rattachement au
-  chantier est à acter par le pilotage.
+  de route. **La ligne 24 de la synthèse** (`docs/audit/99-synthese.md:338`, liste
+  « mises à jour depuis » et son horodatage, corrigés ensemble) **est rattachée au chantier
+  « rythme des campagnes », comme son premier levier** (acté par le pilotage le 07/10). Le
+  fichier de la synthèse lui-même n'est pas modifié.
 - **Chantier « rythme des campagnes »** :
   - envoi par lots calibré (≈ 1 à 2 pushes par seconde prouvés sans gêne) ;
   - réponse immédiate à l'écran du marchand ;
@@ -3659,7 +3662,8 @@ cible : 100 000 porteurs, 599 MB. Temps vus du pilote ; une caisse à Dubaï ajo
 2. La liste « mises à jour depuis » est le premier levier du chantier « rythme des
    campagnes », pas une étape à part.
 3. Serveur et imitateur de test éteints, pilote en `attente`. L'environnement de test est
-   gardé jusqu'à la fin de l'étape 18, au plus tard le 31/10.
+   gardé pour 17a et pour le diagnostic t40, supprimé au plus tard le 31/10 (corrigé le
+   07/10 : l'étape 18 est en parking).
 
 **Prochaine étape après la clôture : 17a** (`trust proxy` 2 et sa garde), diagnostic
 d'abord. Rien n'y est touché avant le message de Yass.
@@ -3667,8 +3671,39 @@ d'abord. Rien n'y est touché avant le message de Yass.
 **Reste pour clore l'étape** (avant ces décisions) :
 - verser `tests/charge/` sur la branche de production, inerte, hors de l'image (décision 6
   du temps 1, sur feu vert) ;
-- garder l'environnement de test jusqu'à la fin de l'étape 18 (au plus tard le 31/10),
-  pour 17a et la série du seuil.
+- garder l'environnement de test pour 17a et le diagnostic t40 (suppression au plus tard
+  le 31/10 ; la série du seuil est sortie de l'étape 15, voir plus haut).
+
+## 15 unvicies. ÉTAPE 17a : VRAIE ADRESSE DU CLIENT — DIAGNOSTIC (07/10, rien codé)
+
+Décision déjà prise (06/10, §15 vicies D) : `trust proxy` 2, alerte au plus 1 par heure si
+`X-Forwarded-For` n'a pas exactement 2 adresses, jamais `Forwarded`, preuve d'abord au test.
+
+**Ce qui lit l'adresse du client (code de `05ead18`, `winwincard/backend/`).**
+- `src/index.js:25` : `trust proxy` 1, seule source de `req.ip`.
+- `src/index.js:39` : journal `morgan` « combined » (écrit `req.ip` en tête de ligne).
+- `src/index.js:45-51` : limiteur global, 300 / 15 min.
+- `src/middleware/rateLimiters.js` : inscription `:4` (20/h, monté `routes/clients.js:14`),
+  admin `:13` (10/h, `index.js:122`), marchand `:22` (10/h, `index.js:114`), caisse `:33`
+  (20/h, `index.js:112`), diagnostic `:45` (30/h, `routes/diag.js:49`).
+- Aucun `keyGenerator` : les 6 limiteurs prennent celui d'`express-rate-limit` 7.5.1
+  (`dist/index.cjs:655-659`), qui renvoie `req.ip`, adresse complète, IPv6 comprise.
+- Aucun autre `req.ip`, `x-real-ip`, `Forwarded` ni `remoteAddress` dans `src/`. Sentry
+  (`src/instrument.js`) sans `sendDefaultPii` : pas d'adresse envoyée.
+
+**Calcul (`proxy-addr` 2.0.7, `trust proxy` 2) sur les chaînes relevées et sur les cas de
+rupture.** Wifi, 4G, forgé : la vraie adresse. Railway +1 étape (3 adresses) : un relais,
+alerte. Railway −1 étape et réécrit (1 adresse) : vraie adresse, alerte. **Railway −1 étape
+ET garde le forgé (`192.0.2.77, vraie`) : 2 adresses, l'adresse forgée est retenue, AUCUNE
+alerte.** Limite de la garde : elle ne voit pas ce cas ; seul le test des en-têtes forgés,
+rejoué, le voit. Sans en-tête (réseau privé, contrôle de santé de Railway) : adresse de la
+connexion, 0 adresse.
+
+**Mesure à faire (point 1 du diagnostic) :** chaîne complète sur ≈ 20 requêtes, deux
+réseaux, par la sonde `/__campagne/adresse` du serveur de test (aucun code à ajouter).
+
+**Non vérifié** : support IPv6 de l'entrée de Railway (forum Railway inaccessible depuis la
+session) ; nature des relais `152.233.x` / `79.127.x`.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
@@ -4211,3 +4246,8 @@ même classe que le bug parrainage). Dette #9 (idempotence) escaladée, `/me/sta
 truncation et incohérences Google hero documentées. Contrat §7 respecté de bout en bout :
 migrations exécutées par le fondateur AVANT le code, diff avant push, feu vert par
 déploiement.*
+
+*Mis à jour le 2026-10-07 par la session « SETUP 5 », étape 17a (diagnostic, rien codé,
+rien poussé) : environnement de test gardé pour 17a et t40, supprimé au plus tard le 31/10 ;
+ligne 24 de la synthèse rattachée au chantier « rythme des campagnes » comme premier levier ;
+inventaire des lecteurs d'adresse et limite de la garde au §15 unvicies.*
