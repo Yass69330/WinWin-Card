@@ -3854,7 +3854,14 @@ SELECT CASE WHEN grouping(date_trunc('day', date_scan)) = 1 THEN 'TOTAL' ELSE to
 À lire : les jours avant le déploiement des écrans avec clé (11b) n'en ont pas, c'est normal ;
 ce qui compte est `dernier_scan_sans_cle` et le pourcentage des derniers jours.
 
-## 15 tervicies. ÉTAPE 16 (RÉDUITE) : CODÉE (07/10, LOCAL, NON POUSSÉ)
+## 15 tervicies. ÉTAPE 16 (RÉDUITE) : POUSSÉE ET VÉRIFIÉE (07/10, `d38d555` sur `claude/keen-goldberg-MXslu`)
+
+**Poussé le 07/10 sur feu vert de Yass**, en avance rapide (`3fe3812..d38d555`, 3 commits).
+**Contrôles en production FAITS et VÉRIFIÉS par Yass (07/10, vers 16:08 UTC)** : déploiement
+vert ; scan cobaye (`POST /api/scan` 200) puis annulation depuis la fiche client (200), solde
+revenu ; carte iPhone resynchronisée (APNs 200, carte re-téléchargée en 200) ; aucune ligne
+`database_unavailable` ni `[scan] lecture … impossible`. Les « pass was unchanged » d'Apple
+vus au même moment relèvent de la dette n°11 (listing sur-inclusif, étapes 23-24), sans lien.
 
 **Correction de pilotage (07/10, Yass) appliquée :** 5 s par appel, **sans budget partagé
 par scan, sans ligne `[base] DÉLAI`**. Elle remplace les « 6 s + budget de 9 s » et la ligne
