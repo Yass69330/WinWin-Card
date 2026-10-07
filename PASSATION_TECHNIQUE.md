@@ -3879,7 +3879,7 @@ de Yass ET le résultat de la requête D.**
   rapide**, après feu vert de Yass et requête D.
 
 **Preuves (07/10, conteneur, Node 22, PostgREST v12.2.12 local) :** `npm test` 135/135 avant,
-**147/147 après** (150/150 avec le registre) ; les 12 nouveaux tests joués sur l'ancien `src/` : 7 KO (lecture lente
+**147/147 après** (150/150 avec le registre, 153/153 avec l'authentification) ; les 12 nouveaux tests joués sur l'ancien `src/` : 7 KO (lecture lente
 servie en 200, panne réseau traitée en mono-site, panne client en 404, écriture jamais
 coupée). Scan, 120 scans en série par cas, avant / après (deux tours chacun) :
 délai base 100 ms → p50 327,0 / 327,5 ms (mono-site), 325,7 / 325,3 ms (boutique) ;
@@ -3893,10 +3893,18 @@ la transaction** : solde crédité, une ligne. Le renvoi même clé rend 200 san
 À confirmer côté Supabase (passerelle devant PostgREST) : non mesuré en production.
 
 **Hypothèses (ce qui ferait casser) et limites :**
-- Pire cas d'un scan : authentification sans cache (lecture `marchands`, 5 s, puis passe
-  en cas de panne) + 3 appels = **20 s**, au-delà des 15 s de la caisse ; sans
-  l'authentification, 15 s pile. La caisse coupe alors d'elle-même (incident connexion,
-  clé gardée). Accepté avec la correction « sans budget ».
+- Pire cas d'un scan : authentification sans cache (lecture `marchands`, 5 s) + 3 appels
+  lents mais sous 5 s chacun ≈ **20 s**, au-delà des 15 s de la caisse. La caisse coupe
+  alors d'elle-même (incident connexion, clé gardée). Accepté avec la correction « sans
+  budget ».
+- **Authentification de la caisse (demande de Yass, 07/10) :** `authScanner`
+  (`middleware/auth.js`) laissait passer quand la lecture du marchand échouait sans valeur
+  en cache (`marchand-cache.js:95`, `degrade: true`). Elle répond maintenant **503
+  `database_unavailable`**, comme le scan. Aucune requête de plus (le second
+  `etatMarchand` lit le cache). Une valeur connue, même périmée, sert toujours. Tests :
+  lecture retenue 8 s → 503 vers 5 s ; panne → 503 ; base revenue → 200 (ancien code :
+  2 KO, scan crédité). **Le dashboard (`authMarchand`) laisse toujours passer** :
+  décision hors pilotage, hors du périmètre demandé (caisse).
 - Une **erreur réseau** (connexion refusée, coupée) ou un 503 de PostgREST sur une lecture
   restent réessayés par postgrest-js (1 + 2 + 4 s) : le délai ne couvre que la lenteur.
 - Une coupure pendant la lecture du **corps** de la réponse rend une `TimeoutError` non

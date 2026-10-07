@@ -733,6 +733,21 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     verifier('journal : chaque lecture impossible est écrite (boutique, réseau, client, code de secours)',
       ['boutique', 'réseau', 'client', 'code de secours'].map(e => j.includes(`[scan] lecture ${e} impossible`)), [true, true, true, true]);
 
+    // Authentification de la caisse, cache marchand vide (M.points, M.pointsParr :
+    // jamais vus par ce serveur) : lecture du marchand coupée ou en panne.
+    regler(/^\/rest\/v1\/marchands/, 8000);
+    const pc = client(M.points);
+    const auLent = await scan14(tP, pc.serial, { points: 10 });
+    verifier('auth caisse, lecture du marchand bloquée 8 s : 503 database_unavailable vers 5 s, une requête, rien crédité (avant : laissait passer)',
+      [auLent.statut, auLent.corps.error, dans(auLent.ms, 4800, 6500), regle.vues, solde(pc.id)], [503, 'database_unavailable', true, 1, 0]);
+    regler(/^\/rest\/v1\/marchands/, 0, true);
+    const ppc = client(M.pointsParr);
+    const auPanne = await scan14(tPP, ppc.serial, { points: 10 });
+    verifier('auth caisse, lecture du marchand en panne : 503 database_unavailable, rien crédité',
+      [auPanne.statut, auPanne.corps.error, solde(ppc.id)], [503, 'database_unavailable', 0]);
+    regler(null, 0);
+    verifier('… base revenue : le scan repasse (200)', (await scan14(tPP, ppc.serial, { points: 10 })).statut, 200);
+
     regler(/^\/rest\/v1\/rpc\/crediter_scan/, 8000);
     const k = client(M.tampons);
     const ecr = await scan14(tT, k.serial);

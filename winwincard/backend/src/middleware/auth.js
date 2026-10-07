@@ -93,6 +93,13 @@ async function authScanner(req, res, next) {
 
   // Le scan relisait déjà le statut de la BOUTIQUE (scan.js) mais jamais celui
   // du MARCHAND pour un jeton boutique : ce contrôle ferme ce trou.
+  // Étape 16 : lecture impossible (coupée à 5 s ou en erreur) et aucune valeur
+  // connue → 503, comme le scan : la caisse y voit un incident de connexion
+  // (nouvel essai, clé gardée), jamais l'écran de connexion. Avant, on laissait
+  // passer. Une valeur connue, même périmée, sert toujours (marchand-cache).
+  // Le dashboard (authMarchand) garde l'ancien comportement.
+  const etat = await etatMarchand(payload.marchand_id);
+  if (etat.degrade) return res.status(503).json({ error: 'database_unavailable' });
   const refus = await refusAutorisation(payload.marchand_id, payload);
   if (refus) return res.status(refus.status).json({ error: refus.error });
 
