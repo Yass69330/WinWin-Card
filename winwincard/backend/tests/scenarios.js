@@ -44,7 +44,7 @@ INSERT INTO points_de_vente (id, marchand_id, nom, actif, deleted_at, scanner_lo
  ('${B.archivee}', '${M.reseau}', 'Archivée',   true,  now(), 'filet-archivee');
 `;
 
-async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur, urlSupabase }) {
+async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur, urlSupabase, cleService }) {
   // ── Outils ────────────────────────────────────────────────────────────────
   const jeton = (marchandId, pointDeVenteId) => jwt.sign(pointDeVenteId
     ? { role: 'scanner', marchand_id: marchandId, point_de_vente_id: pointDeVenteId, tv: 1 }
@@ -745,6 +745,38 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     verifier('client long : admin_marchands_stats retenue 6 s → 200, compteurs présents (le client de 5 s l\'aurait coupée)',
       [adm.statut, adm.ms >= 6000, Array.isArray(adm.corps) && adm.corps.length > 0 && adm.corps.every(x => x.total_clients !== null)],
       [200, true, true]);
+
+    // Registre des envois : un lot du cron ou d'une campagne passe par le client
+    // long ; un push unique (scan) garde 5 s. Modules chargés ici, dans le
+    // processus du test, branchés sur le relais.
+    const env = { url: process.env.SUPABASE_URL, cle: process.env.SUPABASE_SERVICE_KEY };
+    const modules = ['../src/services/supabase', '../src/services/notif-registre'].map(x => require.resolve(x));
+    modules.forEach(x => delete require.cache[x]);
+    process.env.SUPABASE_URL = `http://127.0.0.1:${relais.address().port}`;
+    process.env.SUPABASE_SERVICE_KEY = cleService;
+    const registre = require('../src/services/notif-registre');
+    const ecrits = lot => Number(sql(`SELECT count(*) FROM notification_envois WHERE lot = '${lot.id}'`));
+    const remplir = lot => { for (let i = 0; i < 3; i++) lot.ajouter({ plateforme: 'apple', pushToken: `jeton-${i}` }); return lot; };
+    regler(/^\/rest\/v1\/notification_envois/, 6000);
+    const erreurs = []; const consoleError = console.error; console.error = (...a) => erreurs.push(a.join(' '));
+    const lotLong = remplir(registre.creerLot('manuel', M.tampons, { long: true }));
+    const lotCourt = remplir(registre.creerLot('scan', M.tampons));
+    let t1 = Date.now(); await lotLong.ecrire(); const msLong = Date.now() - t1;
+    t1 = Date.now(); await lotCourt.ecrire(); const msCourt = Date.now() - t1;
+    console.error = consoleError;
+    verifier('registre, lot de campagne ou du cron ({ long: true }) retenu 6 s : écrit (3 lignes), client long',
+      [ecrits(lotLong), msLong >= 6000], [3, true]);
+    verifier('registre, lot d\'un scan retenu 6 s : coupé vers 5 s, rien écrit, erreur journalisée, sans rejet',
+      [ecrits(lotCourt), dans(msCourt, 4800, 6500), erreurs.some(e => e.startsWith('[notif-registre] insert'))], [0, true, true]);
+    verifier('registre : le cron (3 lots) et la campagne manuelle demandent le client long',
+      [(require('fs').readFileSync(require.resolve('../src/workers/cron.js'), 'utf8').match(/creerLot\([^)]*\{ long: true \}\)/g) || []).length,
+       /creerLot\('manuel', req\.marchandId, \{ long: true \}\)/.test(require('fs').readFileSync(require.resolve('../src/routes/notifications.js'), 'utf8'))],
+      [3, true]);
+    modules.forEach(x => delete require.cache[x]);
+    process.env.SUPABASE_URL = env.url; process.env.SUPABASE_SERVICE_KEY = env.cle;
+    if (env.url === undefined) delete process.env.SUPABASE_URL;
+    if (env.cle === undefined) delete process.env.SUPABASE_SERVICE_KEY;
+
     regler(null, 0);
     s14.processus.kill();
     relais.close();

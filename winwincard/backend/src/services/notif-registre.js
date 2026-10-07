@@ -34,6 +34,7 @@
 
 const crypto   = require('crypto');
 const supabase = require('./supabase');
+const { clientLong } = supabase;
 
 const TABLE      = 'notification_envois';
 // Découpe les inserts volumineux : un lot de plusieurs milliers de lignes
@@ -84,11 +85,11 @@ function ligne({ source, marchandId, plateforme, serialNumber, pushToken, lot, e
 // Écriture effective. NE REJETTE JAMAIS. §3.9 : supabase-js ne rejette pas non
 // plus — on lit `error` explicitement, sinon l'échec serait invisible, ce qui
 // est précisément le défaut que ce lot corrige ailleurs dans le code.
-async function _inserer(lignes) {
+async function _inserer(lignes, client = supabase) {
   for (let i = 0; i < lignes.length; i += TAILLE_LOT) {
     const tranche = lignes.slice(i, i + TAILLE_LOT);
     try {
-      const { error } = await supabase.from(TABLE).insert(tranche);
+      const { error } = await client.from(TABLE).insert(tranche);
       if (error) console.error(`[notif-registre] insert (${tranche.length} l.):`, error.message);
     } catch (e) {
       console.error('[notif-registre] insert exception:', e.message);
@@ -98,9 +99,10 @@ async function _inserer(lignes) {
 
 // ── Lot : accumule puis écrit une fois ────────────────────────────────────
 class Lot {
-  constructor(source, marchandId) {
+  constructor(source, marchandId, { long = false } = {}) {
     this.source     = source;
     this.marchandId = marchandId || null;
+    this.client     = long ? clientLong : supabase;
     this.id         = crypto.randomUUID();
     this.lignes     = [];
   }
@@ -118,13 +120,16 @@ class Lot {
   async ecrire() {
     if (!this.lignes.length) return 0;
     const n = this.lignes.length;
-    await _inserer(this.lignes);
+    await _inserer(this.lignes, this.client);
     this.lignes = [];
     return n;
   }
 }
 
-function creerLot(source, marchandId) { return new Lot(source, marchandId); }
+// { long: true } : client long (30 s par appel, étape 16), pour les lots du
+// cron et des campagnes, qui peuvent compter des milliers de lignes. Un push
+// unique (scan, avis, bienvenue…) garde le client de 5 s.
+function creerLot(source, marchandId, options) { return new Lot(source, marchandId, options); }
 
 // ── Écriture unitaire, pour les surfaces à un push par événement ───────────
 // Ne rejette jamais. N'est jamais attendue par un chemin d'envoi.

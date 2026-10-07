@@ -92,7 +92,7 @@ async function runInactiveWorkflow(opts = {}) {
       supabase.from('workflow_executions').select('client_id').eq('marchand_id', merchant.id).eq('workflow_type', 'inactive').gte('executed_at', dedupSince),
     ]);
 
-    const lot = registre.creerLot('inactive', merchant.id);
+    const lot = registre.creerLot('inactive', merchant.id, { long: true });
     const activeSet = new Set((activeScans || []).map(s => s.client_id));
     const dedupSet  = new Set((recentExec  || []).map(e => e.client_id));
     const toNotify  = (clients || []).filter(c => !activeSet.has(c.id) && !dedupSet.has(c.id));
@@ -161,7 +161,7 @@ async function runNearRewardWorkflow(opts = {}) {
         .gte('executed_at', dedupSince),
     ]);
 
-    const lot = registre.creerLot('near_reward', merchant.id);
+    const lot = registre.creerLot('near_reward', merchant.id, { long: true });
     const dedupSet = new Set((recentExec || []).map(e => e.client_id));
     const toNotify = (clients || []).filter(c => !dedupSet.has(c.id));
 
@@ -237,7 +237,7 @@ async function runBirthdayWorkflow(opts = {}) {
         .gte('executed_at', yearStart),
     ]);
 
-    const lot = registre.creerLot('birthday', merchant.id);
+    const lot = registre.creerLot('birthday', merchant.id, { long: true });
     const sentSet = new Set((sentThisYear || []).map(e => e.client_id));
     // slice(5) de 'AAAA-MM-JJ' → 'MM-JJ'. 29/02 ne matche que les années
     // bissextiles → aucun envoi les autres années (voulu, pas de contournement).

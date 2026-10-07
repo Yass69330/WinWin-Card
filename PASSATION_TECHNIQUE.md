@@ -3874,10 +3874,12 @@ de Yass ET le résultat de la requête D.**
   `admin_marchands_stats`, et dans `POST /api/notifications` les lectures `device_tokens`
   et `passes` **et la mise à jour de `passes`** (voir décisions hors pilotage).
 - Filet : §14 (base lente, relais réglable devant PostgREST, second serveur) et §15
-  (coupure pendant que la base écrit). `tests/lancer.js` passe `urlSupabase` aux scénarios.
+  (coupure pendant que la base écrit). `tests/lancer.js` passe `urlSupabase` et `cleService`
+  aux scénarios. **Push prévu sur `claude/keen-goldberg-MXslu` (production), en avance
+  rapide**, après feu vert de Yass et requête D.
 
 **Preuves (07/10, conteneur, Node 22, PostgREST v12.2.12 local) :** `npm test` 135/135 avant,
-**147/147 après** ; les 12 nouveaux tests joués sur l'ancien `src/` : 7 KO (lecture lente
+**147/147 après** (150/150 avec le registre) ; les 12 nouveaux tests joués sur l'ancien `src/` : 7 KO (lecture lente
 servie en 200, panne réseau traitée en mono-site, panne client en 404, écriture jamais
 coupée). Scan, 120 scans en série par cas, avant / après (deux tours chacun) :
 délai base 100 ms → p50 327,0 / 327,5 ms (mono-site), 325,7 / 325,3 ms (boutique) ;
@@ -3901,9 +3903,12 @@ la transaction** : solde crédité, une ligne. Le renvoi même clé rend 200 san
   convertie : elle devient une erreur lue (pas de nouvel essai, le code est après la boucle
   de postgrest-js), pas une exception.
 - **Stockage non borné** (`/storage/v1/` exclu), comme avant.
-- Services appelés par le cron (`notif-registre`, caches…) restent sur le client 5 s : une
-  écriture du registre de plusieurs milliers de lignes en un lot pourrait être coupée
-  (journalisée, non mesurée à cette taille).
+- **Registre des envois (demande de Yass, 07/10) :** les lots du cron (`inactive`,
+  `near_reward`, `birthday`) et de la campagne manuelle passent par le client long
+  (`creerLot(…, { long: true })`, `notif-registre.js`). Les écritures d'un push unique
+  (scan, avis, bienvenue, ajustement, `enregistrer()`) gardent 5 s : coupées, elles sont
+  journalisées et perdues, l'envoi est déjà parti. Testé (filet §14, 150/150). Les autres
+  services appelés par le cron (caches…) restent sur le client 5 s.
 - `AbortSignal.any` exige Node ≥ 20.3 (production : 24.10.0).
 - Sans clé d'idempotence (requête D), un renvoi après coupure recrédite : limite connue.
 

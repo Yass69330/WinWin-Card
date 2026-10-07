@@ -282,6 +282,7 @@ if (require.main === module) (async () => {
     urlServeur,
     secretJwt: SECRET_JWT,
     urlSupabase,
+    cleService: jwt.sign({ role: 'service_role' }, SECRET_PGRST),
     demarrerServeur: (nom, url = urlSupabase) => demarrerServeur(url, nom),
     async api(methode, chemin, jeton, corps) {
       const r = await fetch(urlServeur + chemin, { method: methode,

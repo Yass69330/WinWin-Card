@@ -125,7 +125,7 @@ router.post('/', authMarchand, asyncHandler(async (req, res) => {
   // Registre des envois (migration 046) : UN insert pour toute la campagne,
   // après les envois — il ne peut donc rien retarder. Promise.allSettled
   // conserve l'ordre des entrées, d'où l'appariement par index avec tokens/passes.
-  const lot = registre.creerLot('manuel', req.marchandId);
+  const lot = registre.creerLot('manuel', req.marchandId, { long: true });
   appleResults.forEach((r, i) => lot.ajouter({
     plateforme: 'apple',
     pushToken:  (tokens || [])[i]?.push_token,
