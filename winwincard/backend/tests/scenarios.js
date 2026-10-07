@@ -655,6 +655,14 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     const r0 = await post('/api/scanner/login', {});
     verifier('serveur : chaînes à 1, 3 et 0 adresse → requêtes servies, UNE alerte (au plus 1 par heure)', [[r1, r3, r0].includes(429), alertes()], [false, 1]);
     verifier('serveur : l\'alerte du journal ne contient aucune adresse', /ALERTE[^\n]*\d+\.\d+\.\d+\.\d+/.test(s13.journal()), false);
+    // Inscriptions : 60 par heure et par adresse (20 avant, décision du 07/10). Un corps vide est
+    // refusé (400) par la route, mais compté par le limiteur, qui passe avant elle.
+    const ins = h => post('/api/clients', h);
+    const C = { 'X-Forwarded-For': `203.0.113.30, ${RELAIS}` }, D = { 'X-Forwarded-For': `203.0.113.31, ${RELAIS}` };
+    const rI = []; for (let i = 0; i < 61; i++) rI.push(await ins(C));
+    verifier('serveur : inscriptions, 60 par heure et par adresse (la 21e passe, la 61e est refusée, 429)',
+      [rI[20] === 429, rI.slice(0, 60).includes(429), rI[60]], [false, false, 429]);
+    verifier('… un autre client derrière le même relais s\'inscrit encore', await ins(D) === 429, false);
     s13.processus.kill();
   }
 }

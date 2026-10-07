@@ -3744,7 +3744,7 @@ session) ; nature des relais `152.233.x` / `79.127.x`.
   aucun écran modifié. Filet sans navigateur : 133/133.
 - **`/health/db`** est bien le contrôle de santé de Railway (réglage Healthcheck Path,
   étape 8) : l'exception de la garde est confirmée.
-- **Limiteur global et routes Apple/cartes (EN ATTENTE de décision).** `index.js:45` est monté
+- **Limiteur global et routes Apple/cartes (DÉCIDÉ le 07/10 : inchangé en 17a, voir plus bas).** `index.js:45` est monté
   AVANT toutes les routes : il couvre `/v1/devices/*`, `/v1/passes/*`, `/v1/log`
   (`apple-wallet.js`), le téléchargement de carte (`/api/passes/:serial/apple`), Google
   (`/api/google-wallet/pass/:serial`), les pages et les fichiers statiques, sans exception.
@@ -3753,6 +3753,25 @@ session) ; nature des relais `152.233.x` / `79.127.x`.
   (4G à adresse commune, Wi-Fi de boutique avec la caisse). Un 429 sur la route Apple
   retarde une mise à jour de carte (l'iPhone réessaie) ; sur la caisse, il bloquerait un
   scan.
+
+**Décision de Yass (07/10) : inscriptions de 20 à 60 par heure, dans 17a.** Code :
+`rateLimiters.js:4` (`max: 60`). Limite globale (300 par 15 min) et scans INCHANGÉS ; les
+routes Apple restent sous le limiteur global (limite propre au service web Apple : étape 17).
+- **Mesure en production, 30 jours, glissante, par marchand** (`database/requetes/limites_adresse_17a.sql`,
+  lue seule) : inscriptions en 1 h : Dinapoli **14**, Boucherie République 12, Shop By Ness 9,
+  Nails By Ness 7, Hilal Kebab 7. Scans en 15 min : Hilal Kebab 15, Pizz'Amore Saxe 13, le reste
+  ≤ 10. Contre 20 par heure : Dinapoli à 70 % de la limite, donc un compteur d'adresse
+  partagée aurait pu refuser un vrai client ; contre 300 : au plus 15 scans, marge large.
+- **Hypothèses (ce qui le ferait casser) :** le maximum du marchand borne celui de sa boutique
+  (la table `clients` ne porte pas la boutique) ; la fréquence d'inscription reste du même
+  ordre (60 par heure = ≈ 4 fois le maximum mesuré) ; un lancement ou un QR au comptoir
+  concentré sur une seule adresse resterait sous 60. À remesurer avec la même requête au
+  premier marchand à ≈ 500 porteurs ou à la signature d'un réseau.
+- **Limite :** 60 par heure et par adresse protège moins contre une inscription en rafale
+  depuis une seule adresse (jusqu'à 60 fausses cartes par heure et par adresse, au lieu
+  de 20). Provisoire jusqu'à l'étape 17 (limite par clé, limites par type de route).
+- Filet : section 13 de `tests/scenarios.js`, 135/135 (la 61ᵉ inscription est refusée, un
+  autre client derrière le même relais passe).
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 

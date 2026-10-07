@@ -1,9 +1,14 @@
 const rateLimit = require('express-rate-limit');
 
-// Anti-spam inscription client — appliqué uniquement sur POST /api/clients
+// Anti-spam inscription client — appliqué uniquement sur POST /api/clients.
+// 60 par heure et par adresse (étape 17a, décision du 07/10 ; 20 avant). Avec la vraie
+// adresse du client, les clients d'une même boutique (Wi-Fi) ou d'un même opérateur
+// (4G) partagent ce compteur. Mesuré en production sur 30 jours : jusqu'à 14
+// inscriptions en une heure pour un marchand. 60 = environ 4 fois ce maximum ; en
+// dessous de 12 par heure en usage normal, le garde-fou ne vise que l'abus.
 const limiterInscription = rateLimit({
   windowMs: 60 * 60 * 1000, // 1h
-  max: 20,
+  max: 60,
   message: { error: 'Too many attempts, please try again in an hour' },
   standardHeaders: true,
   legacyHeaders: false,
