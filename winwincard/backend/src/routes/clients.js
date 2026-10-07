@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const supabase = require('../services/supabase');
+const { clientLong } = supabase;   // 30 s par appel (étape 16) : export, effacement
 const asyncHandler = require('../utils/asyncHandler');
 const { suivre } = require('../services/arret');   // envois après la réponse, attendus à l'arrêt (étape 14a)
 const { authMarchand, authAdmin } = require('../middleware/auth');
@@ -130,7 +131,7 @@ router.get('/export', authMarchand, asyncHandler(async (req, res) => {
     return res.status(403).json({ error: 'CSV export requires the Pro+ plan or the premium landing page.' });
   }
 
-  const { data: clients, error } = await supabase
+  const { data: clients, error } = await clientLong
     .from('clients')
     .select('prenom, stored_value, email, telephone, date_anniversaire, created_at')
     .eq('marchand_id', req.marchandId)
@@ -170,7 +171,7 @@ router.get('/export', authMarchand, asyncHandler(async (req, res) => {
 
 // DELETE /api/clients/:id — droit à l'effacement RGPD
 router.delete('/:id', authMarchand, asyncHandler(async (req, res) => {
-  const { error } = await supabase.rpc('effacer_client', {
+  const { error } = await clientLong.rpc('effacer_client', {
     p_client_id: req.params.id,
     p_marchand_id: req.marchandId
   });

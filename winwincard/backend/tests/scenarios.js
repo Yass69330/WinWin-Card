@@ -44,7 +44,7 @@ INSERT INTO points_de_vente (id, marchand_id, nom, actif, deleted_at, scanner_lo
  ('${B.archivee}', '${M.reseau}', 'Archivée',   true,  now(), 'filet-archivee');
 `;
 
-async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur }) {
+async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur, urlSupabase }) {
   // ── Outils ────────────────────────────────────────────────────────────────
   const jeton = (marchandId, pointDeVenteId) => jwt.sign(pointDeVenteId
     ? { role: 'scanner', marchand_id: marchandId, point_de_vente_id: pointDeVenteId, tv: 1 }
@@ -664,6 +664,112 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       [rI[20] === 429, rI.slice(0, 60).includes(429), rI[60]], [false, false, 429]);
     verifier('… un autre client derrière le même relais s\'inscrit encore', await ins(D) === 429, false);
     s13.processus.kill();
+  }
+
+  // ── 14. Base lente : délai par appel (étape 16) ───────────────────────────
+  titre('14. Base lente : délai par appel (étape 16)');
+  {
+    // Un relais devant PostgREST, réglé par le test : retient ou casse les
+    // requêtes dont le chemin correspond, et les compte. Un second serveur
+    // passe par lui ; les autres scénarios n'en voient rien.
+    const http = require('http');
+    const amont = new URL(urlSupabase);
+    const regle = { motif: null, delaiMs: 0, panne: false, vues: 0 };
+    const relais = http.createServer((req, res) => {
+      const vise = regle.motif && regle.motif.test(req.url);
+      if (vise) regle.vues++;
+      if (vise && regle.panne) { res.writeHead(500, { 'Content-Type': 'application/json' }); return res.end('{"message":"panne simulée"}'); }
+      const envoyer = () => {
+        if (req.destroyed || res.destroyed || res.writableEnded) return;   // l'appelant a coupé : rien ne part
+        const p = http.request({ host: amont.hostname, port: amont.port, path: req.url, method: req.method,
+          headers: { ...req.headers, host: amont.host } }, r => { res.writeHead(r.statusCode, r.headers); r.pipe(res); });
+        p.on('error', () => { if (!res.headersSent) { res.writeHead(502); res.end(); } });
+        req.pipe(p);
+      };
+      if (vise && regle.delaiMs > 0) { req.pause(); setTimeout(() => { req.resume(); envoyer(); }, regle.delaiMs); } else envoyer();
+    });
+    await new Promise(r => relais.listen(0, '127.0.0.1', r));
+    const s14 = await demarrerServeur('base-lente', `http://127.0.0.1:${relais.address().port}`);
+    const appel = async (methode, chemin, jt, corps) => {
+      const t0 = Date.now();
+      const r = await fetch(s14.url + chemin, { method: methode,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jt}` }, body: corps && JSON.stringify(corps) });
+      const t = await r.text(); let c; try { c = JSON.parse(t); } catch { c = t; }
+      return { statut: r.status, corps: c, ms: Date.now() - t0 };
+    };
+    const regler = (motif, delaiMs, panne = false) => Object.assign(regle, { motif, delaiMs, panne, vues: 0 });
+    const scan14 = (jt, serial, corps = {}) => appel('POST', '/api/scan', jt, { serial_number: serial, ...corps });
+    const dans = (ms, min, max) => ms >= min && ms <= max;
+
+    // Préchauffe : le cache marchand (auth) est rempli, la lecture lente vise le scan seul.
+    const c = client(M.reseau);
+    verifier('relais sans délai : le scan boutique passe (200)', (await scan14(tB1, c.serial)).statut, 200);
+
+    regler(/^\/rest\/v1\/points_de_vente/, 8000);
+    const lent = await scan14(tB1, c.serial);
+    verifier('lecture de la boutique bloquée 8 s : 503 database_unavailable vers 5 s (avant : 403 access_disabled, ou 4 essais et 11 s et plus)',
+      [lent.statut, lent.corps.error, dans(lent.ms, 4800, 6500)], [503, 'database_unavailable', true]);
+    verifier('… UNE seule requête partie vers la base (aucun nouvel essai de postgrest-js)', regle.vues, 1);
+    verifier('… rien de crédité', solde(c.id), 1);
+
+    regler(/^\/rest\/v1\/points_de_vente/, 0, true);
+    const m = await scan14(tT, client(M.tampons).serial);
+    verifier('base en panne au contrôle du réseau (jeton marchand) : 503 (avant : traité comme mono-site, scan ouvert)',
+      [m.statut, m.corps.error], [503, 'database_unavailable']);
+
+    const t = client(M.tampons);
+    regler(/^\/rest\/v1\/clients/, 0, true);
+    const u = await scan14(tT, t.serial);
+    const sec = await scan14(tT, t.serial.slice(-6));
+    verifier('base en panne à la lecture du client : 503 par UUID et par code de secours (avant : 404 « carte inconnue »)',
+      [u.statut, u.corps.error, sec.statut, sec.corps.error], [503, 'database_unavailable', 503, 'database_unavailable']);
+    regler(null, 0);
+    let absent;
+    do { absent = crypto.randomBytes(3).toString('hex'); }
+    while (Number(sql(`SELECT count(*) FROM clients WHERE marchand_id = '${M.tampons}' AND pass_serial_number LIKE '%${absent}'`)));
+    verifier('base saine, carte inconnue : toujours 404 (UUID et code de secours)',
+      [(await scan14(tT, crypto.randomUUID())).statut, (await scan14(tT, absent)).statut], [404, 404]);
+    const j = s14.journal();
+    verifier('journal : chaque lecture impossible est écrite (boutique, réseau, client, code de secours)',
+      ['boutique', 'réseau', 'client', 'code de secours'].map(e => j.includes(`[scan] lecture ${e} impossible`)), [true, true, true, true]);
+
+    regler(/^\/rest\/v1\/rpc\/crediter_scan/, 8000);
+    const k = client(M.tampons);
+    const ecr = await scan14(tT, k.serial);
+    verifier('écriture (crediter_scan) bloquée 8 s : coupée vers 5 s, une requête, réponse 5xx, rien crédité',
+      [ecr.statut >= 500, dans(ecr.ms, 4800, 6500), regle.vues, solde(k.id)], [true, true, 1, 0]);
+
+    // Client long (30 s) : une statistique admin de 6 s aboutit.
+    regler(/^\/rest\/v1\/rpc\/admin_marchands_stats/, 6000);
+    const adm = await appel('GET', '/api/admin/marchands', jetonAdmin);
+    verifier('client long : admin_marchands_stats retenue 6 s → 200, compteurs présents (le client de 5 s l\'aurait coupée)',
+      [adm.statut, adm.ms >= 6000, Array.isArray(adm.corps) && adm.corps.length > 0 && adm.corps.every(x => x.total_clients !== null)],
+      [200, true, true]);
+    regler(null, 0);
+    s14.processus.kill();
+    relais.close();
+  }
+
+  // ── 15. Coupure pendant que la base écrit encore (étape 16) ────────────────
+  titre('15. Coupure pendant que la base écrit encore (étape 16)');
+  {
+    // La carte est tenue 7 s par une autre session : crediter_scan attend le
+    // verrou, le serveur coupe à 5 s. Que fait PostgREST de la transaction ?
+    const c = client(M.tampons, { solde: 2 });
+    const cle = crypto.randomUUID();
+    const verrou = sqlEnFond(`BEGIN; SELECT 1 FROM clients WHERE id = '${c.id}' FOR UPDATE; SELECT pg_sleep(7); COMMIT;`);
+    await attendre(() => Number(sql(`SELECT count(*) FROM pg_stat_activity WHERE query LIKE 'SELECT pg_sleep(%'`)) === 1);
+    const t0 = Date.now();
+    const r = await scanCle(tT, c.serial, cle);
+    const ms = Date.now() - t0;
+    await verrou;
+    await new Promise(ok => setTimeout(ok, 500));
+    verifier('verrou de 7 s : le serveur coupe vers 5 s et répond 5xx', [r.statut >= 500, ms >= 4800 && ms <= 6500], [true, true]);
+    const apres = [solde(c.id), lignes(c.id)];
+    console.log(`    (mesure : après la coupure, solde ${apres[0]}, ${apres[1]} ligne(s) : PostgREST ${apres[1] ? 'a fini' : 'a annulé'} la transaction)`);
+    const renvoi = await scanCle(tT, c.serial, cle);
+    verifier('renvoi même clé après la coupure : 200, crédité UNE fois en tout (2 → 3, une ligne)',
+      [renvoi.statut, solde(c.id), lignes(c.id)], [200, 3, 1]);
   }
 }
 

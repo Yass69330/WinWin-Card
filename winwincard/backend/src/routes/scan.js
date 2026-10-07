@@ -36,14 +36,24 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   // On statue AVANT toute écriture. Le statut de la boutique est TOUJOURS relu
   // en base (jamais présumé depuis le JWT) → c'est ce qui rend la coupure
   // effective au scan suivant.
+  // Étape 16 : une lecture en erreur (base lente, coupée au délai, ou en panne)
+  // répond 503, jamais 403 access_disabled ni 404 : la caisse y voit un
+  // incident de connexion (nouvel essai, clé gardée), pas une déconnexion ni
+  // une carte inconnue.
+  const baseIndisponible = (etape, error) => {
+    console.error(`[scan] lecture ${etape} impossible :`, error.message);
+    return res.status(503).json({ error: 'database_unavailable' });
+  };
+
   let pointDeVenteId = null;
   if (req.scannerRole === 'scanner') {
-    const { data: pdv } = await supabase
+    const { data: pdv, error: errPdv } = await supabase
       .from('points_de_vente')
       .select('id, actif, deleted_at')
       .eq('id', req.pointDeVenteId)
       .eq('marchand_id', req.marchandId)
       .maybeSingle();
+    if (errPdv) return baseIndisponible('boutique', errPdv);
     // Coupée (actif=false), archivée (deleted_at), ou introuvable → refus.
     if (!pdv || pdv.deleted_at || !pdv.actif) {
       return res.status(403).json({ error: 'access_disabled' });
@@ -53,13 +63,14 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
     // Token marchand : refusé si le réseau a AU MOINS une boutique provisionnée
     // (index partiel idx_points_de_vente_reseau_actif). Sinon mono-site → autorisé,
     // point_de_vente_id reste NULL, comportement identique à aujourd'hui.
-    const { data: reseau } = await supabase
+    const { data: reseau, error: errReseau } = await supabase
       .from('points_de_vente')
       .select('id')
       .eq('marchand_id', req.marchandId)
       .is('deleted_at', null)
       .not('scanner_login', 'is', null)
       .limit(1);
+    if (errReseau) return baseIndisponible('réseau', errReseau);
     if (reseau && reseau.length > 0) {
       return res.status(403).json({ error: 'use_boutique_login' });
     }
@@ -75,19 +86,22 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   let client = null;
 
   if (RE_UUID.test(raw)) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('clients').select(SELECT_CLIENT)
       .eq('pass_serial_number', raw)
       .eq('marchand_id', req.marchandId)
       .is('deleted_at', null)
       .single();
+    // PGRST116 : aucune ligne (ou plusieurs) pour .single() → carte inconnue.
+    if (error && error.code !== 'PGRST116') return baseIndisponible('client', error);
     client = data || null;
   } else if (/^[0-9a-f]{6}$/.test(raw)) {
-    const { data: matches } = await supabase
+    const { data: matches, error } = await supabase
       .from('clients').select(SELECT_CLIENT)
       .eq('marchand_id', req.marchandId)
       .is('deleted_at', null)
       .ilike('pass_serial_number', '%' + raw);
+    if (error) return baseIndisponible('code de secours', error);
     if (matches && matches.length > 1) {
       // Collision (ultra-rare) : jamais de tampon aveugle → on renvoie les
       // candidats pour désambiguïsation d'un tap côté caisse.

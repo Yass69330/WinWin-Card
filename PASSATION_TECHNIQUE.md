@@ -3854,6 +3854,66 @@ SELECT CASE WHEN grouping(date_trunc('day', date_scan)) = 1 THEN 'TOTAL' ELSE to
 À lire : les jours avant le déploiement des écrans avec clé (11b) n'en ont pas, c'est normal ;
 ce qui compte est `dernier_scan_sans_cle` et le pourcentage des derniers jours.
 
+## 15 tervicies. ÉTAPE 16 (RÉDUITE) : CODÉE (07/10, LOCAL, NON POUSSÉ)
+
+**Correction de pilotage (07/10, Yass) appliquée :** 5 s par appel, **sans budget partagé
+par scan, sans ligne `[base] DÉLAI`**. Elle remplace les « 6 s + budget de 9 s » et la ligne
+de journal décidés plus haut (§15 duovicies). Aucune migration. **Push : attend le feu vert
+de Yass ET le résultat de la requête D.**
+
+**Livré (backend) :**
+- `src/services/supabase.js` : enveloppe `fetch` (option `global.fetch`) ; 5 s par appel ;
+  la coupure (`TimeoutError`) est relancée en `AbortError` (postgrest-js ne réessaie plus) ;
+  un `.abortSignal()` de l'appelant est gardé (`AbortSignal.any`). Seuls les chemins
+  `/rest/v1/` sont bornés. Second client exporté, `clientLong`, à 30 s.
+- `src/routes/scan.js` : les 4 lectures (boutique, réseau, client par UUID, code de
+  secours) lisent `error` → **503 `database_unavailable`** + ligne `[scan] lecture <étape>
+  impossible`. `.single()` sans ligne (`PGRST116`) reste 404. Les écrans n'ont pas changé :
+  un 5xx y est déjà un incident de connexion (un nouvel essai, clé gardée).
+- `clientLong` : tout `workers/cron.js`, export CSV (lecture des clients), `effacer_client`,
+  `admin_marchands_stats`, et dans `POST /api/notifications` les lectures `device_tokens`
+  et `passes` **et la mise à jour de `passes`** (voir décisions hors pilotage).
+- Filet : §14 (base lente, relais réglable devant PostgREST, second serveur) et §15
+  (coupure pendant que la base écrit). `tests/lancer.js` passe `urlSupabase` aux scénarios.
+
+**Preuves (07/10, conteneur, Node 22, PostgREST v12.2.12 local) :** `npm test` 135/135 avant,
+**147/147 après** ; les 12 nouveaux tests joués sur l'ancien `src/` : 7 KO (lecture lente
+servie en 200, panne réseau traitée en mono-site, panne client en 404, écriture jamais
+coupée). Scan, 120 scans en série par cas, avant / après (deux tours chacun) :
+délai base 100 ms → p50 327,0 / 327,5 ms (mono-site), 325,7 / 325,3 ms (boutique) ;
+délai 0 → 19–21 ms / 20–22 ms (bruit du conteneur). **Requêtes base par scan : 5,25 et
+5,00, identiques avant et après.** Lecture lente : 503 en ≈ 5 s, UNE requête (avant :
+4 requêtes, 11 s+, ou 200 si la base finit par répondre).
+
+**MESURÉ (était « non mesuré » en §15 duovicies), en local seulement :** quand le serveur
+coupe `crediter_scan` à 5 s (carte verrouillée 7 s par une autre session), **PostgREST finit
+la transaction** : solde crédité, une ligne. Le renvoi même clé rend 200 sans recréditer.
+À confirmer côté Supabase (passerelle devant PostgREST) : non mesuré en production.
+
+**Hypothèses (ce qui ferait casser) et limites :**
+- Pire cas d'un scan : authentification sans cache (lecture `marchands`, 5 s, puis passe
+  en cas de panne) + 3 appels = **20 s**, au-delà des 15 s de la caisse ; sans
+  l'authentification, 15 s pile. La caisse coupe alors d'elle-même (incident connexion,
+  clé gardée). Accepté avec la correction « sans budget ».
+- Une **erreur réseau** (connexion refusée, coupée) ou un 503 de PostgREST sur une lecture
+  restent réessayés par postgrest-js (1 + 2 + 4 s) : le délai ne couvre que la lenteur.
+- Une coupure pendant la lecture du **corps** de la réponse rend une `TimeoutError` non
+  convertie : elle devient une erreur lue (pas de nouvel essai, le code est après la boucle
+  de postgrest-js), pas une exception.
+- **Stockage non borné** (`/storage/v1/` exclu), comme avant.
+- Services appelés par le cron (`notif-registre`, caches…) restent sur le client 5 s : une
+  écriture du registre de plusieurs milliers de lignes en un lot pourrait être coupée
+  (journalisée, non mesurée à cette taille).
+- `AbortSignal.any` exige Node ≥ 20.3 (production : 24.10.0).
+- Sans clé d'idempotence (requête D), un renvoi après coupure recrédite : limite connue.
+
+**Décisions hors pilotage (07/10) :**
+- La **mise à jour de `passes`** d'une campagne (`notifications.js`) passe sur le client
+  long, pas seulement les lectures : même nature (tout un marchand en un appel) ; coupée à
+  5 s, la notification visible iPhone ne partirait pas.
+- Le stockage est exclu de l'enveloppe (« délai par appel BASE »).
+- Réponse 503 nommée `database_unavailable`.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :

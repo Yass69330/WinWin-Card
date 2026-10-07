@@ -2,6 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const jwt     = require('jsonwebtoken');
 const supabase = require('../services/supabase');
+const { clientLong } = supabase;   // 30 s par appel (étape 16) : admin_marchands_stats
 const asyncHandler = require('../utils/asyncHandler');
 const { suivre } = require('../services/arret');   // envois après la réponse, attendus à l'arrêt (étape 14a)
 const { authAdmin } = require('../middleware/auth');
@@ -44,7 +45,7 @@ router.get('/marchands', authAdmin, asyncHandler(async (req, res) => {
       .order('created_at', { ascending: false }),
     // Filtres (clients supprimés, scans annulés, boutiques archivées = base de
     // facturation) portés par la fonction SQL — cf. inventaire §13.
-    supabase.rpc('admin_marchands_stats'),
+    clientLong.rpc('admin_marchands_stats'),
   ]);
 
   if (error) return res.status(500).json({ error: error.message });

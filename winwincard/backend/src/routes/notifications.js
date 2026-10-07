@@ -1,6 +1,7 @@
 const express  = require('express');
 const router   = express.Router();
 const supabase = require('../services/supabase');
+const { clientLong } = supabase;   // 30 s par appel (étape 16) : lectures et écritures de campagne
 const asyncHandler = require('../utils/asyncHandler');
 const { suivre } = require('../services/arret');   // envois après la réponse, attendus à l'arrêt (étape 14a)
 const { authMarchand } = require('../middleware/auth');
@@ -77,11 +78,11 @@ router.post('/', authMarchand, asyncHandler(async (req, res) => {
 
   // Récupérer tokens Apple et passes Google en parallèle
   const [{ data: tokens, error: errT }, { data: passes }] = await Promise.all([
-    supabase
+    clientLong
       .from('device_tokens')
       .select('push_token')
       .eq('marchand_id', req.marchandId),
-    supabase
+    clientLong
       .from('passes')
       .select('serial_number')
       .eq('marchand_id', req.marchandId)
@@ -99,7 +100,7 @@ router.post('/', authMarchand, asyncHandler(async (req, res) => {
         .update({ notification_titre: null, notification_message: message })
         .eq('id', req.marchandId),
       // Met à jour notification_message sur chaque pass pour que changeMessage détecte le changement
-      supabase.from('passes')
+      clientLong.from('passes')
         .update({ notification_message: message })
         .eq('marchand_id', req.marchandId),
     ]);

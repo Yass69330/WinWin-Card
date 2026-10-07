@@ -1,5 +1,6 @@
 const cron    = require('node-cron');
-const supabase = require('../services/supabase');
+// Client long (30 s par appel, étape 16) : lectures et écritures par lot.
+const supabase = require('../services/supabase').clientLong;
 const { notif } = require('../i18n/messages');
 const registre = require('../services/notif-registre');
 const passages = require('../services/cron-passages');
