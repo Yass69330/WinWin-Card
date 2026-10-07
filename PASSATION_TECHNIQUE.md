@@ -3705,6 +3705,17 @@ réseaux, par la sonde `/__campagne/adresse` du serveur de test (aucun code à a
 **Non vérifié** : support IPv6 de l'entrée de Railway (forum Railway inaccessible depuis la
 session) ; nature des relais `152.233.x` / `79.127.x`.
 
+**Décisions de pilotage (07/10, diagnostic 17a validé).**
+- **Alerte : pas d'alerte sur le chemin du contrôle de santé** (sans en-tête, 0 adresse).
+- **Limite ACCEPTÉE : « une étape retirée par Railway ET en-tête forgé conservé »** donne 2
+  adresses, l'adresse forgée est retenue, aucune alerte. Compensée par le test des en-têtes
+  forgés, **rejoué après toute annonce de Railway** (et au minimum à chaque changement
+  constaté de la chaîne). Hypothèse qui fait casser le correctif : Railway cesse de
+  réécrire `X-Forwarded-For`.
+- **IPv6 : rien en 17a.** Si la mesure montre une adresse IPv6, la signaler au pilotage.
+- **Rien n'est codé** tant que les résultats de la mesure ne sont pas envoyés et validés
+  par le pilotage.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
