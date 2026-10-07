@@ -3603,7 +3603,7 @@ cible : 100 000 porteurs, 599 MB. Temps vus du pilote ; une caisse à Dubaï ajo
   jusqu'à 154 s. Proposition : un délai par appel à la base, au-dessus des 3,5 s mesurées
   en charge normale (par exemple 5 à 8 s), pour une erreur franche au lieu d'une attente.
 - **17** (limiteurs, au-delà de 17a) : limite propre au service web Apple, dimensionnée sur
-  ≈ 3,6 requêtes de carte par push (≈ 1 à 2 après l'étape 24) ; limite par clé pour les
+  ≈ 3,6 requêtes de carte par push (≈ 1 à 2 après le premier levier du rythme) ; limite par clé pour les
   machines.
 - **18** (bandeaux) : rendus de 14 à 30 ms en réel, non bloquants. Mais ≈ 1 400 lectures
   au stockage par campagne de 1 000 appareils. Priorité inchangée.
@@ -3613,12 +3613,16 @@ cible : 100 000 porteurs, 599 MB. Temps vus du pilote ; une caisse à Dubaï ajo
   « pas_fini » à 60 min) ; plafond par épisode à prévoir.
 - **23** (envois) : 410 et purge du registre fonctionnent ; un message Google part vers
   toutes les cartes pendant une campagne (1 018).
-- **24** (liste « mises à jour depuis ») : la cause de la revérification est trouvée et
-  mesurée. C'est le premier levier de l'option 2 du rythme.
+- **Liste « mises à jour depuis »** (`apple-wallet.js:85-92`) : cause de la revérification
+  trouvée et mesurée. **Décision du pilotage (07/10) : ce n'est pas une étape à part, c'est
+  le PREMIER LEVIER du chantier « rythme des campagnes ».** On ne l'ajoute pas à la feuille
+  de route. Note : la synthèse porte déjà une ligne 24 sur ce sujet
+  (`docs/audit/99-synthese.md:338`). Elle n'a pas été modifiée ; son rattachement au
+  chantier est à acter par le pilotage.
 - **Chantier « rythme des campagnes »** :
   - envoi par lots calibré (≈ 1 à 2 pushes par seconde prouvés sans gêne) ;
   - réponse immédiate à l'écran du marchand ;
-  - moins de requêtes par retour (étape 24) ;
+  - moins de requêtes par retour (premier levier : la liste « mises à jour depuis ») ;
   - file prioritaire pour les caisses ;
   - **série du seuil** (paliers 123, 308 et 615) **sortie de l'étape 15, jouée dans ce
     chantier, avant puis après correction** (décision du pilotage) ;
@@ -3636,7 +3640,31 @@ cible : 100 000 porteurs, 599 MB. Temps vus du pilote ; une caisse à Dubaï ajo
   (`generateur.js:57`), pas un défaut du serveur.
 - Coût réel de la série : à relever (usage Railway, facture Supabase).
 
-**Reste pour clore l'étape** :
+**Décisions de clôture (Yass, 07/10).**
+1. `tests/charge/` est versé sur la branche de production, inerte et hors de l'image,
+   avec la suppression de `scripts/load-test.js`, le `.dockerignore` et `tests/lancer.js`.
+   Trois preuves avant le push : `npm test` complet, `git diff` (`src/`, `Dockerfile`,
+   dépendances et `database/` intacts), et `tests/charge` absent de l'image.
+   **Réunies le 07/10** :
+   - `npm test`, avec les tests au navigateur : **173/173 OK** ;
+   - `git diff dc4a0ac` est VIDE sur `src/`, `Dockerfile`, `package.json`,
+     `package-lock.json` et `database/`. Ne changent que la passation, `.dockerignore`
+     (+3 lignes), `tests/lancer.js`, `tests/charge/` et la suppression de
+     `scripts/load-test.js` ;
+   - image de production construite avec Docker (copie locale du `Dockerfile` racine,
+     plus le seul certificat du proxy de la machine) : `/app/tests` contient
+     `lancer.js`, `navigateur` et `scenarios.js`. `tests/charge` et `load-test.js` sont
+     absents. Commande : `node src/index.js`.
+   Versé par avance rapide depuis `dc4a0ac` (commit qui porte ce texte).
+2. La liste « mises à jour depuis » est le premier levier du chantier « rythme des
+   campagnes », pas une étape à part.
+3. Serveur et imitateur de test éteints, pilote en `attente`. L'environnement de test est
+   gardé jusqu'à la fin de l'étape 18, au plus tard le 31/10.
+
+**Prochaine étape après la clôture : 17a** (`trust proxy` 2 et sa garde), diagnostic
+d'abord. Rien n'y est touché avant le message de Yass.
+
+**Reste pour clore l'étape** (avant ces décisions) :
 - verser `tests/charge/` sur la branche de production, inerte, hors de l'image (décision 6
   du temps 1, sur feu vert) ;
 - garder l'environnement de test jusqu'à la fin de l'étape 18 (au plus tard le 31/10),
