@@ -3560,6 +3560,88 @@ Variante, une seule journée et un seul chargement : un petit ajout aux outils (
 marchands de 123, 308 et 615 porteurs dans `donnees.sql`, cible de campagne choisie par
 variable). À coder seulement sur feu vert.
 
+### G. RAPPORT FINAL DE L'ÉTAPE 15 (07/10)
+
+**Banc** : local, 4 cœurs, délai base posé à 100 ms. **Réel** : Railway Amsterdam +
+Supabase Micro Paris (x86, PostgreSQL 17.11, PostgREST 14.18). Base de test à la taille
+cible : 100 000 porteurs, 599 MB. Temps vus du pilote ; une caisse à Dubaï ajoute ≈ 0,28 s.
+
+| Mesure | Banc | Réel |
+|---|---|---|
+| requête base, méd. | 100 ms posés | **107 ms** |
+| scan seul, méd. / p99 | 340–455 / ≈ 500 ms | 345 / 616 ms |
+| pointe ×3, méd. / p99 / max | 420 / 495 / — ms | 297 / 514 / 730 ms |
+| pointe ×10, méd. / p99 / max ; boucle max | 350 / 471 / — ms ; 105 ms | 347 / 994 / 1 481 ms (547/547) ; 52 ms |
+| dashboard, palier 5 000 | 120–320 ms | < 0,75 s |
+| dashboard, palier 50 000 : stats / group-stats / clients | — | réseau 820 / 748 / 168 ms ; plafond 828 / **1 505** / 230 ms (listes coupées à 1 000) |
+| campagne vers 1 000 appareils : caisse méd. / max | 1,1–2,9 s / 26 s (processeur) | **11,7 s / 154 s**, puis 94,6 s / 134 s (file de l'API de données) |
+| cron complet, palier 50 000 | 49 min | **57 min** (08:00:00 → 08:57:15) |
+| rush ×1 pendant le cron (2 h 30) : caisse méd. / p99 / max | méd. 430 ms | 313 / 633 / 1 730 ms ; base max 3,5 s ; boucle max 321 ms ; 343 Mo |
+| campagnes réelles de la production (133 à 187 iPhones) | — | aucune file ; retours groupés en 15 à 40 s |
+
+**Découvertes.**
+- Le goulot des campagnes est **l'API de données de Supabase**, pas le serveur : le
+  stockage est resté rapide pendant la tempête.
+- Le seuil se situe **entre ≈ 170 et 1 000 appareils**, à la taille cible.
+- **4 413 pushes étalés** (≈ 1,3 par seconde, cron et rush) n'ont pas gêné les caisses :
+  le rythme d'envoi est la solution.
+- L'écran du marchand reste bloqué **52 s** pendant une campagne.
+- Un iPhone **revérifie toutes ses cartes** à chaque push (`apple-wallet.js:85-92`) :
+  15 978 `GET /v1/passes` pour 4 413 pushes, soit ≈ 3,6 par push.
+- Les limiteurs comptent **par relais de Railway** ; l'en-tête `Forwarded` est
+  falsifiable.
+- Une reconstruction depuis le dépôt dépend du réglage « exposition automatique » ;
+  `credit_referral` et `effacer_client` reposent sur le droit d'exécution de `PUBLIC`.
+- `near_reward` : **895 clients** notifiés d'un coup, chez le marchand plafond (plafond
+  de 1 000 lignes).
+- Le cron a purgé 7 013 lignes du registre ; 47 refus APNs 410 (simulés).
+
+**Conclusions par étape.**
+- **17a** (vraie adresse) : `trust proxy` 2 et sa garde (DÉCIDÉ), prouvés d'abord au
+  test ; juste après la clôture.
+- **16** (panne de base lue au comptoir) : sans délai maximal, la caisse a attendu
+  jusqu'à 154 s. Proposition : un délai par appel à la base, au-dessus des 3,5 s mesurées
+  en charge normale (par exemple 5 à 8 s), pour une erreur franche au lieu d'une attente.
+- **17** (limiteurs, au-delà de 17a) : limite propre au service web Apple, dimensionnée sur
+  ≈ 3,6 requêtes de carte par push (≈ 1 à 2 après l'étape 24) ; limite par clé pour les
+  machines.
+- **18** (bandeaux) : rendus de 14 à 30 ms en réel, non bloquants. Mais ≈ 1 400 lectures
+  au stockage par campagne de 1 000 appareils. Priorité inchangée.
+- **21** (plafond de 1 000 lignes) : la règle 8 est confirmée. Le plafond borne
+  aujourd'hui les rafales des campagnes et de `near_reward`.
+- **22** (relance) : cron de 57 min à la taille cible (au-delà, `/health/cron` signale
+  « pas_fini » à 60 min) ; plafond par épisode à prévoir.
+- **23** (envois) : 410 et purge du registre fonctionnent ; un message Google part vers
+  toutes les cartes pendant une campagne (1 018).
+- **24** (liste « mises à jour depuis ») : la cause de la revérification est trouvée et
+  mesurée. C'est le premier levier de l'option 2 du rythme.
+- **Chantier « rythme des campagnes »** :
+  - envoi par lots calibré (≈ 1 à 2 pushes par seconde prouvés sans gêne) ;
+  - réponse immédiate à l'écran du marchand ;
+  - moins de requêtes par retour (étape 24) ;
+  - file prioritaire pour les caisses ;
+  - **série du seuil** (paliers 123, 308 et 615) **sortie de l'étape 15, jouée dans ce
+    chantier, avant puis après correction** (décision du pilotage) ;
+  - déclencheur : premier marchand à ≈ 500 porteurs, ou signature d'un réseau.
+
+**Limites du test.**
+- iPhones imités qui reviennent en 1 à 5 s : le pire cas.
+- 2,7 cartes par appareil, et une base 24 fois plus grosse que la production : taille
+  cible.
+- x86 au test contre ARM en production, versions différentes : les temps absolus sont
+  incertains.
+- Le générateur et les iPhones passent par le réseau privé, pas par l'entrée publique.
+- Délais de Google imités (sauf création).
+- 211 réponses 401 pendant le rush : artefact du jeton de 2 h du générateur
+  (`generateur.js:57`), pas un défaut du serveur.
+- Coût réel de la série : à relever (usage Railway, facture Supabase).
+
+**Reste pour clore l'étape** :
+- verser `tests/charge/` sur la branche de production, inerte, hors de l'image (décision 6
+  du temps 1, sur feu vert) ;
+- garder l'environnement de test jusqu'à la fin de l'étape 18 (au plus tard le 31/10),
+  pour 17a et la série du seuil.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
@@ -3889,6 +3971,12 @@ la branche locale avait 20 commits de retard sur `origin/claude/keen-goldberg-MX
 (`git merge --ff-only`), aucun changement local n'existant : rien perdu, rien poussé.
 
 ---
+
+*Mis à jour le 2026-10-07 par la session « SETUP 4 », seizième chantier (fin des mesures) :
+cron complet à la taille cible en 57 min, sans gêner les caisses ; 4 413 pushes étalés,
+sans gêne ; dashboard au palier 50 000 ≤ 1,5 s. Les 401 du rush sont un artefact du jeton
+de 2 h du générateur. Série du seuil reportée au chantier « rythme des campagnes ». RAPPORT
+FINAL au §15 vicies G. Mesures de l'étape 15 terminées.*
 
 *Mis à jour le 2026-10-06 par la session « SETUP 4 », seizième chantier (suite 5) :
 résultats de Yass sur les en-têtes. Railway réécrit `X-Forwarded-For` et `X-Real-IP`, mais
