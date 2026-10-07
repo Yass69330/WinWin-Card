@@ -3773,6 +3773,39 @@ routes Apple restent sous le limiteur global (limite propre au service web Apple
 - Filet : section 13 de `tests/scenarios.js`, 135/135 (la 61ᵉ inscription est refusée, un
   autre client derrière le même relais passe).
 
+## 15 duovicies. ÉTAPES 16 (RÉDUITE) ET 17 REGROUPÉES : DIAGNOSTIC (07/10, rien codé)
+
+**16, délai par appel base.**
+- Tous les appels passent par un seul client, `src/services/supabase.js:8-14`, sans option
+  `global.fetch` (supabase-js 2.107.0 l'accepte). ≈ 190 appels dans 17 fichiers.
+- **Piège mesuré (script jetable, hors dépôt) :** un `fetch` enveloppé par
+  `AbortSignal.timeout` rend une `TimeoutError`, que postgrest-js ne reconnaît pas
+  (`index.cjs:289` ne teste que `AbortError`). Un `GET` est alors RÉESSAYÉ 3 fois
+  (attentes 1, 2, 4 s) : délai de 1 s → **11 s et 4 requêtes** ; une RPC (POST) : 1 s.
+  Variante qui tient : relancer l'erreur en `AbortError` dans l'enveloppe → 1 s, 1 requête
+  pour les deux. `.abortSignal()` par appel (`index.js:163`, `cron-passages.js:106`) : 1 s.
+- **Les erreurs de lecture se lisent mal au scan** (`scan.js:44-46, 56, 78-83, 86`) : `error`
+  n'est pas lu. Une base lente ou en panne donne `403 access_disabled` (boutique), un
+  réseau traité comme mono-site (`:56`, ouvert) ou `404 Pass not found`. Le scanner
+  traduit `access_disabled` par l'écran de connexion (`scanner/index.html:1279`) et le 404
+  par « carte inconnue » (`:1304`). Un délai sans ce correctif aggraverait le défaut F3.
+- Un scan fait jusqu'à 3 appels en série : par appel seul, 3 × 6 s dépasse les 15 s de la
+  caisse (`DELAI_SCAN_MS`, `scanner/index.html:1198`, `dashboard/index.html:1735`).
+- Écriture coupée : `crediter_scan` est UNE transaction (`migration_051:84-175`, verrou
+  `FOR UPDATE` du client, clé lue après le verrou, index unique
+  `scans_cle_idempotence_unique`). Le crédit peut aboutir alors que le serveur répond 503 ;
+  le renvoi, même clé (gardée par l'écran, `scanner/index.html:1166-1178`), rend
+  `deja_enregistre`. Si la base finit encore la première transaction, le renvoi attend le
+  verrou puis voit la ligne. Hypothèse non mesurée : PostgREST annule-t-il la requête quand
+  le client coupe. Limite : la clé reste FACULTATIVE (`scan.js:17-22`) ; sans elle, le renvoi
+  recrédite.
+
+**17, limiteurs** (tous comptés par `req.ip`, sans `keyGenerator`) : global 300 / 15 min
+(`index.js:45`) ; inscription 60 / h (`rateLimiters.js:4`, `clients.js:14`) ; marchand 10 / h
+(`:13`, `index.js:114`) ; admin 10 / h (`:22`, `index.js:122`) ; caisse 20 / h (`:33`,
+`index.js:112`) ; diagnostic 30 / h (`:45`, `diag.js:49`). Tous comptent AUSSI les
+tentatives réussies.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
