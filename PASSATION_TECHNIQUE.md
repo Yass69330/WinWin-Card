@@ -3738,6 +3738,22 @@ session) ; nature des relais `152.233.x` / `79.127.x`.
   `database/requetes/limites_adresse_17a.sql` (inscriptions en 1 h, scans en 15 min). Ni la
   table `clients` ni `scans` ne portent la boutique d'inscription : approchée par marchand.
 
+**Compléments 17a (07/10).**
+- **Tests navigateur non rejoués pour 17a** : ils expirent dans cet environnement, y compris
+  sur `05ead18` (`Navigateur : scanner (tampons)`, 30 s). Non bloquant, décision de Yass :
+  aucun écran modifié. Filet sans navigateur : 133/133.
+- **`/health/db`** est bien le contrôle de santé de Railway (réglage Healthcheck Path,
+  étape 8) : l'exception de la garde est confirmée.
+- **Limiteur global et routes Apple/cartes (EN ATTENTE de décision).** `index.js:45` est monté
+  AVANT toutes les routes : il couvre `/v1/devices/*`, `/v1/passes/*`, `/v1/log`
+  (`apple-wallet.js`), le téléchargement de carte (`/api/passes/:serial/apple`), Google
+  (`/api/google-wallet/pass/:serial`), les pages et les fichiers statiques, sans exception.
+  Avec la vraie adresse, le compteur est par adresse du client (un iPhone ≈ 3,6 à 5
+  requêtes par push, très loin de 300) ; le risque ne vient que d'une adresse PARTAGÉE
+  (4G à adresse commune, Wi-Fi de boutique avec la caisse). Un 429 sur la route Apple
+  retarde une mise à jour de carte (l'iPhone réessaie) ; sur la caisse, il bloquerait un
+  scan.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
