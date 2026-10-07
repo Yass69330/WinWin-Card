@@ -610,6 +610,53 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     }
     delete require.cache[require.resolve('../src/services/arret')];
   }
+
+  // ── 13. Adresse du client : trust proxy 2 et sa garde (étape 17a) ─────────
+  titre('13. Adresse du client : trust proxy 2 et sa garde (étape 17a)');
+  {
+    // La garde seule : horloge simulée, journal simulé.
+    const { gardeAdresse } = require('../src/middleware/gardeAdresse');
+    const lignes = []; let t = 1000000;
+    const g = gardeAdresse({ journal: { warn: m => lignes.push(m) }, maintenant: () => t });
+    const passer = (xff, chemin = '/api/x') => { let suite = 0; g({ headers: xff === undefined ? {} : { 'x-forwarded-for': xff }, method: 'GET', path: chemin }, {}, () => { suite++; }); return suite; };
+    verifier('garde : 2 adresses → aucune alerte, la requête passe (synchrone)', [passer('1.1.1.1, 2.2.2.2'), lignes.length], [1, 0]);
+    verifier('garde : le contrôle de santé de Railway (/health/db, sans en-tête) → aucune alerte', [passer(undefined, '/health/db'), lignes.length], [1, 0]);
+    let passees = 0;
+    for (let i = 0; i < 1000; i++) passees += passer(i % 2 ? '1.1.1.1' : '1.1.1.1, 2.2.2.2, 3.3.3.3');
+    verifier('garde : 1 000 requêtes à 1 ou 3 adresses → UNE alerte, aucune requête bloquée', [lignes.length, passees], [1, 1000]);
+    verifier('garde : l\'alerte ne contient aucune adresse', /\d+\.\d+\.\d+\.\d+/.test(lignes[0]), false);
+    t += 59 * 60 * 1000; passer('1.1.1.1');
+    verifier('garde : 59 min plus tard, toujours une seule alerte', lignes.length, 1);
+    t += 2 * 60 * 1000; passer('1.1.1.1');
+    verifier('garde : plus d\'une heure après, une deuxième alerte', lignes.length, 2);
+    verifier('garde : le module n\'appelle ni la base ni le réseau (aucun require, aucun await)',
+      /require\(|await |fetch\(|supabase/.test(require('fs').readFileSync(require.resolve('../src/middleware/gardeAdresse'), 'utf8').replace(/\/\/.*$/gm, '')), false);
+
+    // Le vrai serveur : ici le test joue l'entrée de Railway (« client, relais »).
+    const s13 = await demarrerServeur('adresse');
+    const post = (chemin, h) => fetch(s13.url + chemin, { method: 'POST', headers: { 'Content-Type': 'application/json', ...h },
+      body: JSON.stringify({ email: 'x@example.com', password: 'faux' }) }).then(r => r.status);
+    const alertes = () => (s13.journal().match(/\[adresse\] ALERTE/g) || []).length;
+    const RELAIS = '198.51.100.1';
+    await fetch(s13.url + '/health/db');
+    verifier('serveur : /health/db sans en-tête → aucune alerte', alertes(), 0);
+    const A = { 'X-Forwarded-For': `203.0.113.5, ${RELAIS}` }, B = { 'X-Forwarded-For': `203.0.113.6, ${RELAIS}` };
+    const rA = []; for (let i = 0; i < 11; i++) rA.push(await post('/api/merchants/login', A));
+    verifier('serveur : le compteur est celui du CLIENT (10 par heure : la 11e est refusée, 429)', [rA.slice(0, 10).includes(429), rA[10]], [false, 429]);
+    verifier('… un AUTRE client derrière le MÊME relais n\'est pas refusé (avec trust proxy 1, il l\'aurait été)', await post('/api/merchants/login', B) === 429, false);
+    // Forgé : X-Real-IP et Forwarded ne sont jamais lus ; en changer ne donne pas un nouveau compteur.
+    const rF = []; for (let i = 0; i < 11; i++) rF.push(await post('/api/admin/login', { 'X-Forwarded-For': `203.0.113.20, ${RELAIS}`,
+      'X-Real-IP': `192.0.2.${100 + i}`, Forwarded: `for=192.0.2.${150 + i}` }));
+    verifier('serveur : X-Real-IP et Forwarded forgés, différents à chaque requête → ignorés (la 11e est refusée)', [rF.slice(0, 10).includes(429), rF[10]], [false, 429]);
+    verifier('serveur : 22 requêtes à 2 adresses → toujours aucune alerte', alertes(), 0);
+    // Chaîne à 1 ou 3 adresses : alerte, une seule, et la requête passe.
+    const r1 = await post('/api/scanner/login', { 'X-Forwarded-For': '192.0.2.77' });
+    const r3 = await post('/api/scanner/login', { 'X-Forwarded-For': `192.0.2.77, 203.0.113.9, ${RELAIS}` });
+    const r0 = await post('/api/scanner/login', {});
+    verifier('serveur : chaînes à 1, 3 et 0 adresse → requêtes servies, UNE alerte (au plus 1 par heure)', [[r1, r3, r0].includes(429), alertes()], [false, 1]);
+    verifier('serveur : l\'alerte du journal ne contient aucune adresse', /ALERTE[^\n]*\d+\.\d+\.\d+\.\d+/.test(s13.journal()), false);
+    s13.processus.kill();
+  }
 }
 
 module.exports = { FIXTURES, jouer, M, B };

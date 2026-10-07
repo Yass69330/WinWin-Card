@@ -20,9 +20,15 @@ const cors = require('cors');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
+const { gardeAdresse, RELAIS_ATTENDUS } = require('./middleware/gardeAdresse');
 
 const app = express();
-app.set('trust proxy', 1); // Railway / reverse proxy — requis pour rate limiting par IP réelle
+// Railway / reverse proxy — requis pour rate limiting par IP réelle.
+// 2 relais de confiance : l'entrée de Railway écrit « client, relais » dans X-Forwarded-For
+// (mesuré le 07/10). Avec 1, Express retenait le relais et tous les clients d'un relais
+// partageaient un compteur. La garde ci-dessous alerte si ce nombre change.
+app.set('trust proxy', RELAIS_ATTENDUS);
+app.use(gardeAdresse());
 
 // ── Sécurité & middlewares ───────────────────────────────────
 app.use(helmet({

@@ -3716,6 +3716,28 @@ session) ; nature des relais `152.233.x` / `79.127.x`.
 - **Rien n'est codé** tant que les résultats de la mesure ne sont pas envoyés et validés
   par le pilotage.
 
+**Mesure sur le serveur de test (07/10, Yass) et code 17a (LOCAL, NON POUSSÉ).**
+- Mesure : **2 adresses à chaque requête**, vrai client en premier, relais variable (`152.233.x`,
+  `79.127.178.81/82`). Wi-Fi Dubaï ×5, 4G France ×5, navigation privée comprise.
+  **Aucune adresse IPv6** : rien en 17a. Serveur de test et pilote éteints après la mesure.
+- Code : `trust proxy` 2 (`index.js`, constante `RELAIS_ATTENDUS`) et la garde
+  `src/middleware/gardeAdresse.js` : alerte au journal, au plus 1 par heure, si
+  `X-Forwarded-For` n'a pas exactement 2 adresses ; pas d'alerte sur `/health/db` ; l'alerte
+  ne contient aucune adresse ; aucun `await`, aucune requête base (≈ 53 ns par requête,
+  mesuré). Jamais `Forwarded` ni `X-Real-IP`. Filet : section 13 de `tests/scenarios.js`.
+- **Hypothèses (ce qui le ferait casser) :** Railway garde 2 adresses et RÉÉCRIT
+  `X-Forwarded-For` ; `/health/db` est bien le contrôle de santé de Railway ; l'alerte lue
+  dans les journaux de Railway est regardée par quelqu'un (aucun envoi, ni mail ni Sentry).
+- **Limites :** la garde ne voit pas « étape retirée + en-tête forgé conservé » (acceptée,
+  voir plus haut) ; le test d'en-têtes forgés contre l'entrée de Railway reste à rejouer sur
+  le serveur de test, le filet local ne jouant que l'entrée (« client, relais »).
+- **Dette outil (non corrigée) :** le pilote, étape `adresse`, échoue (« fetch failed »)
+  quand `IMITATEUR` est renseignée et l'imitateur éteint (`generateur.js:250`, `fetch` non
+  protégé). Contournement : retirer `IMITATEUR` le temps de l'étape, puis la remettre.
+- **Contrôle des limites avec la vraie adresse :** requête SQL manuelle
+  `database/requetes/limites_adresse_17a.sql` (inscriptions en 1 h, scans en 15 min). Ni la
+  table `clients` ni `scans` ne portent la boutique d'inscription : approchée par marchand.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
