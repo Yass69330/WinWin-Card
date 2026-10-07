@@ -3941,8 +3941,9 @@ compris, hors du global ; connexion caisse 20 ÉCHECS / h / adresse (les échecs
 sur la même adresse sont acceptés) ; correctif de la connexion caisse validé (503 sur panne,
 seuls les 4xx comptent) ; inscriptions 60 / h, marchand 10 / h, admin 10 / h, diagnostic
 30 / h inchangés. Aucune migration. **Poussé le 07/10 sur feu vert de Yass**, en avance rapide
-(`c349c1f..f431ae0`). Contrôles en production (déploiement, connexion caisse, scan et
-annulation, en-tête `ratelimit-limit: 1000` sur `/v1`) : à faire par Yass.
+(`c349c1f..f431ae0`). **Contrôles en production OK (Yass, 07/10)** : déploiement actif, scan
+test et annulation réussis. Correctif de la connexion marchand poussé ensuite (`a3fadde`,
+voir plus bas).
 
 **Livré (backend) :**
 - `middleware/rateLimiters.js` : `limiterAppleWallet` (1 000 / 15 min) ; `limiterScannerLogin`
@@ -3991,7 +3992,9 @@ inchangées (5,25 et 5,00)**.
   ou en panne → `marchand` nul → **401 « Invalid credentials »** à un bon mot de passe, et
   ce 401 est compté par `limiterMarchandLogin` (10 / h, toutes réponses comptées) : 10
   essais pendant une panne bloquent le dashboard une heure.
-  **CORRIGÉ ensuite (validé par Yass le 07/10, commit séparé, LOCAL, NON POUSSÉ)** :
+  **CORRIGÉ ensuite (validé par Yass le 07/10, commit séparé `a3fadde`, POUSSÉ le 07/10 en
+  avance rapide `f431ae0..a3fadde` ; contrôles à faire par Yass : déploiement vert avec
+  « WinWin Card API démarré », connexion au dashboard marchand)** :
   `merchants.js` lit `error` → 503 `database_unavailable` (`PGRST116`, aucune ligne,
   reste 401) ; `limiterMarchandLogin` ne compte plus les 5xx (`skipFailedRequests`,
   « échec » = statut ≥ 500) ; réussites et 4xx toujours comptées (10 / h inchangé).
