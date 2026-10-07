@@ -3934,13 +3934,15 @@ la transaction** : solde crédité, une ligne. Le renvoi même clé rend 200 san
 - Le stockage est exclu de l'enveloppe (« délai par appel BASE »).
 - Réponse 503 nommée `database_unavailable`.
 
-## 15 quatervicies. ÉTAPE 17 : LIMITEURS, CODÉE (07/10, LOCAL, NON POUSSÉ)
+## 15 quatervicies. ÉTAPE 17 : LIMITEURS, POUSSÉE (07/10, `f431ae0` sur `claude/keen-goldberg-MXslu`)
 
 **Décisions de Yass (07/10, diagnostic 17 validé)** : `/v1/*` 1 000 / 15 min / adresse, `/v1/log`
 compris, hors du global ; connexion caisse 20 ÉCHECS / h / adresse (les échecs d'un collègue
 sur la même adresse sont acceptés) ; correctif de la connexion caisse validé (503 sur panne,
 seuls les 4xx comptent) ; inscriptions 60 / h, marchand 10 / h, admin 10 / h, diagnostic
-30 / h inchangés. Aucune migration. **Push : attend le feu vert de Yass.**
+30 / h inchangés. Aucune migration. **Poussé le 07/10 sur feu vert de Yass**, en avance rapide
+(`c349c1f..f431ae0`). Contrôles en production (déploiement, connexion caisse, scan et
+annulation, en-tête `ratelimit-limit: 1000` sur `/v1`) : à faire par Yass.
 
 **Livré (backend) :**
 - `middleware/rateLimiters.js` : `limiterAppleWallet` (1 000 / 15 min) ; `limiterScannerLogin`
@@ -3977,17 +3979,27 @@ inchangées (5,25 et 5,00)**.
   requêtes par push, dette n°11) → ≈ 28 pushes en 15 min. Un 429 y retarde une mise à
   jour de carte, jamais un scan.
 - Le téléchargement initial de carte (`/api/passes/…`) reste sous le global (décidé).
-- **Écran de connexion du scanner non modifié** (`public/scanner/index.html:877-880`) : il
-  affiche le code brut de l'erreur. Sur une panne, la caissière lit donc
-  « database_unavailable » (au lieu de « identifiants invalides » avant) ; sur un 429,
-  « Too many attempts… » comme aujourd'hui. Un message traduit est un correctif d'écran
-  (toute modification du scanner recharge les caisses) : à décider.
+- **Écran de connexion du scanner : message brut — À TRAITER AVEC LA PROCHAINE MODIFICATION
+  DU SCANNER (décision de Yass, 07/10 : on n'y touche pas pour l'instant).**
+  `public/scanner/index.html:877-880` affiche le code brut de l'erreur : sur une panne, la
+  caissière lit « database_unavailable » (au lieu de « identifiants invalides » avant) ; sur
+  un 429, « Too many attempts… » comme aujourd'hui. Toute modification du scanner recharge
+  les caisses, d'où le regroupement.
 
 **Vérifié seulement (rien corrigé, à décider) — connexions marchand et admin :**
 - **Marchand** : `routes/merchants.js:18-24` ne lit pas `error` (`.single()`). Base lente
   ou en panne → `marchand` nul → **401 « Invalid credentials »** à un bon mot de passe, et
   ce 401 est compté par `limiterMarchandLogin` (10 / h, toutes réponses comptées) : 10
   essais pendant une panne bloquent le dashboard une heure.
+  **CORRIGÉ ensuite (validé par Yass le 07/10, commit séparé, LOCAL, NON POUSSÉ)** :
+  `merchants.js` lit `error` → 503 `database_unavailable` (`PGRST116`, aucune ligne,
+  reste 401) ; `limiterMarchandLogin` ne compte plus les 5xx (`skipFailedRequests`,
+  « échec » = statut ≥ 500) ; réussites et 4xx toujours comptées (10 / h inchangé).
+  Effet de bord de `skipFailedRequests` : une requête dont le client coupe la connexion
+  avant la réponse n'est pas comptée non plus. Tests (§14, relais) : lecture bloquée 8 s →
+  503 vers 5 s ; 12 connexions en panne → toutes 503, aucune 429 ; base revenue → 200 ;
+  1 réussite + 9 échecs puis 11e → 429 ; marchand inconnu, base saine → 401. **172/172.**
+  Ancien code : 5 KO (401 en panne, dashboard bloqué en 429 après le retour de la base).
 - **Admin** : `routes/admin.js:11-23` ne lit pas la base (mot de passe en variable
   d'environnement) : pas concerné.
 

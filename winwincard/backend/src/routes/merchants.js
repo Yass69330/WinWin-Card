@@ -15,11 +15,18 @@ router.post('/login', asyncHandler(async (req, res) => {
   }
 
   const field = slug ? 'slug' : 'email_contact';
-  const { data: marchand } = await supabase
+  const { data: marchand, error } = await supabase
     .from('marchands')
     .select('id, nom, slug, langue, type_programme, email_contact, password_hash, actif, token_version')
     .eq(field, identifier)
     .single();
+  // Étape 17 : lecture en erreur (base lente, coupée à 5 s, ou en panne) → 503,
+  // jamais 401 à un bon mot de passe ; non compté par le limiteur (5xx).
+  // PGRST116 : aucune ligne pour .single() → identifiants inconnus, 401.
+  if (error && error.code !== 'PGRST116') {
+    console.error('[merchants] connexion, lecture impossible :', error.message);
+    return res.status(503).json({ error: 'database_unavailable' });
+  }
 
   if (!marchand) return res.status(401).json({ error: 'Invalid credentials' });
   if (!marchand.actif) return res.status(403).json({ error: 'Account suspended' });

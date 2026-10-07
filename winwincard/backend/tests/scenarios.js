@@ -786,6 +786,32 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     regler(null, 0);
     const cRetour = await connexion('filet-b2', 'filet-mdp-b2', '203.0.113.60');
     verifier('… base revenue : la bonne connexion passe depuis la même adresse (200, jeton rendu)', [cRetour.statut, typeof (cRetour.corps && cRetour.corps.token)], [200, 'string']);
+    // Connexion marchand (dashboard) sur base coupée : 503, non comptée ; les
+    // réussites et les 4xx restent comptées (10 par heure).
+    sql(`UPDATE marchands SET password_hash = '${hashPassword('filet-mdp-marchand')}' WHERE id = '${M.tampons}'`);
+    const cxM = (password, xff = '203.0.113.62', slug = 'filet-tampons') => fetch(s14.url + '/api/merchants/login', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': `${xff}, 198.51.100.1` },
+      body: JSON.stringify({ slug, password }) })
+      .then(async r => ({ statut: r.status, corps: await r.json().catch(() => null) }));
+    regler(/^\/rest\/v1\/marchands/, 8000);
+    t1 = Date.now();
+    const mLente = await cxM('filet-mdp-marchand');
+    verifier('connexion marchand, lecture bloquée 8 s : 503 database_unavailable vers 5 s (avant : 401 « Invalid credentials »)',
+      [mLente.statut, mLente.corps && mLente.corps.error, dans(Date.now() - t1, 4800, 6500)], [503, 'database_unavailable', true]);
+    regler(/^\/rest\/v1\/marchands/, 0, true);
+    const mPanne = [];
+    for (let i = 0; i < 12; i++) mPanne.push((await cxM('filet-mdp-marchand')).statut);
+    verifier('… base en panne, 12 connexions de la même adresse : toutes 503, aucune 429 (un 5xx n\'est pas compté)',
+      [mPanne.every(x => x === 503), mPanne.includes(429)], [true, false]);
+    regler(null, 0);
+    const mRetour = await cxM('filet-mdp-marchand');
+    verifier('… base revenue : la bonne connexion passe depuis la même adresse (200, jeton rendu)', [mRetour.statut, typeof (mRetour.corps && mRetour.corps.token)], [200, 'string']);
+    const mFaux = [];
+    for (let i = 0; i < 9; i++) mFaux.push((await cxM('faux')).statut);
+    verifier('… réussites et 4xx toujours comptées : 1 réussite + 9 échecs (401) passent, la 11e tentative reçoit 429',
+      [mFaux.every(x => x === 401), (await cxM('filet-mdp-marchand')).statut], [true, 429]);
+    verifier('base saine, marchand inconnu : toujours 401 (pas 503)', (await cxM('x', '203.0.113.63', 'filet-inconnu')).statut, 401);
+    verifier('journal : lecture impossible de la connexion marchand écrite', s14.journal().includes('[merchants] connexion, lecture impossible'), true);
     verifier('journal : lectures impossibles de la connexion écrites (boutique, marchand)',
       ['boutique', 'marchand'].map(e => s14.journal().includes(`[scanner-auth] lecture ${e} impossible`)), [true, true]);
 

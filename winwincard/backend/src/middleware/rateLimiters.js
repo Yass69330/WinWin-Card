@@ -23,10 +23,15 @@ const limiterAdminLogin = rateLimit({
   legacyHeaders: false,
 });
 
-// Anti brute-force login marchand (même politique que l'admin)
+// Anti brute-force login marchand (même politique que l'admin) : 10 par heure,
+// réussites et 4xx comptées. Étape 17 : un 5xx (base lente ou en panne, 503)
+// n'est PAS compté (skipFailedRequests, « échec » = statut ≥ 500 ici) : sinon
+// dix essais pendant une panne bloqueraient le dashboard une heure.
 const limiterMarchandLogin = rateLimit({
   windowMs: 60 * 60 * 1000, // 1h
   max: 10,
+  skipFailedRequests: true,
+  requestWasSuccessful: (req, res) => res.statusCode < 500,
   message: { error: 'Too many attempts, please try again in an hour' },
   standardHeaders: true,
   legacyHeaders: false,
