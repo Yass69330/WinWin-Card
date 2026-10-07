@@ -3806,6 +3806,54 @@ routes Apple restent sous le limiteur global (limite propre au service web Apple
 `index.js:112`) ; diagnostic 30 / h (`:45`, `diag.js:49`). Tous comptent AUSSI les
 tentatives réussies.
 
+**Décisions de pilotage (07/10, diagnostic 16 + 17 validé). Ordre : 16 d'abord (un push,
+preuves et diff avant), puis 17. Rien n'est codé à ce jour.**
+
+*16 (réduite) :*
+- Enveloppe `fetch` dans `supabase.js` qui relance toute coupure de délai en `AbortError`
+  (sinon postgrest-js réessaie les lectures, 11 s au lieu de 1 s) : **6 s par appel**, et
+  **budget de 9 s par scan** (version la plus simple), sous les 15 s de la caisse.
+- **Les 4 corrections de lecture d'erreur au scan** : `scan.js:44-46, 56, 78-86`. Une
+  base lente ou en panne répond 503, jamais 403 `access_disabled` ni 404.
+- **Second client à 30 s** pour le cron (`workers/cron.js`), l'export CSV
+  (`clients.js:166`), `admin_marchands_stats` (`admin.js:47`), `effacer_client`
+  (`clients.js:173`) et les lectures de campagne (`notifications.js`).
+- **Une ligne `[base] DÉLAI` par coupure, au plus 1 par minute et par route**, sans requête
+  de plus.
+- **Clé d'idempotence : PAS obligatoire en 16.** On attend que la requête D (ci-dessous)
+  montre 100 % de scans avec clé sur les derniers jours. Tant que ce n'est pas le cas, un
+  renvoi sans clé recrédite : limite connue.
+- **« t38 point 5 »** = carte des chantiers t38, point 5 : angle mort de surveillance (le
+  serveur mesure moins de 1,5 s quand la caisse attend 9 s ; `/health` et `/health/db` ne
+  voient pas une base lente).
+- Hypothèses : l'enveloppe ne s'applique qu'au client supabase-js (pas aux appels
+  Apple/Google) ; PostgREST peut finir une transaction après la coupure du client (non
+  mesuré), le renvoi même clé attend alors le verrou du client.
+
+*17 :*
+- Limiteur `/v1/*` : **1 000 par 15 min et par adresse**, exclu du global (`skip`), **`/v1/log`
+  inclus** (`apple-wallet.js:210`).
+- Connexion caisse : **20 par heure, ÉCHECS seulement** (`skipSuccessfulRequests`).
+- Le reste **inchangé** (global 300 / 15 min, marchand 10 / h, admin 10 / h, diagnostic
+  30 / h). **Inscriptions : 60 par heure et par adresse conservés**, pas de compteur par
+  marchand ; **à revoir quand un réseau signe**.
+
+**Requête D (lecture seule, à lancer à la main dans Supabase, production) : part des scans
+avec clé d'idempotence, par jour, sur 14 jours.**
+```sql
+SELECT CASE WHEN grouping(date_trunc('day', date_scan)) = 1 THEN 'TOTAL' ELSE to_char(date_trunc('day', date_scan), 'YYYY-MM-DD') END AS jour,
+       count(*) AS scans,
+       count(cle_idempotence) AS avec_cle,
+       round(100.0 * count(cle_idempotence) / count(*), 1) AS pct_avec_cle,
+       max(date_scan) FILTER (WHERE cle_idempotence IS NULL) AS dernier_scan_sans_cle
+  FROM scans
+ WHERE date_scan >= now() - interval '14 days'
+ GROUP BY ROLLUP (date_trunc('day', date_scan))
+ ORDER BY 1 DESC;
+```
+À lire : les jours avant le déploiement des écrans avec clé (11b) n'en ont pas, c'est normal ;
+ce qui compte est `dernier_scan_sans_cle` et le pourcentage des derniers jours.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
