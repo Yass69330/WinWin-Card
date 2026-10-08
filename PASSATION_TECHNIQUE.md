@@ -4199,6 +4199,188 @@ du jour).
 7. Avec la landing premium : **choix des champs** et **produit favori** (point 3), après le
    correctif des consentements (7.1).
 
+## 15 sexvicies. t37 : RYTHME D'ENVOI DES CAMPAGNES — DIAGNOSTIC ET PROPOSITION (08/10, rien codé)
+
+**Décision de Yass (08/10)** : un plafond fixe de 1 000 destinataires n'est pas une
+solution ; t37 supprime le plafond des DESTINATAIRES de campagne, sans geler les caisses.
+Les listes du dashboard restent dans l'étape 21. Sources : §15 sexdecies à vicies G (étape
+15), audits 01, 04, A ; code de `a3fadde`. Le débit mesuré PENDANT la saturation n'est pas
+une capacité : il n'est pas utilisé ici.
+
+### 0. Ce que fait une campagne aujourd'hui (`src/routes/notifications.js:48-170`)
+
+Tout se passe dans la requête HTTP du marchand : lecture de TOUS les jetons et de toutes les
+cartes Google (`:80-90`, coupées à 1 000), mise à jour de `marchands` et de TOUTES les
+cartes du marchand (`:97-106`, 50 000 cartes en 1,3 s au banc), puis **tous les pushes en
+même temps** (`:109-125`), registre et `notification_logs` à la fin (`:128-160`). Mesuré :
+écran bloqué 51,8 s ; vers 1 000 appareils, scans méd. 11,7 s, max 154 s (file dans l'API de
+données de Supabase, pas dans le serveur).
+
+### 1. Les leviers
+
+**Coût d'un iPhone réveillé, route par route (avant tout « 304 »)** :
+
+| Route | Requêtes base | Ce qui existe | Ce qui manque |
+|---|---|---|---|
+| liste `GET /v1/devices/…/registrations` (`apple-wallet.js:81-104`) | 1 | `passesUpdatedSince` est lu, mais le filtre porte sur la carte jointe sans `!inner` : **il ne filtre rien**, toutes les cartes de l'appareil sont rendues ; `lastUpdated` vient de l'horloge de Node | le filtre réel ET l'horodatage pris en base, **corrigés ensemble** (dette n°11, ligne 24 de la synthèse ; l'un sans l'autre fait manquer des mises à jour) |
+| carte `GET /v1/passes/…` en **304** (`:108-131`) | **1** | **existe et marche** : `If-Modified-Since` comparé à `passes.updated_at` à la seconde. Ce sont les 1 175 « 304 » du test : les AUTRES cartes de l'appareil, revérifiées à cause de la liste | rien sur la route ; c'est la liste qui les provoque |
+| carte en **200** (`:133-165`) | **3, en série** (`passes`, `clients`, `marchands`) + génération 13-20 ms + images (logo et icône relus à chaque carte, `apple-pass.js:448-450` ; 1 387 lectures au stockage pendant le test) | `Last-Modified` posé | une seule requête (carte, client et marchand joints) ; images du marchand gardées en mémoire |
+| téléchargement initial `/api/passes/:serial/apple` | — | hors campagne | — |
+
+Au profil du test (2,7 cartes par appareil) : 1 + 3 + 1,7 × 1 ≈ **5,1 requêtes par appareil**
+(mesuré : 5 102 pour 995). Au profil de la production (≈ 1 carte) : **≈ 4**.
+
+| Levier | Requêtes | Effet sur les caisses | Risque | Effort |
+|---|---|---|---|---|
+| **a. Lots étalés, avancement en base** : la campagne devient une ligne en base ; l'écran reçoit une réponse immédiate ; un minuteur du serveur envoie un lot (par exemple 50 iPhone) toutes les 10 s, met à jour les cartes DU LOT, écrit registre et avancement | + 3 à 4 par lot (lire le lot suivant, mettre à jour ses cartes, écrire l'avancement et le registre), soit ≈ 0,07 par appareil ; supprime la mise à jour des 50 000 cartes d'un coup | **le pic ne dépend plus de la taille** : il vaut celui d'un lot, quelle que soit la campagne | moyen : durée (8 000 iPhone ≈ 27 min à 5 / s), reprise après coupure, double lancement | moyen : 1 migration, 1 boucle, 1 reprise au démarrage, écran |
+| **b1. Carte en 200 en une seule requête** | 3 → 1 par carte téléchargée | ≈ ÷ 2 de requêtes par appareil (4 → 2) : lots deux fois plus gros à charge égale | faible (même lecture, jointe) | faible |
+| **b2. Liste vraiment filtrée + horodatage en base** (ligne 24) | supprime les 304 des autres cartes : 0 en production (≈ 1 carte), − 1,7 par appareil au test | faible en production, fort pour les porteurs de plusieurs cartes (réseaux, multi-marchands) | **moyen** : une erreur = des cartes qui ne se mettent plus à jour, sans bruit ; à tester sur un vrai iPhone | moyen |
+| b3. Cache de la carte signée | 0 en campagne : chaque carte change une fois, le cache ne sert pas | aucun en campagne | faible à moyen (carte périmée) | moyen |
+| b4. Images du marchand en mémoire | 0 requête base ; − ≈ 3 lectures au stockage par carte | faible (le stockage est resté rapide) | faible | faible |
+| **c. File côté serveur, priorité aux caisses** : au plus N retours d'iPhone (`/v1/*`) traités en même temps (par exemple 10) ; les suivants attendent en mémoire, ou reçoivent 503 au-delà d'une attente | 0 | **protège le scan quoi qu'il arrive** (rafale d'iPhone, cron, retours imprévus) : les scans ne passent jamais derrière des milliers de cartes | moyen : cartes plus lentes à se mettre à jour, réglage de N ; comportement d'iOS sur 503 non vérifié | faible |
+| d1. Ne plus envoyer de message Google aux cartes iPhone (étape 23) | 0 requête base ; ≈ − 64 % des appels Google | aucun sur la base (Google ne rappelle pas notre serveur) | moyen (porteurs Apple ET Google : non mesuré) | faible à moyen |
+| d2. Un seul débit d'envoi partagé par la campagne et le cron | 0 | évite que les deux s'additionnent | faible | faible |
+
+Écartés : instance Supabase supérieure (coût, le pic demeure), deux répliques Railway (le
+serveur n'est pas le goulot), créneaux interdits (ne règlent pas la taille).
+
+### 2. Recommandation
+
+**En premier, ensemble : a + c + b1.**
+- a supprime le plafond des destinataires sans pic ;
+- c est le filet qui garantit la caisse, même si un lot est mal réglé ;
+- b1 divise par deux le coût de chaque retour, donc la durée des campagnes.
+- d2 dans le même chantier (même minuteur).
+**Ensuite** : b2 (avec la ligne 24, test sur vrai iPhone), d1 (étape 23). b3 et b4 :
+seulement si les mesures le demandent.
+**Débit de départ** : 50 iPhone toutes les 10 s (5 par seconde), réglable par variable,
+calé ensuite par la série du seuil. Repère : la production a servi 133 à 187 retours
+groupés en 15 à 40 s sans file. Durées : 1 500 porteurs (≈ 1 200 iPhone) ≈ 4 min ; 10 000
+porteurs (≈ 8 100) ≈ 27 min ; avec b1, ≈ 2 fois moins si les mesures le permettent.
+
+### 3. Les cas qui font peur
+
+- **Redéploiement ou crash au milieu.** Aujourd'hui : l'arrêt propre attend 20 s, puis tout
+  ce qui reste est perdu ; le registre et `notification_logs` ne sont écrits qu'à la fin
+  (ni trace, ni quota consommé : le marchand relance et les premiers reçoivent deux fois).
+  Avec a : l'avancement est en base après chaque lot ; au démarrage, le serveur lit les
+  campagnes « en cours » (1 lecture au démarrage, pas de requête régulière) et reprend au
+  curseur. Ordre proposé : **Apple** envoyé PUIS curseur écrit (au pire un lot reçoit deux
+  pushes silencieux : sans effet visible, la carte n'a pas changé) ; **Google** : curseur
+  écrit AVANT l'envoi (au pire un lot perd son message, jamais de doublon visible ni de quota
+  gâché). Hypothèse : une seule instance Railway ; la campagne est « prise » par
+  l'instance (comme `cron_passages.instance`).
+- **Double clic, deux campagnes proches.** Aujourd'hui : quota lu puis envoi, sans verrou
+  (`notifications.js:58-75`) : deux clics passent. Avec a : **une seule campagne en cours
+  par marchand** (index unique partiel en base) ; la seconde est refusée (409, « une
+  campagne est en cours »). Le quota se compte à la création.
+- **Le cron de 08:00 UTC.** Il envoie en série, ≈ 0,9 s par carte (étape 15 : 4 413 pushes
+  étalés n'ont pas gêné les caisses). Proposition : un seul débit partagé dans le serveur
+  (d2) ; pendant le passage du cron, la campagne ralentit de moitié. Zéro requête.
+- **Apple et Google ensemble.** Rythmes différents : le goulot vient des retours
+  d'iPhone (Apple). Google ne rappelle jamais notre serveur ; ses envois coûtent un appel
+  à Google (méd. 520 ms) et une ligne de registre. Proposition : Google dans le même lot,
+  en parallèle borné (5 à 10 appels simultanés), sans attendre les retours d'iPhone. Le
+  quota de l'API Google (par projet) n'est pas connu : console Google, à relever.
+
+### 4. Google
+
+- **Quota : 3 notifications par carte et par 24 h**, messages `TEXT_AND_NOTIFY` compris,
+  au-delà `QuotaExceededException` : **confirmé par la documentation officielle le 26/09**
+  (audit A §5.2, lien cité) ; **non observé** en production (le registre ne le verrait pas :
+  un refus pour quota répond 200). Non revérifié aujourd'hui : la page de Google n'est pas
+  joignable depuis ce poste. Les mises à jour d'objet ne notifient pas (audit 04 §4.5). Un
+  plafond de 10 messages par carte s'ajoute.
+- **Le filtre actuel ne trie rien** : la campagne vise les cartes dont `google_pass_url`
+  n'est pas nul (`notifications.js:84-90`), or ce lien est créé à l'inscription pour
+  **toutes** les cartes (`clients.js:84-88`) ; 64 % finissent sur un iPhone (audit 04).
+- **Gain si t37 n'envoie plus aux cartes iPhone** (étape 23) : ≈ 64 % des appels Google en
+  moins (≈ 650 sur 1 000 cartes ; 6 400 sur 10 000), autant de lignes de registre, aucune
+  requête base en moins côté retours. Le gain réel est ailleurs : ne plus consommer pour
+  rien le plafond de 10 messages d'objets jamais installés. **Condition** : un signal
+  fiable « carte Google installée » (rappels de Google ; à défaut, la sonnette Apple, avec le
+  risque des porteurs à deux plateformes, non mesuré).
+
+### 5. Ce que voit le marchand
+
+- Au clic : réponse immédiate, « Envoi en cours vers N appareils iPhone et M cartes Google,
+  environ X min. Vous pouvez fermer cette page. »
+- Pendant : « Envoyés : A / N iPhone, G / M Google » (acceptés par Apple et Google, jamais
+  « reçus ») ; bouton **Arrêter l'envoi** (les lots restants ne partent pas, ceux déjà
+  envoyés restent). Lu par la route existante `GET /api/notifications`, rafraîchie toutes
+  les 15 s **seulement pendant un envoi et page ouverte** : pas de requête régulière.
+- À la fin : « Terminé en X min : A iPhone, G Google, E refus (appareils retirés) ». Le
+  compteur parle d'appareils et de cartes, pas de clients (audit 05 §4.3).
+- À trancher par Yass : une campagne arrêtée compte-t-elle dans le quota du mois
+  (proposition : oui si au moins un lot est parti).
+
+### 6. À quelle taille le problème apparaît
+
+- **Sûr** : vers 1 000 appareils, file de 24 à 44 s dans l'API de données, caisse jusqu'à
+  154 s (test, base de 578 Mo, 2,7 cartes par appareil).
+- **Absent** : 133 à 187 appareils en production (4 campagnes, aucune file).
+- **Banc** : pire scan au-delà de 2 s dans 1 essai sur 2 vers 500 inscriptions iPhone,
+  4 sur 4 vers 750 (processeur local, pas Supabase).
+- **Le seuil réel, entre ≈ 170 et 1 000 appareils, n'est pas mesuré** : c'est la série du
+  seuil (123, 308, 615 porteurs). Déclencheur inchangé : premier marchand à ≈ 500 porteurs
+  ou un réseau.
+
+### 7. Plan de mesure
+
+**Environnement** : le projet de test `winwin-campagne-15` (Railway + Supabase Micro),
+outils `tests/charge/` ; aucune mesure en production hors observation passive.
+- **Avant (sans code)** : la série du seuil, `CHARGE_PLAFOND` 123, 308, 615 puis la campagne
+  vers 1 000 déjà mesurée ; un scan de contrôle avant chaque campagne ; 10 min entre deux.
+- **Après (code t37)** : mêmes paliers + 1 000 + **5 000 et 16 000 appareils** (le réseau
+  entier, impossible avant).
+- **Quoi mesurer** : scans pendant la campagne (médiane, p99, max, vus du pilote) ; temps des
+  requêtes base (méd., max) ; requêtes base par appareil réveillé ; durée de la campagne ;
+  temps de réponse au clic ; avancement exact après `SIGTERM` puis après arrêt brutal.
+- **Seuils de réussite** :
+  - caisse pendant toute campagne : médiane ≤ 450 ms, **p99 ≤ 1 s, max ≤ 2 s** ;
+  - requêtes base, méd. ≤ 300 ms pendant la campagne (aucune file) ;
+  - clic du marchand : réponse ≤ 1 s ;
+  - avec b1 : ≤ 2,5 requêtes base par appareil (contre 5,1) ;
+  - durée : N / débit à ± 10 % ;
+  - reprise : aucun appareil oublié ; au plus un lot de pushes Apple en double ; zéro
+    message Google en double ; second clic refusé (409).
+- **En local d'abord** (`npm test`, imitateur d'Apple et de Google) : la logique (lots,
+  reprise, verrou, arrêt, quota), pas la capacité de Supabase.
+
+### 8. Calendrier réaliste (à partir du feu vert)
+
+| Quand | Quoi | Environnement de test |
+|---|---|---|
+| sem. du 12/10 | série du seuil AVANT (1 journée) ; relevé des réglages Supabase des deux projets | **rallumé** (Yass prévenu avant) |
+| 13 → 20/10 | code a + c + b1 + d2 : migration (table des campagnes), boucle, reprise, verrou, écran ; filet local | éteint |
+| ≈ 21/10 | revue, migration en production avant le push, push, contrôles | éteint |
+| 22 → 24/10 | série APRÈS sur le test (paliers, 5 000, 16 000, coupures) | **rallumé** |
+| après | b2 (ligne 24, vrai iPhone), d1 (étape 23) | — |
+
+**Ça tient avant le 31/10 pour a + c + b1, de justesse**, si la série « avant » se joue la
+semaine du 12/10 et que chaque push est validé sans retour. **b2 ne tiendra pas** avant le
+31/10 avec ses tests sur vrai iPhone. **Recommandation : garder l'environnement jusqu'au
+15/11** (≈ 5 $ de plus) pour la marge et la mesure de b2. **Mesure manquante** : la série du
+seuil « avant » ; elle demande de rallumer les services : je préviens avant.
+
+### Avant le premier marchand à ≈ 1 000 porteurs / ce qui peut attendre
+
+**Avant** : a (lots, avancement, reprise, verrou, réponse immédiate), c (file avec priorité
+aux caisses), b1 (carte en une requête), d2 (débit partagé avec le cron), la mise à jour des
+cartes par lot, l'écran d'avancement.
+**Peut attendre** : b2 (ligne 24), d1 (étape 23, Google vers iPhone), b3, b4, le compte rendu
+en clients (étape 26).
+
+### Hypothèses et limites
+
+- Une seule instance Railway (deux instances enverraient deux fois sans la prise de campagne
+  par instance).
+- Le débit de départ (5 iPhone par seconde) vient de la production (≈ 170 retours sans file)
+  ; il sera calé par la série du seuil.
+- Comportement d'iOS sur une réponse 503 de `/v1/passes` (levier c, mode « refus ») non
+  vérifié : préférer l'attente en mémoire, bornée.
+- Quotas de l'API Google par projet : non relevés.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
