@@ -4011,6 +4011,194 @@ inchangées (5,25 et 5,00)**.
 les deux lectures d'identifiants : sinon une panne y délivrait un jeton marchand à un
 réseau sans le contrôle `use_boutique_login`.
 
+## 15 quinvicies. t40 : DASHBOARD ET NOTIFICATIONS CIBLÉES — DIAGNOSTIC (08/10, rien codé)
+
+Sources : code de `a3fadde` (production), audit `docs/audit/05-statistiques.md` (mesures
+M1, T1-T4), mesures de l'étape 15 (§15 vicies G). **L'environnement de test n'a pas servi** :
+aucune mesure ne manquait. Lignes citées sur `winwincard/backend/`.
+
+### 1. Dashboard marchand : ce qui passe à l'échelle, ce qui ne passe pas
+
+| Écran / route | Lecture | ×50 (50 000 porteurs) | Verdict |
+|---|---|---|---|
+| Aperçu `GET /me/stats` (`src/routes/merchants.js:67-93`) | 2 comptages exacts + **liste** des scans 30 j (`:73`), comptée en JS (`:76-84`) | 820 ms mesurés ; **faux dès 1 000 scans / 30 j** (≈ 33 / jour) : actifs, rétention, fréquence sous-estimés et instables | NE PASSE PAS (justesse) |
+| … erreurs non lues (`:70-74`) | une panne affiche 0 client, 0 %, 0x | — | défaut F3 |
+| Réseau `GET /me/group-stats` → `group_stats` (migration 039) | tout en SQL, un petit jsonb | 748 ms (réseau), **1 505 ms** (plafond) ; erreur vers 0,3 à 1,6 M scans / 90 j | PASSE (jusqu'à l'e-commerce) |
+| Clients `GET /api/clients` (`src/routes/clients.js:109-118`) | toute la liste, triée par solde, sans pagination ; recherche dans le navigateur | 230 ms, **coupée à 1 000** : les petits soldes disparaissent, introuvables | NE PASSE PAS |
+| Export CSV (`clients.js:122-169`) | toute la liste (client long 30 s) | **coupé à 1 000** (les plus anciens) | NE PASSE PAS |
+| Historique `GET /api/scan` (`src/routes/scan.js:390-410`) | 100 à 200 derniers, `idx_scans_marchand_date` | constant | PASSE |
+| Fiche client (`clients.js:188-…`) | 1 client + 10 scans | constant | PASSE |
+| Notifications `GET` (`src/routes/notifications.js:20-45`) | 50 dernières + comptage du mois | constant | PASSE |
+| Campagne `POST` (`notifications.js:48-…`) | jetons et cartes du marchand (`:80-90`), envoi de tout d'un coup (`:109-125`) | **coupée à 1 000 + 1 000** ; écran bloqué 52 s ; file Supabase vers 1 000 appareils | NE PASSE PAS sans t37 |
+| QR, profil, boutiques | 1 ligne chacun | constant | PASSE |
+
+Le dashboard n'a **aucun graphique** aujourd'hui, ni réseau ni mono-site : des chiffres et
+des tableaux. L'Aperçu se recharge maintenant à la demande (`loadOverview(force)`,
+`public/dashboard/index.html:1139`) : le constat « figé » de l'audit 05 est à revérifier.
+
+### 2. Statistiques mono-boutique aussi riches qu'un réseau
+
+**Faisable avec condition : les définitions (étape 26) d'abord.**
+- `group_stats` calcule déjà tout par marchand : elle marche pour un mono-site sans boutique.
+  Indicateurs réutilisables tels quels : porteurs, actifs 30 j, nouveaux du mois, taux de
+  retour, répartition des passages, récompenses remises (`recompense_distribuee`, aujourd'hui
+  invisible pour un mono-site). À masquer : boutiques, scans non attribués, mobilité entre
+  boutiques (exclusion du Socle respectée : aucune comparaison entre boutiques).
+- Condition : deux définitions sont biaisées (mois entamé contre mois complet ; rétention
+  divisée par toute la base, audit 05 §4.1-4.2). Les recopier sur tous les marchands
+  multiplierait les chiffres faux. D'où l'étape 26 avant.
+- Coût : **1 appel au lieu de 3** à l'ouverture de l'Aperçu (`/me/stats` remplacé). Charge :
+  0,1 à 0,7 s à 5 000 porteurs, 0,8 à 1,5 s à 50 000 (mesuré), à la demande seulement.
+  Aucune requête régulière, aucun effet sur le scan.
+- Un graphique (scans par jour sur 30 j) : une requête groupée par jour sur
+  `idx_scans_marchand_date`, 30 lignes, du même ordre de coût. Faisable, à décider.
+- Stockage : rien.
+
+### 3. Choix des champs de la landing : modèle de données (technique, court)
+
+- **Aujourd'hui** : un seul interrupteur, `marchands.landing_premium` (Pro ou Pro+, case de
+  l'admin, `src/services/forfaits.js:34`). Allumé, la landing montre e-mail, téléphone et
+  anniversaire ensemble (`public/landing.html:885-890`) ; le serveur accepte les trois
+  (`clients.js:37-42`) et écrit une preuve par champ dans `consentements` (`:55-65`).
+  **Aucun choix champ par champ.**
+- **Faisable sans casser l'inscription** : une colonne de réglage par marchand, par exemple
+  `marchands.champs_landing text[]` (`{email}`, `{email,produit_favori}`…), NULL = règle
+  actuelle (les trois si premium). `GET /merchants/:slug/public` la renvoie (même lecture) ;
+  la landing n'affiche que ces champs ; l'inscription n'accepte que ceux-là (miroir
+  serveur, comme `landingPremiumActive`). **Zéro requête en plus** à l'inscription.
+- **« Par boutique »** : réglable par MARCHAND tout de suite. Par point de vente d'un réseau :
+  NON aujourd'hui, la landing n'a pas de paramètre de boutique (`/l/:slug`) ; il faudrait
+  `/l/:slug?b=…` et un réglage par `points_de_vente`. À décider avec la landing premium.
+- **Où stocker** : un champ qui servira à cibler (produit favori) → **colonne de `clients`**
+  (`produit_favori text`, ou identifiant d'une petite table `produits` par marchand si la
+  liste est fermée) ; des préférences libres, jamais filtrées → une colonne `jsonb`. Pas de
+  table à part : elle ajouterait une écriture à l'inscription et une jointure à la lecture.
+- **Poids à 100 000 porteurs** : ≈ 2 à 4 Mo pour une colonne texte courte, ≈ 10 Mo pour un
+  `jsonb` de 100 octets, ≈ 3 à 4 Mo par index ; la base de test pèse 599 Mo : négligeable.
+- **Lecture** : fiche et export ajoutent la colonne à leur `select` (même requête).
+- **Scan : aucun effet**, `SELECT_CLIENT` liste ses colonnes (`scan.js:73`).
+- **Index** pour s'en servir : `(marchand_id, produit_favori)` le jour où une campagne filtre
+  dessus ; aucun avant.
+- **À ne pas oublier** : `effacer_client` (`database/rgpd_effacement.sql:45-49`) efface
+  colonne par colonne : chaque nouveau champ doit y être ajouté, sinon l'effacement RGPD
+  le laisse en base.
+
+### 4. Segmentation et campagnes ciblées
+
+**Ce qu'on peut cibler avec les données existantes** (aucune colonne à ajouter) :
+- dernier passage (inactifs depuis N jours), nombre de passages sur une période, solde
+  (proches de la récompense), récompenses remises, date d'inscription (nouveaux) ;
+- **boutique fréquentée** (`scans.point_de_vente_id`, migration 033 ; jamais pour un client
+  jamais scanné) ;
+- anniversaire (landing premium seulement), parrains / filleuls, plateforme (Apple :
+  `device_tokens` ; Google : `passes.google_pass_url`).
+
+**Comment, sans requête régulière** : une fonction SQL de sélection appelée **au moment de
+l'envoi** (comme `group_stats`), qui rend la liste des destinataires. Coût : 1 appel par
+campagne (quota de 5 à 20 par mois et par marchand), ≈ le coût de `group_stats` (≤ 1,5 s à
+50 000 porteurs). Index existants suffisants (`idx_scans_marchand_date`, `idx_scans_client`,
+`idx_clients_marchand`). Rien de stocké, rien d'écrit au scan.
+- Alternative écartée : des colonnes résumé sur `clients` (dernier passage, nombre de
+  passages) tenues par `crediter_scan` : zéro requête en plus, mais toucherait la fonction
+  de l'argent et l'annulation (recalcul). Pas nécessaire à ce volume.
+- Demanderait des données en plus : produit favori, préférences (point 3), un fuseau par
+  marchand pour « aujourd'hui » à Dubaï.
+- Demanderait un index en plus : anniversaire filtré en SQL → index sur
+  `(marchand_id, extract(month…), extract(day…))` ; filtre par produit (point 3).
+
+**Règle 8** : cibler **réduit** le nombre de destinataires (une boutique, un segment) : c'est
+le contraire d'une campagne plus large. Faisable avant t37 **à condition** que la sélection
+garde le plafond actuel (au plus 1 000 + 1 000 par envoi) et qu'aucun segment ne puisse
+dépasser « tous les porteurs ». Deux réserves :
+- un envoi ciblé de 1 000 appareils crée la même file Supabase qu'aujourd'hui : t37 reste
+  la condition des gros envois ;
+- un message Google part vers toutes les cartes d'une campagne (étape 23) : à corriger
+  avant de multiplier les campagnes.
+
+### 5. Plafond de 1 000 lignes (étape 21) dans le dashboard et le cron
+
+| Où | Effet au-delà de 1 000 |
+|---|---|
+| Aperçu, scans 30 j (`merchants.js:73`) | actifs, rétention, fréquence faux, différents de l'onglet Réseau |
+| Liste clients (`clients.js:113-118`) | compteur bloqué à 1 000, clients introuvables |
+| Export (`clients.js:136-141`) | les plus anciens manquent |
+| Campagne (`notifications.js:80-90`) | 1 000 iPhone + 1 000 cartes Google au plus, sans le dire (voulu par la règle 8) |
+| Cron inactifs (`src/workers/cron.js:89-93`) | **liste des scans coupée → des clients ACTIFS relancés comme inactifs** ; liste des clients coupée → les autres jamais évalués ; liste de dédoublonnage coupée → relances en double |
+| Cron proches de la récompense (`cron.js:151-158`) | 895 notifiés d'un coup mesurés ; dédoublonnage coupé aussi |
+| Cron anniversaire (`cron.js:228-237`) | au-delà de 1 000 anniversaires connus, des anniversaires manqués |
+
+**Le plus grave n'est pas dans le dashboard : c'est le cron inactifs**, qui enverra des
+relances à tort dès ≈ 33 scans par jour chez un marchand. Proposition compatible avec la
+règle 8 : **sélection juste en SQL, envoi toujours plafonné** (au plus 1 000 par passage,
+le reste au passage suivant) — on corrige qui reçoit, pas combien.
+
+### 6. Rapport du cron visible par le marchand
+
+| Source | Ce qu'elle a | Par marchand ? | Manque |
+|---|---|---|---|
+| `workflow_executions` (migration 010) | une ligne par client relancé, type, `executed_at`, 90 j | **oui** (`marchand_id`) | index : `idx_wf_exec_lookup` commence par `workflow_type, client_id` → pas utilisable pour « ce marchand, aujourd'hui » |
+| `notification_envois` (migration 046) | une ligne par push, source, statut, 90 j | oui, index `(marchand_id, envoye_le)` | compte des appareils et des cartes, pas des clients (audit 05 §4.3) |
+| `cron_passages` (migration 049) | un passage par jour, bilan **global** par workflow | **non** | rien par marchand |
+
+**Faisable** : « aujourd'hui : X relances, Y proches de la récompense, Z anniversaires » =
+un comptage groupé sur `workflow_executions` (marchand, depuis minuit).
+- Coût : 1 lecture à l'ouverture de l'onglet (à la demande, aucune requête régulière) ; un
+  index `(marchand_id, executed_at)` : ≈ 5 à 15 Mo à 100 000 porteurs, une écriture
+  d'index par relance (négligeable devant les 3 requêtes de chaque relance).
+- Limites : `workflow_executions` note une tentative, pas une réception (un client sans
+  appareil est compté) ; « aujourd'hui » en UTC (le passage de 08:00 UTC tombe à 12:00 à
+  Dubaï, 10:00 à Lyon). Les acceptations Apple et Google se lisent dans le registre, en
+  appareils.
+- **Condition** : après la sélection juste du point 5, sinon le rapport affichera des
+  relances à tort comme un succès.
+
+### 7. Points faibles non listés
+
+1. **Preuves de consentement perdues sans bruit** : `clients.js:67-69`,
+   `insert(...).then().catch()` (supabase-js ne rejette jamais, §3.9). Une écriture ratée
+   n'est vue nulle part. **À corriger avant de collecter un champ de plus.** Coût : nul.
+2. **`consentements` sans index** (`database/schema.sql:137-144`) : effacement et preuve
+   « montrez-moi le consentement de ce client » relisent la table. Sans effet aujourd'hui ;
+   index `(client_id)` à prévoir avec le point 3.
+3. **Carte sans ligne `passes`** possible : `clients.js:58`, l'erreur n'est pas lue.
+4. **Chaque relance coûte 3 requêtes** en série (`cron.js:272-290` et `:105`) : mise à jour
+   de la carte, lecture des jetons, écriture du dédoublonnage. C'est ce qui donne 57 min à
+   50 000 porteurs. Grouper par lot (une écriture pour tout le marchand) ferait
+   gagner l'essentiel ; à faire dans 22.
+5. **Le cron inactifs lit les scans sans exclure les annulations** (`cron.js:90`) : un
+   passage annulé compte comme une visite.
+6. **Quota des campagnes sans verrou** (`notifications.js:58-75`) : deux clics simultanés
+   passent tous les deux.
+7. **Pas de fuseau par marchand** : « aujourd'hui », « ce mois » et l'heure des relances
+   sont en UTC (Dubaï : 4 h d'écart).
+8. **Écran du dashboard** : message d'erreur brut à la connexion (`public/dashboard/index.html`,
+   même cas que le scanner, noté à l'étape 17).
+
+### Avant le premier marchand à ≈ 1 000 porteurs (ou le premier réseau) / ce qui peut attendre
+
+**Avant** : t37 (rythme) ; sélection juste du cron (point 5) ; Aperçu en SQL (point 2,
+après 26) ; liste et export paginés côté serveur (21) ; consentements lus (point 7.1).
+**Peut attendre** : graphique, rapport du cron (après la sélection juste), choix des champs
+de la landing et produit favori (avec la landing premium), campagnes par segment (après
+t37 et 23), fuseau par marchand (avant le premier marchand à Dubaï qui lit ses chiffres
+du jour).
+
+### Ordre de travail proposé (rien codé)
+
+1. **t37, rythme des campagnes** (déjà prévu ; déclencheur : premier marchand à ≈ 500
+   porteurs ou un réseau). Condition de tout gros envoi.
+2. **22 + la part « cron » de 21 : sélection juste, envoi plafonné.** Fonctions SQL pour
+   inactifs, proches de la récompense, anniversaires, dédoublonnage compris ; envoi au plus
+   1 000 par passage ; relances groupées (7.4) ; arrêt sur une panne de lecture. Respecte la
+   règle 8 (aucun envoi plus large).
+3. **26, définitions**, puis **Aperçu en SQL, identique pour mono et réseau** (point 2).
+4. **21, reste** : liste clients paginée avec recherche serveur, export par tranches. Après
+   t37 pour la campagne.
+5. **23, envois** (message Google borné), puis **campagnes par segment** (point 4).
+6. **Rapport du cron** (point 6), une fois 2 en place.
+7. Avec la landing premium : **choix des champs** et **produit favori** (point 3), après le
+   correctif des consentements (7.1).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
