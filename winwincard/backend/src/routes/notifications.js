@@ -88,7 +88,7 @@ router.post('/', authMarchand, asyncHandler(async (req, res) => {
     return res.status(409).json({ error: 'A campaign is already being sent. Please wait until it is finished.' });
   }
 
-  campagnes.demarrer({ id: lancement.campagne_id, marchand_id: req.marchandId, message,
+  campagnes.demarrer({ id: lancement.campagne_id, marchand_id: req.marchandId, message, cree_le: new Date().toISOString(),
     curseur_apple: null, curseur_google: null, apple_fini: false, google_fini: false });
   res.status(202).json({ statut: 'en_cours', campagne_id: lancement.campagne_id });
 }));

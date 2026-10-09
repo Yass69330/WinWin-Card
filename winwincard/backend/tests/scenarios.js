@@ -1019,7 +1019,7 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       envois.apple.length = 0; envois.google.length = 0;
       const enCours = camp.demarrer({ id: c2.campagne_id, marchand_id: MC, message: 'message deux',
         curseur_apple: null, curseur_google: null, apple_fini: false, google_fini: false });
-      while (envois.apple.length < 350) await attendreMs(20);
+      await attendre(() => envois.apple.length >= 350, 30000);
       camp.arreter();
       await enCours;
       const a1 = envois.apple.length, g1 = envois.google.length;
@@ -1034,7 +1034,7 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       camp = neuf();
       const reg = imiter(camp);
       const repris = await camp.reprendre();
-      await Promise.all([...reg.actives.values()]);
+      await Promise.race([Promise.all([...reg.actives.values()]), attendreMs(30000)]);
       const jetons = envois.apple.map(e => e.jeton);
       verifier('reprise : la campagne repart du curseur et se termine',
         [repris.length, sql(`SELECT statut FROM campagnes WHERE id = '${c2.campagne_id}'`)], [1, 'terminee']);
@@ -1066,7 +1066,7 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       const c4 = lancerSql('message quatre');
       camp.demarrer({ id: c4.campagne_id, marchand_id: MC, message: 'message quatre',
         curseur_apple: null, curseur_google: null, apple_fini: false, google_fini: false });
-      while (envois.apple.length < 300) await attendreMs(20);
+      await attendre(() => envois.apple.length >= 300, 30000);
       panne.motif = /^\/rest\/v1\/device_tokens/;
       await attendre(() => sql(`SELECT statut FROM campagnes WHERE id = '${c4.campagne_id}'`) === 'interrompue', 10000);
       const pendantPanne = sql(`SELECT statut FROM campagnes WHERE id = '${c4.campagne_id}'`);
@@ -1086,6 +1086,49 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       await attendreMs(1500);
       verifier('… finie, plus aucune tentative ni requête (aucune minuterie quand il n\'y a rien à reprendre)',
         [regI.relances ? regI.relances.size : 'absent', panne.vues - vuesAvant], [0, 0]);
+
+      // Date limite : 24 h après le clic (ici 1,5 s), la campagne interrompue est abandonnée.
+      camp._pourTests({ config: { limiteMs: 1500, relancesMs: [300], essais: 2 } });
+      const journalA = [];
+      console.error = (...x) => { journalA.push(x.join(' ')); };
+      panne.motif = /^\/rest\/v1\/device_tokens/;
+      const c6 = lancerSql('message six');
+      const logsAvant = Number(sql(`SELECT count(*) FROM notification_logs WHERE marchand_id = '${MC}'`));
+      camp.demarrer({ id: c6.campagne_id, marchand_id: MC, message: 'message six',
+        cree_le: sql(`SELECT cree_le FROM campagnes WHERE id = '${c6.campagne_id}'`),
+        curseur_apple: null, curseur_google: null, apple_fini: false, google_fini: false });
+      const abandonnee = await attendre(() => sql(`SELECT statut FROM campagnes WHERE id = '${c6.campagne_id}'`) === 'abandonnee', 8000);
+      const vuesA = panne.vues;
+      await attendreMs(1500);
+      console.error = consoleError;
+      panne.motif = null;
+      const c7 = lancerSql('message sept');
+      verifier('date limite dépassée : campagne « abandonnee » (fin posée), UNE ligne « ABANDONNÉE après … », après des tentatives',
+        [abandonnee, sql(`SELECT fin_le IS NOT NULL FROM campagnes WHERE id = '${c6.campagne_id}'`),
+         journalA.filter(l => /\] [0-9a-f-]+ ABANDONNÉE après/.test(l)).length, journalA.some(l => l.includes('INTERROMPUE'))],
+        [true, 't', 1, true]);
+      verifier('… ensuite plus de tentative, plus d\'alerte, plus aucune requête ; verrou levé (nouvelle campagne acceptée) ; quota toujours compté',
+        [regI.relances.size, panne.vues - vuesA, journalA.filter(l => l.includes('ABANDONNÉE')).length, c7.ok,
+         Number(sql(`SELECT count(*) FROM notification_logs WHERE marchand_id = '${MC}'`)) - logsAvant],
+        [0, 0, 1, true, 1]);
+      if (c7.ok) sql(`UPDATE campagnes SET statut = 'terminee' WHERE id = '${c7.campagne_id}'`);
+
+      // Au démarrage : une campagne interrompue de plus de 24 h est abandonnée, une plus récente reprend.
+      sql(`INSERT INTO campagnes (marchand_id, message, statut, cree_le, maj_le)
+             VALUES ('${MC}', 'vieille', 'interrompue', now() - interval '25 hours', now() - interval '1 hour'),
+                    ('${M.pointsParr}', 'récente', 'interrompue', now() - interval '1 hour', now() - interval '1 hour')`);
+      camp = neuf();
+      const regB = imiter(camp);
+      const journalB = [];
+      console.error = (...x) => { journalB.push(x.join(' ')); };
+      const reprises = await camp.reprendre();
+      await Promise.race([Promise.all([...regB.actives.values()]), attendreMs(30000)]);
+      console.error = consoleError;
+      verifier('démarrage : la campagne de plus de 24 h est abandonnée (ligne « ABANDONNÉE après 24 h »), la récente reprend et se termine',
+        [reprises.length,
+         sql(`SELECT statut FROM campagnes WHERE message = 'vieille'`), sql(`SELECT statut FROM campagnes WHERE message = 'récente'`),
+         journalB.filter(l => l.includes('ABANDONNÉE après 24 h')).length],
+        [2, 'abandonnee', 'terminee', 1]);
       relaisI.close();
     }
     modules.forEach(m => delete require.cache[m]);

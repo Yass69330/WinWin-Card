@@ -32,6 +32,10 @@
 // puis toutes les 30 min, tant qu'elle n'est pas finie. Une requête par
 // tentative ; aucune minuterie quand il n'y a rien à reprendre. Pendant
 // l'interruption, le verrou tient : un nouveau clic reçoit 409.
+// Date limite (décision du 09/10) : 24 h après le clic. Passé ce délai, une
+// campagne interrompue s'arrête pour de bon : statut « abandonnee », plus de
+// tentative ni d'alerte, verrou levé, quota toujours compté ; une dernière
+// ligne « [campagne] <id> ABANDONNÉE après 24 h ».
 // ════════════════════════════════════════════════════════════════════════════
 
 const os = require('os');
@@ -51,7 +55,16 @@ const config = {
   // Attentes avant chaque nouvelle tentative d'une campagne interrompue ; la
   // dernière se répète.
   relancesMs:       [60e3, 120e3, 300e3, 600e3, 1200e3, 1800e3],
+  limiteMs:         24 * 3600e3,
 };
+
+function echeance(c) {
+  return new Date(c.cree_le || Date.now()).getTime() + config.limiteMs;
+}
+
+function duree(ms) {
+  return ms >= 3600e3 ? `${Math.round(ms / 3600e3)} h` : `${Math.round(ms / 1000)} s`;
+}
 
 // Envois réels ; remplacés par les tests (_pourTests).
 let envoyeurs = {
@@ -211,30 +224,48 @@ async function executer(c) {
     if (!arretDemande) console.log(`[campagne] ${c.id} terminée`);
   } else {
     const e = echec.reason;
+    if (Date.now() >= echeance(c)) { await abandonner(c, true); return; }
     const n = (relances.get(c.id) || { n: 0 }).n;
-    const attente = config.relancesMs[Math.min(n, config.relancesMs.length - 1)];
+    const attente = Math.min(config.relancesMs[Math.min(n, config.relancesMs.length - 1)], echeance(c) - Date.now());
     console.error(`[campagne] ${c.id} INTERROMPUE (marchand ${c.marchand_id}) : ${e.message} ; nouvelle tentative dans ${Math.round(attente / 1000)} s`);
     const { error } = await supabase.from('campagnes').update({ statut: 'interrompue' }).eq('id', c.id);
     if (error) console.error(`[campagne] ${c.id} statut interrompue :`, error.message);
-    planifierRelance(c.id, n, attente);
+    planifierRelance(c, n, attente);
   }
+}
+
+// Date limite dépassée : arrêt définitif. Une écriture ; si la base ne répond
+// pas, nouvel essai plus tard, sans alerte (la reprise au démarrage abandonne
+// aussi les campagnes trop vieilles).
+async function abandonner(c, journaliser) {
+  if (journaliser) console.error(`[campagne] ${c.id} ABANDONNÉE après ${duree(config.limiteMs)} (marchand ${c.marchand_id}) : arrêt définitif, verrou levé, quota compté`);
+  const { error } = await supabase.from('campagnes')
+    .update({ statut: 'abandonnee', fin_le: new Date().toISOString() })
+    .eq('id', c.id).in('statut', ['interrompue', 'en_cours']);
+  if (!error) { relances.delete(c.id); return; }
+  if (arretDemande) return;
+  const minuteur = setTimeout(() => { abandonner(c, false); }, config.relancesMs[config.relancesMs.length - 1]);
+  minuteur.unref();
+  relances.set(c.id, { n: 0, minuteur });
 }
 
 // Nouvelle tentative d'une campagne interrompue : UNE requête (la remet « en
 // cours » et relit ses curseurs), puis l'envoi reprend au curseur. Si la base
 // ne répond toujours pas, tentative suivante, plus tard.
-function planifierRelance(id, n, attente) {
+function planifierRelance(c, n, attente) {
+  const id = c.id;
   if (arretDemande) return;
   const minuteur = setTimeout(async () => {
     if (arretDemande) return;
+    if (Date.now() >= echeance(c)) { await abandonner(c, true); return; }
     const { data, error } = await supabase.from('campagnes')
       .update({ statut: 'en_cours', instance: INSTANCE, maj_le: new Date().toISOString() })
       .eq('id', id).in('statut', ['interrompue', 'en_cours'])
       .select('*');
     if (error) {
-      const suivante = config.relancesMs[Math.min(n + 1, config.relancesMs.length - 1)];
+      const suivante = Math.max(0, Math.min(config.relancesMs[Math.min(n + 1, config.relancesMs.length - 1)], echeance(c) - Date.now()));
       console.error(`[campagne] ${id} INTERROMPUE : reprise impossible (${error.message}) ; nouvelle tentative dans ${Math.round(suivante / 1000)} s`);
-      planifierRelance(id, n + 1, suivante);
+      planifierRelance(c, n + 1, suivante);
       return;
     }
     if (!data || data.length === 0) { relances.delete(id); return; }   // finie ailleurs
@@ -259,9 +290,14 @@ function demarrer(c) {
 async function reprendre() {
   const { data, error } = await supabase.rpc('reprendre_campagnes', {
     p_instance: INSTANCE, p_inactif_depuis: `${Math.round(config.inactifMs / 1000)} seconds`,
+    p_limite: `${Math.round(config.limiteMs / 1000)} seconds`,
   });
   if (error) { console.error('[campagne] reprise :', error.message); return []; }
   for (const c of data || []) {
+    if (c.statut === 'abandonnee') {
+      console.error(`[campagne] ${c.id} ABANDONNÉE après ${duree(config.limiteMs)} (marchand ${c.marchand_id}) : arrêt définitif, verrou levé, quota compté`);
+      continue;
+    }
     console.log(`[campagne] ${c.id} reprise (marchand ${c.marchand_id})`);
     demarrer(c);
   }

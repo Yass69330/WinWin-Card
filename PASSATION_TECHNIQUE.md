@@ -4505,8 +4505,8 @@ profil de la production (≈ 1 carte) ; reprise sans oubli ni doublon Google.
    à 45 s (ces trois points sortent des « décisions hors pilotage » du §15 septvicies).
 4. La série « après » compte les 503 de la file des iPhone ; **seuil : zéro au débit
    nominal (50 / 10 s)**.
-- Feu vert : basculer les trois services de test sur `claude/keen-goldberg-MXslu` (réglage
-  Railway) et lancer la série « avant ». Pour plus tard : pousser t37 sur une branche de
+- ~~Feu vert : basculer les trois services de test sur `claude/keen-goldberg-MXslu`~~ (remplacé
+  le 09/10 par la branche de test `campagne/etape37`, §15 novovicies) et lancer la série « avant ». Pour plus tard : pousser t37 sur une branche de
   TEST (jamais la production) et exécuter la 054 sur la base de TEST, pour la série « après ».
 
 **Livré (local)** :
@@ -4544,6 +4544,47 @@ migrations 051 à 053 ; la base de test les a déjà (rejouées au geste 3 du 05
 local tourne avec le code de production (§15 septvicies). Après la bascule, **tout push en
 production redéploie aussi les trois services de test** (et rejoue l'étape du pilote) : pilote
 laissé en `attente`, serveur et imitateur arrêtés après la série.
+
+## 15 novovicies. t37 : DATE LIMITE DE 24 H, BRANCHE DE TEST `campagne/etape37` (09/10)
+
+**Décisions de Yass (09/10)** :
+1. Campagne interrompue : reprise automatique gardée, avec une **date limite de 24 h après
+   le clic**. Passé ce délai : statut final, plus de tentative ni d'alerte, verrou levé, quota
+   toujours compté ; dernière ligne « [campagne] ABANDONNÉE après 24 h ». Aucune requête
+   régulière en plus.
+2. L'environnement de test ne suit PAS `claude/keen-goldberg-MXslu` (trop lié à la
+   production). Branche de test **`campagne/etape37`**, créée depuis `a3fadde` (code de la
+   production) et poussée (feu vert pour ce push seulement) : les trois services de test la
+   suivront. t37 y sera poussé pour la série « après », sur feu vert.
+
+**Livré (local, non poussé)** :
+- `src/services/campagnes.js` : `limiteMs` = 24 h depuis `cree_le` (au clic, l'heure du
+  serveur ; à la reprise, celle de la base). Une panne au-delà de l'échéance → `abandonner()` :
+  ligne `[campagne] <id> ABANDONNÉE après 24 h (marchand …) : arrêt définitif, verrou levé,
+  quota compté`, statut `abandonnee`, `fin_le`. Les tentatives sont plafonnées à l'échéance
+  (la dernière tombe pile dessus). Si la base ne répond pas au moment d'écrire l'abandon :
+  nouvel essai toutes les 30 min, sans alerte, jusqu'à ce que l'écriture passe.
+- Migration 054 (toujours non exécutée, modifiée en place) : statut `abandonnee` ;
+  `reprendre_campagnes(instance, inactif, limite)` abandonne au démarrage les campagnes
+  orphelines dont le clic date de plus de 24 h, reprend les autres (les deux rendues, le
+  statut dit lequel). Le verrou (`en_cours`, `interrompue`) ne couvre pas `abandonnee`.
+- Une campagne qui avance normalement n'a pas de date limite (seules les interrompues et les
+  orphelines sont concernées).
+
+**Preuves** : `npm test` **200/200**. Nouveaux tests : panne persistante, date limite réglée
+à 1,5 s → « abandonnee » avec `fin_le`, UNE ligne « ABANDONNÉE après … », puis aucune
+tentative, aucune alerte, **aucune requête** pendant 1,5 s, nouvelle campagne acceptée
+(verrou levé), ligne de quota gardée ; au démarrage, une campagne interrompue de 25 h est
+abandonnée (« ABANDONNÉE après 24 h ») et une d'1 h reprend et se termine. Contre-épreuve
+(version `a3020c4`, ancienne migration ET ancien code) : la campagne n'est jamais
+abandonnée, ses tentatives continuent (8 requêtes en 1,5 s), le verrou reste (KO). Les
+boucles d'attente des tests sont maintenant bornées (une contre-épreuve mal appariée,
+nouvelle migration avec l'ancien code, avait bloqué le filet ; arrêtée à la main, code
+actuel remis en place et vérifié).
+
+**Branche de test** : `campagne/etape37` = `a3fadde` (vérifié par `git ls-remote`). Rien en
+production. Tout push sur cette branche redéploie les trois services de test et rejoue
+l'étape inscrite au pilote (`attente` au repos).
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 

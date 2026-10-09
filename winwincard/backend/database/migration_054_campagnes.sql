@@ -18,7 +18,9 @@
 --     `notification_logs` (ce que lit déjà l'historique du dashboard).
 --   - `reprendre_campagnes` : au démarrage du serveur (une fois, après un délai),
 --     prend les campagnes en cours ou interrompues que plus personne ne fait
---     avancer.
+--     avancer ; celles dont le clic date de plus de 24 h passent « abandonnee »
+--     (décision du 09/10 : date limite de 24 h, quota toujours compté, verrou
+--     levé).
 --
 -- VOLUME : une ligne par campagne (quota de 5 à 20 par mois et par marchand).
 -- Aucune purge.
@@ -38,7 +40,7 @@ CREATE TABLE IF NOT EXISTS public.campagnes (
   notification_log_id uuid        REFERENCES public.notification_logs (id) ON DELETE SET NULL,
   message             text        NOT NULL,
   statut              text        NOT NULL DEFAULT 'en_cours'
-                      CONSTRAINT campagnes_statut_check CHECK (statut IN ('en_cours', 'terminee', 'interrompue')),
+                      CONSTRAINT campagnes_statut_check CHECK (statut IN ('en_cours', 'terminee', 'interrompue', 'abandonnee')),
   cree_le             timestamptz NOT NULL DEFAULT now(),
   -- Dernière écriture d'avancement : une campagne « en cours » dont maj_le est
   -- ancien n'est plus suivie par personne (serveur arrêté ou planté).
@@ -149,25 +151,36 @@ END;
 $$;
 
 -- ── reprendre_campagnes ─────────────────────────────────────────────────────
--- Prend (statut en_cours, instance, maj_le) les campagnes en cours ou
--- interrompues sans avancement depuis p_inactif_depuis, et les rend. Atomique :
--- deux serveurs ne prennent jamais la même campagne.
-CREATE OR REPLACE FUNCTION public.reprendre_campagnes(p_instance text, p_inactif_depuis interval)
+-- Campagnes en cours ou interrompues sans avancement depuis p_inactif_depuis :
+--   - clic de plus de p_limite → « abandonnee » (fin_le posée) ;
+--   - sinon → prises (statut en_cours, instance, maj_le).
+-- Rend les deux, le statut dit lequel. Atomique : deux serveurs ne prennent
+-- jamais la même campagne.
+CREATE OR REPLACE FUNCTION public.reprendre_campagnes(p_instance text, p_inactif_depuis interval, p_limite interval)
 RETURNS SETOF public.campagnes
 LANGUAGE sql
 SET search_path = public
 AS $$
-  UPDATE campagnes SET statut = 'en_cours', instance = p_instance, maj_le = now()
-   WHERE statut IN ('en_cours', 'interrompue') AND maj_le < now() - p_inactif_depuis
-  RETURNING *;
+  WITH abandon AS (
+    UPDATE campagnes SET statut = 'abandonnee', fin_le = now()
+     WHERE statut IN ('en_cours', 'interrompue') AND maj_le < now() - p_inactif_depuis
+       AND cree_le < now() - p_limite
+    RETURNING *
+  ), prise AS (
+    UPDATE campagnes SET statut = 'en_cours', instance = p_instance, maj_le = now()
+     WHERE statut IN ('en_cours', 'interrompue') AND maj_le < now() - p_inactif_depuis
+       AND cree_le >= now() - p_limite
+    RETURNING *
+  )
+  SELECT * FROM abandon UNION ALL SELECT * FROM prise;
 $$;
 
 REVOKE ALL ON FUNCTION public.lancer_campagne(uuid, text, integer, timestamptz) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.lancer_campagne(uuid, text, integer, timestamptz) TO service_role;
 REVOKE ALL ON FUNCTION public.avancer_campagne(uuid, uuid, uuid, boolean, boolean, integer, integer, integer, integer) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.avancer_campagne(uuid, uuid, uuid, boolean, boolean, integer, integer, integer, integer) TO service_role;
-REVOKE ALL ON FUNCTION public.reprendre_campagnes(text, interval) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.reprendre_campagnes(text, interval) TO service_role;
+REVOKE ALL ON FUNCTION public.reprendre_campagnes(text, interval, interval) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.reprendre_campagnes(text, interval, interval) TO service_role;
 
 COMMIT;
 
@@ -186,7 +199,7 @@ COMMIT;
 -- ── RETOUR ARRIÈRE ────────────────────────────────────────────────────────
 -- À n'exécuter QU'APRÈS avoir remis le code en arrière.
 --
--- DROP FUNCTION IF EXISTS public.reprendre_campagnes(text, interval);
+-- DROP FUNCTION IF EXISTS public.reprendre_campagnes(text, interval, interval);
 -- DROP FUNCTION IF EXISTS public.avancer_campagne(uuid, uuid, uuid, boolean, boolean, integer, integer, integer, integer);
 -- DROP FUNCTION IF EXISTS public.lancer_campagne(uuid, text, integer, timestamptz);
 -- DROP TABLE IF EXISTS public.campagnes;
