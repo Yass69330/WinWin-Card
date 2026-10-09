@@ -5,6 +5,7 @@ const { notif } = require('../i18n/messages');
 const registre = require('../services/notif-registre');
 const passages = require('../services/cron-passages');
 const { suivre } = require('../services/arret');
+const debit = require('../services/debit');   // débit partagé avec les campagnes (t37, d2)
 
 const DEDUP_DAYS   = 7;
 const PURGE_DAYS   = 90;
@@ -282,6 +283,10 @@ async function notifyClient(client, marchandId, msg, lot) {
     const { data: tokens } = await supabase.from('device_tokens').select('push_token').eq('serial_number', client.pass_serial_number);
     for (const { push_token } of (tokens || [])) {
       let erreur = null;
+      // Un jeton du débit partagé avec les campagnes : à eux deux, jamais plus
+      // que le débit (debit.js). Le cron (≈ 1 carte par seconde) n'attend
+      // presque jamais.
+      await debit.prendre();
       await sendPushUpdate(push_token).catch(e => { erreur = e; console.error('[cron] APNs push:', e.message); });
       if (lot) lot.ajouter({ plateforme: 'apple', serialNumber: client.pass_serial_number, pushToken: push_token, erreur });
     }

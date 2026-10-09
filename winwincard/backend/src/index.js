@@ -113,8 +113,9 @@ app.use('/dashboard', dashboardRoutes);
 app.use('/admin', adminUiRoutes);
 
 // Apple Wallet WebService — chemins standards Apple, pas de préfixe /api
-// Limiteur propre, /v1/log compris (étape 17).
-app.use('/v1', limiterAppleWallet);
+// Limiteur propre, /v1/log compris (étape 17). File des retours d'iPhone,
+// priorité aux caisses (t37, middleware/fileAppleWallet.js).
+app.use('/v1', limiterAppleWallet, require('./middleware/fileAppleWallet').fileAppleWallet);
 app.use('/', appleWalletRoutes);
 
 // API REST
@@ -230,6 +231,8 @@ const serveur = app.listen(PORT, () => {
   } catch (e) {
     console.error('[cron] Échec initialisation — workflows désactivés:', e.message);
   }
+  // Campagnes interrompues par un arrêt : reprises UNE fois, après un délai (t37).
+  require('./services/campagnes').planifierReprise();
 });
 
 // ── Arrêt propre au redéploiement (étape 14a, services/arret.js) ─
@@ -237,7 +240,10 @@ const serveur = app.listen(PORT, () => {
 // cours finissent (20 s au plus), puis sortie. Les demandes d'avis en mémoire
 // sont perdues (décision 4 a) : comptées dans le bilan.
 require('./services/arret').brancher(serveur, {
-  avantFermeture: () => require('./workers/cron').arreterPlanification(),
+  avantFermeture: () => {
+    require('./workers/cron').arreterPlanification();
+    require('./services/campagnes').arreter();   // plus de nouveau lot (t37)
+  },
   bilan: () => ({ "demande(s) d'avis perdue(s)": require('./services/avis').enAttenteCount() }),
 });
 

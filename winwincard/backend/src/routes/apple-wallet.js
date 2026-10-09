@@ -103,6 +103,9 @@ router.get('/v1/devices/:deviceId/registrations/:passTypeId', asyncHandler(async
   res.json({ serialNumbers, lastUpdated });
 }));
 
+// Colonnes du marchand nécessaires à la génération de la carte.
+const COLONNES_MARCHAND_CARTE = 'id, nom, slug, forfait, langue, type_programme, pass_display_name, how_it_works, couleur_fond, couleur_fond_reward, couleur_pastille_fond, couleur_pastille_contour, couleur_pastille_icone, couleur_label_strip, couleur_barre_principale, couleur_barre_secondaire,couleur_texte, couleur_texte_reward, couleur_label, logo_url, logo_reward_url, icon_url, image_strip_url, images_tiers, max_value, display_max_value, notification_titre, notification_message, referral_enabled, referral_bonus_points, telephone, adresse, strip_mode, strip_theme, strip_illustration, strip_produit, strip_vide, stamp_icon, strip_custom_background_url, strip_config_version, strip_label, lien_avis_google';
+
 // GET /v1/passes/:passTypeId/:serialNumber
 // Apple télécharge le pass mis à jour (appelé après push APNs)
 router.get('/v1/passes/:passTypeId/:serialNumber', asyncHandler(async (req, res) => {
@@ -111,9 +114,12 @@ router.get('/v1/passes/:passTypeId/:serialNumber', asyncHandler(async (req, res)
 
   if (!verifyAppleToken(req, serialNumber)) return res.status(401).send();
 
+  // Étape t37 (levier b1) : carte, client et marchand en UNE requête base (3 en
+  // série avant). Un retour d'iPhone en 304 coûte toujours une requête ; en 200,
+  // une au lieu de trois. Mêmes colonnes qu'avant.
   const { data: pass, error: errPass } = await supabase
     .from('passes')
-    .select('updated_at, client_id, marchand_id, notification_message')
+    .select(`updated_at, notification_message, clients(prenom, stored_value), marchands(${COLONNES_MARCHAND_CARTE})`)
     .eq('serial_number', serialNumber)
     .single();
 
@@ -132,18 +138,9 @@ router.get('/v1/passes/:passTypeId/:serialNumber', asyncHandler(async (req, res)
     if (updatedSec <= ifModifiedSec) return res.status(304).send();
   }
 
-  // Récupérer les données à jour pour régénérer le pass
-  const { data: client } = await supabase
-    .from('clients')
-    .select('prenom, stored_value')
-    .eq('id', pass.client_id)
-    .single();
-
-  const { data: marchand } = await supabase
-    .from('marchands')
-    .select('id, nom, slug, forfait, langue, type_programme, pass_display_name, how_it_works, couleur_fond, couleur_fond_reward, couleur_pastille_fond, couleur_pastille_contour, couleur_pastille_icone, couleur_label_strip, couleur_barre_principale, couleur_barre_secondaire,couleur_texte, couleur_texte_reward, couleur_label, logo_url, logo_reward_url, icon_url, image_strip_url, images_tiers, max_value, display_max_value, notification_titre, notification_message, referral_enabled, referral_bonus_points, telephone, adresse, strip_mode, strip_theme, strip_illustration, strip_produit, strip_vide, stamp_icon, strip_custom_background_url, strip_config_version, strip_label, lien_avis_google')
-    .eq('id', pass.marchand_id)
-    .single();
+  // Données lues avec la carte (même requête).
+  const client = pass.clients;
+  const marchand = pass.marchands;
 
   if (!client || !marchand) return res.status(404).send();
 

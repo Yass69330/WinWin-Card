@@ -4381,6 +4381,119 @@ en clients (étape 26).
   vérifié : préférer l'attente en mémoire, bornée.
 - Quotas de l'API Google par projet : non relevés.
 
+## 15 septvicies. t37 : CODÉ EN LOCAL (09/10, NON POUSSÉ, migration 054 non exécutée)
+
+**Décisions de Yass (09/10)** : a + c + b1 + d2 ensemble ; plus de plafond de 1 000
+DESTINATAIRES de campagne (les listes du dashboard restent dans 21) ; quota compté au clic ;
+écran : seul le texte de la réponse au clic change (« Campagne en cours d'envoi. »), ni
+compteur ni bouton, aucune requête en plus ; en attente : b2 (parking), b3, b4, d1 (23).
+Débit de départ : 50 iPhone par 10 s, réglable.
+
+**Livré (local)** :
+- `database/migration_054_campagnes.sql` : table `campagnes` (avancement par curseurs
+  `device_tokens.id` et `passes.id`, `maj_le`, `instance`) ; index unique partiel « une seule
+  en cours par marchand » ; `lancer_campagne` (quota + `notification_logs` + campagne, une
+  transaction ; second clic → `en_cours`, rien écrit) ; `avancer_campagne` (curseurs, fin de
+  voie, compteurs de `notification_logs`, une requête) ; `reprendre_campagnes` (prise
+  atomique des campagnes orphelines). **À exécuter en production AVANT le push.**
+- `src/services/campagnes.js` (a) : envoi en arrière-plan, deux voies. Apple : lot lu par
+  curseur, message posé sur les cartes DU LOT, un jeton du débit avant chaque push, puis
+  registre et avancement (envoi PUIS curseur : au pire un lot reçoit un second push
+  silencieux). Google : curseur PUIS envoi (au pire un lot perd son message, jamais de
+  doublon), 5 appels à la fois, un lot par 10 s. Reprise UNE fois au démarrage, après 60 s
+  (l'ancien serveur finit son lot pendant un redéploiement), des campagnes sans avancement
+  depuis 45 s. Arrêt propre : plus de nouveau lot. 6 erreurs de base de suite → campagne
+  « interrompue » (le verrou est libéré), journalisé.
+- `src/services/debit.js` (d2) : un débit unique, en mémoire, pour les pushes Apple en masse
+  (campagnes ET cron, `workers/cron.js`) ; file servie dans l'ordre d'arrivée : les deux
+  avancent ensemble, le total ne dépasse jamais le débit. Pas concernés : les pushes d'un seul
+  événement (scan, bienvenue, ajustement, avis) et Google (ne rappelle pas notre serveur).
+- `src/middleware/fileAppleWallet.js` (c) : au plus 10 requêtes `/v1/*` traitées à la fois
+  (`/v1/log` exclu) ; les suivantes attendent en mémoire au plus 15 s, puis 503 avec
+  `Retry-After: 30` ; au-delà de 2 000 en attente, 503 tout de suite. Les caisses n'y passent
+  jamais.
+- `src/routes/apple-wallet.js` (b1) : carte, client et marchand en UNE requête (jointure) ;
+  mêmes colonnes ; 304 inchangé (une requête).
+- `src/routes/notifications.js` : le clic appelle `lancer_campagne` et répond **202** tout de
+  suite (409 si une campagne est en cours, 429 quota inchangé).
+- `public/dashboard/index.html` : texte de la réponse au clic seulement.
+- `src/index.js` : branchement de la file, de la reprise différée et de l'arrêt.
+- **Le scan ne change pas** (`scan.js` hors du diff).
+
+**Réglages (variables Railway, toutes facultatives)** : `CAMPAGNE_IPHONE_PAR_LOT` (50),
+`CAMPAGNE_LOT_MS` (10000), `DEBIT_RAFALE` (débit d'une seconde), `CAMPAGNE_GOOGLE_PAR_LOT`
+(50), `CAMPAGNE_GOOGLE_SIMULTANES` (5), `CAMPAGNE_REPRISE_DELAI_MS` (60000),
+`CAMPAGNE_INACTIF_MS` (45000), `FILE_V1_EN_VOL` (10), `FILE_V1_ATTENTE_MS` (15000),
+`FILE_V1_MAX` (2000).
+
+**Requêtes** : aucune régulière. Une seule au démarrage (+ 60 s, reprise). Par lot Apple :
+lecture, mise à jour des cartes du lot, avancement, registre (4) ; par lot Google : lecture,
+curseur, compteurs, registre (4). Au clic : profil + `lancer_campagne` (2), au lieu de 7.
+
+**Preuves (local, 09/10)** :
+- `npm test` **192/192** (172 avant t37). §17 : débit partagé (cron et campagne ensemble,
+  toute fenêtre respectée) ; campagne de 1 200 appareils et 1 200 cartes Google : un envoi
+  chacun, au débit réglé, historique 1 200 / 1 200, message posé sur les 1 200 cartes,
+  2 400 lignes de registre ; verrou (second lancement refusé, quota non compté) ; arrêt
+  propre au milieu puis reprise au curseur : aucun iPhone oublié, exactement un lot Apple en
+  double, zéro message Google en double, un lot Google perdu (arrêt brutal imité en base) ;
+  clic 202 en moins d'1 s, quota compté au clic ; double clic 409 ; quota 429 ; carte en UNE
+  requête (304 aussi), client et marchand bien lus ; file : 30 retours d'iPhone, au plus 5
+  requêtes de carte à la fois vers la base, scan en 200 pendant ce temps, 503 + Retry-After
+  au-delà de l'attente.
+- **Contre-épreuve** (ancien `src/`, même migration et mêmes tests) : 10 KO (clic 200 au lieu
+  de 202, pas de verrou, 3 requêtes par carte, 30 requêtes de carte en même temps, modules
+  absents). Le test « scan pendant la file » passe AUSSI sur l'ancien code : à cette échelle
+  locale le scan n'est pas encore gêné ; ce qui distingue est le nombre de requêtes en vol.
+- **Scan inchangé** (120 scans en série, délai base 100 ms, deux tours) : p50 327-328 ms
+  avant et après, 5,25 et 5,00 requêtes base par scan (5,01 : l'unique lecture de reprise,
+  faite 60 s après le démarrage pendant la mesure).
+- **Banc local** (`tests/charge/banc-local.js`, 100 000 porteurs, palier 615, campagne vers
+  le marchand plafond, processeur local, PAS Supabase) :
+
+  | | avant | t37 |
+  |---|---|---|
+  | clic du marchand | 2 316 ms (200) | 370 ms (202) |
+  | pushes Apple | 519 d'un coup | 561 en ≈ 112 s |
+  | scans pendant : méd. / p99 / max | 442 / 5 885 / 5 885 ms | 428 / 512 / 512 ms |
+  | requêtes base par iPhone réveillé (2,7 cartes / appareil) | 6,8 | 4,7 |
+  | boucle max ; mémoire | 411 ms ; 274 Mo | 85 ms ; 205 Mo |
+
+  Les 304 restants (1 517) sont les autres cartes de chaque appareil : b2 (parking).
+  `CHARGE_CAMPAGNE_S` doit couvrir la durée de l'envoi (130 s ici), sinon le banc s'arrête
+  avant la fin.
+
+**Hypothèses et limites** :
+- Une seule instance Railway (le débit et la file sont en mémoire ; deux instances
+  doubleraient le débit). La reprise, elle, est sûre à deux (prise atomique).
+- Comportement d'iOS sur 503 + `Retry-After` non vérifié sur un vrai iPhone (la carte se met à
+  jour plus tard).
+- Pendant l'envoi, l'historique (route existante, lue seulement à l'ouverture de l'onglet)
+  montre l'avancement partiel « x/N reçues » : libellé d'avant t37 (audit 05 §4.3), non
+  modifié (seul le texte du clic était admis) ; à décider.
+- Une page du dashboard ouverte AVANT le déploiement lit l'ancienne réponse : le clic affiche
+  une erreur alors que la campagne part ; un nouveau clic reçoit 409 (pas de doublon).
+- La campagne pose son message sur le marchand (`notification_message`) au début, comme
+  avant, même sans appareil.
+- Clés i18n `appleLine`, `googleLine`, `noDevices` du dashboard devenues inutiles, laissées.
+
+**Décisions hors pilotage (09/10)** :
+- Le débit partagé compte les pushes **Apple** (cause des retours d'iPhone) ; Google a sa
+  propre cadence (un lot de 50 par 10 s, 5 à la fois).
+- Statut « interrompue » après 6 erreurs de base de suite, pour ne pas bloquer le marchand
+  (409 sans fin).
+- Reprise différée de 60 s et seuil d'orphelin de 45 s (chevauchement des serveurs pendant un
+  redéploiement Railway).
+- 409 : message « A campaign is already being sent. Please wait until it is finished. »,
+  affiché tel quel par l'écran (comme les autres erreurs du serveur).
+
+**Mesures sur l'environnement de test (à faire, rien lancé)** : série « avant » 123 / 308 /
+615 sur le code de production (`claude/keen-goldberg-MXslu`, qui porte `tests/charge/`), puis
+« après » sur une branche de test portant t37 (migration 054 sur la base de TEST d'abord).
+Seuils de réussite (§15 sexvicies, 7) : caisse p99 ≤ 1 s et max ≤ 2 s pendant toute
+campagne ; requêtes base méd. ≤ 300 ms ; clic ≤ 1 s ; ≤ 2,5 requêtes base par appareil au
+profil de la production (≈ 1 carte) ; reprise sans oubli ni doublon Google.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :

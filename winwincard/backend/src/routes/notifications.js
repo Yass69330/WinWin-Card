@@ -1,13 +1,9 @@
 const express  = require('express');
 const router   = express.Router();
 const supabase = require('../services/supabase');
-const { clientLong } = supabase;   // 30 s par appel (étape 16) : lectures et écritures de campagne
 const asyncHandler = require('../utils/asyncHandler');
-const { suivre } = require('../services/arret');   // envois après la réponse, attendus à l'arrêt (étape 14a)
 const { authMarchand } = require('../middleware/auth');
-const { sendPushUpdate, isApnsConfigured }                    = require('../services/apns');
-const { addMessageToLoyaltyObject, isConfigured: isGoogleConfigured } = require('../services/google-pass');
-const registre = require('../services/notif-registre');
+const campagnes = require('../services/campagnes');   // envoi par lots (t37)
 // Quota mensuel : Basic 0 / Pro 5 / Pro+ 20, quota manuel de l'admin prioritaire.
 const { limiteMensuelle } = require('../services/forfaits');
 
@@ -42,9 +38,15 @@ router.get('/', authMarchand, asyncHandler(async (req, res) => {
   });
 }));
 
-// POST /api/notifications — envoi push depuis le dashboard marchand
-// Corps : { titre, message }
-// Réponse : { apple: { envoyes, echecs, total, active }, google: { ... } }
+// POST /api/notifications — campagne depuis le dashboard marchand (étape t37)
+// Corps : { message }
+// Crée la campagne et répond TOUT DE SUITE (202) ; l'envoi part ensuite par
+// lots, en arrière-plan (services/campagnes.js). En UNE transaction
+// (lancer_campagne, migration 054) : quota du mois, ligne notification_logs
+// (le quota est compté au clic), ligne campagnes. Une seule campagne en cours
+// par marchand : un second clic reçoit 409. Plus de plafond de 1 000
+// destinataires : la campagne parcourt tous les appareils et toutes les cartes.
+// Réponse : { statut: 'en_cours', campagne_id }
 router.post('/', authMarchand, asyncHandler(async (req, res) => {
   const { message } = req.body;
 
@@ -63,116 +65,24 @@ router.post('/', authMarchand, asyncHandler(async (req, res) => {
     return res.status(403).json({ error: 'Push notifications are not available on the Basic plan.', upgrade: true });
   }
 
-  const { count: usedThisMonth } = await supabase
-    .from('notification_logs')
-    .select('*', { count: 'exact', head: true })
-    .eq('marchand_id', req.marchandId)
-    .gte('created_at', startOfMonth());
+  const { data: lancement, error } = await supabase.rpc('lancer_campagne', {
+    p_marchand_id: req.marchandId, p_message: message, p_limite: limit, p_debut_mois: startOfMonth(),
+  });
+  if (error) return res.status(500).json({ error: error.message });
 
-  if (usedThisMonth >= limit) {
+  if (!lancement.ok && lancement.reason === 'quota') {
     return res.status(429).json({
-      error: `Monthly limit reached — ${usedThisMonth}/${limit} notifications used this month.`,
-      used: usedThisMonth, limit, upgrade: true,
+      error: `Monthly limit reached — ${lancement.used}/${limit} notifications used this month.`,
+      used: lancement.used, limit, upgrade: true,
     });
   }
-
-  // Récupérer tokens Apple et passes Google en parallèle
-  const [{ data: tokens, error: errT }, { data: passes }] = await Promise.all([
-    clientLong
-      .from('device_tokens')
-      .select('push_token')
-      .eq('marchand_id', req.marchandId),
-    clientLong
-      .from('passes')
-      .select('serial_number')
-      .eq('marchand_id', req.marchandId)
-      .not('google_pass_url', 'is', null),
-  ]);
-
-  if (errT) return res.status(500).json({ error: errT.message });
-
-  // Apple Wallet : stocker la notification dans le marchand, toucher les passes,
-  // puis push silencieux. iOS re-télécharge le pass, détecte le champ modifié
-  // et génère automatiquement une notification visible dans le centre de notifications.
-  if (isApnsConfigured() && (tokens || []).length > 0) {
-    await Promise.all([
-      supabase.from('marchands')
-        .update({ notification_titre: null, notification_message: message })
-        .eq('id', req.marchandId),
-      // Met à jour notification_message sur chaque pass pour que changeMessage détecte le changement
-      clientLong.from('passes')
-        .update({ notification_message: message })
-        .eq('marchand_id', req.marchandId),
-    ]);
+  if (!lancement.ok) {
+    return res.status(409).json({ error: 'A campaign is already being sent. Please wait until it is finished.' });
   }
 
-  const [appleResults, googleResults] = await Promise.all([
-    isApnsConfigured()
-      ? Promise.allSettled(
-          (tokens || []).map(({ push_token }) => sendPushUpdate(push_token))
-        )
-      : Promise.resolve([]),
-
-    isGoogleConfigured()
-      ? Promise.allSettled(
-          (passes || []).map(({ serial_number }) =>
-            addMessageToLoyaltyObject(serial_number, null, message)
-          )
-        )
-      : Promise.resolve([]),
-  ]);
-
-  // Registre des envois (migration 046) : UN insert pour toute la campagne,
-  // après les envois — il ne peut donc rien retarder. Promise.allSettled
-  // conserve l'ordre des entrées, d'où l'appariement par index avec tokens/passes.
-  const lot = registre.creerLot('manuel', req.marchandId, { long: true });
-  appleResults.forEach((r, i) => lot.ajouter({
-    plateforme: 'apple',
-    pushToken:  (tokens || [])[i]?.push_token,
-    erreur:     r.status === 'rejected' ? r.reason : null,
-  }));
-  googleResults.forEach((r, i) => lot.ajouter({
-    plateforme:   'google',
-    serialNumber: (passes || [])[i]?.serial_number,
-    erreur:       r.status === 'rejected' ? r.reason : null,
-  }));
-  await lot.ecrire();   // ne rejette jamais
-
-  // Log des échecs pour diagnostic Railway
-  appleResults.filter(r => r.status === 'rejected')
-    .forEach(r => console.error('[notifications] APNs échec:', r.reason?.message));
-  googleResults.filter(r => r.status === 'rejected')
-    .forEach(r => console.error('[notifications] Google échec:', r.reason?.message));
-
-  // Log fire-and-forget
-  // §3.9 : supabase-js ne rejette JAMAIS — l'ancien `.then().catch()` était du
-  // code mort et tout échec d'écriture de notification_logs (la table dont
-  // dépend le dashboard) passait inaperçu. On lit `error`.
-  suivre(supabase.from('notification_logs').insert({
-    marchand_id:    req.marchandId,
-    message,
-    envoyes_apple:  appleResults.filter(r => r.status === 'fulfilled').length,
-    envoyes_google: googleResults.filter(r => r.status === 'fulfilled').length,
-    total_apple:    (tokens || []).length,
-    total_google:   (passes || []).length,
-  }).then(({ error }) => {
-    if (error) console.error('[notifications] notification_logs insert:', error.message);
-  }));
-
-  res.json({
-    apple: {
-      envoyes: appleResults.filter(r => r.status === 'fulfilled').length,
-      echecs:  appleResults.filter(r => r.status === 'rejected').length,
-      total:   (tokens || []).length,
-      active:  isApnsConfigured(),
-    },
-    google: {
-      envoyes: googleResults.filter(r => r.status === 'fulfilled').length,
-      echecs:  googleResults.filter(r => r.status === 'rejected').length,
-      total:   (passes || []).length,
-      active:  isGoogleConfigured(),
-    },
-  });
+  campagnes.demarrer({ id: lancement.campagne_id, marchand_id: req.marchandId, message,
+    curseur_apple: null, curseur_google: null, apple_fini: false, google_fini: false });
+  res.status(202).json({ statut: 'en_cours', campagne_id: lancement.campagne_id });
 }));
 
 module.exports = router;

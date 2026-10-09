@@ -839,7 +839,7 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       [ecrits(lotCourt), dans(msCourt, 4800, 6500), erreurs.some(e => e.startsWith('[notif-registre] insert'))], [0, true, true]);
     verifier('registre : le cron (3 lots) et la campagne manuelle demandent le client long',
       [(require('fs').readFileSync(require.resolve('../src/workers/cron.js'), 'utf8').match(/creerLot\([^)]*\{ long: true \}\)/g) || []).length,
-       /creerLot\('manuel', req\.marchandId, \{ long: true \}\)/.test(require('fs').readFileSync(require.resolve('../src/routes/notifications.js'), 'utf8'))],
+       /creerLot\('manuel', c\.marchand_id, \{ long: true \}\)/.test((() => { try { return require('fs').readFileSync(require.resolve('../src/services/campagnes.js'), 'utf8'); } catch { return ''; } })())],
       [3, true]);
     modules.forEach(x => delete require.cache[x]);
     process.env.SUPABASE_URL = env.url; process.env.SUPABASE_SERVICE_KEY = env.cle;
@@ -922,6 +922,205 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     for (let i = 0; i < 31; i++) dg.push((await req16('POST', '/api/diag/camera', '203.0.113.75', {})).statut);
     verifier('diagnostic : inchangé, 30 par heure (la 31e reçoit 429)', [dg.slice(0, 30).includes(429), dg[30]], [false, 429]);
     s16.processus.kill();
+  }
+  // ── 17. Campagnes par lots, débit partagé, file des iPhone (étape t37) ─────
+  titre('17. Campagnes par lots, débit partagé, file des iPhone (étape t37)');
+  {
+    const http = require('http');
+    const fs = require('fs');
+    const attendreMs = ms => new Promise(ok => setTimeout(ok, ms));
+    const charger = chemin => { try { return require(chemin); } catch { return null; } };
+    // Sur toute fenêtre de W ms, au plus rafale + W × taux envois (+ 1 d'arrondi).
+    const respecteDebit = (temps, rafale, taux, W) => {
+      const t = [...temps].sort((a, b) => a - b);
+      let j = 0;
+      for (let i = 0; i < t.length; i++) {
+        while (t[i] - t[j] > W) j++;
+        if (i - j + 1 > rafale + W * taux + 1) return false;
+      }
+      return true;
+    };
+
+    // ── d2 : le débit partagé, seul (horloge réelle, débit accéléré) ──
+    const debitMod = charger('../src/services/debit');
+    if (!debitMod) {
+      verifier('débit partagé : module présent (services/debit.js)', false, true);
+    } else {
+      const d = debitMod.creerDebit({ parLot: 10, lotMs: 200, rafale: 2 });   // 50 / s
+      const temps = { cron: [], campagne: [] };
+      const consommer = (qui, n) => (async () => { for (let i = 0; i < n; i++) { await d.prendre(); temps[qui].push(Date.now()); } })();
+      const t0 = Date.now();
+      await Promise.all([consommer('cron', 30), consommer('campagne', 30)]);
+      const duree = Date.now() - t0;
+      const tous = [...temps.cron, ...temps.campagne];
+      const premierFiniCron = Math.max(...temps.cron), premierFiniCamp = Math.max(...temps.campagne);
+      verifier('débit partagé : cron et campagne avancent ENSEMBLE (aucun n\'attend la fin de l\'autre)',
+        [temps.cron.filter(x => x < premierFiniCamp).length > 20, temps.campagne.filter(x => x < premierFiniCron).length > 20], [true, true]);
+      verifier('… à eux deux, jamais plus que le débit (60 jetons à 50 / s : ≥ 1,1 s, toute fenêtre respectée)',
+        [duree >= 1100, respecteDebit(tous, 2, 10 / 200, 200), respecteDebit(tous, 2, 10 / 200, 500)], [true, true, true]);
+    }
+    const cronSrc = fs.readFileSync(require.resolve('../src/workers/cron.js'), 'utf8');
+    verifier('débit partagé : le cron prend un jeton avant chaque push Apple',
+      /await debit\.prendre\(\);\s*\n\s*await sendPushUpdate\(push_token\)/.test(cronSrc), true);
+
+    // ── a : campagne par lots, dans ce processus, envois imités ──
+    const MC = 'c0c0c0c0-0000-4000-8000-000000000037';
+    sql(`INSERT INTO marchands (id, nom, slug, forfait, type_programme, max_value, display_max_value, langue)
+           VALUES ('${MC}', 'Filet Campagne', 'filet-campagne', 'pro', 'stamps', 10, 10, 'fr');
+         WITH c AS (INSERT INTO clients (marchand_id, prenom) SELECT '${MC}', 'C' || g FROM generate_series(1, 1200) g
+                    RETURNING id, pass_serial_number),
+              p AS (INSERT INTO passes (client_id, marchand_id, serial_number, google_pass_url)
+                    SELECT id, '${MC}', pass_serial_number, 'https://pay.google.com/filet' FROM c RETURNING id, client_id, serial_number)
+         INSERT INTO device_tokens (pass_id, client_id, marchand_id, serial_number, device_id, push_token)
+         SELECT id, client_id, '${MC}', serial_number, 'app-' || serial_number, 'jeton-' || serial_number FROM p;`);
+    const lancerSql = msg => JSON.parse(sql(`SELECT lancer_campagne('${MC}', '${msg}', 5, date_trunc('month', now()))`));
+    const envois = { apple: [], google: [] };
+    const env = { ...process.env };
+    Object.assign(process.env, { SUPABASE_URL: urlSupabase, SUPABASE_SERVICE_KEY: cleService,
+      CAMPAGNE_IPHONE_PAR_LOT: '100', CAMPAGNE_LOT_MS: '500', DEBIT_RAFALE: '10', CAMPAGNE_GOOGLE_PAR_LOT: '200' });
+    const modules = ['supabase', 'notif-registre', 'debit', 'campagnes'].map(m => require('path').resolve(__dirname, `../src/services/${m}.js`));
+    const neuf = () => { modules.forEach(m => delete require.cache[m]); return charger('../src/services/campagnes'); };
+    const imiter = camp => camp && camp._pourTests({ envoyeurs: {
+      appleActif: () => true, googleActif: () => true,
+      apple: async jeton => { envois.apple.push({ jeton, t: Date.now() }); await attendreMs(5); },
+      google: async serial => { envois.google.push(serial); await attendreMs(5); },
+    }, config: { inactifMs: 0 } });
+    let camp = neuf();
+    imiter(camp);
+    if (!camp) {
+      verifier('campagne par lots : module présent (services/campagnes.js)', false, true);
+    } else {
+      const c1 = lancerSql('message un');
+      const t0 = Date.now();
+      await camp.demarrer({ id: c1.campagne_id, marchand_id: MC, message: 'message un',
+        curseur_apple: null, curseur_google: null, apple_fini: false, google_fini: false });
+      const duree = Date.now() - t0;
+      const unique = l => new Set(l).size;
+      verifier('campagne de 1 200 appareils (plus de plafond de 1 000) : chaque iPhone reçoit UN push, chaque carte Google UN message',
+        [envois.apple.length, unique(envois.apple.map(e => e.jeton)), envois.google.length, unique(envois.google)], [1200, 1200, 1200, 1200]);
+      verifier('… au débit réglé (100 / 500 ms) : toute fenêtre respectée, durée ≥ 5,9 s',
+        [respecteDebit(envois.apple.map(e => e.t), 10, 100 / 500, 500), respecteDebit(envois.apple.map(e => e.t), 10, 100 / 500, 2000), duree >= 5900],
+        [true, true, true]);
+      verifier('… campagne terminée ; historique : 1 200 / 1 200 Apple et Google ; message posé sur les 1 200 cartes',
+        sql(`SELECT c.statut || '|' || l.envoyes_apple || '/' || l.total_apple || '|' || l.envoyes_google || '/' || l.total_google
+               || '|' || (SELECT count(*) FROM passes WHERE marchand_id = '${MC}' AND notification_message = 'message un')
+             FROM campagnes c JOIN notification_logs l ON l.id = c.notification_log_id WHERE c.id = '${c1.campagne_id}'`),
+        'terminee|1200/1200|1200/1200|1200');
+      verifier('… registre des envois : 2 400 lignes « manuel » (CLAUDE.md)',
+        sql(`SELECT count(*) FROM notification_envois WHERE marchand_id = '${MC}' AND source = 'manuel'`), '2400');
+
+      // Verrou : une seule campagne en cours par marchand, quota compté au clic.
+      const c2 = lancerSql('message deux');
+      const c3 = lancerSql('message trois');
+      verifier('verrou : une seconde campagne pendant qu\'une autre est en cours est refusée, sans compter le quota',
+        [c2.ok, c3.ok, c3.reason, sql(`SELECT count(*) FROM notification_logs WHERE marchand_id = '${MC}'`)], [true, false, 'en_cours', '2']);
+
+      // Arrêt propre au milieu, puis reprise au curseur.
+      envois.apple.length = 0; envois.google.length = 0;
+      const enCours = camp.demarrer({ id: c2.campagne_id, marchand_id: MC, message: 'message deux',
+        curseur_apple: null, curseur_google: null, apple_fini: false, google_fini: false });
+      while (envois.apple.length < 350) await attendreMs(20);
+      camp.arreter();
+      await enCours;
+      const a1 = envois.apple.length, g1 = envois.google.length;
+      verifier('arrêt propre : le lot en cours finit, la campagne reste « en cours » avec son avancement',
+        [a1 % 100, sql(`SELECT statut || '|' || (curseur_apple IS NOT NULL) FROM campagnes WHERE id = '${c2.campagne_id}'`)], [0, 'en_cours|true']);
+      // Arrêt BRUTAL imité : un lot Apple envoyé sans que son curseur soit écrit,
+      // et un lot Google dont le curseur est écrit sans qu'il soit envoyé.
+      sql(`UPDATE campagnes SET
+             curseur_apple  = (SELECT id FROM device_tokens WHERE marchand_id = '${MC}' ORDER BY id OFFSET ${a1 - 101} LIMIT 1),
+             curseur_google = (SELECT id FROM passes WHERE marchand_id = '${MC}' AND google_pass_url IS NOT NULL ORDER BY id OFFSET ${g1 + 199} LIMIT 1)
+           WHERE id = '${c2.campagne_id}'`);
+      camp = neuf();
+      const reg = imiter(camp);
+      const repris = await camp.reprendre();
+      await Promise.all([...reg.actives.values()]);
+      const jetons = envois.apple.map(e => e.jeton);
+      verifier('reprise : la campagne repart du curseur et se termine',
+        [repris.length, sql(`SELECT statut FROM campagnes WHERE id = '${c2.campagne_id}'`)], [1, 'terminee']);
+      verifier('… Apple : aucun iPhone oublié, au plus UN lot en double (100 pushes silencieux)',
+        [unique(jetons), jetons.length - unique(jetons)], [1200, 100]);
+      verifier('… Google : zéro message en double ; au pire un lot perdu (200)',
+        [envois.google.length - unique(envois.google), 1200 - unique(envois.google)], [0, 200]);
+    }
+    modules.forEach(m => delete require.cache[m]);
+    for (const k of Object.keys(process.env)) if (!(k in env)) delete process.env[k];
+    Object.assign(process.env, env);
+
+    // ── Le clic du marchand, la file et la carte, à travers un vrai serveur ──
+    const amont = new URL(urlSupabase);
+    const regle = { motif: null, delaiMs: 0, enVol: 0, maxEnVol: 0, vues: 0 };
+    const relais = http.createServer((req, res) => {
+      const vise = regle.motif && regle.motif.test(req.url);
+      if (/^\/rest\/v1\//.test(req.url)) regle.vues++;
+      if (vise) { regle.enVol++; regle.maxEnVol = Math.max(regle.maxEnVol, regle.enVol); }
+      let compte = vise;
+      const finir = () => { if (compte) { compte = false; regle.enVol--; } };
+      res.on('finish', finir); res.on('close', finir);
+      const envoyer = () => {
+        const p = http.request({ host: amont.hostname, port: amont.port, path: req.url, method: req.method,
+          headers: { ...req.headers, host: amont.host } }, r => { res.writeHead(r.statusCode, r.headers); r.pipe(res); });
+        p.on('error', () => { if (!res.headersSent) { res.writeHead(502); res.end(); } });
+        req.pipe(p);
+      };
+      if (vise && regle.delaiMs > 0) { req.pause(); setTimeout(() => { req.resume(); envoyer(); }, regle.delaiMs); } else envoyer();
+    });
+    await new Promise(r => relais.listen(0, '127.0.0.1', r));
+    const s17 = await demarrerServeur('t37', `http://127.0.0.1:${relais.address().port}`,
+      { FILE_V1_EN_VOL: '5', FILE_V1_ATTENTE_MS: '2500', CAMPAGNE_REPRISE_DELAI_MS: '600000' });
+    const appel = async (methode, chemin, jt, corps, enTetes = {}) => {
+      const t0 = Date.now();
+      const r = await fetch(s17.url + chemin, { method: methode, headers: { 'Content-Type': 'application/json',
+        ...(jt ? { Authorization: jt } : {}), ...enTetes }, body: corps && JSON.stringify(corps) });
+      const t = await r.text(); let c; try { c = JSON.parse(t); } catch { c = t; }
+      return { statut: r.status, corps: c, ms: Date.now() - t0, retry: r.headers.get('retry-after') };
+    };
+    const logs = m => Number(sql(`SELECT count(*) FROM notification_logs WHERE marchand_id = '${m}'`));
+
+    // Clic : réponse immédiate, quota compté au clic.
+    const avantT = logs(M.tampons);
+    const clic = await appel('POST', '/api/notifications', `Bearer ${tT}`, { message: 'Campagne filet' });
+    verifier('clic du marchand : 202 « en cours » tout de suite (< 1 s), quota compté au clic',
+      [clic.statut, clic.corps && clic.corps.statut, clic.ms < 1000, logs(M.tampons) - avantT], [202, 'en_cours', true, 1]);
+    const fini = await attendre(() => sql(`SELECT statut FROM campagnes WHERE marchand_id = '${M.tampons}' ORDER BY cree_le DESC LIMIT 1`) === 'terminee', 5000);
+    verifier('… la campagne se termine en arrière-plan (ici sans Apple ni Google configurés)', fini, true);
+    sql(`INSERT INTO campagnes (marchand_id, message) VALUES ('${M.points}', 'en cours')`);
+    const avantP = logs(M.points);
+    const second = await appel('POST', '/api/notifications', `Bearer ${tP}`, { message: 'Doublon' });
+    verifier('double clic : une campagne déjà en cours → 409, quota non compté', [second.statut, logs(M.points) - avantP], [409, 0]);
+    sql(`UPDATE campagnes SET statut = 'terminee' WHERE marchand_id = '${M.points}'`);
+    sql(`INSERT INTO notification_logs (marchand_id, message) SELECT '${M.pointsParr}', 'q' || g FROM generate_series(1, 5) g`);
+    verifier('quota du mois atteint : toujours 429', (await appel('POST', '/api/notifications', `Bearer ${tPP}`, { message: 'Hors quota' })).statut, 429);
+
+    // b1 : une carte servie en UNE requête base.
+    const carte = client(M.tampons);
+    const authApple = 'ApplePass ' + crypto.createHmac('sha256', secretJwt).update(carte.serial).digest('hex').slice(0, 32);
+    const cheminCarte = `/v1/passes/pass.com.winwincard.loyalty/${carte.serial}`;
+    regle.vues = 0;
+    const c200 = await appel('GET', cheminCarte, authApple);
+    const vues200 = regle.vues;
+    regle.vues = 0;
+    const c304 = await appel('GET', cheminCarte, authApple, undefined, { 'If-Modified-Since': new Date(Date.now() + 3600e3).toUTCString() });
+    // Sans certificats Apple, le filet ne signe pas la carte : 500 après lecture. Une
+    // lecture jointe ratée rendrait 404 (client ou marchand absent).
+    verifier('carte téléchargée : UNE requête base au lieu de trois (304 : une aussi), client et marchand bien lus',
+      [vues200, c200.statut !== 404, c304.statut, regle.vues], [1, true, 304, 1]);
+
+    // c : file des iPhone, la caisse passe devant.
+    Object.assign(regle, { motif: /^\/rest\/v1\/passes/, delaiMs: 1000, enVol: 0, maxEnVol: 0 });
+    const iphones = Array.from({ length: 30 }, () => appel('GET', cheminCarte, authApple));
+    await attendreMs(300);
+    const scanPendant = await appel('POST', '/api/scan', `Bearer ${tT}`, { serial_number: client(M.tampons).serial });
+    const retours = await Promise.all(iphones);
+    Object.assign(regle, { motif: null, delaiMs: 0 });
+    verifier('file des iPhone : 30 retours en même temps, au plus 5 requêtes de carte à la fois vers la base',
+      regle.maxEnVol <= 5 && regle.maxEnVol > 0, true);
+    verifier('… la caisse passe devant : scan en 200, en moins de 1,5 s, pendant que les cartes attendent',
+      [scanPendant.statut, scanPendant.ms < 1500], [200, true]);
+    verifier('… au-delà de 2,5 s d\'attente, l\'iPhone reçoit 503 avec Retry-After (il réessaiera)',
+      [retours.some(r => r.statut === 503 && r.retry === '30'), retours.every(r => [200, 304, 500, 503].includes(r.statut))], [true, true]);
+    s17.processus.kill();
+    relais.close();
   }
 }
 
