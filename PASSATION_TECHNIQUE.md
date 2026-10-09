@@ -4631,6 +4631,9 @@ de caisse) :
    SELECT count(*) AS scans_avec_cle, count(DISTINCT cle_idempotence) AS cles_distinctes
      FROM scans WHERE cle_idempotence IS NOT NULL;
    ```
+   **Résultat (Yass, 09/10, base de test) : 46 scans, 46 clés distinctes** = 30 + 14 + 2 :
+   les deux scans coupés en 500 ont été crédités, **une fois chacun** (PostgREST a fini la
+   transaction, comme mesuré en local au §15 tervicies).
 
 **Preuves** : `npm test` **205/205**. Nouveaux tests : base saine (inscription 201, liste 200,
 carte inconnue 404) ; liste coupée à 5 s → 503 + Retry-After vers 5 s ; panne → carte,
