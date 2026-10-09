@@ -4494,6 +4494,57 @@ Seuils de réussite (§15 sexvicies, 7) : caisse p99 ≤ 1 s et max ≤ 2 s pend
 campagne ; requêtes base méd. ≤ 300 ms ; clic ≤ 1 s ; ≤ 2,5 requêtes base par appareil au
 profil de la production (≈ 1 carte) ; reprise sans oubli ni doublon Google.
 
+## 15 octovicies. t37 : CORRECTIONS DU 09/10 ET SÉRIE « AVANT » (LOCAL, NON POUSSÉ)
+
+**Décisions de Yass (09/10)** :
+1. Historique des notifications : plus de chiffre « x/N reçues » ; « En cours d'envoi »
+   pendant l'envoi, « Envoyée » à la fin. Texte seulement, aucune requête en plus.
+2. Une campagne « interrompue » reprend seule quand la base revient (tentatives espacées,
+   aucune requête quand il n'y a rien à reprendre) + ligne d'alerte « [campagne] INTERROMPUE ».
+3. **Validées** : cadence Google séparée d'Apple, reprise 60 s après le démarrage, orpheline
+   à 45 s (ces trois points sortent des « décisions hors pilotage » du §15 septvicies).
+4. La série « après » compte les 503 de la file des iPhone ; **seuil : zéro au débit
+   nominal (50 / 10 s)**.
+- Feu vert : basculer les trois services de test sur `claude/keen-goldberg-MXslu` (réglage
+  Railway) et lancer la série « avant ». Pour plus tard : pousser t37 sur une branche de
+  TEST (jamais la production) et exécuter la 054 sur la base de TEST, pour la série « après ».
+
+**Livré (local)** :
+- `GET /api/notifications` : chaque ligne porte `etat` (`en_cours` tant que sa campagne
+  n'est pas `terminee`, interrompue comprise ; sinon `envoyee`), lu par jointure
+  `campagnes(statut)` dans la MÊME requête. Les compteurs restent dans la réponse, l'écran ne
+  les affiche plus (`public/dashboard/index.html`, `renderNotifHistory`). Clés i18n
+  `received` et `noDevicesShort` devenues inutiles, laissées.
+- `src/services/campagnes.js` : une voie en panne arrête l'autre (`c.stop`), la campagne
+  passe en « interrompue » avec la ligne `[campagne] <id> INTERROMPUE (marchand …) : … ;
+  nouvelle tentative dans N s`, puis reprend seule au curseur après 1, 2, 5, 10, 20 puis
+  toutes les 30 min, tant qu'elle n'est pas finie (une requête par tentative ; les minuteries
+  n'existent que pour une campagne interrompue ; l'arrêt du serveur les annule, et la reprise
+  au démarrage prend alors le relais).
+- Migration 054 (pas encore exécutée nulle part, modifiée en place) : le verrou couvre
+  `en_cours` ET `interrompue` (un nouveau clic reçoit 409 pendant une interruption) ;
+  `reprendre_campagnes` reprend aussi les interrompues et les remet « en cours ».
+- **Correction trouvée à la relecture** : dans la première version, une voie en panne
+  laissait l'autre tourner ; une reprise aurait fait tourner deux voies à la fois (doublons).
+
+**Preuves** : `npm test` **197/197**. Nouveaux tests : panne de base sur `device_tokens`
+pendant l'envoi → « interrompue », alerte au journal (au moins 2 tentatives ratées pendant
+la panne), verrou gardé ; la base revient → reprise seule, campagne terminée, 1 200 iPhone et
+1 200 cartes, aucun oubli ni doublon ; ensuite aucune minuterie et aucune requête pendant
+1,5 s ; historique « en cours d'envoi » / « envoyée » avec le même nombre de lectures (3 par
+ouverture). Contre-épreuve (première version de t37, `ec546e8`) : 5 KO (campagne laissée
+« interrompue » avec 400 iPhone servis sur 1 200, pas d'état dans l'historique).
+
+**Limite** : si la base reste en panne des heures, la campagne garde le verrou (409) et
+journalise une alerte toutes les 30 min ; pas de fin automatique.
+
+**Série « avant » : préparation (rien lancé)**. Vérifié par git : `claude/keen-goldberg-MXslu`
+(production, `a3fadde`) et `campagne/etape15` portent tous deux `tests/charge/` et les
+migrations 051 à 053 ; la base de test les a déjà (rejouées au geste 3 du 05/10). Le banc
+local tourne avec le code de production (§15 septvicies). Après la bascule, **tout push en
+production redéploie aussi les trois services de test** (et rejoue l'étape du pilote) : pilote
+laissé en `attente`, serveur et imitateur arrêtés après la série.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :

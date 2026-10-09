@@ -25,8 +25,13 @@
 //
 // Hypothèses : une campagne n'avance que sur le serveur qui l'a lancée ou
 // reprise (reprendre_campagnes la « prend » de façon atomique) ; une campagne
-// sans avancement depuis INACTIF_MS est orpheline. Limite : une erreur de base
-// répétée (6 essais, ≈ 6 lots) l'arrête en « interrompue », journalisé.
+// sans avancement depuis INACTIF_MS est orpheline.
+// Panne de base : après 6 essais de suite (≈ 6 lots), la campagne passe en
+// « interrompue » (ligne d'alerte « [campagne] INTERROMPUE » dans le journal)
+// et reprend SEULE au curseur : nouvelles tentatives après 1, 2, 5, 10, 20
+// puis toutes les 30 min, tant qu'elle n'est pas finie. Une requête par
+// tentative ; aucune minuterie quand il n'y a rien à reprendre. Pendant
+// l'interruption, le verrou tient : un nouveau clic reçoit 409.
 // ════════════════════════════════════════════════════════════════════════════
 
 const os = require('os');
@@ -43,6 +48,9 @@ const config = {
   essais:           6,
   repriseDelaiMs:   Number(process.env.CAMPAGNE_REPRISE_DELAI_MS) || 60000,
   inactifMs:        Number(process.env.CAMPAGNE_INACTIF_MS) || 45000,
+  // Attentes avant chaque nouvelle tentative d'une campagne interrompue ; la
+  // dernière se répète.
+  relancesMs:       [60e3, 120e3, 300e3, 600e3, 1200e3, 1800e3],
 };
 
 // Envois réels ; remplacés par les tests (_pourTests).
@@ -55,6 +63,7 @@ let envoyeurs = {
 
 const INSTANCE = process.env.RAILWAY_REPLICA_ID || os.hostname();
 const actives = new Map();      // id → promesse
+const relances = new Map();     // id → { n, minuteur } des campagnes interrompues
 let arretDemande = false;
 const reveils = new Set();
 
@@ -88,7 +97,7 @@ async function avecEssais(c, nom, fn) {
   for (let i = 1; ; i++) {
     try { return await fn(); } catch (e) {
       console.error(`[campagne] ${c.id} ${nom}, essai ${i}/${config.essais} :`, e.message);
-      if (i >= config.essais || arretDemande) throw e;
+      if (i >= config.essais || arretDemande || c.stop) throw e;
       await attendre(config.lotMs);
     }
   }
@@ -106,7 +115,7 @@ async function voieApple(c) {
     if (error) console.error(`[campagne] ${c.id} marchand :`, error.message);
   }
 
-  while (!arretDemande) {
+  while (!arretDemande && !c.stop) {
     const lot = await avecEssais(c, 'lecture Apple', async () => {
       let q = supabase.from('device_tokens').select('id, push_token, serial_number')
         .eq('marchand_id', c.marchand_id).order('id', { ascending: true }).limit(config.iphoneParLot);
@@ -151,7 +160,7 @@ async function voieGoogle(c) {
   if (!envoyeurs.googleActif()) { await avancer(c, { googleFini: true }); return; }
   let curseur = c.curseur_google || null;
 
-  while (!arretDemande) {
+  while (!arretDemande && !c.stop) {
     const debutLot = Date.now();
     const lot = await avecEssais(c, 'lecture Google', async () => {
       let q = supabase.from('passes').select('id, serial_number')
@@ -191,15 +200,50 @@ async function voieGoogle(c) {
 }
 
 async function executer(c) {
-  try {
-    await Promise.all([voieApple(c), voieGoogle(c)]);
+  // Une voie en panne arrête l'autre (c.stop) : la reprise repart des deux
+  // curseurs enregistrés, sans qu'une voie ancienne tourne encore.
+  c.stop = false;
+  const voies = [voieApple(c), voieGoogle(c)].map(p => p.catch(e => { c.stop = true; throw e; }));
+  const issues = await Promise.allSettled(voies);
+  const echec = issues.find(r => r.status === 'rejected');
+  if (!echec) {
+    relances.delete(c.id);
     if (!arretDemande) console.log(`[campagne] ${c.id} terminée`);
-  } catch (e) {
-    console.error(`[campagne] ${c.id} INTERROMPUE :`, e.message);
-    const { error } = await supabase.from('campagnes')
-      .update({ statut: 'interrompue', fin_le: new Date().toISOString() }).eq('id', c.id);
+  } else {
+    const e = echec.reason;
+    const n = (relances.get(c.id) || { n: 0 }).n;
+    const attente = config.relancesMs[Math.min(n, config.relancesMs.length - 1)];
+    console.error(`[campagne] ${c.id} INTERROMPUE (marchand ${c.marchand_id}) : ${e.message} ; nouvelle tentative dans ${Math.round(attente / 1000)} s`);
+    const { error } = await supabase.from('campagnes').update({ statut: 'interrompue' }).eq('id', c.id);
     if (error) console.error(`[campagne] ${c.id} statut interrompue :`, error.message);
+    planifierRelance(c.id, n, attente);
   }
+}
+
+// Nouvelle tentative d'une campagne interrompue : UNE requête (la remet « en
+// cours » et relit ses curseurs), puis l'envoi reprend au curseur. Si la base
+// ne répond toujours pas, tentative suivante, plus tard.
+function planifierRelance(id, n, attente) {
+  if (arretDemande) return;
+  const minuteur = setTimeout(async () => {
+    if (arretDemande) return;
+    const { data, error } = await supabase.from('campagnes')
+      .update({ statut: 'en_cours', instance: INSTANCE, maj_le: new Date().toISOString() })
+      .eq('id', id).in('statut', ['interrompue', 'en_cours'])
+      .select('*');
+    if (error) {
+      const suivante = config.relancesMs[Math.min(n + 1, config.relancesMs.length - 1)];
+      console.error(`[campagne] ${id} INTERROMPUE : reprise impossible (${error.message}) ; nouvelle tentative dans ${Math.round(suivante / 1000)} s`);
+      planifierRelance(id, n + 1, suivante);
+      return;
+    }
+    if (!data || data.length === 0) { relances.delete(id); return; }   // finie ailleurs
+    relances.set(id, { n: n + 1, minuteur: null });
+    console.log(`[campagne] ${id} reprise après interruption (tentative ${n + 1})`);
+    demarrer(data[0]);
+  }, attente);
+  minuteur.unref();
+  relances.set(id, { n: n + 1, minuteur });
 }
 
 // Lance l'envoi d'une campagne déjà créée (route du clic, ou reprise).
@@ -233,12 +277,13 @@ function planifierReprise() {
 function arreter() {
   arretDemande = true;
   for (const r of [...reveils]) r();
+  for (const { minuteur } of relances.values()) if (minuteur) clearTimeout(minuteur);
 }
 
 function _pourTests({ envoyeurs: e, config: cfg } = {}) {
   if (e) envoyeurs = { ...envoyeurs, ...e };
   if (cfg) Object.assign(config, cfg);
-  return { actives, config };
+  return { actives, relances, config };
 }
 
 module.exports = { demarrer, reprendre, planifierReprise, arreter, _pourTests };

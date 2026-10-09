@@ -13,11 +13,15 @@ function startOfMonth() {
 }
 
 // GET /api/notifications — historique + quota du mois
+// Chaque ligne porte `etat` : 'en_cours' tant que sa campagne n'est pas finie
+// (une campagne interrompue reprend seule), sinon 'envoyee'. Lu dans la MÊME
+// requête (jointure campagnes, migration 054). Plus de compteur « x/N reçues »
+// à l'écran (décision du 09/10) ; les compteurs restent dans la réponse.
 router.get('/', authMarchand, asyncHandler(async (req, res) => {
   const [logsResult, meResult, countResult] = await Promise.all([
     supabase
       .from('notification_logs')
-      .select('id, message, envoyes_apple, envoyes_google, total_apple, total_google, created_at')
+      .select('id, message, envoyes_apple, envoyes_google, total_apple, total_google, created_at, campagnes(statut)')
       .eq('marchand_id', req.marchandId)
       .order('created_at', { ascending: false })
       .limit(50),
@@ -32,8 +36,12 @@ router.get('/', authMarchand, asyncHandler(async (req, res) => {
 
   const forfait = meResult.data?.forfait || 'pro';
   const limit   = limiteMensuelle(meResult.data);
+  const logs = (logsResult.data || []).map(({ campagnes: c, ...log }) => ({
+    ...log,
+    etat: (c || []).some(x => x.statut !== 'terminee') ? 'en_cours' : 'envoyee',
+  }));
   res.json({
-    logs:  logsResult.data || [],
+    logs,
     quota: { used: countResult.count || 0, limit, forfait },
   });
 }));

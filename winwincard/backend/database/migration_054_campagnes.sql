@@ -10,14 +10,15 @@
 --   - Table `campagnes` : une ligne par campagne, avec son avancement (dernier
 --     appareil Apple et dernière carte Google traités). Le serveur envoie lot par
 --     lot et reprend au curseur après un redémarrage.
---   - Une seule campagne EN COURS par marchand : index unique partiel. Un second
---     clic est refusé.
+--   - Une seule campagne EN COURS (ou INTERROMPUE, qui reprendra seule) par
+--     marchand : index unique partiel. Un second clic est refusé.
 --   - `lancer_campagne` : en UNE transaction, contrôle du quota du mois, ligne
 --     `notification_logs` (le quota est compté au clic) et ligne `campagnes`.
 --   - `avancer_campagne` : en UNE requête, curseurs, fin de voie, compteurs de
 --     `notification_logs` (ce que lit déjà l'historique du dashboard).
 --   - `reprendre_campagnes` : au démarrage du serveur (une fois, après un délai),
---     prend les campagnes en cours que plus personne ne fait avancer.
+--     prend les campagnes en cours ou interrompues que plus personne ne fait
+--     avancer.
 --
 -- VOLUME : une ligne par campagne (quota de 5 à 20 par mois et par marchand).
 -- Aucune purge.
@@ -53,7 +54,7 @@ CREATE TABLE IF NOT EXISTS public.campagnes (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS campagnes_une_en_cours
-  ON public.campagnes (marchand_id) WHERE statut = 'en_cours';
+  ON public.campagnes (marchand_id) WHERE statut IN ('en_cours', 'interrompue');
 
 COMMENT ON TABLE public.campagnes IS
   'Campagnes de notifications envoyées par lots (t37) : avancement, reprise après redémarrage, une seule en cours par marchand.';
@@ -148,16 +149,16 @@ END;
 $$;
 
 -- ── reprendre_campagnes ─────────────────────────────────────────────────────
--- Prend (instance, maj_le) les campagnes en cours sans avancement depuis
--- p_inactif_depuis, et les rend. Atomique : deux serveurs ne prennent jamais la
--- même campagne.
+-- Prend (statut en_cours, instance, maj_le) les campagnes en cours ou
+-- interrompues sans avancement depuis p_inactif_depuis, et les rend. Atomique :
+-- deux serveurs ne prennent jamais la même campagne.
 CREATE OR REPLACE FUNCTION public.reprendre_campagnes(p_instance text, p_inactif_depuis interval)
 RETURNS SETOF public.campagnes
 LANGUAGE sql
 SET search_path = public
 AS $$
-  UPDATE campagnes SET instance = p_instance, maj_le = now()
-   WHERE statut = 'en_cours' AND maj_le < now() - p_inactif_depuis
+  UPDATE campagnes SET statut = 'en_cours', instance = p_instance, maj_le = now()
+   WHERE statut IN ('en_cours', 'interrompue') AND maj_le < now() - p_inactif_depuis
   RETURNING *;
 $$;
 

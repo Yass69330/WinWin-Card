@@ -806,7 +806,7 @@ const I18N = {
     quotaText:({used,limit})=>`${used} / ${limit} notifications this month`,
     errLoadHistory:'Error loading history', noNotifsSent:'No notifications sent yet',
     received:({envoyes,total})=>`${envoyes}/${total} received`, noDevicesShort:'No devices',
-    campagneEnCours:'Campaign being sent.',
+    campagneEnCours:'Campaign being sent.', etatEnCours:'Sending', etatEnvoyee:'Sent',
     deleteClientTitle:'Delete this client?',
     deleteBody:({nom})=>`Delete <strong>${nom}</strong>? This action is <strong>irreversible</strong> — the pass will become invalid.`,
     deletePermanently:'Delete permanently', cancel:'Cancel',
@@ -915,7 +915,7 @@ const I18N = {
     quotaText:({used,limit})=>`${used} / ${limit} notifications ce mois-ci`,
     errLoadHistory:"Erreur de chargement de l'historique", noNotifsSent:'Aucune notification envoyée pour le moment',
     received:({envoyes,total})=>`${envoyes}/${total} reçues`, noDevicesShort:'Aucun appareil',
-    campagneEnCours:"Campagne en cours d'envoi.",
+    campagneEnCours:"Campagne en cours d'envoi.", etatEnCours:"En cours d'envoi", etatEnvoyee:'Envoyée',
     deleteClientTitle:'Supprimer ce client ?',
     deleteBody:({nom})=>`Supprimer <strong>${nom}</strong> ? Cette action est <strong>irréversible</strong> — le pass deviendra invalide.`,
     deletePermanently:'Supprimer définitivement', cancel:'Annuler',
@@ -2169,9 +2169,8 @@ function renderNotifHistory() {
     return;
   }
   el.innerHTML = S.notifLogs.map(n => {
-    const total   = (n.total_apple || 0) + (n.total_google || 0);
-    const envoyes = (n.envoyes_apple || 0) + (n.envoyes_google || 0);
-    const dest = total > 0 ? t('received', { envoyes, total }) : t('noDevicesShort');
+    // Étape t37 : plus de chiffre, l'état seulement.
+    const dest = n.etat === 'en_cours' ? t('etatEnCours') : t('etatEnvoyee');
     return `<div class="notif-log-entry">
       <div class="notif-log-msg">${esc(n.message)}</div>
       <div class="notif-log-meta"><span>${timeAgo(n.created_at)}</span><span>${dest}</span></div>

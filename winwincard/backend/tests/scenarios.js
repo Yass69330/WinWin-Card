@@ -1042,6 +1042,51 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
         [unique(jetons), jetons.length - unique(jetons)], [1200, 100]);
       verifier('… Google : zéro message en double ; au pire un lot perdu (200)',
         [envois.google.length - unique(envois.google), 1200 - unique(envois.google)], [0, 200]);
+
+      // Panne de base pendant l'envoi : la campagne s'interrompt, puis reprend SEULE.
+      const amontI = new URL(urlSupabase);
+      const panne = { motif: null, vues: 0 };
+      const relaisI = http.createServer((req, res) => {
+        panne.vues++;
+        if (panne.motif && panne.motif.test(req.url)) { res.writeHead(500, { 'Content-Type': 'application/json' }); return res.end('{"message":"panne simulée"}'); }
+        const p = http.request({ host: amontI.hostname, port: amontI.port, path: req.url, method: req.method,
+          headers: { ...req.headers, host: amontI.host } }, r => { res.writeHead(r.statusCode, r.headers); r.pipe(res); });
+        p.on('error', () => { if (!res.headersSent) { res.writeHead(502); res.end(); } });
+        req.pipe(p);
+      });
+      await new Promise(r => relaisI.listen(0, '127.0.0.1', r));
+      process.env.SUPABASE_URL = `http://127.0.0.1:${relaisI.address().port}`;
+      envois.apple.length = 0; envois.google.length = 0;
+      camp = neuf();
+      const regI = imiter(camp);
+      camp._pourTests({ config: { essais: 3, relancesMs: [400] } });
+      const journal = [];
+      const consoleError = console.error;
+      console.error = (...x) => { journal.push(x.join(' ')); };
+      const c4 = lancerSql('message quatre');
+      camp.demarrer({ id: c4.campagne_id, marchand_id: MC, message: 'message quatre',
+        curseur_apple: null, curseur_google: null, apple_fini: false, google_fini: false });
+      while (envois.apple.length < 300) await attendreMs(20);
+      panne.motif = /^\/rest\/v1\/device_tokens/;
+      await attendre(() => sql(`SELECT statut FROM campagnes WHERE id = '${c4.campagne_id}'`) === 'interrompue', 10000);
+      const pendantPanne = sql(`SELECT statut FROM campagnes WHERE id = '${c4.campagne_id}'`);
+      const c5 = lancerSql('message cinq');
+      await attendreMs(1500);    // plusieurs tentatives, toujours en panne
+      const alertes = journal.filter(l => l.includes('INTERROMPUE')).length;
+      panne.motif = null;
+      const repartie = await attendre(() => sql(`SELECT statut FROM campagnes WHERE id = '${c4.campagne_id}'`) === 'terminee', 20000);
+      console.error = consoleError;
+      verifier('panne de base pendant l\'envoi : campagne « interrompue », alerte « [campagne] INTERROMPUE » au journal, verrou gardé (nouveau clic refusé)',
+        [pendantPanne, alertes >= 2, c5.ok, c5.reason], ['interrompue', true, false, 'en_cours']);
+      verifier('… la base revient : la campagne reprend SEULE et se termine',
+        [repartie, sql(`SELECT statut FROM campagnes WHERE id = '${c4.campagne_id}'`)], [true, 'terminee']);
+      verifier('… aucun iPhone ni aucune carte oubliés, aucun doublon',
+        [unique(envois.apple.map(e => e.jeton)), envois.apple.length, unique(envois.google), envois.google.length], [1200, 1200, 1200, 1200]);
+      const vuesAvant = panne.vues;
+      await attendreMs(1500);
+      verifier('… finie, plus aucune tentative ni requête (aucune minuterie quand il n\'y a rien à reprendre)',
+        [regI.relances ? regI.relances.size : 'absent', panne.vues - vuesAvant], [0, 0]);
+      relaisI.close();
     }
     modules.forEach(m => delete require.cache[m]);
     for (const k of Object.keys(process.env)) if (!(k in env)) delete process.env[k];
@@ -1088,6 +1133,15 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     const avantP = logs(M.points);
     const second = await appel('POST', '/api/notifications', `Bearer ${tP}`, { message: 'Doublon' });
     verifier('double clic : une campagne déjà en cours → 409, quota non compté', [second.statut, logs(M.points) - avantP], [409, 0]);
+    sql(`UPDATE campagnes SET statut = 'terminee' WHERE marchand_id = '${M.points}'`);
+    // Historique : l'état, sans chiffre (en cours d'envoi / envoyée), lu dans la même requête.
+    sql(`WITH l AS (INSERT INTO notification_logs (marchand_id, message) VALUES ('${M.points}', 'Campagne longue') RETURNING id)
+         INSERT INTO campagnes (marchand_id, notification_log_id, message) SELECT '${M.points}', id, 'Campagne longue' FROM l`);
+    regle.vues = 0;
+    const histP = await appel('GET', '/api/notifications', `Bearer ${tP}`);
+    const histT = await appel('GET', '/api/notifications', `Bearer ${tT}`);
+    verifier('historique : « en cours d\'envoi » tant que la campagne n\'est pas finie, « envoyée » ensuite, sans requête de plus (3 lectures comme avant)',
+      [histP.corps.logs.find(l => l.message === 'Campagne longue').etat, histT.corps.logs.find(l => l.message === 'Campagne filet').etat, regle.vues], ['en_cours', 'envoyee', 6]);
     sql(`UPDATE campagnes SET statut = 'terminee' WHERE marchand_id = '${M.points}'`);
     sql(`INSERT INTO notification_logs (marchand_id, message) SELECT '${M.pointsParr}', 'q' || g FROM generate_series(1, 5) g`);
     verifier('quota du mois atteint : toujours 429', (await appel('POST', '/api/notifications', `Bearer ${tPP}`, { message: 'Hors quota' })).statut, 429);
