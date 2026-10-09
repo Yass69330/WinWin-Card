@@ -461,12 +461,12 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
          CREATE TRIGGER filet_panne_ligne BEFORE INSERT ON scans FOR EACH ROW
            WHEN (NEW.client_id = '${c.id}') EXECUTE FUNCTION filet_panne();`);
     const panne = await scan(tT, c.serial);
-    verifier('panne à l\'écriture de la ligne : erreur, solde INCHANGÉ, aucune ligne (étape 11 : tout ou rien)', [panne.statut, solde(c.id), lignes(c.id)], [500, 0, 0]);
+    verifier('panne à l\'écriture de la ligne : erreur, solde INCHANGÉ, aucune ligne (étape 11 : tout ou rien)', [panne.statut, solde(c.id), lignes(c.id)], [503, 0, 0]);   // 503 depuis t37 (erreur de base), 500 avant
     sql(`DROP TRIGGER filet_panne_ligne ON scans;
          CREATE TRIGGER filet_panne_carte BEFORE UPDATE ON passes FOR EACH ROW
            WHEN (NEW.serial_number = '${c.serial}') EXECUTE FUNCTION filet_panne();`);
     const panne2 = await scan(tT, c.serial);
-    verifier('panne à l\'écriture de la carte : erreur, solde INCHANGÉ, aucune ligne', [panne2.statut, solde(c.id), lignes(c.id)], [500, 0, 0]);
+    verifier('panne à l\'écriture de la carte : erreur, solde INCHANGÉ, aucune ligne', [panne2.statut, solde(c.id), lignes(c.id)], [503, 0, 0]);
     sql(`DROP TRIGGER filet_panne_carte ON passes; DROP FUNCTION filet_panne();`);
     const reprise = await scan(tT, c.serial);
     verifier('… le scan suivant est juste : 0 → 1, une ligne', [reprise.statut, solde(c.id), lignes(c.id)], [200, 1, 1]);
@@ -1137,10 +1137,11 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
 
     // ── Le clic du marchand, la file et la carte, à travers un vrai serveur ──
     const amont = new URL(urlSupabase);
-    const regle = { motif: null, delaiMs: 0, enVol: 0, maxEnVol: 0, vues: 0 };
+    const regle = { motif: null, delaiMs: 0, enVol: 0, maxEnVol: 0, vues: 0, panne: null };
     const relais = http.createServer((req, res) => {
       const vise = regle.motif && regle.motif.test(req.url);
       if (/^\/rest\/v1\//.test(req.url)) regle.vues++;
+      if (regle.panne && regle.panne.test(req.url)) { res.writeHead(500, { 'Content-Type': 'application/json' }); return res.end('{"message":"panne simulée"}'); }
       if (vise) { regle.enVol++; regle.maxEnVol = Math.max(regle.maxEnVol, regle.enVol); }
       let compte = vise;
       const finir = () => { if (compte) { compte = false; regle.enVol--; } };
@@ -1202,6 +1203,38 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     // lecture jointe ratée rendrait 404 (client ou marchand absent).
     verifier('carte téléchargée : UNE requête base au lieu de trois (304 : une aussi), client et marchand bien lus',
       [vues200, c200.statut !== 404, c304.statut, regle.vues], [1, true, 304, 1]);
+
+    // Routes Apple et écriture du scan sur base coupée ou en panne : 503, jamais 404, 204 ni 500.
+    const appareil = 'filet-appareil-t37';
+    const cheminInscr = `/v1/devices/${appareil}/registrations/pass.com.winwincard.loyalty/${carte.serial}`;
+    const cheminListe = `/v1/devices/${appareil}/registrations/pass.com.winwincard.loyalty`;
+    verifier('base saine : inscription d\'un iPhone 201, liste 200, carte inconnue 404',
+      [(await appel('POST', cheminInscr, authApple, { pushToken: 'jeton-t37' })).statut, (await appel('GET', cheminListe)).statut,
+       (await appel('GET', '/v1/passes/pass.com.winwincard.loyalty/' + crypto.randomUUID().replace(/^/, ''), 'ApplePass x')).statut === 401], [201, 200, true]);
+    const inconnu = crypto.randomUUID();
+    const authInconnu = 'ApplePass ' + crypto.createHmac('sha256', secretJwt).update(inconnu).digest('hex').slice(0, 32);
+    verifier('… carte inconnue, base saine : toujours 404', (await appel('GET', `/v1/passes/pass.com.winwincard.loyalty/${inconnu}`, authInconnu)).statut, 404);
+    Object.assign(regle, { motif: /^\/rest\/v1\/device_tokens/, delaiMs: 8000 });
+    const listeLente = await appel('GET', cheminListe);
+    Object.assign(regle, { motif: null, delaiMs: 0 });
+    verifier('liste des cartes, base coupée à 5 s : 503 + Retry-After vers 5 s (avant : 204 « rien de modifié »)',
+      [listeLente.statut, listeLente.retry, listeLente.ms >= 4800 && listeLente.ms <= 6500], [503, '30', true]);
+    regle.panne = /^\/rest\/v1\/passes/;
+    const cartePanne = await appel('GET', cheminCarte, authApple);
+    const inscrPanne = await appel('POST', cheminInscr, authApple, { pushToken: 'jeton-t37' });
+    regle.panne = /^\/rest\/v1\/device_tokens/;
+    const inscrPanne2 = await appel('POST', cheminInscr, authApple, { pushToken: 'jeton-t37' });
+    const listePanne = await appel('GET', cheminListe);
+    const desinscrPanne = await appel('DELETE', cheminInscr, authApple);
+    regle.panne = /^\/rest\/v1\/rpc\/crediter_scan/;
+    const scanPanne = await appel('POST', '/api/scan', `Bearer ${tT}`, { serial_number: client(M.tampons).serial });
+    regle.panne = null;
+    verifier('base en panne : carte 503 (avant 404), inscription 503 (avant 404 puis 500), liste 503 (avant 204), désinscription 503 (avant 500), toutes avec Retry-After',
+      [cartePanne.statut, inscrPanne.statut, inscrPanne2.statut, listePanne.statut, desinscrPanne.statut,
+       [cartePanne, inscrPanne, inscrPanne2, listePanne, desinscrPanne].every(r => r.retry === '30')],
+      [503, 503, 503, 503, 503, true]);
+    verifier('scan, écriture (crediter_scan) en panne : 503 database_unavailable (avant : 500)',
+      [scanPanne.statut, scanPanne.corps && scanPanne.corps.error], [503, 'database_unavailable']);
 
     // c : file des iPhone, la caisse passe devant.
     Object.assign(regle, { motif: /^\/rest\/v1\/passes/, delaiMs: 1000, enVol: 0, maxEnVol: 0 });

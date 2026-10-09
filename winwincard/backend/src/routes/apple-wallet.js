@@ -16,6 +16,15 @@ function verifyAppleToken(req, serialNumber) {
   return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected));
 }
 
+// Base lente (coupée à 5 s, étape 16) ou en panne : 503 + Retry-After, jamais
+// « introuvable » (404) ni « rien de modifié » (204), que l'iPhone prendrait
+// pour une réponse et qui lui feraient manquer la mise à jour (série « avant »
+// de t37, 09/10). Même principe que la caisse.
+function baseIndisponible(res, route, error) {
+  console.error(`[apple-wallet] ${route} : base indisponible :`, error.message);
+  return res.set('Retry-After', '30').status(503).send();
+}
+
 // ============================================================
 // Endpoints standard Apple Wallet (WebService URL)
 // Apple appelle ces routes automatiquement — ne pas modifier les chemins.
@@ -32,12 +41,14 @@ router.post('/v1/devices/:deviceId/registrations/:passTypeId/:serialNumber', asy
   if (!pushToken) return res.status(400).send();
 
   // Récupérer le pass et le client associé
-  const { data: pass } = await supabase
+  const { data: pass, error: errPass } = await supabase
     .from('passes')
     .select('id, client_id, marchand_id')
     .eq('serial_number', serialNumber)
     .single();
 
+  // PGRST116 : aucune ligne → carte inconnue (404). Toute autre erreur : la base.
+  if (errPass && errPass.code !== 'PGRST116') return baseIndisponible(res, 'inscription', errPass);
   if (!pass) return res.status(404).send();
 
   // Upsert du device token (un client peut réinstaller son pass)
@@ -52,7 +63,7 @@ router.post('/v1/devices/:deviceId/registrations/:passTypeId/:serialNumber', asy
       push_token: pushToken
     }, { onConflict: 'device_id,serial_number' });
 
-  if (error) return res.status(500).send();
+  if (error) return baseIndisponible(res, 'inscription', error);
 
   res.status(201).send();
 
@@ -72,7 +83,7 @@ router.delete('/v1/devices/:deviceId/registrations/:passTypeId/:serialNumber', a
     .eq('device_id', deviceId)
     .eq('serial_number', serialNumber);
 
-  if (error) return res.status(500).send();
+  if (error) return baseIndisponible(res, 'désinscription', error);
   res.status(200).send();
 }));
 
@@ -91,7 +102,8 @@ router.get('/v1/devices/:deviceId/registrations/:passTypeId', asyncHandler(async
     query.gt('passes.updated_at', passesUpdatedSince);
   }
 
-  const { data } = await query;
+  const { data, error } = await query;
+  if (error) return baseIndisponible(res, 'liste des cartes', error);
 
   if (!data || data.length === 0) {
     return res.status(204).send();
@@ -123,10 +135,8 @@ router.get('/v1/passes/:passTypeId/:serialNumber', asyncHandler(async (req, res)
     .eq('serial_number', serialNumber)
     .single();
 
-  if (errPass) {
-    console.error('[apple-wallet] Erreur SELECT pass:', errPass.message);
-    return res.status(404).send();
-  }
+  // PGRST116 : aucune ligne → carte inconnue (404). Toute autre erreur : la base.
+  if (errPass && errPass.code !== 'PGRST116') return baseIndisponible(res, 'carte', errPass);
   if (!pass) return res.status(404).send();
 
   // Comparaison tronquée à la seconde : toUTCString() (HTTP date) n'a pas de ms,

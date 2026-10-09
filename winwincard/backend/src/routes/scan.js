@@ -178,7 +178,12 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
     // 23505 : la même clé vient d'être enregistrée pour un AUTRE client, au
     // même instant. La transaction entière est annulée : rien n'est écrit.
     if (errCredit.code === '23505') return res.status(409).json({ error: 'idempotency_conflict' });
-    return res.status(500).json({ error: errCredit.message });
+    // Toute autre erreur vient de la base (coupure à 5 s, panne) : 503, comme les
+    // lectures (étape 16). La transaction a pu aboutir quand même (PostgREST la
+    // finit, §15 tervicies) : l'écran garde la clé, le renvoi rend le premier
+    // résultat sans recréditer.
+    console.error('[scan] écriture crediter_scan impossible :', errCredit.message);
+    return res.status(503).json({ error: 'database_unavailable' });
   }
   if (!credit || credit.ok !== true) {
     const raison = credit && credit.reason;

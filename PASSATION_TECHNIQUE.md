@@ -4586,6 +4586,75 @@ actuel remis en place et vérifié).
 production. Tout push sur cette branche redéploie les trois services de test et rejoue
 l'étape inscrite au pilote (`attente` au repos).
 
+## 15 tricies. t37 : SÉRIE « AVANT » (09/10, environnement de test, code de production `a3fadde`)
+
+**Faite par Yass le 09/10** sur `campagne/etape37` (= `a3fadde`), serveur et imitateur arrêtés
+ensuite, pilote sur `attente`. Campagne vers le marchand plafond, scans au rythme ×3 pendant
+45 s. Profil du test : ≈ 2,7 cartes par appareil (production ≈ 1).
+
+| Palier (porteurs) | iPhone / Google | scan au calme méd. / max | clic | scans pendant | `/v1` |
+|---|---|---|---|---|---|
+| 123 | 88 / 50 | 377 / 564 ms | 1 993 ms | méd. 329, p99 = max 1 564 ms, tous 200 | passes 200×82, 304×240, **404×25** ; listes 200×94, **204×11** |
+| 308 | 241 / 116 | 356 / 662 ms | 3 013 ms | méd. 319, max 2 566 ms (générateur) / 6 533 ms (serveur), 200×26, **503×2** | passes **404×120** |
+| 615 | 504 / 211 | 400 / 1 070 ms | **33 143 ms** | 200×14, **503×11, 500×2**, max **17 654 ms** | passes 200×56, 304×243, **404×239** ; listes 200×142, **204×370** ; requêtes base max **23 386 ms** |
+
+**Lecture, face aux seuils de t37** (caisse p99 ≤ 1 s et max ≤ 2 s ; clic ≤ 1 s ; zéro 5xx
+de caisse) :
+- 123 : déjà hors seuil (p99 1,56 s ; clic 2 s), sans erreur.
+- 308 : hors seuil (max 2,6 à 6,5 s ; 2 scans refusés en 503 par les coupures à 5 s de
+  l'étape 16, qui ont joué leur rôle : pas d'attente de 154 s).
+- 615 : tempête (41 % des scans en erreur, clic 33 s, base 23 s).
+- **Coude : entre ≈ 90 et ≈ 240 iPhone notifiés** (profil du test). La production a servi
+  133 à 187 iPhone sans file, à ≈ 1 carte par appareil. **Le déclencheur « premier marchand à
+  ≈ 500 porteurs » est trop haut** : à ≈ 300 porteurs (≈ 240 iPhone, le plus gros marchand
+  actuel), une campagne gêne déjà la caisse au profil du test.
+- Ce que t37 doit faire tomber : clic → < 1 s ; scans pendant → max ≤ 2 s, zéro 503 et 500 ;
+  requêtes base → plus de file (max < 1 s) ; `/v1` → zéro 404 et 204 de coupure.
+
+**Deux défauts trouvés par la série, corrigés dans t37 (local)** :
+1. **Routes Apple sur coupure ou panne de base (CONFIRMÉ par le code et par la
+   contre-épreuve)** : `apple-wallet.js` ne lisait pas l'erreur de la liste (`204` « rien de
+   modifié ») et rendait `404` sur toute erreur de lecture de carte ; l'inscription
+   rendait 404 puis 500, la désinscription 500. L'iPhone prenait ces réponses pour vraies et
+   manquait la mise à jour. Correctif : toute erreur de base → **503 + `Retry-After: 30`** ;
+   seul `PGRST116` (aucune ligne) reste 404.
+2. **Les 2 scans en 500 du palier 615** : écriture `crediter_scan` coupée à 5 s
+   (`scan.js`, erreur autre que 23505 → 500). Correctif : **503 `database_unavailable`**,
+   journalisé (les deux tests de l'étape 11 « panne à l'écriture » attendent maintenant 503).
+   **Crédit unique** : chaque scan du générateur porte une clé neuve et n'est jamais
+   renvoyé (`generateur.js:96`), et `crediter_scan` est une seule transaction : chaque scan
+   coupé est crédité 0 ou 1 fois, jamais 2 (index unique sur la clé). À compter sur la base
+   de test (requête en lecture, ci-dessous) : `donnees.sql` ne pose aucune clé, donc les
+   lignes avec clé sont celles du générateur depuis le chargement 615 : attendu 30 (contrôle)
+   + 14 (200) + 0 à 2 (les 500), et autant de clés distinctes.
+   ```sql
+   SELECT count(*) AS scans_avec_cle, count(DISTINCT cle_idempotence) AS cles_distinctes
+     FROM scans WHERE cle_idempotence IS NOT NULL;
+   ```
+
+**Preuves** : `npm test` **205/205**. Nouveaux tests : base saine (inscription 201, liste 200,
+carte inconnue 404) ; liste coupée à 5 s → 503 + Retry-After vers 5 s ; panne → carte,
+inscription (deux lectures), liste et désinscription en 503 + Retry-After ; écriture du scan
+en panne → 503. Contre-épreuve (sans ces deux correctifs) : 5 KO, avec exactement les codes
+vus en série : 204, 404, 404 puis 500, 500, et 500 au scan.
+
+**Série « après » : proposition** (feu vert déjà donné : push de t37 sur `campagne/etape37`,
+migration 054 sur la base de TEST, rien d'autre). Débit nominal 50 / 10 s.
+`CHARGE_CAMPAGNE_S` = durée d'envoi (iPhone ÷ 5) + 50 s environ :
+
+| Essai | données | cible | iPhone ≈ | `CHARGE_CAMPAGNE_S` |
+|---|---|---|---|---|
+| A | 123 | plafond | 88 | 60 |
+| B | 308 | plafond | 241 | 100 |
+| C | 615 | plafond | 504 | 150 |
+| D | 5000 | plafond | ≈ 4 050 | 870 |
+| E | 5000 | reseau | ≈ 16 200 | 3 300 (55 min) ; redéploiement du serveur au milieu (reprise) |
+
+Seuils : caisse p99 ≤ 1 s, max ≤ 2 s, zéro 503 et 500 ; clic ≤ 1 s ; requêtes base méd.
+≤ 300 ms ; zéro 503 de la file `/v1` ; zéro 404 et 204 de coupure ; requêtes base par iPhone
+réveillé ≈ 4,7 au profil du test (≤ 2,5 visé au profil de la production : b2 en parking) ; E :
+reprise dans le journal (`[campagne] … reprise`), fin « terminée », compteurs complets.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
