@@ -4658,6 +4658,51 @@ Seuils : caisse p99 ≤ 1 s, max ≤ 2 s, zéro 503 et 500 ; clic ≤ 1 s ; requ
 réveillé ≈ 4,7 au profil du test (≤ 2,5 visé au profil de la production : b2 en parking) ; E :
 reprise dans le journal (`[campagne] … reprise`), fin « terminée », compteurs complets.
 
+## 15 untricies. t37 : SÉRIE « APRÈS », ESSAIS A À D (09-10/10, environnement de test, `a46a976`)
+
+**Faite par Yass** sur `campagne/etape37` = `a46a976` (t37 complet), migration 054 sur la base
+de TEST (vérification : 5 × true). Débit nominal 50 iPhone / 10 s. Profil du test : ≈ 2,7
+cartes par appareil. Essai E (réseau ≈ 16 200, redéploiement au milieu) : pas encore reçu.
+
+| Essai | pushes Apple | clic | scans pendant : méd. / p95 / p99 / max (n) ; erreurs | requêtes base : méd. la plus haute / max | `/v1` erreurs | durée |
+|---|---|---|---|---|---|---|
+| A (123) | 115 | 239 ms (202) | 369 / 1 095 / 1 242 / 1 242 ms (29) ; 0 | 193 / 468 ms | 0 | 69 s |
+| B (308) | 272 | 221 ms | 319 / 656 / 758 / 758 ms (41) ; 0 | 253 / 557 ms | 0 | 109 s |
+| C (615) | 567 | 245 ms | 397 / 1 238 / 1 344 / 1 344 ms (84) ; 0 | 163 / 684 ms | 0 | 158 s |
+| D (5000) | **4 366** | 231 ms | 424 / 1 055 / 1 457 / **2 428** ms (462) ; 0 | 136 / 916 ms | 0 | 881 s (= 4 366 ÷ 5 s⁻¹) |
+
+Scan au calme (contrôle, 30 scans) : méd. 336 à 365 ms, max 530 à 834 ms.
+
+**Comparaison avec la série « avant »** (§15 tricies) :
+- erreurs de caisse pendant une campagne : 2 (308) et 13 sur 27 (615) → **0 à tous les
+  paliers**, D compris (462 scans) ;
+- clic : 2 à 33 s → **≈ 230 ms**, constant ;
+- requêtes base : max 23 s (file) → **max < 1 s**, médianes 135 à 250 ms : plus de file ;
+- `/v1` : 404 et 204 de coupure (jusqu'à 239 et 370) → **0** ; aucun 503 de la file des iPhone
+  au débit nominal (seuil du 09/10 tenu) ;
+- **plafond levé** : D envoie 4 366 pushes (impossible avant : 1 000 au plus), au débit
+  exact, sans erreur ; boucle max 32 ms, mémoire 324 Mo ;
+- requêtes base par iPhone réveillé (D) : (4 319 listes + 15 733 cartes) ÷ 4 319 ≈ **4,6**
+  (attendu 4,7) ; dont 2,6 vérifications « 304 » d'autres cartes, propres au profil du test
+  (b2, parking).
+
+**Face aux seuils** :
+- tenus : zéro erreur de caisse, clic ≤ 1 s, base méd. ≤ 300 ms, zéro 503 de la file, zéro
+  404/204 de coupure, requêtes par iPhone conformes ;
+- **non tenus** : caisse **p99 ≤ 1 s** (A 1,24 ; C 1,34 ; D 1,46 s ; B 0,76 s tenu) et **max
+  ≤ 2 s** en D (2,43 s, un scan sur 462). Cause lue dans les mesures : pas de file, mais une
+  base plus chargée (≈ 20 à 25 requêtes base par seconde venues des iPhone) : chaque requête
+  du scan passe de ≈ 100 à 300-500 ms au p95-p99, et un scan en enchaîne 3 à 4. Le contrôle
+  au calme est déjà à 0,5-0,8 s de max.
+
+**Leviers sans code, à décider** :
+1. réviser le seuil : p99 ≤ 1,5 s et max ≤ 2,5 s pendant une campagne (au calme : max
+   ≈ 0,8 s ; Dubaï ajoute ≈ 0,28 s) ;
+2. ou baisser le débit : `CAMPAGNE_IPHONE_PAR_LOT=30` (3 iPhone / s, ≈ − 40 % de charge),
+   campagnes ≈ 1,7 fois plus longues (4 000 iPhone : ≈ 22 min) ; à mesurer en rejouant C et D ;
+3. au profil de la production (≈ 1 carte par appareil), ≈ 2 requêtes par iPhone au lieu de
+   4,6 : la charge réelle sera ≈ moitié de celle du test (HYPOTHÈSE, non mesurée).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
