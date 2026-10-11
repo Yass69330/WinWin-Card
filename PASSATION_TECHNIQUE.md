@@ -4737,6 +4737,26 @@ erreur, p99 370 ms. Boucle max 56 ms, mémoire 218 Mo. Réserve : la base de tes
 plus rapide au calme ce matin-là (scan de contrôle méd. 351 ms) : une part de l'écart peut
 venir de l'heure. D' (palier 5000) dira si l'effet tient sur la durée.
 
+**Essai D' (11/10, 10:35 → 11:01 UTC) : palier 5000, débit 30 / 10 s.** 4 663 pushes Apple
+en 1 528 s (≈ 3 / s, le débit réglé), 2 657 messages Google. Clic 214 ms. Scans pendant :
+**822 / 822 en 200, méd. 318, p95 580, p99 1 124, max 1 947 ms**. Requêtes base : méd. la plus
+haute 118 ms, max 939 ms, p95 ≈ 170 ms (D à 50 / 10 s : ≈ 310 ms). `/v1` : 0 erreur, p99
+382 ms. Boucle max 81 ms, mémoire 242 Mo.
+
+| | D (50 / 10 s) | D' (30 / 10 s) | seuil |
+|---|---|---|---|
+| caisse p99 | 1 457 ms | **1 124 ms** | ≤ 1 s |
+| caisse max | 2 428 ms | **1 947 ms** | ≤ 2 s |
+| erreurs | 0 / 462 | 0 / 822 | 0 |
+| durée pour ≈ 4 500 iPhone | ≈ 15 min | ≈ 26 min | — |
+
+**Lecture.** À 30 / 10 s, le max tient sur 25 min de campagne, le p99 dépasse d'≈ 0,1 s (le
+calme est à 0,56 s). À 50 / 10 s, p99 et max sont dépassés. Au profil de la production (≈ 1
+carte par appareil, ≈ 2 requêtes base par iPhone au lieu de 4,6), la charge réelle serait
+≈ moitié (HYPOTHÈSE non mesurée). **Proposition** : débit de production 30 / 10 s
+(`CAMPAGNE_IPHONE_PAR_LOT=30`, variable Railway, sans code), seuil de caisse pendant
+campagne p99 ≤ 1,2 s et max ≤ 2 s. À décider par Yass.
+
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
