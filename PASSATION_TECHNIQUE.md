@@ -4662,7 +4662,7 @@ reprise dans le journal (`[campagne] … reprise`), fin « terminée », compteu
 
 **Faite par Yass** sur `campagne/etape37` = `a46a976` (t37 complet), migration 054 sur la base
 de TEST (vérification : 5 × true). Débit nominal 50 iPhone / 10 s. Profil du test : ≈ 2,7
-cartes par appareil. Essai E (réseau ≈ 16 200, redéploiement au milieu) : pas encore reçu.
+cartes par appareil. Essai E : voir plus bas.
 
 | Essai | pushes Apple | clic | scans pendant : méd. / p95 / p99 / max (n) ; erreurs | requêtes base : méd. la plus haute / max | `/v1` erreurs | durée |
 |---|---|---|---|---|---|---|
@@ -4702,6 +4702,33 @@ Scan au calme (contrôle, 30 scans) : méd. 336 à 365 ms, max 530 à 834 ms.
    campagnes ≈ 1,7 fois plus longues (4 000 iPhone : ≈ 22 min) ; à mesurer en rejouant C et D ;
 3. au profil de la production (≈ 1 carte par appareil), ≈ 2 requêtes par iPhone au lieu de
    4,6 : la charge réelle sera ≈ moitié de celle du test (HYPOTHÈSE, non mesurée).
+
+**Essai E (10/10, 22:19 → 23:14 UTC) : réseau, 16 230 inscriptions iPhone, redéploiement du
+serveur au milieu (22:33:58).**
+- Campagne `terminee` toute seule : `fin_le` 23:14:52, 55 min 22 s pour 16 230 (≈ 4,9 / s,
+  pause de reprise comprise). Compteurs complets : Apple 16 230 tentés, 16 075 acceptés
+  (165 refus simulés par l'imitateur, ≈ 1 %) ; Google 7 205 / 7 205.
+- **Reprise prouvée** : ligne `[campagne] 0e5ca25b-… reprise (marchand 4e3871ed-…)` du
+  nouveau serveur, colonne `instance` posée (seule la reprise l'écrit), `maj_le` qui avance
+  après le redémarrage, un appel `rpc/reprendre_campagnes`.
+- Scans pendant (générateur, redémarrage compris) : **1 761 / 1 761 en 200**, méd. 455, p95
+  1 114, **p99 1 669, max 2 616 ms**. Clic 139 ms. Requêtes base max 1,09 s (pas de file).
+  `/v1` : 0 erreur, p99 1 s. Boucle max 71 ms, mémoire 234 Mo.
+- Même campagne SANS plafond à l'étape 15 (avant t37) : 68 scans coupés sur 82, max 150 s,
+  boucle bloquée 37 s, 3,1 Go, 35 % d'échecs Apple.
+- **Doublons Google : 0** (7 205 envois, 7 205 cartes).
+- **Apple : 16 230 envois pour 12 622 jetons distincts. Ce n'est PAS un doublon de reprise.**
+  Un iPhone a UN jeton de push pour toutes ses cartes ; au profil du test, des appareils
+  portent plusieurs cartes du réseau, donc plusieurs lignes `device_tokens`. La campagne
+  envoie un push par ligne, comme avant t37 (`notifications.js:81` d'origine). La requête
+  de doublons devait compter les couples (jeton, carte) : à relancer (ci-dessous).
+- **Piste nouvelle (non codée)** : un seul push par appareil et par campagne (même jeton) :
+  ici 12 622 au lieu de 16 230, soit ≈ − 22 % de pushes et de retours d'iPhone (un iPhone
+  réveillé revérifie de toute façon toutes ses cartes). Gain nul au profil de la production
+  (≈ 1 carte par appareil), réel pour un réseau dont les clients ont plusieurs cartes.
+- Seuils : tenus sauf **caisse p99 ≤ 1 s et max ≤ 2 s** (1,67 et 2,62 s), comme en D : charge
+  de la base, pas de file. Les essais C' et D' (débit 30 / 10 s) le diront.
+
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
