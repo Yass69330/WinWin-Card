@@ -4788,6 +4788,250 @@ double malgré le redémarrage au milieu de la campagne. Environnement de test :
 débit retirée, serveur et imitateur arrêtés, pilote sur `attente` ; gardé jusqu'au 31/10.
 **t37 clos.**
 
+## 15 tertricies. ÉTAPE 22 + CRON DE L'ÉTAPE 21 : DIAGNOSTIC ET PROPOSITION (11/10, rien codé)
+
+Base : production `f49b44b`, `src/workers/cron.js`. Chiffres « avant » : mesures de
+l'étape 15 (§15 G : 57 min au palier 50 000, requête base ≈ 107 ms, 2 849 relances
+d'inactifs prévues dont 1 105 vers des actifs).
+
+### 1. Comment chaque smart notification choisit ses destinataires
+
+Le cron n'en a que trois (un seul passage à 08:00 UTC, `cron.js:25`). La demande d'avis
+(`services/avis.js`) n'est pas du cron : minuteur de 30 min après une récompense, déjà
+dédoublonné en mémoire. Elle est hors du périmètre. « Boost » n'existe pas dans le code :
+le workflow le plus proche est `near_reward`.
+
+| Workflow | Sélection aujourd'hui | Où ça casse |
+|---|---|---|
+| **inactive** `cron.js:68-124` | 3 lectures par marchand : scans depuis N jours (`:91`), tous les clients (`:92`), relances des 7 derniers jours (`:93`). Le tri se fait en JS (`:97-99`). | (a) Les 3 listes sont **coupées à 1 000** : des clients actifs sont relancés dès ≈ 33 scans par jour ; les clients après le 1 000ᵉ ne sont jamais évalués ; le dédoublonnage coupé produit des relances en double. (b) **Scans annulés comptés** comme visites (`:91`, pas de `annule_le IS NULL`). (c) **Nouveaux clients relancés** : un inscrit sans scan est « inactif » dès le lendemain (aucun critère sur `created_at`). (d) **Relance chaque semaine sans fin** : dédoublonnage de 7 j contre une absence de 30 j. Un absent reçoit environ 4 relances par mois. **Sur iPhone, ces relances 2, 3, 4 ne s'affichent pas** : le texte de `notification_message` est identique (aucun scan entre-temps), donc iOS ne voit aucun changement (même mécanisme que B3, `avis.js:129-133`). Le registre les compte pourtant « ok ». |
+| **near_reward** `cron.js:129-189` | Clients avec `stored_value` dans [max − seuil, max[, plus les relances des 7 derniers jours. | Les deux listes sont coupées à 1 000 (895 envois d'un coup mesurés). Même relance hebdomadaire muette sur iPhone tant que le solde ne bouge pas. |
+| **birthday** `cron.js:201-267` | **Tous** les clients ayant une date de naissance, puis tri `MM-JJ` en JS. | Liste coupée à 1 000 : au-delà de 1 000 dates connues, des anniversaires manqués **au hasard** (aucun ordre). |
+
+Défauts communs :
+- **3 requêtes en série par client** : mise à jour de la carte (`:276`), lecture des
+  jetons (`:283`), écriture du dédoublonnage (`:106/173/256`). C'est l'essentiel des
+  57 min.
+- **Google appelé pour tous les clients** (`:296-300`), y compris ceux qui n'ont pas de
+  carte Google. Cela donne un appel inutile, un 404 et une fausse erreur dans le
+  registre. C'est le même défaut que celui corrigé dans les campagnes par t37.
+- **Dédoublonnage écrit APRÈS l'envoi**, erreur seulement journalisée : si l'écriture
+  échoue, la relance repart le lendemain (doublon).
+- **Aucun verrou** : `POST /api/admin/workflows/trigger` (`routes/workflows.js:60-66`)
+  pendant le passage de 08:00 lit le même dédoublonnage vide, ce qui donne des doublons.
+- **Erreur de la lecture des marchands non lue** (`:80/141/214`) : une base en panne
+  donne « 0 marchand » et un passage « ok » dans `cron_passages`.
+- **Aucune règle entre types** : un même client peut recevoir inactive + near_reward +
+  birthday le même jour (aujourd'hui déjà, dans un seul passage). Sur iPhone, seul le
+  dernier texte reste dans la carte.
+
+### 2. Proposition : sélection juste DANS LA BASE
+
+Une migration (055), une fonction `reserver_relances(p_marchand_id, p_type, p_lot,
+p_params jsonb, p_limite int)`. En UNE transaction :
+1. Un verrou consultatif par (marchand, type) (`pg_advisory_xact_lock`) : deux appels
+   simultanés (cron + bouton admin) passent l'un après l'autre et le second voit les
+   réservations du premier.
+2. La sélection, sans plafond de lecture (tout se passe dans la base) :
+   - **inactive** : client non effacé, avec carte, dont la **dernière activité** est plus
+     ancienne que N jours. La dernière activité est le dernier scan NON annulé
+     (`annule_le IS NULL`), ou l'inscription s'il n'a jamais scanné. Anti-jointure sur
+     les scans du marchand depuis N jours (index existant `idx_scans_marchand_date`).
+   - **near_reward** : même filtre de solde qu'aujourd'hui.
+   - **birthday** : `to_char(date_anniversaire, 'MM-DD')` = jour UTC.
+   - Dans les trois cas : dédoublonnage du type (7 j ; année pour birthday). On exclut
+     aussi les clients **sans aucun canal** (ni jeton Apple, ni carte Google).
+   - Plus la règle « une smart notification par client et par jour » (point 6).
+3. `INSERT` dans `workflow_executions` des élus (avec `lot`) **AVANT l'envoi** : un
+   crash ou un redéploiement perd au pire ce lot (perte silencieuse, jamais de doublon).
+   C'est la règle « curseur avant envoi » de Google dans t37.
+4. Retour : `client_id, prenom, serial, stored_value, google (bool), jetons text[]` (les
+   push tokens de `device_tokens`), au plus `p_limite` lignes (500 < plafond de 1 000
+   de l'API).
+
+Pas de curseur : les élus étant inscrits, l'appel suivant tombe sur les suivants. On
+boucle jusqu'à une page vide ou jusqu'au **plafond par marchand et par passage**.
+
+**Plafond par épisode** (règle 8, §15 G « 22 ») : au plus **1 000 clients par marchand,
+par type et par passage** (proposé ; à trancher). Le reste part au passage suivant,
+puisqu'il reste éligible. Cela protège du premier passage après mise en production :
+au palier 50 000, ≈ 20 000 inactifs d'un coup feraient ≈ 1 h 50 de pushes au débit
+partagé.
+
+**Index** : un seul nouvel index, `workflow_executions (marchand_id, executed_at)`.
+- Il sert au dédoublonnage par type, à la règle « un par jour » et au futur rapport
+  marchand.
+- Taille : ≈ 10 à 15 Mo au palier 50 000 (≈ 3 300 lignes par jour × 90 j).
+- L'ancien `idx_wf_exec_lookup` devient inutile. On le supprimera plus tard, après
+  mesure. Rien d'autre : scans, clients et jetons ont déjà leurs index.
+
+**Charge base de la sélection** : par page, ≈ 30 000 scans de 30 j relus par index plus
+50 000 clients par index, chez le plus gros marchand. Estimation 50 à 300 ms
+(**HYPOTHÈSE**, à mesurer), 2 à 3 pages par gros marchand et par jour, à 08:00.
+Les caisses ne sont pas touchées : le scan ne change pas, et aucune requête régulière
+n'est ajoutée.
+
+### 3. Relances regroupées
+
+Par page de 500 clients :
+1. `rpc reserver_relances` : 1 requête (sélection, dédoublonnage, jetons).
+2. `rpc poser_messages(p_serials text[], p_messages text[])` : 1 requête. Les textes
+   restent construits en JS (i18n, `{prenom}`, `{nom}`, `{remaining}`), puis sont posés
+   sur `passes.notification_message` en une seule écriture. Le déclencheur
+   `trg_passes_updated_at` bouge `updated_at`, comme aujourd'hui.
+3. Envois : Apple via le débit (point 4) ; Google seulement si le client a une carte
+   Google, 5 en parallèle (comme les campagnes).
+4. Registre : 1 insert pour toute la page (déjà groupé).
+
+Requêtes base par client relancé : **3 → ≈ 0,006** (3 requêtes pour 500).
+- Par jour au palier 50 000 (≈ 3 300 relances, HYPOTHÈSE §5) : ≈ 9 900 requêtes avant,
+  ≈ 30 après.
+- Stockage : inchangé par relance (une ligne `workflow_executions`, une par push dans le
+  registre). Le volume total MONTE avec la sélection juste (plus de vrais inactifs),
+  borné par le plafond.
+
+### 4. Débit partagé (d2)
+
+C'est déjà le cas depuis t37 : `debit.prendre()` passe avant chaque push Apple du cron
+(`cron.js:289`). On le garde tel quel.
+
+Conséquence à connaître : le débit (30 iPhone / 10 s = 3/s) devient **le** facteur de
+durée du cron. Une campagne lancée à 08:00 partage ce débit et ralentit d'autant (ordre
+d'arrivée).
+
+Google reste hors débit : Google ne rappelle pas notre serveur. Les envois Google sont
+bornés à 5 en parallèle.
+
+### 5. Durée du cron, avant / après
+
+**HYPOTHÈSES** :
+- ≈ 40 % d'inactifs (palier 50 000 du banc : 20 138 / 50 000) ;
+- relances inactifs ≈ inactifs / 7 par jour en régime établi (règle actuelle) ;
+- near_reward ≈ 300 par jour à 50 000 ;
+- ≈ 60 % de clients avec iPhone et ≈ 40 % avec Google ;
+- 0,68 s par client aujourd'hui (57 min ÷ ≈ 5 000 envois mesurés) ;
+- Google ≈ 0,2 s par appel.
+
+| | 5 000 porteurs | 50 000 porteurs |
+|---|---|---|
+| Aujourd'hui (sélection fausse, coupée) | ≈ 4 à 6 min | **57 min mesurées** |
+| Sélection juste SEULE, 3 requêtes par client | ≈ 4 min (330 relances par jour) ; premier jour ≈ 25 min | ≈ 37 min par jour ; **premier jour ≈ 4 h** (≈ 20 000 inactifs) |
+| **Proposition** (SQL + groupé + débit + plafond 1 000) | **≈ 1 min** (≈ 200 iPhone ÷ 3/s ; base < 5 s) | **≈ 11 à 12 min** par jour (≈ 2 000 iPhone ÷ 3/s) ; premier jour borné par le plafond (≈ 6 min par gros marchand et par type) |
+
+Avec la règle « une relance par absence » (point 8, décision) au lieu d'une par
+semaine, les relances inactifs tombent à ≈ 1/4. Le cron passe alors à ≈ 4 min à
+50 000.
+
+Limite : `/health/cron` signale « pas_fini » à 60 min (`cron-passages.js:31`). Le
+plafond par marchand garde le passage sous ce seuil jusqu'à ≈ 15 gros marchands. Au-delà,
+il faudra un plafond global (noté, pas maintenant).
+
+### 6. Un cron par type de smart notification (idée de Yass)
+
+**Pour** :
+- passages plus courts ;
+- une panne de birthday n'empêche plus inactive (déjà vrai : chaque étape attrape son
+  erreur) ;
+- rapport et santé par type ;
+- une heure adaptée à chaque message (anniversaire le matin, relance avant le déjeuner).
+
+**Contre** : le risque « deux notifications le même jour » **existe déjà** dans le
+passage unique (point 1). Séparer les heures ne le crée pas, il le rend seulement
+visible. Autre coût : `cron_passages` et `/health/cron` supposent un seul passage à
+08:00. Il faudrait une colonne `type`, une heure par type, et une santé par type
+(migration + `cron-passages.js`).
+
+**Recommandation** :
+1. **Maintenant**, quel que soit le découpage : la règle **« au plus une smart
+   notification par client et par jour (UTC) »**, dans la fonction SQL (anti-jointure
+   sur `workflow_executions` depuis minuit, même index). Priorité par l'ordre de
+   passage : birthday → near_reward → inactive. Coût nul en requêtes.
+2. **Ensuite** (peut attendre) : un planificateur par type, dans le même worker (une
+   table `type → heure`), une ligne `cron_passages` par type. Avec la règle 1, le
+   découpage n'apporte aucun doublon.
+
+Non couvert : une campagne manuelle le même jour qu'une relance. Les campagnes n'écrivent
+pas par client. Le croiser demanderait une écriture par client et par campagne : non
+proposé.
+
+### 7. Ce qui doit rester enregistré (futur rapport marchand)
+
+Gardé tel quel :
+- `workflow_executions` : une ligne par client relancé, type, `executed_at`, purge à
+  90 j ;
+- `notification_envois` : une ligne par push, `source` = type, `lot` ;
+- `cron_passages` : bilan global par type.
+
+Ajouts proposés :
+- **`workflow_executions.lot uuid`** (colonne nullable, migration 055). Elle relie
+  chaque relance à ses lignes du registre, pour répondre à « relancé ET reçu par
+  Apple ou Google ». Coût : 16 o par ligne.
+- **Bilan par marchand** dans `cron_passages.bilan` (jsonb existant, aucune table) :
+  `{ type: { total, par_marchand: { id: { eligibles, envoyes, reportes } } } }`.
+  « reportés » (au-delà du plafond) n'existe qu'au moment du passage : sans ça, il est
+  perdu. Taille : ≈ 100 o par marchand et par type, 1 ligne par jour.
+- **Rien n'est perdu** du comportement actuel :
+  - le dédoublonnage s'écrit avant l'envoi au lieu d'après ;
+  - un client sans canal n'est plus inscrit. Il ne recevait rien de toute façon ; il
+    reste compté dans « éligibles ».
+- Limite : la purge à 90 j borne l'historique du rapport. À revoir avec l'écran du
+  rapport, pas maintenant.
+
+### 8. Plan de test
+
+`npm test` (PostgreSQL + PostgREST locaux, **plafond de 1 000 comme Supabase**), une
+section 18. Aucun besoin de l'environnement de test pour la justesse.
+
+Cas à couvrir :
+- plus de 1 000 scans récents : aucun actif relancé ;
+- plus de 1 000 clients : tous évalués ;
+- plus de 1 000 lignes de dédoublonnage : aucun doublon ;
+- scan annulé : non compté ;
+- nouvel inscrit : non relancé ;
+- plafond par marchand : le reste part le lendemain ;
+- règle « un par jour » entre types ;
+- deux déclenchements simultanés (cron + bouton admin) : aucun doublon ;
+- coupure entre réservation et envoi : aucun doublon ;
+- Google seulement pour les cartes Google ;
+- chaque push Apple passe par `debit.prendre()` ;
+- registre écrit, `lot` renseigné ;
+- bilan par marchand ;
+- anniversaire au-delà de 1 000 dates ;
+- contre-épreuve : les nouveaux tests échouent sur `f49b44b`.
+
+Environnement de test (gardé jusqu'au 31/10), **optionnel, à demander avant** : un passage
+du cron au palier 50 000 pour mesurer le « après » réel (57 min avant). Il demande 055 sur
+la base de test. Hors 08:00-09:00 UTC.
+
+### 9. Avant le premier marchand à ≈ 1 000 porteurs / ce qui peut attendre
+
+**Avant** :
+- sélection SQL et réservation avant envoi (points 2 et 3) ;
+- annulations exclues ;
+- nouveaux inscrits exclus ;
+- Google filtré ;
+- verrou ;
+- erreur de la lecture des marchands lue ;
+- plafond par marchand ;
+- index `(marchand_id, executed_at)` ;
+- règle « un par jour » ;
+- colonne `lot` et bilan par marchand (ne rien perdre dès le premier jour).
+
+**Peut attendre** :
+- un planificateur par type ;
+- plafond global du passage ;
+- suppression de `idx_wf_exec_lookup` ;
+- fuseau par marchand ;
+- écran du rapport ;
+- historique au-delà de 90 j.
+
+**Décisions demandées au pilotage** :
+1. relance inactive : une par absence (recommandé), ou une par semaine comme
+   aujourd'hui (muette sur iPhone dès la 2ᵉ) ;
+2. near_reward : même question ;
+3. plafond par marchand, par type et par passage : 1 000 ?
+4. nouveaux inscrits jamais scannés : relancés N jours après l'inscription (recommandé) ?
+5. priorité du « un par jour » : birthday → near_reward → inactive ?
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
