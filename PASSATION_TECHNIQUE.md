@@ -4777,6 +4777,15 @@ instances doubleraient le débit et la file, sans que rien ne le signale. La rep
 campagnes, elle, resterait sûre (prise atomique en base). Toute mise à l'échelle horizontale
 exige d'abord de déplacer débit et file hors de la mémoire.
 
+**MISE EN PRODUCTION (11/10)** : migration 054 exécutée sur la base de PRODUCTION par Yass
+(vérification 5 × true), PUIS push en avance rapide `a3fadde..f49b44b` sur
+`claude/keen-goldberg-MXslu`. **Contrôles en production OK (Yass)** : déploiement vert,
+journal de démarrage, scan test et annulation, petite campagne sur le marchand de test (clic
+immédiat « Campagne en cours d'envoi. », historique « En cours d'envoi » puis « Envoyée »,
+iPhone de Yass mis à jour), scan pendant la campagne sans erreur. **t37 est en production.**
+Restent : requête « couples » de l'essai E (non bloquante) ; environnement de test arrêté et
+gardé jusqu'au 31/10.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
