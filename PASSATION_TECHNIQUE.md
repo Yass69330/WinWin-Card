@@ -4783,8 +4783,10 @@ exige d'abord de déplacer débit et file hors de la mémoire.
 journal de démarrage, scan test et annulation, petite campagne sur le marchand de test (clic
 immédiat « Campagne en cours d'envoi. », historique « En cours d'envoi » puis « Envoyée »,
 iPhone de Yass mis à jour), scan pendant la campagne sans erreur. **t37 est en production.**
-Restent : requête « couples » de l'essai E (non bloquante) ; environnement de test arrêté et
-gardé jusqu'au 31/10.
+Requête « couples » de l'essai E (Yass, 11/10) : **envois = couples**, aucun push Apple en
+double malgré le redémarrage au milieu de la campagne. Environnement de test : variable de
+débit retirée, serveur et imitateur arrêtés, pilote sur `attente` ; gardé jusqu'au 31/10.
+**t37 clos.**
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
