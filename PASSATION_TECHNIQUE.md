@@ -4729,6 +4729,14 @@ serveur au milieu (22:33:58).**
 - Seuils : tenus sauf **caisse p99 ≤ 1 s et max ≤ 2 s** (1,67 et 2,62 s), comme en D : charge
   de la base, pas de file. Les essais C' et D' (débit 30 / 10 s) le diront.
 
+**Essai C' (11/10, 10:02 UTC) : palier 615, débit 30 / 10 s (`CAMPAGNE_IPHONE_PAR_LOT=30`).**
+604 pushes Apple, 332 messages Google. Clic 218 ms (202). Scans pendant : **121 / 121 en 200,
+méd. 301, p95 500, p99 617, max 779 ms** : **tous les seuils tenus** (C à 50 / 10 s : p99
+1 344 ms). Requêtes base : méd. la plus haute 98 ms, max 387 ms (C : 163 / 684 ms). `/v1` : 0
+erreur, p99 370 ms. Boucle max 56 ms, mémoire 218 Mo. Réserve : la base de test était aussi
+plus rapide au calme ce matin-là (scan de contrôle méd. 351 ms) : une part de l'écart peut
+venir de l'heure. D' (palier 5000) dira si l'effet tient sur la durée.
+
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
