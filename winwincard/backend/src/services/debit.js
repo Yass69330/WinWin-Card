@@ -14,8 +14,8 @@
 // avis), qui suivent l'activité de la caisse ; les messages Google (Google ne
 // rappelle pas notre serveur).
 //
-// Débit : CAMPAGNE_IPHONE_PAR_LOT pushes par CAMPAGNE_LOT_MS (50 par 10 s par
-// défaut, décision du 09/10), lissé : au plus DEBIT_RAFALE jetons d'avance (le
+// Débit : CAMPAGNE_IPHONE_PAR_LOT pushes par CAMPAGNE_LOT_MS (30 par 10 s par
+// défaut, décision du 11/10 ; 50 avant), lissé : au plus DEBIT_RAFALE jetons d'avance (le
 // débit d'une seconde par défaut). Sur toute fenêtre de T ms, au plus
 // rafale + T × débit pushes partent. Tout en mémoire : aucune requête.
 // ════════════════════════════════════════════════════════════════════════════
@@ -54,7 +54,7 @@ function creerDebit({ parLot, lotMs, rafale, maintenant = () => Date.now() }) {
 }
 
 const debit = creerDebit({
-  parLot: Number(process.env.CAMPAGNE_IPHONE_PAR_LOT) || 50,
+  parLot: Number(process.env.CAMPAGNE_IPHONE_PAR_LOT) || 30,   // 30 : série « après » de t37 (11/10)
   lotMs:  Number(process.env.CAMPAGNE_LOT_MS) || 10000,
   rafale: process.env.DEBIT_RAFALE ? Number(process.env.DEBIT_RAFALE) : undefined,
 });

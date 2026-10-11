@@ -4758,6 +4758,25 @@ carte par appareil, ≈ 2 requêtes base par iPhone au lieu de 4,6), la charge r
 campagne p99 ≤ 1,2 s et max ≤ 2 s. À décider par Yass.
 
 
+## 15 duotricies. t37 : DÉCISIONS DE CLÔTURE (11/10) ET RÈGLE « UNE SEULE INSTANCE »
+
+**Décisions de Yass (11/10), sur la synthèse de la série « après »** :
+1. **Débit : 30 iPhone / 10 s, valeur par défaut DANS LE CODE** (`debit.js`, `campagnes.js` ;
+   50 avant). `CAMPAGNE_IPHONE_PAR_LOT` reste possible pour ajuster. `npm test` 205/205.
+2. **Seuil de caisse pendant une campagne : p99 ≤ 1,2 s, max ≤ 2 s** (validé ; tenu à
+   30 / 10 s en C' et D').
+3. **t37 part en production** (gestes sur feu vert ; migration 054 d'abord).
+4. Parking : « un push par appareil et par campagne » ; b2, b3, b4, d1 / étape 23.
+5. Environnement de test gardé jusqu'au 31/10 : variable de débit retirée, serveur et
+   imitateur arrêtés, pilote sur `attente`.
+6. Requête « couples » de l'essai E : à terminer, ne bloque pas la mise en production.
+
+**RÈGLE (contrat) : le serveur de production tourne en UNE SEULE instance Railway.** Le débit
+partagé (`debit.js`) et la file des iPhone (`fileAppleWallet.js`) sont en mémoire : deux
+instances doubleraient le débit et la file, sans que rien ne le signale. La reprise des
+campagnes, elle, resterait sûre (prise atomique en base). Toute mise à l'échelle horizontale
+exige d'abord de déplacer débit et file hors de la mémoire.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :

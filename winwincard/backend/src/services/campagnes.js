@@ -45,7 +45,7 @@ const debit = require('./debit');
 const { suivre } = require('./arret');
 
 const config = {
-  iphoneParLot:     Number(process.env.CAMPAGNE_IPHONE_PAR_LOT) || 50,
+  iphoneParLot:     Number(process.env.CAMPAGNE_IPHONE_PAR_LOT) || 30,
   googleParLot:     Number(process.env.CAMPAGNE_GOOGLE_PAR_LOT) || 50,
   lotMs:            Number(process.env.CAMPAGNE_LOT_MS) || 10000,
   googleSimultanes: Number(process.env.CAMPAGNE_GOOGLE_SIMULTANES) || 5,
