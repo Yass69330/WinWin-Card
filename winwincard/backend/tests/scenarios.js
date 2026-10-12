@@ -837,10 +837,10 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       [ecrits(lotLong), msLong >= 6000], [3, true]);
     verifier('registre, lot d\'un scan retenu 6 s : coupé vers 5 s, rien écrit, erreur journalisée, sans rejet',
       [ecrits(lotCourt), dans(msCourt, 4800, 6500), erreurs.some(e => e.startsWith('[notif-registre] insert'))], [0, true, true]);
-    verifier('registre : le cron (3 lots) et la campagne manuelle demandent le client long',
-      [(require('fs').readFileSync(require.resolve('../src/workers/cron.js'), 'utf8').match(/creerLot\([^)]*\{ long: true \}\)/g) || []).length,
+    verifier('registre : le cron (lots par marchand) et la campagne manuelle demandent le client long',
+      [(require('fs').readFileSync(require.resolve('../src/workers/cron.js'), 'utf8').match(/creerLot\([^)]*\{ long: true \}\)/g) || []).length > 0,
        /creerLot\('manuel', c\.marchand_id, \{ long: true \}\)/.test((() => { try { return require('fs').readFileSync(require.resolve('../src/services/campagnes.js'), 'utf8'); } catch { return ''; } })())],
-      [3, true]);
+      [true, true]);
     modules.forEach(x => delete require.cache[x]);
     process.env.SUPABASE_URL = env.url; process.env.SUPABASE_SERVICE_KEY = env.cle;
     if (env.url === undefined) delete process.env.SUPABASE_URL;
@@ -961,7 +961,7 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     }
     const cronSrc = fs.readFileSync(require.resolve('../src/workers/cron.js'), 'utf8');
     verifier('débit partagé : le cron prend un jeton avant chaque push Apple',
-      /await debit\.prendre\(\);\s*\n\s*await sendPushUpdate\(push_token\)/.test(cronSrc), true);
+      /await debit\.prendre\(\);\s*\n\s*await (sendPushUpdate\(push_token\)|envoyeurs\.apple\(jeton\))/.test(cronSrc), true);
 
     // ── a : campagne par lots, dans ce processus, envois imités ──
     const MC = 'c0c0c0c0-0000-4000-8000-000000000037';
@@ -1251,6 +1251,204 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       [retours.some(r => r.statut === 503 && r.retry === '30'), retours.every(r => [200, 304, 500, 503].includes(r.statut))], [true, true]);
     s17.processus.kill();
     relais.close();
+  }
+
+  titre('18. Relances automatiques : sélection en base, une par absence, plafond (étape 22)');
+  {
+    const path = require('path');
+    const env = { ...process.env };
+    Object.assign(process.env, { SUPABASE_URL: urlSupabase, SUPABASE_SERVICE_KEY: cleService,
+      CAMPAGNE_IPHONE_PAR_LOT: '1000', CAMPAGNE_LOT_MS: '100', DEBIT_RAFALE: '1000' });
+    const modules = ['services/supabase', 'services/notif-registre', 'services/debit', 'services/cron-passages', 'workers/cron']
+      .map(m => path.resolve(__dirname, `../src/${m}.js`));
+    modules.forEach(m => delete require.cache[m]);
+    const cronMod = require('../src/workers/cron');
+    cronMod.arreterPlanification();
+    const debitMod = require('../src/services/debit');
+    const envois = { apple: [], google: [] };
+    let jetonsPris = 0;
+    const prendreOrigine = debitMod.prendre;
+    debitMod.prendre = () => { jetonsPris++; return prendreOrigine(); };
+    if (cronMod._pourTests) cronMod._pourTests({ envoyeurs: {
+      appleActif: () => true, googleActif: () => true,
+      apple: async jeton => { envois.apple.push(jeton); },
+      google: async (serial, message) => { envois.google.push({ serial, message }); },
+    } });
+    const sqlOuNull = requete => { try { return sql(requete); } catch { return null; } };
+    const nombre = requete => Number(sql(requete));
+
+    const marchand = (id, nom, extra = {}) => sql(`INSERT INTO marchands (id, nom, slug, forfait, type_programme, max_value, display_max_value, langue, landing_premium)
+      VALUES ('${id}', '${nom}', '${nom.toLowerCase().replace(/\W+/g, '-')}', 'pro', 'stamps', 10, 10, 'fr', ${extra.premium ? 'true' : 'false'})`);
+    // n clients « prenom1 … prenomN » : carte Apple (jeton) et/ou Google, un scan il y a `scanIl`
+    // jours (annulé ou non), solde, anniversaire, fiche modifiée il y a `majIl` jours.
+    function peupler(m, prenom, n, { apple = true, google = false, scanIl = null, annule = false, solde = 0, anniv = 'NULL', majIl = 0 } = {}) {
+      sql(`WITH c AS (INSERT INTO clients (marchand_id, prenom, stored_value, date_anniversaire, updated_at)
+                      SELECT '${m}', '${prenom}' || g, ${solde}, ${anniv}, now() - interval '${majIl} days' FROM generate_series(1, ${n}) g
+                      RETURNING id, pass_serial_number),
+                p AS (INSERT INTO passes (client_id, marchand_id, serial_number, google_pass_url)
+                      SELECT id, '${m}', pass_serial_number, ${google ? `'https://pay.google.com/filet'` : 'NULL'} FROM c
+                      RETURNING id, client_id, serial_number),
+                d AS (INSERT INTO device_tokens (pass_id, client_id, marchand_id, serial_number, device_id, push_token)
+                      SELECT id, client_id, '${m}', serial_number, 'app-' || serial_number, 'jeton-' || serial_number FROM p WHERE ${apple})
+           INSERT INTO scans (client_id, marchand_id, stored_value_avant, stored_value_apres, date_scan, annule_le)
+           SELECT client_id, '${m}', 0, 1, now() - interval '${scanIl ?? 0} days', ${annule ? 'now()' : 'NULL'} FROM p WHERE ${scanIl !== null}`);
+    }
+    const relances = (m, type) => nombre(`SELECT count(*) FROM workflow_executions WHERE marchand_id = '${m}'${type ? ` AND workflow_type = '${type}'` : ''}`);
+    const relancesDe = (m, prefixe) => nombre(`SELECT count(*) FROM workflow_executions w JOIN clients c ON c.id = w.client_id
+                                              WHERE w.marchand_id = '${m}' AND c.prenom LIKE '${prefixe}%'`);
+    const decaler = (m, jours) => sql(`UPDATE workflow_executions SET executed_at = executed_at - interval '${jours} days' WHERE marchand_id = '${m}'`);
+    const pushesVers = (m) => envois.apple.filter(j => jetonsDe[m] && jetonsDe[m].has(j)).length;
+    const jetonsDe = {};
+    const noterJetons = m => { jetonsDe[m] = new Set(sql(`SELECT push_token FROM device_tokens WHERE marchand_id = '${m}'`).split('\n').filter(Boolean)); };
+    const inactifs = async (m) => { try { return await cronMod.runInactiveWorkflow({ marchandId: m, force: true }); } catch (e) { return [{ erreur: e.message }]; } };
+
+    // ── A : inactifs, plus de 1 000 scans récents, annulations, jamais venus, canaux ──
+    const MA = 'e2200000-0000-4000-8000-00000000000a';
+    marchand(MA, 'Filet Relance A');
+    peupler(MA, 'Actif', 1100, { scanIl: 2 });                 // actifs : plus de 1 000 scans récents
+    peupler(MA, 'Absent', 40, { scanIl: 40 });                 // absents depuis 40 j
+    peupler(MA, 'Annule', 5, { scanIl: 40 });                  // absents ; leur scan récent est annulé
+    sql(`INSERT INTO scans (client_id, marchand_id, stored_value_avant, stored_value_apres, date_scan, annule_le)
+         SELECT id, '${MA}', 1, 2, now() - interval '2 days', now() - interval '2 days' FROM clients WHERE marchand_id = '${MA}' AND prenom LIKE 'Annule%'`);
+    peupler(MA, 'Jamais', 5);                                  // jamais scanné
+    peupler(MA, 'SansCanal', 5, { apple: false, scanIl: 40 }); // ni iPhone ni Google
+    peupler(MA, 'Google', 5, { apple: false, google: true, scanIl: 40 });
+    noterJetons(MA);
+    const rA = await inactifs(MA);
+    verifier('inactifs : plus de 1 000 scans récents, AUCUN actif relancé ; les 40 absents, les 5 au scan récent annulé et les 5 sur Google le sont',
+      [relancesDe(MA, 'Actif'), relancesDe(MA, 'Absent'), relancesDe(MA, 'Annule'), relancesDe(MA, 'Google'), relances(MA)], [0, 40, 5, 5, 50]);
+    verifier('inactifs : jamais scanné et sans aucun canal → pas relancés', [relancesDe(MA, 'Jamais'), relancesDe(MA, 'SansCanal')], [0, 0]);
+    verifier('envois : 45 pushes Apple (un par jeton), 5 messages Google aux seules cartes Google, texte personnalisé posé sur la carte',
+      [pushesVers(MA), envois.google.length, envois.google.every(g => /^Salut Google\d+ ! Tu nous manques chez Filet Relance A/.test(g.message)),
+       messageCarte(sql(`SELECT pass_serial_number FROM clients WHERE marchand_id = '${MA}' AND prenom = 'Absent1'`))],
+      [45, 5, true, 'Salut Absent1 ! Tu nous manques chez Filet Relance A. Reviens vite ! 🎯']);
+    verifier('débit partagé : un jeton pris avant chaque push Apple', jetonsPris, 45);
+    verifier('registre : 50 lignes « inactive », et chaque relance porte le lot de ses lignes du registre',
+      [nombre(`SELECT count(*) FROM notification_envois WHERE marchand_id = '${MA}' AND source = 'inactive'`),
+       sqlOuNull(`SELECT count(*) FROM workflow_executions w WHERE w.marchand_id = '${MA}'
+                    AND EXISTS (SELECT 1 FROM notification_envois n WHERE n.lot = w.lot)`)], [50, '50']);
+    verifier('bilan rendu par marchand : 50 éligibles, 50 relancés, 0 reporté',
+      [rA[0] && rA[0].eligibles, rA[0] && rA[0].relances, rA[0] && rA[0].reportes], [50, 50, 0]);
+
+    // ── B : une relance par absence ──
+    await inactifs(MA);
+    const memeJour = relances(MA);
+    decaler(MA, 2);
+    await inactifs(MA);
+    const absenceSuivante = relances(MA);
+    // Absent1 et Absent2 : relancés il y a 50 j, revenus il y a 40 j, absents depuis.
+    sql(`UPDATE workflow_executions SET executed_at = now() - interval '50 days'
+          WHERE client_id IN (SELECT id FROM clients WHERE marchand_id = '${MA}' AND prenom IN ('Absent1', 'Absent2'))`);
+    await inactifs(MA);
+    verifier('une relance par absence : rien de plus le même jour, ni les jours suivants ; de nouveau après un scan puis une nouvelle absence (2)',
+      [memeJour, absenceSuivante, relances(MA) - absenceSuivante], [50, 50, 2]);
+
+    // ── C : plafond de 1 000 par passage, plus de 1 000 lignes de dédoublonnage ──
+    const MB = 'e2200000-0000-4000-8000-00000000000b';
+    marchand(MB, 'Filet Relance B');
+    peupler(MB, 'Absent', 1200, { scanIl: 40 });
+    noterJetons(MB);
+    const rB1 = await inactifs(MB);
+    const apresB1 = relances(MB);
+    const rB2 = await inactifs(MB);
+    const apresB2 = relances(MB);
+    decaler(MB, 2);
+    await inactifs(MB);
+    verifier('plafond : 1 000 relancés sur 1 200 éligibles, 200 reportés ; le passage suivant envoie les 200',
+      [apresB1, rB1[0] && rB1[0].eligibles, rB1[0] && rB1[0].reportes, apresB2 - apresB1, rB2[0] && rB2[0].reportes], [1000, 1200, 200, 200, 0]);
+    verifier('plus de 1 000 relances déjà faites : aucun doublon (1 200 clients, 1 200 relances, 1 200 pushes distincts)',
+      [relances(MB), nombre(`SELECT count(DISTINCT client_id) FROM workflow_executions WHERE marchand_id = '${MB}'`),
+       pushesVers(MB), new Set(envois.apple.filter(j => jetonsDe[MB].has(j))).size], [1200, 1200, 1200, 1200]);
+
+    // ── D : proches de la récompense, une par palier ──
+    const MC2 = 'e2200000-0000-4000-8000-00000000000c';
+    marchand(MC2, 'Filet Relance C');
+    peupler(MC2, 'Neuf', 3, { solde: 9, majIl: 10 });
+    peupler(MC2, 'Huit', 3, { solde: 8, majIl: 10 });
+    peupler(MC2, 'Loin', 3, { solde: 5, majIl: 10 });
+    const proches = async () => { try { await cronMod.runNearRewardWorkflow({ marchandId: MC2, force: true }); } catch { /* compté plus bas */ } };
+    await proches();
+    const carteDe = p => messageCarte(sql(`SELECT pass_serial_number FROM clients WHERE marchand_id = '${MC2}' AND prenom = '${p}'`));
+    verifier('proches de la récompense : les 6 dans la zone, textes au singulier et au pluriel',
+      [relances(MC2), relancesDe(MC2, 'Loin'), carteDe('Neuf1'), carteDe('Huit1')],
+      [6, 0, 'Salut Neuf1 ! Plus que 1 point pour débloquer ta récompense chez Filet Relance C. Passe nous voir ! 🎁',
+       'Salut Huit1 ! Plus que 2 points pour débloquer ta récompense chez Filet Relance C. Passe nous voir ! 🎁']);
+    decaler(MC2, 2);
+    await proches();
+    const sansMouvement = relances(MC2);
+    sql(`UPDATE clients SET stored_value = 9 WHERE marchand_id = '${MC2}' AND prenom = 'Huit1'`);
+    await proches();
+    verifier('une relance par palier : rien tant que le solde ne bouge pas ; le solde bouge → une nouvelle relance',
+      [sansMouvement, relances(MC2) - sansMouvement], [6, 1]);
+
+    // ── E : passage complet : anniversaires au-delà de 1 000 dates, une relance par jour ──
+    const MD = 'e2200000-0000-4000-8000-00000000000d';
+    marchand(MD, 'Filet Relance D', { premium: true });
+    sql(`UPDATE marchands SET workflow_inactive_enabled = true, workflow_near_reward_enabled = true, workflow_birthday_enabled = true WHERE id = '${MD}'`);
+    const autreJour = `(now() AT TIME ZONE 'UTC' + interval '40 days')::date`;
+    const aujourdhui = `(now() AT TIME ZONE 'UTC')::date - interval '30 years'`;
+    peupler(MD, 'Autre', 1070, { anniv: autreJour });          // 1 070 dates connues, pas aujourd'hui
+    peupler(MD, 'Fete', 30, { anniv: aujourdhui });            // insérés après : au-delà des 1 000 premières lignes
+    peupler(MD, 'Triple', 3, { anniv: aujourdhui, solde: 9, scanIl: 40, majIl: 10 });  // anniversaire + proche + inactif
+    const passagesAvant = nombre(`SELECT count(*) FROM cron_passages`);
+    await cronMod.passageQuotidien();
+    const dernier = sql(`SELECT statut || '|' || (details -> 'par_marchand' -> 'birthday' -> '${MD}' ->> 'relances') FROM cron_passages ORDER BY debut DESC LIMIT 1`);
+    verifier('anniversaires : les 30 du jour trouvés au-delà de 1 000 dates connues (plus les 3 « Triple »)',
+      [relancesDe(MD, 'Fete'), relances(MD, 'birthday')], [30, 33]);
+    verifier('une relance par client et par jour : anniversaire + proche + inactif → l\'anniversaire seul',
+      [relancesDe(MD, 'Triple'), relances(MD, 'near_reward'), relances(MD, 'inactive')], [3, 0, 0]);
+    verifier('passage : « ok », bilan par marchand gardé dans cron_passages (33 anniversaires chez D)',
+      [nombre(`SELECT count(*) FROM cron_passages`) - passagesAvant, dernier], [1, 'ok|33']);
+
+    // ── F : cron de 08:00 et bouton admin en même temps ──
+    const ME = 'e2200000-0000-4000-8000-00000000000e';
+    marchand(ME, 'Filet Relance E');
+    peupler(ME, 'Absent', 300, { scanIl: 40 });
+    noterJetons(ME);
+    await Promise.all([inactifs(ME), inactifs(ME)]);
+    verifier('deux déclenchements simultanés : 300 relances, 300 pushes, aucun doublon',
+      [relances(ME), nombre(`SELECT count(DISTINCT client_id) FROM workflow_executions WHERE marchand_id = '${ME}'`), pushesVers(ME)], [300, 300, 300]);
+
+    // ── G : coupure entre réservation et envoi ──
+    const MF = 'e2200000-0000-4000-8000-00000000000f';
+    marchand(MF, 'Filet Relance F');
+    peupler(MF, 'Absent', 10, { scanIl: 40 });
+    noterJetons(MF);
+    const reserves = sqlOuNull(`SELECT jsonb_array_length(reserver_relances('${MF}', 'inactive', gen_random_uuid(), '{"*": "x"}', 4, 30) -> 'clients')`);
+    decaler(MF, 1);
+    await inactifs(MF);
+    verifier('coupure après la réservation (4 réservés, rien envoyé) : le passage suivant envoie les 6 autres, aucun doublon',
+      [reserves, relances(MF), pushesVers(MF)], ['4', 10, 6]);
+
+    // ── H : lecture des marchands impossible ──
+    sql(`REVOKE SELECT ON public.marchands FROM service_role`);
+    const consoleError = console.error; console.error = () => {};
+    await cronMod.passageQuotidien();
+    console.error = consoleError;
+    sql(`GRANT SELECT ON public.marchands TO service_role`);
+    verifier('lecture des marchands impossible : passage « erreurs » (avant : « ok » avec 0 envoi), les trois relances en erreur',
+      sql(`SELECT statut || '|' || (details -> 'erreurs')::text FROM cron_passages ORDER BY debut DESC LIMIT 1`),
+      'erreurs|["birthday", "near_reward", "inactive"]');
+
+    // ── I : purge à 90 jours, la dernière relance de chaque (client, type) gardée ──
+    const MG = 'e2200000-0000-4000-8000-000000000010';
+    marchand(MG, 'Filet Relance G');
+    peupler(MG, 'Vieux', 2, { scanIl: 300 });
+    sql(`INSERT INTO workflow_executions (workflow_type, client_id, marchand_id, executed_at)
+         SELECT t.type, c.id, '${MG}', now() - (t.j || ' days')::interval
+           FROM clients c, (VALUES ('inactive', 200), ('inactive', 100), ('near_reward', 150)) t(type, j)
+          WHERE c.marchand_id = '${MG}'`);
+    sql(`UPDATE clients SET deleted_at = now() WHERE marchand_id = '${MG}' AND prenom = 'Vieux2'`);
+    if (cronMod.purgeOldExecutions) await cronMod.purgeOldExecutions();   // absente de l'ancien code : le contrôle échoue, sans interrompre
+    verifier('purge : au-delà de 90 j, la dernière relance de chaque type est gardée (sinon « une par absence » serait oubliée) ; un client effacé n\'en garde aucune',
+      sql(`SELECT string_agg(c.prenom || ':' || w.workflow_type || ':' || round(extract(epoch FROM now() - w.executed_at) / 86400), ',' ORDER BY c.prenom, w.workflow_type)
+             FROM workflow_executions w JOIN clients c ON c.id = w.client_id WHERE w.marchand_id = '${MG}'`),
+      'Vieux1:inactive:100,Vieux1:near_reward:150');
+
+    debitMod.prendre = prendreOrigine;
+    modules.forEach(m => delete require.cache[m]);
+    for (const k of Object.keys(process.env)) if (!(k in env)) delete process.env[k];
+    Object.assign(process.env, env);
   }
 }
 

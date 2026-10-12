@@ -7,7 +7,6 @@ const passages = require('../services/cron-passages');
 const { suivre } = require('../services/arret');
 const debit = require('../services/debit');   // débit partagé avec les campagnes (t37, d2)
 
-const DEDUP_DAYS   = 7;
 const PURGE_DAYS   = 90;
 
 // Forfaits éligibles aux workflows automatiques. Ouverts au Pro le 25/09/2026 ;
@@ -30,39 +29,153 @@ function arreterPlanification() {
   tache.stop();
 }
 
-// Étapes du passage, dans l'ordre d'origine.
+// Étapes du passage. Ordre = priorité de la règle « une relance par client et
+// par jour » (décision du 12/10) : birthday, puis near_reward, puis inactive.
 const ETAPES = [
-  ['inactive',    runInactiveWorkflow],
-  ['near_reward', runNearRewardWorkflow],
   ['birthday',    runBirthdayWorkflow],
+  ['near_reward', runNearRewardWorkflow],
+  ['inactive',    runInactiveWorkflow],
   ['purge',       purgeOldExecutions],
 ];
 
 // Le passage planifié. Chaque étape attrape sa propre erreur : un workflow en
-// échec n'empêche pas les suivants (comportement d'origine, inchangé). Le suivi
-// (cron_passages, migration 049) encadre le passage sans jamais le bloquer.
-// `etapes` n'est passé que par les tests.
+// échec n'empêche pas les suivants. Une étape est « en erreur » si elle lève
+// (lecture des marchands impossible) ou si un marchand a échoué ; les autres
+// marchands sont quand même servis. Le suivi (cron_passages, migration 049)
+// encadre le passage sans jamais le bloquer. `etapes` n'est passé que par les tests.
 async function passageQuotidien(etapes = ETAPES) {
   console.log('[cron] Démarrage des workflows…');
   const passage = await passages.debuter();
   const bilan   = {};
   const erreurs = [];
+  const parMarchand = {};
   for (const [nom, etape] of etapes) {
     try {
       const resultats = await etape();
-      bilan[nom] = Array.isArray(resultats)
-        ? resultats.reduce((n, r) => n + (r.notifies || 0), 0)
-        : 'ok';
+      if (Array.isArray(resultats)) {
+        bilan[nom] = resultats.reduce((n, r) => n + (r.notifies || 0), 0);
+        parMarchand[nom] = Object.fromEntries(resultats.map(r => [r.marchand_id,
+          r.erreur ? { erreur: r.erreur, relances: r.relances || 0 }
+                   : { eligibles: r.eligibles, relances: r.relances, reportes: r.reportes }]));
+        if (resultats.some(r => r.erreur)) erreurs.push(nom);
+      } else {
+        bilan[nom] = 'ok';
+      }
     } catch (e) {
       erreurs.push(nom);
       console.error(`[cron] ${nom}:`, e.message);
     }
   }
-  await passages.terminer(passage, { bilan, erreurs });
+  await passages.terminer(passage, { bilan, erreurs, parMarchand });
   console.log('[cron] Workflows terminés.');
 }
 
+// ── Sélection et envoi (étape 22, migration 055) ─────────────────
+// La base choisit les destinataires (reserver_relances) : sans plafond de
+// lecture, scans annulés exclus, une relance par absence ou par palier, une par
+// client et par jour, inscription AVANT l'envoi (un crash perd au pire une page,
+// jamais de doublon). Ici : pages de `page` clients, au plus `plafond` par
+// marchand, par type et par passage (décision du 12/10) ; le reste reste
+// éligible et part au passage suivant. Par page : 1 requête de sélection, puis
+// 1 insert du registre. Plus aucune requête par client.
+const reglages = { page: 500, plafond: 1000, googleSimultanes: 5 };
+
+// Envois réels ; remplacés par les tests (_pourTests).
+let envoyeurs = {
+  appleActif:  () => require('../services/apns').isApnsConfigured(),
+  apple:       token => require('../services/apns').sendPushUpdate(token),
+  googleActif: () => require('../services/google-pass').isConfigured(),
+  google:      (serial, message) => require('../services/google-pass').addMessageToLoyaltyObject(serial, null, message),
+};
+
+// Une lecture des marchands ratée n'est plus « 0 marchand » : l'étape lève et le
+// passage finit en « erreurs ».
+async function lireMarchands(query) {
+  const { data, error } = await query;
+  if (error) throw new Error(`lecture des marchands impossible : ${error.message}`);
+  return data || [];
+}
+
+// Remplace toutes les occurrences, sans motif d'expression régulière.
+const remplacer = (texte, motif, valeur) => texte.split(motif).join(valeur);
+
+async function relancerMarchand(type, merchant, modeles, params = {}) {
+  const lot = registre.creerLot(type, merchant.id, { long: true });
+  let eligibles = null;
+  let relances  = 0;
+  try {
+    while (relances < reglages.plafond) {
+      const limite = Math.min(reglages.page, reglages.plafond - relances);
+      const { data, error } = await supabase.rpc('reserver_relances', {
+        p_marchand_id: merchant.id, p_type: type, p_lot: lot.id, p_modeles: modeles, p_limite: limite,
+        p_jours: params.jours ?? null, p_min: params.min ?? null, p_max: params.max ?? null,
+      });
+      if (error) throw new Error(`reserver_relances : ${error.message}`);
+      if (eligibles === null) eligibles = data.eligibles || 0;
+      const clients = data.clients || [];
+      relances += clients.length;
+      await envoyer(clients, lot);
+      await lot.ecrire();   // registre écrit page par page : une perte reste bornée
+      if (clients.length < limite) break;
+    }
+  } catch (e) {
+    e.relances = relances;
+    throw e;
+  } finally {
+    await lot.ecrire();
+  }
+  return { eligibles, relances, reportes: Math.max(0, eligibles - relances) };
+}
+
+// Apple : un jeton du débit partagé avec les campagnes avant chaque push (t37,
+// d2) ; Google : seulement les clients qui ont une carte Google, 5 à la fois.
+async function envoyer(clients, lot) {
+  const apple = envoyeurs.appleActif() && (async () => {
+    for (const c of clients) {
+      for (const jeton of (c.jetons || [])) {
+        let erreur = null;
+        await debit.prendre();
+        await envoyeurs.apple(jeton).catch(e => { erreur = e; console.error('[cron] APNs push:', e.message); });
+        lot.ajouter({ plateforme: 'apple', serialNumber: c.serial, pushToken: jeton, erreur });
+      }
+    }
+  })();
+  const google = envoyeurs.googleActif() && (async () => {
+    const file = clients.filter(c => c.google);
+    await Promise.all(Array.from({ length: Math.min(reglages.googleSimultanes, file.length) }, async () => {
+      while (file.length > 0) {
+        const c = file.shift();
+        let erreur = null;
+        await envoyeurs.google(c.serial, c.message).catch(e => { erreur = e; console.error('[cron] Google notify:', e.message); });
+        lot.ajouter({ plateforme: 'google', serialNumber: c.serial, erreur });
+      }
+    }));
+  })();
+  await Promise.all([apple, google]);
+}
+
+// Un marchand en échec n'arrête pas les autres ; son erreur est rendue.
+async function parMarchand(type, merchants, relancer) {
+  const results = [];
+  for (const merchant of merchants) {
+    try {
+      const r = await relancer(merchant);
+      if (!r) continue;
+      console.log(`[cron] ${type}: ${r.relances} client(s) notifié(s) — ${merchant.nom}`
+        + (r.reportes ? ` (${r.reportes} au prochain passage)` : ''));
+      results.push({ marchand: merchant.nom, marchand_id: merchant.id, notifies: r.relances, ...r });
+    } catch (e) {
+      console.error(`[cron] ${type} — ${merchant.nom}:`, e.message);
+      results.push({ marchand: merchant.nom, marchand_id: merchant.id, notifies: e.relances || 0,
+        relances: e.relances || 0, erreur: e.message });
+    }
+  }
+  return results;
+}
+
 // ── Workflow : clients inactifs ───────────────────────────────────
+// Une relance par absence : dernier scan non annulé plus vieux que
+// workflow_inactive_days, et aucune relance depuis. Jamais scanné : exclu.
 // opts.marchandId : limiter à un seul marchand (test)
 // opts.force      : ignorer workflow_inactive_enabled (test)
 async function runInactiveWorkflow(opts = {}) {
@@ -77,53 +190,17 @@ async function runInactiveWorkflow(opts = {}) {
   if (!force) query = query.eq('workflow_inactive_enabled', true);
   if (marchandId) query = query.eq('id', marchandId);
 
-  const { data: merchants } = await query;
-  if (!merchants?.length) return [];
-
-  const dedupSince = new Date(Date.now() - DEDUP_DAYS * 864e5).toISOString();
-  const results    = [];
-
-  for (const merchant of merchants) {
-    const days  = merchant.workflow_inactive_days || 30;
-    const since = new Date(Date.now() - days * 864e5).toISOString();
-
-    const [{ data: activeScans }, { data: clients }, { data: recentExec }] = await Promise.all([
-      supabase.from('scans').select('client_id').eq('marchand_id', merchant.id).gte('date_scan', since),
-      supabase.from('clients').select('id, prenom, pass_serial_number').eq('marchand_id', merchant.id).is('deleted_at', null),
-      supabase.from('workflow_executions').select('client_id').eq('marchand_id', merchant.id).eq('workflow_type', 'inactive').gte('executed_at', dedupSince),
-    ]);
-
-    const lot = registre.creerLot('inactive', merchant.id, { long: true });
-    const activeSet = new Set((activeScans || []).map(s => s.client_id));
-    const dedupSet  = new Set((recentExec  || []).map(e => e.client_id));
-    const toNotify  = (clients || []).filter(c => !activeSet.has(c.id) && !dedupSet.has(c.id));
-
-    for (const client of toNotify) {
-      const msg = merchant.workflow_inactive_message
-        ? merchant.workflow_inactive_message.replace('{prenom}', client.prenom).replace('{nom}', merchant.nom)
-        : notif('inactive', merchant.langue, { prenom: client.prenom, nom: merchant.nom });
-      await notifyClient(client, merchant.id, msg, lot);
-      const { error: errDedup } = await supabase.from('workflow_executions').insert({ workflow_type: 'inactive', client_id: client.id, marchand_id: merchant.id });
-      if (errDedup) console.error('[cron] inactive dedup insert:', errDedup.message);
-    }
-
-    // Registre : UN insert pour tout ce marchand, après les envois.
-    await lot.ecrire();
-
-    console.log(`[cron] inactive: ${toNotify.length} client(s) notifié(s) — ${merchant.nom}`);
-    const inactiveClients = (clients || []).filter(c => !activeSet.has(c.id));
-    results.push({
-      marchand:        merchant.nom,
-      inactifs_total:  inactiveClients.length,
-      notifies:        toNotify.length,
-      skipped_dedup:   toNotify.length === 0 && inactiveClients.length > 0,
-    });
-  }
-
-  return results;
+  const merchants = await lireMarchands(query);
+  return parMarchand('inactive', merchants, merchant => {
+    const modele = merchant.workflow_inactive_message
+      ? remplacer(merchant.workflow_inactive_message, '{nom}', merchant.nom)
+      : notif('inactive', merchant.langue, { prenom: '{prenom}', nom: merchant.nom });
+    return relancerMarchand('inactive', merchant, { '*': modele }, { jours: merchant.workflow_inactive_days || 30 });
+  });
 }
 
 // ── Workflow : clients proches de la récompense ───────────────────
+// Une relance par palier : de nouveau seulement quand le solde a bougé.
 // opts.marchandId : limiter à un seul marchand (test)
 // opts.force      : ignorer workflow_near_reward_enabled (test)
 async function runNearRewardWorkflow(opts = {}) {
@@ -138,64 +215,30 @@ async function runNearRewardWorkflow(opts = {}) {
   if (!force) query = query.eq('workflow_near_reward_enabled', true);
   if (marchandId) query = query.eq('id', marchandId);
 
-  const { data: merchants } = await query;
-  if (!merchants?.length) return [];
-
-  const dedupSince = new Date(Date.now() - DEDUP_DAYS * 864e5).toISOString();
-  const results    = [];
-
-  for (const merchant of merchants) {
+  const merchants = await lireMarchands(query);
+  return parMarchand('near_reward', merchants, merchant => {
     const threshold = merchant.workflow_near_reward_threshold || 2;
     const maxVal    = merchant.max_value || 10;
     const minPoints = maxVal - threshold;
-    if (minPoints <= 0) continue;
-
-    const [{ data: clients }, { data: recentExec }] = await Promise.all([
-      supabase.from('clients').select('id, prenom, stored_value, pass_serial_number')
-        .eq('marchand_id', merchant.id)
-        .is('deleted_at', null)
-        .gte('stored_value', minPoints)
-        .lt('stored_value', maxVal),
-      supabase.from('workflow_executions').select('client_id')
-        .eq('marchand_id', merchant.id)
-        .eq('workflow_type', 'near_reward')
-        .gte('executed_at', dedupSince),
-    ]);
-
-    const lot = registre.creerLot('near_reward', merchant.id, { long: true });
-    const dedupSet = new Set((recentExec || []).map(e => e.client_id));
-    const toNotify = (clients || []).filter(c => !dedupSet.has(c.id));
-
-    for (const client of toNotify) {
-      const remaining = maxVal - client.stored_value;
-      const msg = notif('nearReward', merchant.langue, { prenom: client.prenom, remaining, nom: merchant.nom });
-      await notifyClient(client, merchant.id, msg, lot);
-      const { error: errDedup } = await supabase.from('workflow_executions').insert({ workflow_type: 'near_reward', client_id: client.id, marchand_id: merchant.id });
-      if (errDedup) console.error('[cron] near_reward dedup insert:', errDedup.message);
+    if (minPoints <= 0) return null;
+    // Un texte par nombre de points restants (le pluriel en dépend).
+    const modeles = {};
+    for (let restant = 1; restant <= threshold; restant++) {
+      modeles[restant] = notif('nearReward', merchant.langue, { prenom: '{prenom}', remaining: restant, nom: merchant.nom });
     }
-
-    await lot.ecrire();
-
-    console.log(`[cron] near_reward: ${toNotify.length} client(s) notifié(s) — ${merchant.nom}`);
-    results.push({
-      marchand:      merchant.nom,
-      eligibles:     (clients || []).length,
-      notifies:      toNotify.length,
-      skipped_dedup: toNotify.length === 0 && (clients || []).length > 0,
-    });
-  }
-
-  return results;
+    modeles['*'] = modeles[threshold];
+    return relancerMarchand('near_reward', merchant, modeles, { min: minPoints, max: maxVal });
+  });
 }
 
 // ── Workflow : anniversaire client ────────────────────────────────
-// Envoi le jour de l'anniversaire (jour + mois ; année ignorée). Réservé aux
+// Envoi le jour de l'anniversaire (jour + mois UTC ; année ignorée ; le 29/02
+// ne tombe que les années bissextiles, voulu). Une fois par an. Réservé aux
 // marchands éligibles (FORFAITS_WORKFLOWS) AVEC landing premium — seule surface
 // où le client saisit sa date de naissance. Depuis le 30/09/2026, la landing
 // premium s'active en Pro comme en Pro+ (services/forfaits.js,
 // landingPremiumActive) : ce filtre en est le miroir SQL, à tenir aligné.
-// Zéro écriture sur stored_value : simple message via
-// notifyClient (identique stamps/points). Pas de quota (aucun notification_logs).
+// Zéro écriture sur stored_value. Pas de quota (aucun notification_logs).
 // opts.marchandId : limiter à un seul marchand (test)
 // opts.force      : ignorer workflow_birthday_enabled (test)
 async function runBirthdayWorkflow(opts = {}) {
@@ -211,107 +254,23 @@ async function runBirthdayWorkflow(opts = {}) {
   if (!force) query = query.eq('workflow_birthday_enabled', true);
   if (marchandId) query = query.eq('id', marchandId);
 
-  const { data: merchants } = await query;
-  if (!merchants?.length) return [];
-
-  // Clé jour+mois du jour, en UTC (cohérent avec tout le cron). Comparaison en
-  // chaîne 'MM-JJ' — aucun parsing Date de la date de naissance (évite les
-  // décalages de fuseau). date_anniversaire est un DATE Postgres → 'AAAA-MM-JJ'.
-  const now       = new Date();
-  const todayMMDD = `${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
-  // Dédup « une fois par an » sans nouvelle colonne : exécutions birthday de ce
-  // client depuis le 1er janvier UTC de l'année courante.
-  const yearStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1)).toISOString();
-  const results   = [];
-
-  for (const merchant of merchants) {
-    const [{ data: clients }, { data: sentThisYear }] = await Promise.all([
-      supabase.from('clients')
-        .select('id, prenom, pass_serial_number, date_anniversaire')
-        .eq('marchand_id', merchant.id)
-        .is('deleted_at', null)
-        .not('date_anniversaire', 'is', null),
-      supabase.from('workflow_executions')
-        .select('client_id')
-        .eq('marchand_id', merchant.id)
-        .eq('workflow_type', 'birthday')
-        .gte('executed_at', yearStart),
-    ]);
-
-    const lot = registre.creerLot('birthday', merchant.id, { long: true });
-    const sentSet = new Set((sentThisYear || []).map(e => e.client_id));
-    // slice(5) de 'AAAA-MM-JJ' → 'MM-JJ'. 29/02 ne matche que les années
-    // bissextiles → aucun envoi les autres années (voulu, pas de contournement).
-    const toNotify = (clients || []).filter(c =>
-      typeof c.date_anniversaire === 'string' &&
-      c.date_anniversaire.slice(5) === todayMMDD &&
-      !sentSet.has(c.id)
-    );
-
-    for (const client of toNotify) {
-      const msg = merchant.workflow_birthday_message
-        ? merchant.workflow_birthday_message.replace('{prenom}', client.prenom).replace('{nom}', merchant.nom)
-        : notif('birthday', merchant.langue, { prenom: client.prenom, nom: merchant.nom });
-      await notifyClient(client, merchant.id, msg, lot);
-      const { error: errDedup } = await supabase.from('workflow_executions').insert({ workflow_type: 'birthday', client_id: client.id, marchand_id: merchant.id });
-      if (errDedup) console.error('[cron] birthday dedup insert:', errDedup.message);
-    }
-
-    await lot.ecrire();
-
-    console.log(`[cron] birthday: ${toNotify.length} client(s) notifié(s) — ${merchant.nom}`);
-    results.push({ marchand: merchant.nom, notifies: toNotify.length });
-  }
-
-  return results;
-}
-
-// ── Envoi de notification à un client ────────────────────────────
-// `lot` : collecteur du registre des envois (migration 046). Les lignes sont
-// accumulées ici et écrites UNE FOIS par marchand, jamais une par push. Le
-// registre n'est jamais attendu avant l'envoi : il ne peut rien retarder.
-async function notifyClient(client, marchandId, msg, lot) {
-  if (!client.pass_serial_number) return;
-
-  await supabase.from('passes')
-    .update({ notification_message: msg })
-    .eq('serial_number', client.pass_serial_number)
-    .eq('marchand_id', marchandId);
-
-  const { isApnsConfigured, sendPushUpdate } = require('../services/apns');
-  if (isApnsConfigured()) {
-    const { data: tokens } = await supabase.from('device_tokens').select('push_token').eq('serial_number', client.pass_serial_number);
-    for (const { push_token } of (tokens || [])) {
-      let erreur = null;
-      // Un jeton du débit partagé avec les campagnes : à eux deux, jamais plus
-      // que le débit (debit.js). Le cron (≈ 1 carte par seconde) n'attend
-      // presque jamais.
-      await debit.prendre();
-      await sendPushUpdate(push_token).catch(e => { erreur = e; console.error('[cron] APNs push:', e.message); });
-      if (lot) lot.ajouter({ plateforme: 'apple', serialNumber: client.pass_serial_number, pushToken: push_token, erreur });
-    }
-  }
-
-  const { addMessageToLoyaltyObject, isConfigured: isGoogleConfigured } = require('../services/google-pass');
-  if (isGoogleConfigured()) {
-    let errG = null;
-    await addMessageToLoyaltyObject(client.pass_serial_number, null, msg)
-      .catch(e => { errG = e; console.error('[cron] Google notify:', e.message); });
-    if (lot) lot.ajouter({ plateforme: 'google', serialNumber: client.pass_serial_number, erreur: errG });
-  }
+  const merchants = await lireMarchands(query);
+  return parMarchand('birthday', merchants, merchant => {
+    const modele = merchant.workflow_birthday_message
+      ? remplacer(merchant.workflow_birthday_message, '{nom}', merchant.nom)
+      : notif('birthday', merchant.langue, { prenom: '{prenom}', nom: merchant.nom });
+    return relancerMarchand('birthday', merchant, { '*': modele });
+  });
 }
 
 // ── Purge automatique des anciennes exécutions (TTL 90j) ─────────
 async function purgeOldExecutions() {
   const cutoff = new Date(Date.now() - PURGE_DAYS * 864e5).toISOString();
 
-  // L'erreur n'était pas lue : une purge en échec (GRANT retiré, table
-  // renommée) aurait été totalement invisible et la table aurait grossi sans
-  // fin. §3.9 — supabase-js ne rejette jamais.
-  const { count, error } = await supabase
-    .from('workflow_executions')
-    .delete({ count: 'exact' })
-    .lt('executed_at', cutoff);
+  // 90 jours, SAUF la dernière ligne de chaque (client, type) : elle porte
+  // « une relance par absence » et « une par palier » (migration 055).
+  // §3.9 — supabase-js ne rejette jamais : l'erreur est lue.
+  const { data: count, error } = await supabase.rpc('purger_workflow_executions', { p_avant: cutoff });
   if (error) console.error('[cron] purge workflow_executions:', error.message);
   else if (count > 0) console.log(`[cron] purge: ${count} workflow_executions supprimée(s)`);
 
@@ -325,4 +284,10 @@ async function purgeOldExecutions() {
   else if (cE > 0) console.log(`[cron] purge: ${cE} notification_envois supprimée(s)`);
 }
 
-module.exports = { runInactiveWorkflow, runNearRewardWorkflow, runBirthdayWorkflow, passageQuotidien, arreterPlanification };
+function _pourTests({ envoyeurs: e, reglages: r } = {}) {
+  if (e) envoyeurs = { ...envoyeurs, ...e };
+  if (r) Object.assign(reglages, r);
+  return { reglages };
+}
+
+module.exports = { runInactiveWorkflow, runNearRewardWorkflow, runBirthdayWorkflow, purgeOldExecutions, passageQuotidien, arreterPlanification, _pourTests };

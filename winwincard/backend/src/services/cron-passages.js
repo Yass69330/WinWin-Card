@@ -52,8 +52,11 @@ async function debuter() {
   }
 }
 
-// Fin du passage : `erreurs` = noms des étapes qui ont levé.
-async function terminer(id, { bilan, erreurs }) {
+// Fin du passage : `erreurs` = noms des étapes en échec. `parMarchand` (étape
+// 22) : par type et par marchand, { eligibles, relances, reportes } ou
+// { erreur } — ce qui n'existe qu'au moment du passage (les reportés), gardé
+// pour le futur rapport du marchand.
+async function terminer(id, { bilan, erreurs, parMarchand }) {
   if (id == null) return;
   try {
     const { error } = await supabase
@@ -61,7 +64,7 @@ async function terminer(id, { bilan, erreurs }) {
       .update({
         fin:     new Date().toISOString(),
         statut:  erreurs.length ? 'erreurs' : 'ok',
-        details: { bilan, erreurs },
+        details: parMarchand ? { bilan, erreurs, par_marchand: parMarchand } : { bilan, erreurs },
       })
       .eq('id', id);
     if (error) console.error('[cron-suivi] fin non enregistrée :', error.message);
