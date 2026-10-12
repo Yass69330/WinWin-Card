@@ -5174,6 +5174,23 @@ depuis le dernier scan », palier, année, purge). Il est gardé.
 Environnement de test : non nécessaire (justesse prouvée par `npm test`, base locale
 coupée à 1 000 comme Supabase).
 
+**Complément du 12/10 (question du pilotage).**
+- **Client long :** la sélection passe déjà par le client long de 30 s (`cron.js:3`,
+  `clientLong`), comme la purge.
+- **Test ajouté :** `reserver_relances` est retenue 6,5 s par un relais et le passage
+  aboutit (3 relances, aucune erreur). Total : **224/224**.
+- **Contre-épreuve :** avec le client court de 5 s, ce test échoue (« délai de 5000 ms
+  dépassé », 0 relance), soit 223/224.
+- **Limite :** sur Supabase, une requête coupée côté serveur continue dans la base. Une
+  réservation qui aboutit après la coupure fait perdre sa relance au client, sans
+  doublon. Le client long rend ce cas improbable (5 à 7 s estimés pour 30 s permis).
+- **Décisions hors pilotage validées par le pilotage le 12/10 :** date de modification
+  pour near_reward, perte plutôt que doublon, plafond de 1 000 aussi pour les
+  anniversaires, vague du premier passage.
+- **Demande du pilotage :** après le premier passage de 08:00 UTC en production, montrer
+  le bilan par marchand (éligibles, relancés, reportés). C'est la taille réelle de la
+  vague.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :

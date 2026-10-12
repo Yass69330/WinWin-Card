@@ -1445,6 +1445,38 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
              FROM workflow_executions w JOIN clients c ON c.id = w.client_id WHERE w.marchand_id = '${MG}'`),
       'Vieux1:inactive:100,Vieux1:near_reward:150');
 
+    // ── J : sélection lente (≈ 5 à 7 s estimés sur Supabase) : client long de 30 s ──
+    {
+      const http = require('http');
+      const amont = new URL(urlSupabase);
+      const relais = http.createServer((req, res) => {
+        const envoyer = () => {
+          const p = http.request({ host: amont.hostname, port: amont.port, path: req.url, method: req.method,
+            headers: { ...req.headers, host: amont.host } }, r => { res.writeHead(r.statusCode, r.headers); r.pipe(res); });
+          p.on('error', () => { if (!res.headersSent) { res.writeHead(502); res.end(); } });
+          req.pipe(p);
+        };
+        if (/^\/rest\/v1\/rpc\/reserver_relances/.test(req.url)) { req.pause(); setTimeout(() => { req.resume(); envoyer(); }, 6500); } else envoyer();
+      });
+      await new Promise(r => relais.listen(0, '127.0.0.1', r));
+      modules.forEach(m => delete require.cache[m]);
+      process.env.SUPABASE_URL = `http://127.0.0.1:${relais.address().port}`;
+      const cronLent = require('../src/workers/cron');
+      cronLent.arreterPlanification();
+      if (cronLent._pourTests) cronLent._pourTests({ envoyeurs: {
+        appleActif: () => true, googleActif: () => false, apple: async jeton => { envois.apple.push(jeton); } } });
+      const MH = 'e2200000-0000-4000-8000-000000000011';
+      marchand(MH, 'Filet Relance H');
+      peupler(MH, 'Absent', 3, { scanIl: 40 });
+      const t0 = Date.now();
+      const rH = await cronLent.runInactiveWorkflow({ marchandId: MH, force: true }).catch(e => [{ erreur: e.message }]);
+      const ms = Date.now() - t0;
+      relais.close();
+      verifier('sélection en base retenue 6,5 s (au-delà des 5 s du client court) : aboutit par le client long, 3 relances, aucune erreur',
+        [rH[0] && rH[0].erreur, rH[0] && rH[0].relances, relances(MH), ms >= 6500], [undefined, 3, 3, true]);
+      process.env.SUPABASE_URL = urlSupabase;
+    }
+
     debitMod.prendre = prendreOrigine;
     modules.forEach(m => delete require.cache[m]);
     for (const k of Object.keys(process.env)) if (!(k in env)) delete process.env[k];
