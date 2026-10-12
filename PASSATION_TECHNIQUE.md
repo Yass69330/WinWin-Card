@@ -5032,6 +5032,148 @@ la base de test. Hors 08:00-09:00 UTC.
 4. nouveaux inscrits jamais scannés : relancés N jours après l'inscription (recommandé) ?
 5. priorité du « un par jour » : birthday → near_reward → inactive ?
 
+## 15 quatertricies. ÉTAPE 22 + CRON DE L'ÉTAPE 21 : CODÉ EN LOCAL (12/10, rien poussé)
+
+**Décisions de Yass (12/10)** :
+1. Inactifs : UNE relance par absence. Le client redevient éligible seulement après un
+   nouveau scan suivi d'une nouvelle absence. Le délai reste celui de l'admin.
+2. near_reward : une relance par palier ; de nouveau seulement quand le solde a bougé.
+3. Plafond de 1 000 par marchand, par type et par passage ; le reste part le lendemain.
+4. Clients jamais scannés exclus des inactifs (« au plus simple »).
+5. Au plus une relance par client et par jour, dans l'ordre birthday → near_reward →
+   inactive.
+
+En parking : un cron par type, plafond global, fuseau par marchand, écran du rapport.
+
+### Livré (local, non poussé)
+
+- **`database/migration_055_relances_en_base.sql`** :
+  - colonne `workflow_executions.lot` ;
+  - index `idx_wf_exec_marchand_date (marchand_id, executed_at)` ;
+  - fonction `reserver_relances(marchand, type, lot, modeles, limite, jours, min, max)`
+    → jsonb `{ eligibles, clients: [{ client_id, serial, message, google, jetons }] }` ;
+  - fonction `purger_workflow_executions(avant)`.
+- **`reserver_relances`**, en une transaction :
+  1. verrou consultatif par marchand (cron et bouton `/trigger` passent l'un après
+     l'autre) ;
+  2. sélection sans plafond de lecture, scans annulés exclus ;
+  3. inscription dans `workflow_executions` AVANT l'envoi ;
+  4. texte personnalisé posé sur `passes.notification_message` ;
+  5. retour des jetons Apple et du drapeau « carte Google ».
+- **Règles appliquées par la fonction** :
+  - client sans aucun canal : non pris ;
+  - « une par jour » : jour UTC, tous types ;
+  - inactifs : dernier scan non annulé plus vieux que N jours, et aucune relance
+    depuis ;
+  - near_reward : aucune relance depuis `clients.updated_at` ;
+  - birthday : une par année civile UTC.
+- **`purger_workflow_executions`** : purge à 90 j, mais garde la dernière ligne de chaque
+  (client, type). Sans elle, « une par absence » serait oubliée au bout de 90 j. Les
+  lignes des clients effacés partent au même âge.
+- **`src/workers/cron.js`** (réécrit autour de `relancerMarchand`) :
+  - ordre des étapes birthday → near_reward → inactive → purge ;
+  - pages de 500 clients, plafond de 1 000 ;
+  - par page : 1 RPC, puis les envois, puis 1 insert du registre. Plus de requête par
+    client (avant : 3) ;
+  - Apple : `debit.prendre()` avant chaque push ;
+  - Google : seulement si la carte existe, 5 à la fois ;
+  - lecture des marchands en échec → l'étape lève, passage « erreurs » ;
+  - un marchand en échec n'arrête pas les autres, mais marque l'étape en erreur ;
+  - textes construits en JS (i18n), `{prenom}` remplacé en base. near_reward reçoit un
+    texte par nombre de points restants (pluriel) ;
+  - `purgeOldExecutions` exportée, `_pourTests` pour les envois.
+- **`src/services/cron-passages.js`** : `details.par_marchand[type][marchand_id] =
+  { eligibles, relances, reportes }` ou `{ erreur, relances }`.
+- **`tests/scenarios.js`** :
+  - section 18 : 17 contrôles. Les 15 cas du diagnostic, plus « une par palier » et la
+    purge ;
+  - deux contrôles de forme adaptés : le nombre de `creerLot(... { long: true })`, et le
+    jeton du débit avant le push.
+
+### Tests
+
+- **`npm test` : 223/223 OK** (205 avant, 18 de plus en section 18).
+- **Contre-épreuve** : mêmes tests sur `f49b44b` (code ET migrations d'alors) →
+  **206/223**. Les 17 KO sont tous en section 18. Le contrôle « textes singulier et
+  pluriel » passe aussi sur l'ancien code (non-régression voulue).
+- **Ce que l'ancien code a montré dans la contre-épreuve** :
+  - inactifs : 5 jamais-scannés et 5 sans canal relancés ;
+  - scan récent annulé : non relancé, compté comme visite ;
+  - plafond : 1 200 relancés d'un coup au lieu de 1 000 + 200 ;
+  - deux déclenchements simultanés : 600 relances pour 300 clients ;
+  - anniversaire + proche + inactif : 3 relances le même jour ;
+  - lecture des marchands impossible : passage « ok ».
+
+### Mesure (banc local, 4 cœurs, PostgreSQL 16)
+
+Un marchand de 50 000 clients, 1,5 M scans (30 par client, plus lourd que la réalité).
+Un appel `reserver_relances` (page de 500) prend :
+- inactive : **≈ 1,9 à 2,4 s** (26 570 éligibles) ;
+- near_reward : ≈ 0,1 s ;
+- birthday : ≈ 0,06 s.
+
+Le temps d'inactive vient de deux sondes par client sur `idx_scans_client` : « venu
+depuis N jours » et « dernier scan ». Une variante qui lit les scans récents en un
+bloc a été mesurée plus lente sur ce banc (2,8 à 3,1 s) : écartée.
+
+**HYPOTHÈSE** : sur Supabase Micro, ×2 à ×3, soit ≈ 5 à 7 s par appel pour le plus gros
+marchand, 1 à 2 appels par jour, à 08:00. C'est sous le délai de 30 s du client long.
+
+Amélioration possible si la mesure réelle déçoit : un index partiel
+`scans (client_id, date_scan) WHERE annule_le IS NULL`. **Non fait** : il ajoute une
+écriture d'index à chaque scan de la caisse (règle : le scan ne change pas). À mesurer
+avant d'y toucher.
+
+Durée du cron : les estimations du §15 tertricies point 5 tiennent. Le débit partagé
+(3 pushes Apple par seconde) reste le facteur principal.
+
+### Hypothèses et limites
+
+- **Coupure entre la réservation et l'envoi** (crash, redéploiement) : ces clients
+  perdent leur relance (absence, palier ou anniversaire). Perte silencieuse, jamais de
+  doublon.
+- **« Le solde a bougé » = `clients.updated_at`** (déclencheur à chaque mise à jour de
+  la fiche). Une correction du prénom compte aussi comme un mouvement : au pire une
+  relance near_reward de plus.
+- **Anniversaire au-delà de 1 000 le même jour chez un marchand** : le reste est perdu,
+  le lendemain n'est plus le jour. Théorique : ≈ 140 par jour pour 50 000 porteurs.
+- **Jour UTC** pour « une par jour » et l'anniversaire (fuseau par marchand : parking).
+- **Premier passage après la mise en production** :
+  - un absent qui n'a jamais été relancé, ou dont la relance a été purgée (plus de
+    90 j), reçoit sa relance « de cette absence » ;
+  - c'est au plus 1 000 par marchand et par jour : le plafond lisse la vague ;
+  - near_reward : pas de vague. Les relances hebdomadaires récentes sont postérieures à
+    `updated_at`.
+- **Messages personnalisés** : `{nom}` et `{prenom}` sont désormais remplacés partout
+  dans le texte (avant : la première occurrence). Un prénom vide donne une chaîne vide
+  (avant : « null » ou « undefined »).
+- **Lecture des marchands** : toujours plafonnée à 1 000 marchands (sans effet avant
+  longtemps).
+- **Bouton admin `/trigger`** : inactive et near_reward en parallèle, donc la priorité de
+  « une par jour » n'y est pas garantie. Il n'y a pas de doublon (verrou).
+
+### Correction du diagnostic (§15 tertricies)
+
+`idx_wf_exec_lookup` n'est pas inutile : il sert les contrôles par client (« relance
+depuis le dernier scan », palier, année, purge). Il est gardé.
+
+### Mise en production (sur feu vert de Yass)
+
+1. Exécuter `migration_055_relances_en_base.sql` dans Supabase PRODUCTION, puis la
+   requête de vérification en bas du fichier : 5 × true. L'ancien code reste compatible
+   avec 055 : colonne nullable, fonctions non appelées.
+2. Dire « 055 PROD OK ».
+3. Sur feu vert : push en avance rapide sur `claude/keen-goldberg-MXslu` (code, plus les
+   commits de passation en attente).
+4. Contrôles après le passage de 08:00 UTC :
+   - `/health/cron` ok ;
+   - dernière ligne de `cron_passages` : `details.par_marchand` présent ;
+   - `workflow_executions` du jour avec `lot` renseigné ;
+   - aucun client avec deux lignes le même jour.
+
+Environnement de test : non nécessaire (justesse prouvée par `npm test`, base locale
+coupée à 1 000 comme Supabase).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
@@ -5228,6 +5370,20 @@ le dépôt ? Réponse prouvée par deux rejeux locaux et par le projet de test :
 Toute décision prise sans passer par le pilotage (Yass) se note ici : date, décision,
 raison, effet constaté. Une entrée vaut aveu, pas justification — la règle reste le
 contrat §7 (diagnostic, validation, puis code).
+
+**2026-10-12 — Étape 22, choix d'exécution non tranchés en pilotage** (détail
+§15 quatertricies) :
+- « le solde a bougé » se lit sur `clients.updated_at` (toute mise à jour de la fiche) ;
+- la purge de `workflow_executions` garde la dernière ligne de chaque (client, type) ;
+  c'est nécessaire à « une relance par absence » ;
+- clients sans aucun canal : non sélectionnés, aucune ligne écrite ;
+- le plafond de 1 000 s'applique aussi aux anniversaires (le surplus d'un jour est
+  perdu ; théorique) ;
+- jour UTC pour « une par jour » ;
+- une coupure entre la réservation et l'envoi perd la relance (jamais de doublon) ;
+- un marchand en échec n'arrête pas les autres, et marque l'étape « erreurs » ;
+- pas de nouvel index sur `scans` (le scan ne change pas) ; sélection mesurée à ≈ 2 s
+  au banc.
 
 **2026-09-25 — `updateLoyaltyObjectPoints` lève désormais sur statut non-200.**
 Le lot « registre des envois » demandait d'enregistrer le statut des mises à jour
