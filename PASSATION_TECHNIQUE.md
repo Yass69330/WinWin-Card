@@ -6306,8 +6306,12 @@ dès qu'il a cliqué sur le bouton Google ou que la vérification unique l'a tro
 - Migration 057 exécutée par Yass : 4 × true.
 - Feu vert de Yass. Poussé à **16:46:08 UTC** en avance rapide sur
   `claude/keen-goldberg-MXslu` (`da9313c` → `88899f1`).
-- Contrôles de Yass (déploiement, clic Google, scan iPhone) et bilan de la
-  vérification unique : à compléter.
+- Contrôle 3, scan d'une carte iPhone seule (hamza-salon, « Test Docker », 1 jeton
+  Apple, sans signal Google) :
+  - scan de 14:02 UTC (ancien code) : 1 ligne apple et 2 lignes google ;
+  - scan de 16:50 UTC (`88899f1`) : 1 ligne apple, aucune ligne google. OK.
+- Autres contrôles (déploiement, clic Google) et bilan de la vérification unique :
+  à compléter.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
