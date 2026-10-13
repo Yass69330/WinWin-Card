@@ -18,7 +18,8 @@
 // crédit au renvoi, parrain ramené au seuil en mode points…) l'écrit tel quel. Il sera
 // inversé par l'étape de la roadmap qui corrige ce défaut.
 //
-// Prérequis : Node (celui du serveur), PostgreSQL 16 ou plus avec un accès
+// Prérequis : Node EXACTEMENT celui de la production (.nvmrc ; le filet refuse
+// de tourner sous un autre, étape 20a), PostgreSQL 16 ou plus avec un accès
 // superutilisateur, curl et tar (premier lancement seulement), `npm ci` fait.
 // Variables :
 //   PSQL          commande psql superutilisateur (défaut : `runuser -u postgres --
@@ -267,7 +268,27 @@ function nettoyer() {
 module.exports = { TMP, BASE, SECRET_JWT, psqlSocket, psqlEnFond, demarrerPostgresSiBesoin, preparerBase,
   demarrerPostgrest, demarrerServeur, lancer, portLibre, attendreHttp, nettoyer };
 
+// Le filet ne prouve rien sous un autre Node que celui de la production (étape
+// 20a). Les trois sources de la version (Dockerfile, `engines`, .nvmrc) doivent
+// dire la même chose, et le filet doit tourner sous celle-là.
+function verifierNode() {
+  const nvmrc   = fs.readFileSync(path.join(RACINE, '.nvmrc'), 'utf8').trim();
+  const engines = require(path.join(RACINE, 'package.json')).engines.node;
+  const docker  = (/^FROM node:([\d.]+)-/m.exec(fs.readFileSync(path.join(RACINE, 'Dockerfile'), 'utf8')) || [])[1];
+  if (nvmrc !== engines || nvmrc !== docker) {
+    console.error(`FILET REFUSÉ : versions de Node différentes (Dockerfile ${docker}, engines ${engines}, .nvmrc ${nvmrc}).`);
+    return false;
+  }
+  const attendu = 'v' + nvmrc;
+  if (process.version === attendu) return true;
+  console.error(`FILET REFUSÉ : Node ${process.version}, la production tourne sous ${attendu} (.nvmrc, Dockerfile).`);
+  console.error(`Lancer le filet avec Node ${attendu.slice(1)} (binaire officiel : https://nodejs.org/dist/${attendu}/).`);
+  return false;
+}
+
 if (require.main === module) (async () => {
+  if (!verifierNode()) { fs.rmSync(TMP, { recursive: true, force: true }); process.exit(2); }
+  console.log(`Node ${process.version} (celui de la production)`);
   const scenarios = require('./scenarios');
   demarrerPostgresSiBesoin();
   const nb = preparerBase(scenarios.FIXTURES);
