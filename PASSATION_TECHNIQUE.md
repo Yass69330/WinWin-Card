@@ -5394,6 +5394,26 @@ suite en production.
   image. Le prochain push la remplacerait de nouveau : en cas de retour arrière, un
   commit `git revert` est à pousser ensuite (sur feu vert).
 
+### En production (13/10)
+
+- Poussé à **06:40:56 UTC** en avance rapide sur `claude/keen-goldberg-MXslu`
+  (`925cb16` → `3d2f687`). Fenêtre fixée par le pilotage : push et contrôles avant
+  07:30 UTC, sinon retour arrière avant le cron de 08:00.
+- Contrôles de Yass, tous bons :
+  - déploiement vert ;
+  - `/health` affiche `v24.21.0` ;
+  - `/health/db` affiche `{"status":"ok"}`, soit 200 (le code ne s'affiche pas sur la
+    page ; les erreurs répondent 503 `"status":"error"`) ;
+  - scan puis annulation ;
+  - carte iPhone ajoutée, puis mise à jour sur un vrai iPhone (signature par
+    openssl 3.5.7 prouvée).
+- **Carte Google non vérifiée sur un téléphone** (pas d'Android). Contrôle de
+  remplacement proposé : aucune erreur Google dans les journaux Railway depuis le
+  déploiement (l'inscription crée l'objet Google, le scan le met à jour), ou carte
+  ouverte dans wallet.google.com depuis un ordinateur.
+- Retour arrière préparé et NON poussé : commit `9c532de` (revert de `fb4b4e8`) sur la
+  branche locale `retour-20a`. Il est sans objet si rien ne casse.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
