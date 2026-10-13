@@ -158,7 +158,7 @@ mobilite AS (
 scans_par_boutique AS (
   SELECT point_de_vente_id,
     count(*) FILTER (WHERE date_scan >= (SELECT mois_debut FROM b))                                                             AS scans_mois,
-    -- Mêmes jours du mois précédent (décision du 13/10), plus le mois complet.
+    -- Mêmes jours du mois précédent (décision du 13/10).
     count(*) FILTER (WHERE date_scan >= (SELECT mois_prec_debut FROM b) AND date_scan < (SELECT prec_memes_jours FROM b))       AS scans_prec,
     count(DISTINCT client_id) FILTER (WHERE date_scan >= (SELECT mois_debut FROM b))                                            AS clients_distincts,
     count(*) FILTER (WHERE recompense_distribuee IS TRUE AND date_scan >= (SELECT mois_debut FROM b))                           AS recompenses
