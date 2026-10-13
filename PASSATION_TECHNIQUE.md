@@ -6046,6 +6046,22 @@ seulement sur une décision produit (aucune rencontrée, voir « Choix »).
   d'inscription : il est stable.
 - Pas de migration.
 
+### En production (13/10)
+
+- Feu vert de Yass. Poussé à **15:17:28 UTC** en avance rapide sur
+  `claude/keen-goldberg-MXslu` (`a586e5e` → `da9313c`).
+- Contrôles de Yass, tous bons :
+  - déploiement vert, `/health` v24.21.0, `/health/db` ok ;
+  - onglet Clients de Pizz'Amore : le total égale l'Aperçu, « Afficher plus », la
+    recherche fonctionne ;
+  - **export réel complet**, accents corrects dans Excel ;
+  - scan puis annulation.
+- **Étape 21 close** : plus aucune lecture coupée à 1 000 lignes visible du marchand.
+  - Le cron (étape 22), l'Aperçu (étape 26), la liste et l'export sont tous passés en
+    base ou par pages.
+  - Seule reste la lecture des marchands par le cron, plafonnée à 1 000 marchands
+    (sans effet avant longtemps).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
