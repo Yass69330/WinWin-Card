@@ -311,7 +311,7 @@ if (require.main === module) (async () => {
         body: corps === undefined ? undefined : JSON.stringify(corps) });
       const t = await r.text();
       let c; try { c = JSON.parse(t); } catch { c = t; }
-      return { statut: r.status, corps: c };
+      return { statut: r.status, corps: c, retry: r.headers.get('retry-after') };
     },
   };
   await scenarios.jouer(ctx);

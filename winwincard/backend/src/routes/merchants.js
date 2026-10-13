@@ -63,43 +63,29 @@ router.get('/me', authMarchand, asyncHandler(async (req, res) => {
   res.json({ ...data, coordonnees: droitCoordonnees(data) });
 }));
 
-// GET /merchants/me/stats — stats du dashboard + analytics 30j
+// Statistiques indisponibles (base en panne, délai de 5 s dépassé) : une erreur
+// franche, comme le scan (étape 16), jamais des zéros. L'écran affiche
+// « Statistiques indisponibles » et un bouton Réessayer (étape 26).
+function statsIndisponibles(res, route, error) {
+  console.error(`[stats] ${route} indisponible :`, error.message);
+  return res.set('Retry-After', '30').status(503).json({ error: 'database_unavailable' });
+}
+
+// GET /merchants/me/stats — l'Aperçu du dashboard, calculé en base (étape 26,
+// migration 056) : le même pour une mono-boutique et pour un réseau, sans rien
+// par boutique. Une seule lecture, sans plafond de lignes.
 router.get('/me/stats', authMarchand, asyncHandler(async (req, res) => {
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-
-  const [{ count: totalClients }, { count: scansAujourdhui }, { data: scansRecent }] = await Promise.all([
-    supabase.from('clients').select('*', { count: 'exact', head: true }).eq('marchand_id', req.marchandId).is('deleted_at', null),
-    supabase.from('scans').select('*', { count: 'exact', head: true }).eq('marchand_id', req.marchandId).gte('date_scan', new Date().toISOString().split('T')[0]).is('annule_le', null),
-    supabase.from('scans').select('client_id').eq('marchand_id', req.marchandId).gte('date_scan', thirtyDaysAgo).is('annule_le', null),
-  ]);
-
-  const ids = (scansRecent || []).map(s => s.client_id);
-  const activeClients = new Set(ids).size;
-
-  const countByClient = {};
-  ids.forEach(id => { countByClient[id] = (countByClient[id] || 0) + 1; });
-  const retained = Object.values(countByClient).filter(c => c >= 2).length;
-
-  const retentionRate = totalClients > 0 ? Math.round(retained / totalClients * 100) : 0;
-  const avgFrequency  = activeClients > 0 ? parseFloat((ids.length / activeClients).toFixed(1)) : 0;
-
-  res.json({
-    total_clients:       totalClients,
-    scans_aujourdhui:    scansAujourdhui,
-    active_clients_30d:  activeClients,
-    retention_rate:      retentionRate,
-    avg_frequency:       avgFrequency,
-  });
+  const { data, error } = await supabase.rpc('apercu_stats', { p_marchand_id: req.marchandId });
+  if (error) return statsIndisponibles(res, 'apercu_stats', error);
+  res.json(data || {});
 }));
 
-// GET /merchants/me/group-stats — agrégats du dashboard groupe (réseau).
-// Délègue tout le GROUP BY à la fonction SQL group_stats (lecture seule) : Postgres
-// agrège et renvoie un petit jsonb, ce qui évite la troncature PostgREST à 1000
-// lignes qui fausserait un réseau. Renvoie tel quel le jsonb (réseau, boutiques,
-// distribution, scans_non_attribues).
+// GET /merchants/me/group-stats — onglet Réseau. Délègue tout à group_stats, qui
+// prend ses chiffres communs dans apercu_stats (mêmes chiffres que l'Aperçu) et
+// ajoute mobilité, boutiques et scans non attribués.
 router.get('/me/group-stats', authMarchand, asyncHandler(async (req, res) => {
   const { data, error } = await supabase.rpc('group_stats', { p_marchand_id: req.marchandId });
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return statsIndisponibles(res, 'group_stats', error);
   res.json(data || {});
 }));
 

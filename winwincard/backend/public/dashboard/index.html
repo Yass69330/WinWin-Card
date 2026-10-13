@@ -750,6 +750,11 @@ const I18N = {
     pdvConfirmRestore:'Restore scanner access for "{nom}"?',
     statTotalClients:'Total clients', statScansToday:'Scans today', statActive30d:'Active (30 days)',
     statRetention:'Retention rate', statAvgVisits:'Avg visits / active client (30d)',
+    statRetentionHint:'customers signed up 30+ days ago who came back at least twice in 30 days',
+    statRetentionWait:'available after 30 days', statNew:'New this month', statNewCompare:'same days last month: {n}',
+    statReturn:'Return rate', statReturnHint:'customers this month who also came last month',
+    statsUnavailable:'Statistics unavailable right now.',
+    loginUnavailable:'Service temporarily unavailable. Please try again in a moment.',
     copyLink:'📋 Copy link', copied:'✓ Copied', share:'↗ Share', qrShareTitle:'Loyalty program',
     clientsTitle:'Clients', csvBtn:'⬇ CSV', exportCsv:'Export CSV', refresh:'Refresh',
     searchClients:'Search by first name…',
@@ -837,9 +842,9 @@ const I18N = {
     navOverview:'Overview', navClients:'Clients', navScans:'Scans', navScanner:'Scanner', navNotifs:'Notifs',
     navReseau:'Network',
     rsPorteurs:'Carriers', rsActifs30:'Active (30d)', rsNouveaux:'New this month', rsRetour:'Return rate',
-    rsMobilite:'Carriers visiting more than one store', rsDistribTitle:'Monthly visit distribution',
-    rsLessThan:'under', rsMoreThan:'over', rsVisitsCaption:'visits per month',
-    rsDistEmpty:'No active carriers this month yet.',
+    rsMobilite:'Carriers visiting more than one store', rsDistribTitle:'Visit distribution (30 days)',
+    rsLessThan:'under', rsMoreThan:'over', rsVisitsCaption:'visits in 30 days',
+    rsDistEmpty:'No active carriers in the last 30 days.',
     rsBoutiquesTitle:'Stores', rsNonAttribues:'Unattributed scans',
     rsColBoutique:'Store', rsColScans:'Scans', rsColEvol:'vs last month', rsColClients:'Clients served', rsColRecomp:'Rewards',
     rsArchived:'archived', rsNoBoutique:'No store.', rsLoadError:'Loading error',
@@ -859,6 +864,11 @@ const I18N = {
     pdvConfirmRestore:"Rétablir l'accès scanner de « {nom} » ?",
     statTotalClients:'Clients au total', statScansToday:"Scans aujourd'hui", statActive30d:'Actifs (30 jours)',
     statRetention:'Taux de rétention', statAvgVisits:'Visites moy. / client actif (30j)',
+    statRetentionHint:'clients inscrits depuis 30 jours ou plus, revenus au moins 2 fois en 30 jours',
+    statRetentionWait:'disponible après 30 jours', statNew:'Nouveaux ce mois', statNewCompare:'aux mêmes jours du mois préc. : {n}',
+    statReturn:'Taux de retour', statReturnHint:'clients du mois déjà venus le mois dernier',
+    statsUnavailable:'Statistiques indisponibles pour le moment.',
+    loginUnavailable:'Service momentanément indisponible. Réessayez dans un instant.',
     copyLink:'📋 Copier le lien', copied:'✓ Copié', share:'↗ Partager', qrShareTitle:'Programme de fidélité',
     clientsTitle:'Clients', csvBtn:'⬇ CSV', exportCsv:'Exporter CSV', refresh:'Actualiser',
     searchClients:'Rechercher par prénom…',
@@ -946,9 +956,9 @@ const I18N = {
     navOverview:'Aperçu', navClients:'Clients', navScans:'Scans', navScanner:'Scanner', navNotifs:'Notifs',
     navReseau:'Réseau',
     rsPorteurs:'Porteurs', rsActifs30:'Actifs (30 j)', rsNouveaux:'Nouveaux ce mois', rsRetour:'Taux de retour',
-    rsMobilite:'Porteurs fréquentant plusieurs boutiques', rsDistribTitle:'Répartition des passages mensuels',
-    rsLessThan:'moins de', rsMoreThan:'plus de', rsVisitsCaption:'passages par mois',
-    rsDistEmpty:"Aucun porteur actif ce mois pour l'instant.",
+    rsMobilite:'Porteurs fréquentant plusieurs boutiques', rsDistribTitle:'Répartition des passages (30 jours)',
+    rsLessThan:'moins de', rsMoreThan:'plus de', rsVisitsCaption:'passages en 30 jours',
+    rsDistEmpty:'Aucun porteur actif sur les 30 derniers jours.',
     rsBoutiquesTitle:'Boutiques', rsNonAttribues:'Scans non attribués',
     rsColBoutique:'Boutique', rsColScans:'Scans', rsColEvol:'vs mois préc.', rsColClients:'Clients servis', rsColRecomp:'Récompenses',
     rsArchived:'archivée', rsNoBoutique:'Aucune boutique.', rsLoadError:'Erreur de chargement',
@@ -1090,7 +1100,10 @@ document.getElementById('login-form').addEventListener('submit', async () => {
       // les marchands chaque semaine. Le scanner l'envoyait déjà, pas cet écran.
       body: JSON.stringify({ slug, password: pwd, remember_device: remember }),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    // Base indisponible (étape 17 : 503 database_unavailable) : un message lisible,
+    // jamais le code brut (étape 26). Le scanner a son propre écran, non touché.
+    if (res.status === 503 || data.error === 'database_unavailable') throw new Error(t('loginUnavailable'));
     if (!res.ok) throw new Error(data.error || t('invalidCreds'));
     data.slug = data.slug || slug;
     saveSession(data);
@@ -1144,12 +1157,14 @@ async function loadOverview(force = false) {
   // forfait et le droit aux coordonnées changent depuis l'admin, et une valeur
   // gardée d'une session à l'autre laissait un bouton d'export faux.
   const [statsRes, qrRes, meRes, pdvRes] = await Promise.all([
-    api('/api/merchants/me/stats'),
+    api('/api/merchants/me/stats').catch(() => null),
     api('/api/merchants/me/qrcode'),
     api('/api/merchants/me'),
     api('/api/merchants/me/points-de-vente'),
   ]);
-  S.stats = await statsRes.json();
+  // Statistiques en panne (503) ou injoignables : rien n'est gardé, l'écran le
+  // dit et le prochain affichage redemande (étape 26).
+  S.stats = statsRes && statsRes.ok ? await statsRes.json().catch(() => null) : null;
   S.qr    = await qrRes.json();
   S.pdv   = await pdvRes.json().catch(() => []);
   if (meRes.ok) {
@@ -1219,10 +1234,17 @@ async function loadReseau(force = false) {
   if (!force && S.reseau) { renderReseau(); return; }
   const el = document.getElementById('tab-reseau');
   el.innerHTML = '<div class="skeleton skeleton-card"></div>';
-  try {
-    const res = await api('/api/merchants/me/group-stats');
-    S.reseau = await res.json();
-  } catch (e) { el.innerHTML = `<p style="color:var(--error)">${t('rsLoadError')}</p>`; return; }
+  // En panne (503) ou injoignable : rien n'est gardé, message + Réessayer (étape 26).
+  let res = null;
+  try { res = await api('/api/merchants/me/group-stats'); } catch { /* traité ci-dessous */ }
+  const corps = res && res.ok ? await res.json().catch(() => null) : null;
+  if (!corps) {
+    S.reseau = null;
+    el.innerHTML = `<div class="stats-grid">${statsPanneHtml('btn-reseau-retry')}</div>`;
+    document.getElementById('btn-reseau-retry').addEventListener('click', () => loadReseau(true));
+    return;
+  }
+  S.reseau = corps;
   renderReseau();
 }
 
@@ -1236,9 +1258,6 @@ function renderReseau() {
   const d = S.reseau; if (!d) return;
   const el = document.getElementById('tab-reseau');
   const r = d.reseau || {};
-  const dist = d.distribution || {};
-  const total = (dist.bas || 0) + (dist.milieu || 0) + (dist.haut || 0);
-  const pc = n => total > 0 ? Math.round((n || 0) / total * 100) : 0;
   const sort = S.reseauSort || (S.reseauSort = { col: 'scans', dir: -1 });
   const boutiques = (d.boutiques || []).slice().sort((a, b) => {
     let va = a[sort.col], vb = b[sort.col];
@@ -1249,28 +1268,8 @@ function renderReseau() {
     return (va < vb ? -1 : va > vb ? 1 : 0) * sort.dir;
   });
   el.innerHTML = `
-    <div class="stats-grid">
-      <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-value">${r.porteurs ?? '–'}</div><div class="stat-label">${t('rsPorteurs')}</div></div>
-      <div class="stat-card"><div class="stat-icon">🔥</div><div class="stat-value">${r.actifs_30j ?? '–'}</div><div class="stat-label">${t('rsActifs30')}</div></div>
-      <div class="stat-card"><div class="stat-icon">✨</div><div class="stat-value">${r.nouveaux_ce_mois ?? '–'}</div><div class="stat-label">${t('rsNouveaux')}</div></div>
-      <div class="stat-card"><div class="stat-icon">🔄</div><div class="stat-value">${r.taux_retour_reseau != null ? r.taux_retour_reseau + '%' : '–'}</div><div class="stat-label">${t('rsRetour')}</div></div>
-    </div>
+    <div class="stats-grid">${statsBlocHtml(d.apercu || {})}</div>
     <div class="field-hint" style="margin:6px 2px 0">${t('rsMobilite')} : <strong>${r.mobilite ?? 0}</strong></div>
-
-    <p class="section-title">${t('rsDistribTitle')}</p>
-    <div class="qr-card" style="align-items:stretch">
-      <div style="display:flex;height:26px;border-radius:6px;overflow:hidden;background:rgba(0,0,0,.05)">
-        <div style="width:${pc(dist.bas)}%;background:#e0a458"></div>
-        <div style="width:${pc(dist.milieu)}%;background:#8b90ff"></div>
-        <div style="width:${pc(dist.haut)}%;background:#4ea672"></div>
-      </div>
-      <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-top:8px;flex-wrap:wrap">
-        <span><span style="color:#e0a458">■</span> ${t('rsLessThan')} ${dist.seuil_bas} — <strong>${pc(dist.bas)}%</strong> (${dist.bas || 0})</span>
-        <span><span style="color:#8b90ff">■</span> ${dist.seuil_bas}–${dist.seuil_haut} — <strong>${pc(dist.milieu)}%</strong> (${dist.milieu || 0})</span>
-        <span><span style="color:#4ea672">■</span> ${t('rsMoreThan')} ${dist.seuil_haut} — <strong>${pc(dist.haut)}%</strong> (${dist.haut || 0})</span>
-      </div>
-      <div class="field-hint" style="margin-top:4px">${t('rsVisitsCaption')}${total === 0 ? ' — ' + t('rsDistEmpty') : ''}</div>
-    </div>
 
     <p class="section-title">${t('rsBoutiquesTitle')} <span class="field-hint" style="font-weight:400">· ${t('rsNonAttribues')} : <strong>${d.scans_non_attribues ?? 0}</strong></span></p>
     <div style="overflow-x:auto">
@@ -1315,14 +1314,55 @@ async function renamePdv(id, currentNom) {
   renderPdv();
 }
 
+// Bloc commun de l'Aperçu et de l'onglet Réseau (étape 26) : les chiffres
+// d'apercu_stats, les mêmes pour une mono-boutique et pour un réseau, sans rien
+// par boutique. À placer dans un conteneur .stats-grid.
+function statsBlocHtml(a) {
+  const dist = a.distribution || {};
+  const total = (dist.bas || 0) + (dist.milieu || 0) + (dist.haut || 0);
+  const pc = n => total > 0 ? Math.round((n || 0) / total * 100) : 0;
+  const carte = (icone, valeur, libelle, note, large) => `<div class="stat-card"${large ? ' style="grid-column:1/-1"' : ''}>
+      <div class="stat-icon">${icone}</div><div class="stat-value">${valeur}</div><div class="stat-label">${libelle}</div>
+      ${note ? `<div class="stat-label" style="margin-top:4px;opacity:.7">${note}</div>` : ''}</div>`;
+  return `
+    ${carte('👥', a.porteurs ?? '–', t('statTotalClients'))}
+    ${carte('✅', a.scans_aujourdhui ?? '–', t('statScansToday'))}
+    ${carte('🔥', a.actifs_30j ?? '–', t('statActive30d'))}
+    ${carte('📈', (a.visites_moyennes ?? '–') + 'x', t('statAvgVisits'))}
+    ${carte('🔄', a.retention != null ? a.retention + '%' : '–', t('statRetention'), a.retention != null ? t('statRetentionHint') : t('statRetentionWait'))}
+    ${carte('↩️', (a.taux_retour ?? '–') + '%', t('statReturn'), t('statReturnHint'))}
+    ${carte('✨', a.nouveaux_ce_mois ?? '–', t('statNew'), t('statNewCompare').replace('{n}', a.nouveaux_mois_prec_memes_jours ?? '–'), true)}
+    <div class="qr-card" style="grid-column:1/-1;align-items:stretch">
+      <div class="stat-label" style="margin-bottom:8px">${t('rsDistribTitle')}</div>
+      <div style="display:flex;height:26px;border-radius:6px;overflow:hidden;background:rgba(0,0,0,.05)">
+        <div style="width:${pc(dist.bas)}%;background:#e0a458"></div>
+        <div style="width:${pc(dist.milieu)}%;background:#8b90ff"></div>
+        <div style="width:${pc(dist.haut)}%;background:#4ea672"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-top:8px;flex-wrap:wrap">
+        <span><span style="color:#e0a458">■</span> ${t('rsLessThan')} ${dist.seuil_bas} — <strong>${pc(dist.bas)}%</strong> (${dist.bas || 0})</span>
+        <span><span style="color:#8b90ff">■</span> ${dist.seuil_bas}–${dist.seuil_haut} — <strong>${pc(dist.milieu)}%</strong> (${dist.milieu || 0})</span>
+        <span><span style="color:#4ea672">■</span> ${t('rsMoreThan')} ${dist.seuil_haut} — <strong>${pc(dist.haut)}%</strong> (${dist.haut || 0})</span>
+      </div>
+      <div class="stat-label" style="margin-top:6px;opacity:.7">${t('rsVisitsCaption')}${total === 0 ? ' — ' + t('rsDistEmpty') : ''}</div>
+    </div>`;
+}
+
+// Statistiques en panne : un message et un bouton, jamais des zéros (étape 26).
+function statsPanneHtml(idBouton) {
+  return `<div class="qr-card" style="grid-column:1/-1;align-items:center;text-align:center">
+      <p style="margin:0 0 10px">${t('statsUnavailable')}</p>
+      <button class="btn btn-outline btn-sm" id="${idBouton}">${t('reessayer')}</button></div>`;
+}
+
 function renderOverview() {
-  const st = S.stats;
-  document.getElementById('stats-grid').innerHTML = `
-    <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-value">${st.total_clients ?? '–'}</div><div class="stat-label">${t('statTotalClients')}</div></div>
-    <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-value">${st.scans_aujourdhui ?? '–'}</div><div class="stat-label">${t('statScansToday')}</div></div>
-    <div class="stat-card"><div class="stat-icon">🔥</div><div class="stat-value">${st.active_clients_30d ?? '–'}</div><div class="stat-label">${t('statActive30d')}</div></div>
-    <div class="stat-card"><div class="stat-icon">🔄</div><div class="stat-value">${st.retention_rate != null ? st.retention_rate + '%' : '–'}</div><div class="stat-label">${t('statRetention')}</div></div>
-    <div class="stat-card" style="grid-column:1/-1;flex-direction:row;align-items:center;gap:14px"><div class="stat-icon" style="margin:0">📈</div><div><div class="stat-value" style="font-size:22px">${st.avg_frequency ?? '–'}x</div><div class="stat-label">${t('statAvgVisits')}</div></div></div>`;
+  const grille = document.getElementById('stats-grid');
+  if (S.stats) {
+    grille.innerHTML = statsBlocHtml(S.stats);
+  } else {
+    grille.innerHTML = statsPanneHtml('btn-stats-retry');
+    document.getElementById('btn-stats-retry').addEventListener('click', () => loadOverview(true));
+  }
   renderPdv();
   const qrSection = document.getElementById('qr-section');
   qrSection.innerHTML = `
@@ -2464,7 +2504,7 @@ document.getElementById('btn-confirm-delete').addEventListener('click', async ()
     document.getElementById('modal-delete').classList.remove('open');
     if (S.clients) S.clients = S.clients.filter(c => c.id !== id);
     renderClients(document.getElementById('search-clients').value);
-    if (S.stats) { S.stats.total_clients = Math.max(0, (S.stats.total_clients || 1) - 1); renderOverview(); }
+    if (S.stats) { S.stats.porteurs = Math.max(0, (S.stats.porteurs || 1) - 1); renderOverview(); }
   } catch (e) {
     alert(e.message);
   } finally {

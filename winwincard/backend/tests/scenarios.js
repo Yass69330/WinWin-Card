@@ -1482,6 +1482,113 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     for (const k of Object.keys(process.env)) if (!(k in env)) delete process.env[k];
     Object.assign(process.env, env);
   }
+
+  titre('19. Aperçu calculé en base, mêmes jours du mois précédent, panne lisible (étape 26)');
+  {
+    const sqlOuNull = requete => { try { return sql(requete); } catch { return null; } };
+    const apercu = (m, quand) => { const r = sqlOuNull(`SELECT apercu_stats('${m}', '${quand}')`); return r ? JSON.parse(r) : {}; };
+    const marchand = (id, nom) => sql(`INSERT INTO marchands (id, nom, slug, forfait, type_programme, max_value, display_max_value, langue)
+      VALUES ('${id}', '${nom}', '${nom.toLowerCase().replace(/\W+/g, '-')}', 'pro', 'stamps', 10, 10, 'fr')`);
+    const clientNe = (m, prenom, cree) => sql(`INSERT INTO clients (marchand_id, prenom, created_at) VALUES ('${m}', '${prenom}', '${cree}') RETURNING id`);
+    const scanLe = (m, c, quand, annule = false) => sql(`INSERT INTO scans (client_id, marchand_id, stored_value_avant, stored_value_apres, date_scan, annule_le)
+      VALUES ('${c}', '${m}', 0, 1, '${quand}', ${annule ? `'${quand}'` : 'NULL'})`);
+
+    // ── Horloge figée au 31/03/2026 12:00 UTC (février a 28 jours) ──
+    const MS = 'e2600000-0000-4000-8000-000000000001';
+    marchand(MS, 'Filet Apercu');
+    const A1 = clientNe(MS, 'A1', '2026-01-10'), A2 = clientNe(MS, 'A2', '2026-01-10');
+    const A3 = clientNe(MS, 'A3', '2026-01-10'), A4 = clientNe(MS, 'A4', '2026-01-10');
+    const R1 = clientNe(MS, 'R1', '2026-03-20'); clientNe(MS, 'R2', '2026-03-20');
+    clientNe(MS, 'F1', '2026-02-05'); clientNe(MS, 'F2', '2026-02-27'); clientNe(MS, 'F3', '2026-02-28 23:00');
+    scanLe(MS, A1, '2026-03-20'); scanLe(MS, A1, '2026-03-31 08:00');
+    scanLe(MS, A2, '2026-02-15'); scanLe(MS, A2, '2026-03-20');
+    scanLe(MS, A3, '2026-03-10'); scanLe(MS, A3, '2026-03-15'); scanLe(MS, A3, '2026-03-16', true);
+    scanLe(MS, A4, '2026-02-01');
+    scanLe(MS, R1, '2026-03-21'); scanLe(MS, R1, '2026-03-22');
+    const a = apercu(MS, '2026-03-31 12:00+00');
+    verifier('aperçu en base : porteurs, scans du jour, actifs 30 j, visites moyennes (scan annulé exclu)',
+      [a.porteurs, a.scans_aujourdhui, a.actifs_30j, a.visites_moyennes], [9, 1, 4, 1.8]);
+    verifier('rétention (b) : revenus parmi les inscrits depuis 30 j ou plus (2 sur 7), un récent revenu ne compte pas',
+      a.retention, 29);
+    verifier('taux de retour inchangé : 1 des 4 actifs du mois était venu le mois précédent (complet)', a.taux_retour, 25);
+    verifier('nouveaux ce mois et mêmes jours du mois précédent : le 31/03, tout février (borné à la fin du mois)',
+      [a.nouveaux_ce_mois, a.nouveaux_mois_prec_memes_jours], [2, 3]);
+    verifier('mêmes jours du mois précédent : le 10/03 à midi, seulement du 01/02 au 10/02 à midi (1 sur 3)',
+      apercu(MS, '2026-03-10 12:00+00').nouveaux_mois_prec_memes_jours, 1);
+    const d5 = apercu(MS, '2026-03-05 12:00+00').distribution || {};
+    verifier('répartition des passages sur 30 JOURS GLISSANTS : le 05/03, le passage du 15/02 compte (1 porteur, tranche basse)',
+      [d5.bas, d5.milieu, d5.haut, d5.seuil_bas, d5.seuil_haut], [1, 0, 0, 5, 10]);
+    const MJ = 'e2600000-0000-4000-8000-000000000002';
+    marchand(MJ, 'Filet Apercu Jeune');
+    const J1 = clientNe(MJ, 'J1', '2026-03-25');
+    scanLe(MJ, J1, '2026-03-26'); scanLe(MJ, J1, '2026-03-27');
+    verifier('rétention : rien (null) tant qu\'aucun client n\'a 30 jours', apercu(MJ, '2026-03-31 12:00+00').retention, null);
+
+    // ── Par l'API, horloge réelle : plus de 1 000 scans en 30 jours ──
+    const MG = 'e2600000-0000-4000-8000-000000000003';
+    marchand(MG, 'Filet Apercu Gros');
+    sql(`WITH c AS (INSERT INTO clients (marchand_id, prenom, created_at)
+                    SELECT '${MG}', 'G' || g, now() - interval '90 days' FROM generate_series(1, 1200) g RETURNING id)
+         INSERT INTO scans (client_id, marchand_id, stored_value_avant, stored_value_apres, date_scan)
+         SELECT id, '${MG}'::uuid, 0, 1, now() - interval '2 days' FROM c UNION ALL
+         SELECT id, '${MG}'::uuid, 0, 1, now() - interval '3 days' FROM c`);
+    const tG = jwt.sign({ role: 'marchand', marchand_id: MG, tv: 1 }, secretJwt, { expiresIn: '1h' });
+    const sG = await api('GET', '/api/merchants/me/stats', tG);
+    verifier('Aperçu par l\'API, 2 400 scans en 30 j (avant : liste coupée à 1 000) : 1 200 actifs, 2,0 visites, rétention 100 %',
+      [sG.statut, sG.corps.actifs_30j, sG.corps.visites_moyennes, sG.corps.retention], [200, 1200, 2, 100]);
+
+    // ── Réseau : mêmes chiffres que l'Aperçu, « vs mois préc. » aux mêmes jours ──
+    const MN = 'e2600000-0000-4000-8000-000000000004', BN = 'e2610000-0000-4000-8000-000000000004';
+    marchand(MN, 'Filet Apercu Reseau');
+    sql(`INSERT INTO points_de_vente (id, marchand_id, nom, actif, scanner_login) VALUES ('${BN}', '${MN}', 'Boutique stable', true, 'filet-apercu-b')`);
+    const N1 = clientNe(MN, 'N1', '2025-01-01');
+    // Boutique parfaitement stable : un scan par jour, à la même heure, ce mois-ci et
+    // le mois précédent, sur les jours qui existent dans les deux mois.
+    sql(`INSERT INTO scans (client_id, marchand_id, point_de_vente_id, stored_value_avant, stored_value_apres, date_scan)
+         SELECT '${N1}', '${MN}', '${BN}', 0, 1, x.j
+           FROM (SELECT date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' AS mois) b0,
+                LATERAL (SELECT b0.mois, b0.mois - interval '1 month' AS prec) b,
+                generate_series(0, 30) k,
+                LATERAL (VALUES (b.mois + k * interval '1 day' + interval '1 second'),
+                                (b.prec + k * interval '1 day' + interval '1 second')) x(j)
+          WHERE b.prec + k * interval '1 day' < b.mois
+            AND b.mois + k * interval '1 day' + interval '1 second' <= now()`);
+    // … et le reste du mois précédent (jours pas encore arrivés ce mois-ci) : compté par
+    // l'ancien calcul (mois précédent complet), écarté par les mêmes jours.
+    sql(`INSERT INTO scans (client_id, marchand_id, point_de_vente_id, stored_value_avant, stored_value_apres, date_scan)
+         SELECT '${N1}', '${MN}', '${BN}', 0, 1, b.prec + k * interval '1 day' + interval '1 second'
+           FROM (SELECT date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' AS mois) b0,
+                LATERAL (SELECT b0.mois, b0.mois - interval '1 month' AS prec) b,
+                generate_series(0, 30) k
+          WHERE b.prec + k * interval '1 day' < b.mois
+            AND b.mois + k * interval '1 day' + interval '1 second' > now()`);
+    const tN = jwt.sign({ role: 'marchand', marchand_id: MN, tv: 1 }, secretJwt, { expiresIn: '1h' });
+    const sN = await api('GET', '/api/merchants/me/stats', tN);
+    const gN = await api('GET', '/api/merchants/me/group-stats', tN);
+    const boutique = (gN.corps.boutiques || [])[0] || {};
+    verifier('Réseau : son bloc commun EST l\'Aperçu (mêmes chiffres par construction), cartes réseau tirées du même bloc',
+      [JSON.stringify(gN.corps.apercu) === JSON.stringify(sN.corps), gN.corps.reseau && gN.corps.reseau.porteurs === sN.corps.porteurs,
+       JSON.stringify(gN.corps.distribution) === JSON.stringify(sN.corps.distribution)], [true, true, true]);
+    verifier('« vs mois préc. » : une boutique stable donne 0 % (mêmes jours du mois précédent ; avant : en baisse)',
+      [boutique.scans > 0, boutique.scans === boutique.scans_prec, boutique.evolution_pct], [true, true, 0]);
+    verifier('mono-boutique : l\'Aperçu ne contient rien par boutique', ['boutiques', 'mobilite', 'scans_non_attribues'].some(k => k in sN.corps), false);
+
+    // ── Panne : 503 + Retry-After, jamais des zéros ──
+    sqlOuNull(`REVOKE EXECUTE ON FUNCTION public.apercu_stats(uuid, timestamptz) FROM service_role`);
+    const consoleError = console.error; console.error = () => {};
+    const pS = await api('GET', '/api/merchants/me/stats', tN);
+    sqlOuNull(`REVOKE EXECUTE ON FUNCTION public.group_stats(uuid) FROM service_role`);
+    const pG = await api('GET', '/api/merchants/me/group-stats', tN);
+    console.error = consoleError;
+    sqlOuNull(`GRANT EXECUTE ON FUNCTION public.apercu_stats(uuid, timestamptz) TO service_role`);
+    sql(`GRANT EXECUTE ON FUNCTION public.group_stats(uuid) TO service_role`);
+    verifier('statistiques en panne : Aperçu et Réseau répondent 503 database_unavailable avec Retry-After (avant : zéros, réseau vide, 500)',
+      [pS.statut, pS.corps.error, pS.retry, pG.statut, pG.corps.error, pG.retry], [503, 'database_unavailable', '30', 503, 'database_unavailable', '30']);
+    verifier('droits : apercu_stats et group_stats fermées à la clé publique, ouvertes au serveur',
+      sqlOuNull(`SELECT has_function_privilege('anon', 'public.apercu_stats(uuid,timestamptz)', 'EXECUTE') || '|'
+                     || has_function_privilege('anon', 'public.group_stats(uuid)', 'EXECUTE') || '|'
+                     || has_function_privilege('service_role', 'public.apercu_stats(uuid,timestamptz)', 'EXECUTE')`), 'false|false|true');
+  }
 }
 
 module.exports = { FIXTURES, jouer, M, B };
