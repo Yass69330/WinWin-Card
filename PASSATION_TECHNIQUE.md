@@ -5431,6 +5431,24 @@ suite en production.
   Trois requêtes en lecture seule ont été données à Yass (déclencheur, clients dans la
   zone, registre Google du jour). Le correctif, s'il le faut, est une migration qui crée
   le déclencheur, proposée avant tout code.
+- **Tranché le 13/10 (requêtes de Yass) : bénin.**
+  - `trg_clients_updated_at` est présent et actif en production (`O`).
+  - 43 clients dans la zone chez 8 marchands, **0 éligible** : tous ont été relancés
+    après leur dernière modification (au plus tard le 11/10, déjà relancés par l'ancien
+    code).
+  - « Une relance par palier » fonctionne. Rien à corriger.
+- **Registre du jour** : inactive, Apple 60 envois `ok` (200) ; Google 55 envois `ok`
+  (200). La chaîne Google fonctionne sous Node 24.21.0 : carte Google validée.
+- **CORRECTION d'une affirmation de l'étape 22 (§15 quatertricies)** : « Google seulement
+  pour les clients qui ont une carte Google » ne filtre **rien** en production.
+  - Le filtre repose sur `passes.google_pass_url`, or ce lien est créé pour TOUTES les
+    cartes (audit 05 §4.3). D'où 55 messages Google pour 55 relancés, iPhone compris.
+  - Pas de régression : l'ancien code envoyait à tous.
+  - Reste à faire à l'**étape 23** (« message Google envoyé aux cartes iPhone ») : savoir
+    si le client a réellement enregistré sa carte Google (état de l'objet chez Google,
+    ou retour de Google à l'enregistrement). Diagnostic à faire.
+  - Coût aujourd'hui : des appels Google inutiles, qui comptent dans les limites de
+    Google (3 messages par 24 h, 10 par objet).
 
 ## 15 septtricies. ÉTAPE 26 + APERÇU CALCULÉ EN BASE : DIAGNOSTIC ET PROPOSITION (13/10, rien codé)
 
