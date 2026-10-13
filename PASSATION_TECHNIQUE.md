@@ -5801,6 +5801,18 @@ bloc, puis la mobilité et le tableau par boutique (« vs mois préc. » aux mê
 - Totaux : `npm test` **238/238**, navigateur 6/6 (244/244). Contre-épreuve sur
   `3d2f687` : 225/238.
 
+### En production (13/10)
+
+- Migration 056 exécutée en production par Yass, vérification 4 × true.
+- Poussé à **13:07:36 UTC** en avance rapide sur `claude/keen-goldberg-MXslu`
+  (`3d2f687` → `53a27d3`, 10 commits).
+- Contrôles de Yass, tous bons :
+  - déploiement vert, `/health` v24.21.0, `/health/db` ok ;
+  - Aperçu mono-boutique : 6 cartes et la répartition sur 30 jours ;
+  - réseau : Aperçu et onglet Réseau identiques ;
+  - scan puis annulation.
+- **Étape 26 close.**
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
