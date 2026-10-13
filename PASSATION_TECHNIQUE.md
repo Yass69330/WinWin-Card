@@ -5320,6 +5320,80 @@ suite en production.
 3. Rien de plus urgent que 20a : la seule faille joignable sans connexion (qs et
    body-parser) est dans 20a.
 
+## 15 sextricies. ÉTAPE 20a (NODE 24.21.0) : CODÉE EN LOCAL (13/10, rien poussé)
+
+**Décisions du pilotage (13/10)** :
+1. 20a validée : Node 24.21.0, `npm audit fix` sans `--force`, le filet sous le Node de
+   la production. Pas d'environnement de test : production directe, retour arrière
+   prêt.
+2. 20b (Express 5, multer 2, sharp 0.35) juste APRÈS l'étape 26. express-rate-limit
+   reste en 7.
+3. Reste de t17 avant l'étape 28 ; étape 27 en fin de liste.
+4. **Routine mensuelle validée**, sans aucune requête au serveur :
+   - `npm audit --omit=dev` ;
+   - la liste des publications de sécurité de Node 24 (nodejs.org/dist/index.json,
+     champ `security`) ;
+   - le résultat noté dans la passation (date, alertes, décision).
+
+### Livré (commit local `fb4b4e8`)
+
+- `Dockerfile` : `node:24.21.0-trixie@sha256:1278a37eb510ec1606fba0e80f554bcc941ae0b44f35ae373c4822ae7717c64d`
+  (avant : `24.10.0`, `sha256:79784277…`). Commentaire mis à jour (openssl 3.5.7).
+- `package.json` : `engines.node` à `24.21.0`. **Aucune autre ligne changée.**
+- `.nvmrc` : `24.21.0`.
+- `package-lock.json` (`npm audit fix` sans `--force`, npm 11.19.0) :
+  - express 4.22.2 → 4.22.3 ;
+  - body-parser 1.20.5 → 1.20.8 ;
+  - qs 6.15.2 → 6.16.0 ;
+  - proxy-addr 2.0.7 → 2.0.8 ;
+  - morgan 1.11.0 → 1.12.1 ;
+  - @opentelemetry/core, resources, sdk-trace-base 2.7.1 → 2.12.0, plus sdk-trace
+    2.12.0 (nouveau, via Sentry) ;
+  - side-channel 1.1.1, brace-expansion 5.0.12.
+- `tests/lancer.js` : le filet refuse de tourner (code 2) si :
+  - Dockerfile, `engines` et `.nvmrc` ne disent pas la même version ;
+  - Node n'est pas exactement celui-là.
+
+  Le message dit quelle version prendre. Chargé par `require()` (banc de charge), le
+  fichier ne vérifie rien.
+
+### Preuves
+
+- Avant 20a, sous **24.10.0** (Node de la production d'alors) : **224/224**.
+- Après 20a, sous **24.21.0** : **224/224** (« Node v24.21.0 (celui de la production) »).
+- Après 20a, le filet sous 22.22.0 et sous 24.10.0 : **refusé**, code 2.
+- `engines` faussé à 24.20.0 : refusé (« versions de Node différentes »).
+- `npm audit --omit=dev` après : 3 alertes (avant : 11) :
+  - **sharp** (haute) : 20b ;
+  - **node-cron** et **uuid** (moyennes) : la faille vise uuid v3/v5/v6, et nous
+    n'utilisons que v4.
+
+  Plus de critique. qs et body-parser, la seule faille joignable sans connexion, sont
+  corrigés.
+- **Image construite en local** (Docker 29.8.2) depuis la même empreinte :
+  - `node v24.21.0`, `npm 11.19.0`, `OpenSSL 3.5.7 9 Jun 2026` ;
+  - sharp fonctionne (libvips 8.15.3), resvg fonctionne ;
+  - **signature des cartes** : la commande d'`apple-pass.js` (smime -sign -binary
+    -md sha256 -outform DER) avec des certificats de TEST donne une signature vérifiée
+    (« CMS Verification successful », sha256) ;
+  - le serveur démarre dans l'image (« Workflows planifiés »), et `/health` répond
+    `"node":"v24.21.0"`.
+- Avertissement de npm 11.19 à `npm ci` : « sharp@0.33.5 install scripts not yet covered
+  by allowScripts ». Sans effet, sharp fonctionne dans l'image (prouvé ci-dessus). À
+  revoir avec sharp 0.35 (20b).
+- Limite de la preuve locale : pour passer le proxy de la session, la construction a
+  utilisé une COPIE du Dockerfile où `npm ci` reçoit le certificat du proxy en secret
+  de construction. Le Dockerfile du dépôt est inchangé à cette ligne près, et Railway
+  n'a pas de proxy.
+
+### Hypothèses et limites
+
+- La signature réelle (certificats Apple de production) ne se prouve que sur un vrai
+  iPhone : contrôle obligatoire après le déploiement.
+- Le retour arrière par Railway (« Redeploy » du déploiement précédent) remet l'ancienne
+  image. Le prochain push la remplacerait de nouveau : en cas de retour arrière, un
+  commit `git revert` est à pousser ensuite (sur feu vert).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
