@@ -6223,6 +6223,84 @@ iPhone. Ordre de grandeur avec la règle :
 2. **Lecture `hasUsers` unique** pour protéger les clients existants qui ont les deux
    cartes : oui (recommandé), ou accepter le risque.
 
+## 15 tresquadragies. ÉTAPE 23 (GOOGLE, D2) : CODÉE EN LOCAL (13/10, rien poussé)
+
+Décisions de Yass (13/10) : piste b (le clic sur le bouton Google) ; scan inclus ;
+vérification unique auprès de Google, étalée, jamais entre 07:30 et 09:00 UTC, bilan
+au journal, même signal que le clic ; pas de mesure « avant » (gain mesuré après la
+mise en production). Le risque d'un client qui change de téléphone est accepté.
+
+### Règle D2
+
+Google est servi si `passes.google_ouvert_le` est posé, OU si le client n'a aucun jeton
+Apple (`device_tokens`). Google Wallet n'existe pas sur iPhone : un client avec un jeton
+Apple et sans signal est un iPhone seul. Le client qui a les deux cartes garde les deux
+dès qu'il a cliqué sur le bouton Google ou que la vérification unique l'a trouvé.
+
+### Livré (commit local `cfe796b`)
+
+- **Migration 057** (`database/migration_057_google_d2.sql`) :
+  - colonne `passes.google_ouvert_le` ;
+  - `reserver_relances` recréée (même signature que 055), drapeau `google` selon D2 ;
+  - `cartes_google_campagne(marchand, après, limite)`, la voie Google des campagnes ;
+  - `cartes_google_a_verifier(après, limite)`, la liste de la vérification unique ;
+  - fonctions fermées à PUBLIC, anon et authenticated, ouvertes au serveur ;
+  - requête de contrôle (4 × true) et retour arrière en fin de fichier.
+- **`GET /api/passes/:serial/google`** : pose `google_ouvert_le` (une seule fois),
+  puis 302 vers le même lien Google. Carte inconnue ou sans lien : 404 ; lecture en
+  panne : 503 + Retry-After.
+- **Inscription** : `google_wallet_url` renvoyé à la landing pointe vers cette route.
+  La landing elle-même n'est pas modifiée.
+- **Règle d'envoi sur toutes les surfaces** (`services/canal-google.js`) :
+  - scan (et parrain) : une seule lecture des jetons, qui ramène aussi le signal, pour
+    Apple et Google ; aucune requête de plus, réponse de la caisse inchangée ;
+  - ajustement et annulation (`syncPassAfterAdjustment`), avis : même lecture ;
+  - cron : `reserver_relances` ;
+  - campagnes : `cartes_google_campagne`.
+- **Vérification unique** (`services/verification-google.js`) :
+  - lit l'objet Google (`lireObjet`) de chaque carte de la liste ; `hasUsers` vrai, le
+    signal est posé ;
+  - une carte toutes les 500 ms, par pages de 100 ;
+  - refusée, ou interrompue, entre 07:30 et 09:00 UTC ;
+  - bilan au journal :
+    `[verif-google] finie : N vérifiée(s), M ont une carte Google, X sans, E erreur(s)` ;
+  - lancée par l'admin : bouton « Vérifier les cartes Google (une fois) » sous les
+    chiffres, route `POST /api/admin/google-wallet/verification`, avec les réponses
+    202, 409 (en cours), 423 (fenêtre du cron) ou 503 (Google non configuré).
+
+### Preuves
+
+- `npm test` (Node 24.21.0) : **274/274**, dont la section 22 (15 contrôles).
+- Contre-épreuve, les nouveaux tests sur `da9313c` : **261/271**.
+  - Les 10 échecs sont tous dans la section 22 : Google servi à la carte iPhone seule
+    (cron, campagne, scan, ajustement), route et vérification absentes.
+  - Les sections 0 à 21 passent sur l'ancien code.
+- Section 17 : ses 1 200 cartes ont les deux (jeton Apple et lien Google). Le
+  signal y est posé si la colonne existe, sinon elles seraient devenues des iPhone
+  seuls.
+- L'ajustement est vérifié dans le processus du test, avec un Google imité : dans le
+  filet, Google n'est pas configuré et l'ajustement n'y écrit aucune ligne Google.
+
+### Hypothèses et limites
+
+- **Hypothèse** : un jeton Apple veut dire iPhone. Un client qui passe d'iPhone à
+  Android garde son ancien jeton jusqu'au désenregistrement par Apple. Sans clic ni
+  carte trouvée par la vérification, il ne reçoit plus Google (risque accepté).
+- **Limite** : les landings déjà ouvertes avant la mise en production gardent en
+  mémoire (localStorage) l'ancien lien Google direct. Un clic depuis cette mémoire ne
+  pose pas le signal. La vérification unique couvre ces clients.
+- **Limite** : la route admin `/api/google-wallet/pass/:serial` renvoie toujours le
+  lien direct. Elle ne sert qu'à l'admin.
+- **Limite** : sur Android, la landing redirige seule vers le bouton, donc le signal
+  est posé même si le client n'enregistre pas la carte. C'est sans effet : un client
+  sans jeton Apple est servi de toute façon.
+- **Limite** : un clic n'est pas un enregistrement. Un iPhone qui clique sur le bouton
+  Google est servi en Google (envoi inutile, comme avant).
+- **Provisoire** : la vérification unique reste dans le code. Une deuxième vérification
+  ne relit que les cartes encore sans signal. Le bouton pourra être retiré quand le
+  bilan sera noté ici.
+- Gain : non mesuré avant, à mesurer après (lignes Google de `notification_envois`).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
@@ -6439,6 +6517,16 @@ le dépôt ? Réponse prouvée par deux rejeux locaux et par le projet de test :
 Toute décision prise sans passer par le pilotage (Yass) se note ici : date, décision,
 raison, effet constaté. Une entrée vaut aveu, pas justification — la règle reste le
 contrat §7 (diagnostic, validation, puis code).
+
+**2026-10-13 — Étape 23, choix d'exécution** (détail §15 tresquadragies) :
+- la vérification unique se lance depuis un bouton de l'admin (pas au démarrage du
+  serveur ni par un script), pour que Yass choisisse le moment hors 07:30–09:00 UTC ;
+- la route du bouton Google redirige même si l'écriture du clic échoue : le client
+  obtient sa carte, le signal sera posé au clic suivant ou par la vérification ;
+- si la lecture des jetons échoue, Google est servi (on préfère un envoi de trop à un
+  client Google oublié) ;
+- débit de la vérification : une carte toutes les 500 ms, pages de 100 ;
+- section 17 du filet : signal posé sur ses cartes doubles.
 
 **2026-10-13 — Étape 20b, choix d'exécution** (détail §15 quadragies) :
 - le filtre d'identifiant des fiches client est fait avant l'authentification
