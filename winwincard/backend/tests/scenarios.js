@@ -1091,8 +1091,11 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       verifier('… finie, plus aucune tentative ni requête (aucune minuterie quand il n\'y a rien à reprendre)',
         [regI.relances ? regI.relances.size : 'absent', panne.vues - vuesAvant], [0, 0]);
 
-      // Date limite : 24 h après le clic (ici 1,5 s), la campagne interrompue est abandonnée.
-      camp._pourTests({ config: { limiteMs: 1500, relancesMs: [300], essais: 2 } });
+      // Date limite : 24 h après le clic (ici 4 s), la campagne interrompue est abandonnée.
+      // La voie Google finit son lot en cours avant l'arrêt (≈ 1 s au débit du filet,
+      // plus sur une machine chargée) : avec 1,5 s, la date limite tombait parfois
+      // avant la première interruption.
+      camp._pourTests({ config: { limiteMs: 4000, relancesMs: [300], essais: 2 } });
       const journalA = [];
       console.error = (...x) => { journalA.push(x.join(' ')); };
       panne.motif = /^\/rest\/v1\/device_tokens/;
