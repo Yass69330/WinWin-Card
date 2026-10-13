@@ -750,9 +750,8 @@ const I18N = {
     pdvConfirmRestore:'Restore scanner access for "{nom}"?',
     statTotalClients:'Total clients', statScansToday:'Scans today', statActive30d:'Active (30 days)',
     statRetention:'Retention rate', statAvgVisits:'Avg visits / active client (30d)',
-    statRetentionHint:'customers signed up 30+ days ago who came back at least twice in 30 days',
+    statRetentionHint:'signed up more than 30 days ago, came back at least twice in the last 30 days',
     statRetentionWait:'available after 30 days', statNew:'New this month', statNewCompare:'same days last month: {n}',
-    statReturn:'Return rate', statReturnHint:'customers this month who also came last month',
     statsUnavailable:'Statistics unavailable right now.',
     loginUnavailable:'Service temporarily unavailable. Please try again in a moment.',
     copyLink:'📋 Copy link', copied:'✓ Copied', share:'↗ Share', qrShareTitle:'Loyalty program',
@@ -864,9 +863,8 @@ const I18N = {
     pdvConfirmRestore:"Rétablir l'accès scanner de « {nom} » ?",
     statTotalClients:'Clients au total', statScansToday:"Scans aujourd'hui", statActive30d:'Actifs (30 jours)',
     statRetention:'Taux de rétention', statAvgVisits:'Visites moy. / client actif (30j)',
-    statRetentionHint:'clients inscrits depuis 30 jours ou plus, revenus au moins 2 fois en 30 jours',
+    statRetentionHint:'inscrits depuis plus de 30 jours, revenus au moins 2 fois sur les 30 derniers jours',
     statRetentionWait:'disponible après 30 jours', statNew:'Nouveaux ce mois', statNewCompare:'aux mêmes jours du mois préc. : {n}',
-    statReturn:'Taux de retour', statReturnHint:'clients du mois déjà venus le mois dernier',
     statsUnavailable:'Statistiques indisponibles pour le moment.',
     loginUnavailable:'Service momentanément indisponible. Réessayez dans un instant.',
     copyLink:'📋 Copier le lien', copied:'✓ Copié', share:'↗ Partager', qrShareTitle:'Programme de fidélité',
@@ -1316,7 +1314,9 @@ async function renamePdv(id, currentNom) {
 
 // Bloc commun de l'Aperçu et de l'onglet Réseau (étape 26) : les chiffres
 // d'apercu_stats, les mêmes pour une mono-boutique et pour un réseau, sans rien
-// par boutique. À placer dans un conteneur .stats-grid.
+// par boutique. À placer dans un conteneur .stats-grid. Le taux de retour reste
+// calculé (apercu_stats, group_stats) mais n'est pas affiché : deux chiffres pour
+// la même idée étaient confus (décision du 13/10).
 function statsBlocHtml(a) {
   const dist = a.distribution || {};
   const total = (dist.bas || 0) + (dist.milieu || 0) + (dist.haut || 0);
@@ -1330,8 +1330,7 @@ function statsBlocHtml(a) {
     ${carte('🔥', a.actifs_30j ?? '–', t('statActive30d'))}
     ${carte('📈', (a.visites_moyennes ?? '–') + 'x', t('statAvgVisits'))}
     ${carte('🔄', a.retention != null ? a.retention + '%' : '–', t('statRetention'), a.retention != null ? t('statRetentionHint') : t('statRetentionWait'))}
-    ${carte('↩️', (a.taux_retour ?? '–') + '%', t('statReturn'), t('statReturnHint'))}
-    ${carte('✨', a.nouveaux_ce_mois ?? '–', t('statNew'), t('statNewCompare').replace('{n}', a.nouveaux_mois_prec_memes_jours ?? '–'), true)}
+    ${carte('✨', a.nouveaux_ce_mois ?? '–', t('statNew'), t('statNewCompare').replace('{n}', a.nouveaux_mois_prec_memes_jours ?? '–'))}
     <div class="qr-card" style="grid-column:1/-1;align-items:stretch">
       <div class="stat-label" style="margin-bottom:8px">${t('rsDistribTitle')}</div>
       <div style="display:flex;height:26px;border-radius:6px;overflow:hidden;background:rgba(0,0,0,.05)">

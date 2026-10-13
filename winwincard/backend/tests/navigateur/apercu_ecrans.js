@@ -54,10 +54,10 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur }) {
     const cMono = await cartes(mono, '#stats-grid');
     await mono.locator('#tab-overview').screenshot({ path: path.join(captures, '1-apercu-mono-boutique.png') });
     const texteMono = await mono.locator('#stats-grid').innerText();
-    verifier('Aperçu mono-boutique : 7 cartes et la répartition sur 30 jours, rien par boutique, onglet Réseau caché',
+    verifier('Aperçu mono-boutique : 6 cartes (pas de « Taux de retour ») et la répartition sur 30 jours, rien par boutique, onglet Réseau caché',
       [cMono.map(c => c[0]).join(' | '), /Répartition des passages \(30 jours\)/.test(texteMono), /boutique/i.test(texteMono),
        await mono.locator('#nav-reseau').isVisible()],
-      ['Clients au total | Scans aujourd\'hui | Actifs (30 jours) | Visites moy. / client actif (30j) | Taux de rétention | Taux de retour | Nouveaux ce mois',
+      ['Clients au total | Scans aujourd\'hui | Actifs (30 jours) | Visites moy. / client actif (30j) | Taux de rétention | Nouveaux ce mois',
        true, false, false]);
     verifier('… les chiffres de la base : 1 200 clients, 1 200 actifs, 2x, rétention 100 %',
       [cMono[0][1], cMono[2][1], cMono[3][1], cMono[4][1]], ['1200', '1200', '2x', '100%']);
@@ -75,7 +75,7 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur }) {
     await reseau.locator('#tab-reseau').screenshot({ path: path.join(captures, '3-onglet-reseau.png') });
     verifier('réseau : l\'Aperçu et l\'onglet Réseau affichent exactement les mêmes cartes ; le tableau par boutique reste dans l\'onglet Réseau',
       [JSON.stringify(cApercu) === JSON.stringify(cReseau), cApercu.length, await reseau.locator('#tab-reseau table.rs-table').count()],
-      [true, 7, 1]);
+      [true, 6, 1]);
     await reseau.context().close();
 
     titre('Navigateur : statistiques en panne');
