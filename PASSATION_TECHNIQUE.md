@@ -6321,9 +6321,12 @@ dès qu'il a cliqué sur le bouton Google ou que la vérification unique l'a tro
   - Le bouton reste dans l'admin : une relance relirait les 1 643 cartes sans signal.
     À ne pas relancer sans raison ; à retirer plus tard.
 - `/health` ok (Yass).
-- **Reste ouvert** : le vrai clic sur le bouton Google d'une landing (pas d'Android sous
-  la main le 13/10). Requête de contrôle :
-  `SELECT serial_number, google_ouvert_le FROM passes WHERE google_ouvert_le > now() - interval '1 hour' ORDER BY google_ouvert_le DESC;`
+- Clic sur le bouton Google d'une landing (Yass, 13/10) : signal posé.
+  - 4 cartes avec `google_ouvert_le` entre 17:08 et 17:32 UTC : les 2 trouvées par la
+    vérification et les clics de test.
+  - Dernière carte : `c4d4477f…`, à 17:32:47 UTC.
+- **Étape 23 close.** Gain à mesurer dans quelques jours : lignes google de
+  `notification_envois` par source, avant et après le 13/10.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
