@@ -5853,6 +5853,80 @@ Complément relevé le 13/10 :
 
 Taille estimée : ≈ 1 jour avec les tests. Pas d'environnement de test.
 
+## 15 quadragies. ÉTAPE 20b : CODÉE EN LOCAL (13/10, rien poussé)
+
+Feu vert du pilotage pour coder 20b en local (13/10). Plan : §15 novemtricies.
+
+### Livré
+
+**Tests d'abord** (commit `e90f554`) : section 20 du filet, 12 contrôles, **verts sur
+l'ancien code (250/250) avant toute montée de version**.
+- Bandeaux :
+  - 3 tailles (thème logo, thème icône, image statique) ;
+  - le logo est réellement dessiné ;
+  - logo des tampons détouré (60 px, alpha) ;
+  - appels sharp du contrôle de transparence (la route télécharge le logo et refuse
+    les adresses internes : non joignable au filet).
+- Envois d'images par l'admin, via un second serveur derrière un relais qui imite le
+  stockage :
+  - image de palier stockée à l'identique ;
+  - refus 400 pour un fichier qui n'est pas une image, pour plus de 5 Mo, et sans
+    fichier ;
+  - corps multipart mal formé : 400 et serveur toujours vivant ;
+  - image statique.
+- Routes touchées par Express 5 :
+  - écrans `/scanner/…`, `/dashboard/…`, `/admin/…` ;
+  - fiche client à identifiant malformé : 404 ;
+  - appels sans corps JSON : 400, jamais 500 (scan, connexions).
+
+**Montée de version** (commit `801102d`) :
+- `express` 5.3.0, `multer` 2.4.0, `sharp` 0.35.5 (libvips 8.18.7). `express-rate-limit`
+  reste en 7.5.1 (décision du 13/10).
+- `src/routes/scanner.js`, `dashboard.js`, `admin-ui.js` : `router.get('*')` devient
+  `router.get('/{*chemin}')`.
+- `src/routes/clients.js` : `:id([0-9a-f\-]{36})` devient `:id`, avec
+  `siIdentifiant()`. Le filtre est fait AVANT `authMarchand` et renvoie
+  `next('route')`, donc même comportement : 404 « Route not found », même sans jeton.
+- `src/index.js` :
+  - `req.body` vaut `{}` sans corps JSON ;
+  - `query parser` étendu (comme Express 4) ;
+  - `app.listen` relance l'erreur d'écoute (Express 5 la passe au rappel).
+
+### Preuves
+
+- `npm test` sous Node 24.21.0 : **250/250** (238 + 12).
+- **Contre-épreuves ciblées sous Express 5** :
+  - sans la ligne `req.body` : 249/250 (« appel sans corps » → 500, 500, 500) ;
+  - sans les corrections de chemins, le serveur ne démarre pas
+    (`PathError: Unexpected ( at index 4: /:id([0-9a-f\-]{36})`).
+- **Bandeaux, empreintes de pixels** : 9 rendus (logo, icône et image statique, chacun
+  en 3 tailles) **identiques au pixel près** entre sharp 0.33.5 (libvips 8.15.3) et
+  0.35.5 (libvips 8.18.7).
+- **Tests navigateur sous les nouvelles versions** : scanner, onglet scanner, caisse
+  (ensemble), fiche client (seule, 13/13), Aperçu (seul, 6/6).
+- **Dette découverte, sans lien avec 20b** : les 4 tests navigateur joués À LA SUITE
+  bloquent sur la fiche client (attente de 30 s dépassée). C'est **pareil sur l'ancien
+  code** (`e90f554`, Express 4.22.3), donc antérieur à 20b. Probablement la limite
+  globale de requêtes par adresse (300 / 15 min), épuisée par la série. Chacun passe
+  seul. À traiter avec le banc des tests, pas en production.
+- `npm audit --omit=dev` : **2 alertes**, node-cron et uuid (moyennes, sans effet : uuid
+  v4 seulement). Avant 20a : 11.
+- **Image construite en local** (même empreinte Node 24.21.0) :
+  - versions : Node v24.21.0, OpenSSL 3.5.7, express 5.3.0, multer 2.4.0, sharp 0.35.5,
+    libvips 8.18.7 ;
+  - sharp fonctionne ; serveur démarré ; `/health`, `/scanner/x`, `/dashboard/x` et
+    `/admin/x` répondent 200 ;
+  - plus d'avertissement de sharp ni de multer à `npm ci`.
+
+### Hypothèses et limites
+
+- **Un JSON mal formé répond 500, avant comme après** : le gestionnaire d'erreurs
+  global ignore le statut 400 du lecteur de corps. Ce n'est pas une régression ; dette
+  notée, à corriger à part (une ligne : renvoyer `err.status` s'il vaut 4xx).
+- Le contrôle de transparence n'est pas testé par sa route (garde anti-SSRF) : ses
+  appels sharp le sont.
+- Pas de migration.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
@@ -6049,6 +6123,15 @@ le dépôt ? Réponse prouvée par deux rejeux locaux et par le projet de test :
 Toute décision prise sans passer par le pilotage (Yass) se note ici : date, décision,
 raison, effet constaté. Une entrée vaut aveu, pas justification — la règle reste le
 contrat §7 (diagnostic, validation, puis code).
+
+**2026-10-13 — Étape 20b, choix d'exécution** (détail §15 quadragies) :
+- le filtre d'identifiant des fiches client est fait avant l'authentification
+  (`next('route')`), pour garder le 404 d'Express 4 même sans jeton ;
+- `query parser` gardé en mode étendu (comme Express 4), plutôt que le mode simple
+  d'Express 5 ;
+- `app.listen` relance l'erreur d'écoute (comportement d'Express 4) ;
+- un JSON mal formé répond toujours 500 : non corrigé, hors du périmètre de 20b, noté
+  en dette.
 
 **2026-10-13 — Étape 26, choix d'exécution** (détail §15 octotricies) :
 - `group_stats` n'est plus exécutable par PUBLIC, anon, authenticated (migration 056).
