@@ -6062,6 +6062,167 @@ seulement sur une décision produit (aucune rencontrée, voir « Choix »).
   - Seule reste la lecture des marchands par le cron, plafonnée à 1 000 marchands
     (sans effet avant longtemps).
 
+## 15 duoquadragies. ÉTAPE 23 (GOOGLE) : DIAGNOSTIC (13/10, rien codé)
+
+**Décision D2 de Yass (29/09)** : ne plus envoyer le message Google aux clients dont la
+carte est sur iPhone. Précisions du pilotage (13/10) :
+- un client qui change de téléphone et perd sa carte du « bon » côté est un risque
+  ACCEPTABLE ;
+- la piste « plateforme utilisée » a la préférence si elle est fiable ;
+- un client qui a les DEUX cartes ne doit rien perdre.
+
+### 1. Comment on « sait » aujourd'hui qu'un client a une carte Google
+
+- **Rien ne le dit.** `passes.google_pass_url` est écrit pour CHAQUE client :
+  - **à l'inscription**, quel que soit le téléphone (`clients.js:89-98`,
+    `generateGoogleWalletUrl` puis `update({ google_pass_url })`) ;
+  - par `GET /google-wallet/pass/:serial` (`google-wallet.js:27-36`).
+- `generateGoogleWalletUrl` **crée l'objet Google** chez Google (POST
+  `/loyaltyObject`, `google-pass.js:384-388`) **avant tout clic**. Tout client a donc un
+  objet Google, et un `addMessage` sur l'objet d'un client iPhone répond 200 (registre
+  du 13/10 : 55 sur 55 « ok »).
+- Le lien du bouton « Google Wallet » de la landing est le lien `pay.google.com`
+  **direct** (`landing.html:959-960` redirection Android, `:1016-1017` et `:1060-1061`
+  boutons). Le serveur ne voit jamais le clic.
+- Les filtres qui croient trier n'excluent personne :
+  - `campagnes.js:180` (`.not('google_pass_url', 'is', null)`) ;
+  - `reserver_relances` (migration 055, `google = google_pass_url IS NOT NULL`).
+- **Côté Apple, on sait** : une carte installée sur un iPhone s'inscrit
+  (`device_tokens`) et se désinscrit quand on la retire
+  (`DELETE /v1/devices/...`, `apple-wallet.js`).
+
+**Surfaces qui envoient vers Google :**
+
+| Surface | Appels Google | Où |
+|---|---|---|
+| Scan | **2 par scan** (mise à jour des points + message), APRÈS la réponse à la caisse, pour TOUS les clients | `scan.js:215`, `:294-315` (et `:381` renvoi) |
+| Ajustement du solde | 2 | `clients.js:453-461` |
+| Demande d'avis | 1 | `avis.js:155-158` |
+| Campagne | 1 par client | `campagnes.js:171-213` |
+| Cron (relances) | 1 par client relancé | `cron.js` (`envoyer`) |
+
+Le scan est de loin le plus gros volume.
+
+### 2. Les deux pistes
+
+**a. Retours de Google Wallet (callbacks d'enregistrement et de suppression, fiche t16)**
+- **Réglage** : pas de console. L'adresse de retour se pose sur la CLASSE
+  (`callbackOptions.url`), par notre code (`createOrUpdateLoyaltyClass`). Il faut ensuite
+  repousser les classes de tous les marchands (un geste admin existant).
+- **Ce que Google envoie** : un message signé (protocole ECv2SigningOnly) à chaque
+  enregistrement (« save ») et suppression (« del ») d'une carte, avec l'identifiant
+  de l'objet.
+- **Vérification de la signature** : clés publiques de Google, renouvelées, puis
+  chaîne clé intermédiaire → message. C'est faisable avec `crypto` de Node, mais il
+  faut ≈ ½ à 1 jour avec les tests (clés de test fabriquées).
+- **Coût** : aucune requête régulière ; 1 requête entrante et 1 écriture par
+  enregistrement ou suppression. **HYPOTHÈSE** : Google ne garantit pas la livraison
+  de chaque retour (au mieux).
+- **Clients existants** : aucun historique. Il faudrait lire chaque objet chez Google
+  (`GET /loyaltyObject/…`, champ `hasUsers`) une fois : ≈ 1 700 appels en une fois, pas
+  réguliers. **HYPOTHÈSE** : `hasUsers` reste vrai après une suppression, donc il penche
+  vers « envoyer », sans risque de perte.
+- **Fiabilité** : la meilleure (enregistrement réel), si les retours arrivent.
+
+**b. Plateforme utilisée (préférée par le pilotage)**
+- **Signal Apple** : une ligne `device_tokens` pour la carte prouve une carte installée
+  sur un iPhone, et retirée quand elle est supprimée. Il existe déjà, il est fiable.
+- **Signal Google, à créer** : le bouton et la redirection Android de la landing
+  passent par `GET /api/passes/:serial/google`.
+  - Cette route note `passes.google_ouvert_le = now()` (première fois), puis renvoie
+    (302) vers le même lien `pay.google.com`. Pour le client, c'est la même
+    destination, invisible.
+  - Coût : 1 lecture + 1 écriture, **seulement quand un client clique** sur Google.
+  - Migration 057 : une colonne nullable.
+- **Règle d'envoi Google** : envoyer si `google_ouvert_le IS NOT NULL` OU si le client
+  **n'a aucun jeton Apple**.
+  - Client iPhone seul : plus de Google.
+  - Client Android : Google comme aujourd'hui (pas de jeton Apple).
+  - Client sans aucune carte : Google comme aujourd'hui (sans effet).
+- **Fiabilité** :
+  - « a ouvert le lien Google » ne prouve pas l'enregistrement, mais penche vers
+    « envoyer » (aucune perte) ;
+  - **Google Wallet n'existe pas sur iPhone** : un client iPhone qui a un jeton Apple
+    n'a de carte Google que s'il possède aussi un Android.
+- **Changement de téléphone** (risque accepté) :
+  - iPhone → Android : la carte Apple disparaît, Apple désinscrit → plus de jeton →
+    Google reprend tout seul ;
+  - Android → iPhone avec ajout de la carte Apple : Google continue si le lien Google a
+    été ouvert. Envoi inutile mais sans perte.
+- **Limite** : les liens Google déjà gardés dans le navigateur du client (écran
+  « re-bienvenue », `localStorage`) pointent encore vers `pay.google.com` en direct. Ils
+  ne seront pas comptés, ce qui n'a d'effet que pour un client iPhone qui ouvrirait un
+  vieux lien Google.
+
+**Recommandation : b**, avec la règle ci-dessus (simple, aucune requête régulière,
+signal Apple déjà fiable).
+- On ajoute en option, **une seule fois**, la lecture `hasUsers` de la piste a, pour
+  les seuls clients existants qui ONT un jeton Apple (ceux qu'on cesserait de servir
+  côté Google).
+  - C'est ce qui protège les clients existants qui ont les deux cartes.
+  - Coût : environ autant d'appels Google que de clients iPhone, une seule fois, par
+    script lancé par Yass.
+- La piste a complète (retours signés) n'apporte pas assez pour son coût aujourd'hui.
+
+### 3. Gain chiffré
+
+Mesure du 26/09 (A §5.1) : **63 %** des messages Google acceptés visaient une carte
+iPhone. Ordre de grandeur avec la règle :
+
+| Surface | Aujourd'hui | Après (≈ −63 %) |
+|---|---|---|
+| Cron du 13/10 | 55 messages Google | ≈ 20 |
+| Campagne type (1 679 clients au total) | 1 679 messages | ≈ 620 |
+| **Scan** (si inclus) | 2 appels Google par scan | 2 appels pour ≈ 37 % des scans seulement |
+
+- **Temps du cron** : quasi inchangé. Il est fixé par le débit Apple (3 iPhone par
+  seconde) ; Google part 5 à la fois, à côté.
+- **Temps d'une campagne** : la voie Google raccourcit d'environ 60 %.
+- **Surtout** : on cesse de consommer les limites Google (3 messages par 24 h et 10
+  messages par objet) sur des objets que personne ne regarde.
+- Chiffres exacts par marchand : requête en lecture seule donnée à Yass (la part des
+  clients avec et sans jeton Apple, sur les envois Google des 7 derniers jours).
+
+### 4. Client qui a les DEUX cartes
+
+- **Nouveaux clients et clients qui rouvrent le lien Google** : `google_ouvert_le`
+  posé, donc il reçoit Apple ET Google. Rien de perdu.
+- **Clients existants qui ont déjà les deux cartes** : aucun historique de clic.
+  - Sans la lecture `hasUsers` unique, ils **perdraient le message Google** tant qu'ils
+    ne rouvrent pas le lien. Rare (il faut un iPhone ET un Android).
+  - Avec elle, rien de perdu.
+
+### 5. Plan de test (`npm test`, Node 24.21.0)
+
+- **Règle de sélection** :
+  - client avec jeton Apple seul : pas de Google (cron, campagne, avis, ajustement, et
+    scan si inclus) ;
+  - client sans jeton : Google ;
+  - client avec jeton ET `google_ouvert_le` : Apple et Google.
+- **Route `/api/passes/:serial/google`** : 302 vers le lien stocké, `google_ouvert_le`
+  posé une fois (pas réécrit au second clic) ; serial inconnu → 404 ; panne de base →
+  503.
+- **Landing (navigateur)** : sur Android, la redirection automatique passe par la route
+  et aboutit au même lien Google ; le bouton Google aussi.
+- **Changement de téléphone** : jeton Apple supprimé → Google reprend.
+- **Scan, si inclus** : réponse à la caisse identique, aucune requête de plus, Google
+  sauté pour un client iPhone seul.
+- **Contre-épreuve** sur `da9313c`.
+- **Script `hasUsers`, si retenu** : essayé contre un faux Google local.
+
+### Décisions demandées au pilotage (produit)
+
+1. **Inclure le scan ?** Un client iPhone seul ne reçoit plus la mise à jour Google ni
+   le message Google après un scan.
+   - C'est le plus gros gain, avec aucune requête de plus : le scan lit déjà les jetons
+     Apple pour le push iPhone (`scan.js:270-275`).
+   - La réponse à la caisse ne change pas.
+   - L'objet Google d'un client iPhone ne serait plus tenu à jour : sans effet, sauf si
+     ce client ajoute plus tard la carte Google. Elle se mettrait alors à jour au
+     scan suivant.
+2. **Lecture `hasUsers` unique** pour protéger les clients existants qui ont les deux
+   cartes : oui (recommandé), ou accepter le risque.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
