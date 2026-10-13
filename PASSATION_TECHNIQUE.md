@@ -5769,6 +5769,20 @@ bloc, puis la mobilité et le tableau par boutique (« vs mois préc. » aux mê
 - `p_maintenant` n'est passé que par les tests. Une valeur fausse ne peut venir que du
   serveur (service_role).
 
+**Correction d'écran avant le push (pilotage, 13/10)** :
+- **Carte « Taux de retour » retirée** de l'Aperçu et de l'onglet Réseau (bloc commun),
+  car deux chiffres pour la même idée étaient confus. Le calcul reste dans
+  `apercu_stats` et `group_stats` (clé `reseau.taux_retour_reseau`, que l'ancien écran
+  lisait, et le test « taux de retour inchangé »). Migration 056 inchangée.
+- **Note de la rétention** : « inscrits depuis plus de 30 jours, revenus au moins 2 fois
+  sur les 30 derniers jours ». Le texte demandé disait « ce mois-ci » ; le calcul porte
+  sur 30 jours glissants, la note dit donc ce que mesure le chiffre (choix signalé au
+  pilotage).
+- « Nouveaux ce mois » passe en demi-largeur, à côté de la rétention : la grille reste
+  pleine.
+- Aperçu : **6 cartes** et la répartition sur 30 jours.
+- Tests : `npm test` **237/237**, navigateur **6/6** (243/243).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
