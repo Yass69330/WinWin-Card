@@ -5414,6 +5414,24 @@ suite en production.
 - Retour arrière préparé et NON poussé : commit `9c532de` (revert de `fb4b4e8`) sur la
   branche locale `retour-20a`. Il est sans objet si rien ne casse.
 
+### Premier passage du cron de l'étape 22 (13/10, 08:00 UTC, sous Node 24.21.0)
+
+- `/health/cron` ok.
+- **Vague réelle : 55 relances, toutes « inactive »** :
+  - Dinapoli 35, Boucherie République 11, Hilal Kebab 4, Pizz'Amore 4, Wam N Fade 1 ;
+  - 0 chez les 12 autres marchands ;
+  - 0 reporté, 0 erreur.
+- Anniversaires : 0 (3 marchands). **near_reward : 0 chez les 13 marchands.**
+- Contrôle : 55 relances du jour, 55 avec `lot`, **0 double relance**.
+- **À vérifier (ouvert)** : near_reward à 0 partout est suspect. Deux hypothèses :
+  1. bénigne : les clients de la zone ont tous été relancés après leur dernier scan ;
+  2. défaut : le déclencheur `trg_clients_updated_at` est absent en production, donc
+     `updated_at` est figé et un client déjà relancé ne l'est plus jamais.
+
+  Trois requêtes en lecture seule ont été données à Yass (déclencheur, clients dans la
+  zone, registre Google du jour). Le correctif, s'il le faut, est une migration qui crée
+  le déclencheur, proposée avant tout code.
+
 ## 15 septtricies. ÉTAPE 26 + APERÇU CALCULÉ EN BASE : DIAGNOSTIC ET PROPOSITION (13/10, rien codé)
 
 Base : production `3d2f687`. Ce rapport reprend l'audit 05 (§3, §4.1 à 4.5), revérifié
