@@ -17,7 +17,10 @@
 --     JOURS du mois précédent, c'est-à-dire [1er du mois précédent, + temps écoulé
 --     depuis le 1er de ce mois), borné à la fin du mois précédent ;
 --   - taux de retour : calcul inchangé ;
---   - tout en UTC (sujet clos).
+--   - tout en UTC (sujet clos) ;
+--   - un passage = un JOUR avec au moins un scan non annulé (décision du 13/10,
+--     remplace « une visite = un scan » de l'audit 05) : répartition, visites
+--     moyennes et rétention comptent des jours. Le crédit des points ne change pas.
 --
 -- CE QUE FAIT LA MIGRATION.
 --   - `apercu_stats(marchand, maintenant)` : un jsonb, le même pour une
@@ -67,7 +70,9 @@ seuils AS (
     FROM marchands WHERE id = p_marchand_id
 ),
 s30 AS MATERIALIZED (
-  SELECT sc.client_id, count(*) AS n
+  -- n = PASSAGES : jours (UTC) avec au moins un scan non annulé (décision du
+  -- 13/10 : « une visite = un jour avec scan »). Deux scans le même jour = 1.
+  SELECT sc.client_id, count(DISTINCT date_trunc('day', sc.date_scan)) AS n
     FROM scans sc, b
    WHERE sc.marchand_id = p_marchand_id AND sc.annule_le IS NULL AND sc.date_scan >= b.j30 AND sc.date_scan <= b.maintenant
    GROUP BY sc.client_id

@@ -5783,6 +5783,24 @@ bloc, puis la mobilité et le tableau par boutique (« vs mois préc. » aux mê
 - Aperçu : **6 cartes** et la répartition sur 30 jours.
 - Tests : `npm test` **237/237**, navigateur **6/6** (243/243).
 
+**Un passage = un JOUR avec scan (décision de Yass, 13/10)** :
+- **La règle de l'audit 05 « une visite = un scan » est REMPLACÉE par « une visite = un
+  jour avec au moins un scan non annulé ».**
+- `apercu_stats` : `count(DISTINCT date_trunc('day', date_scan))`, en UTC, au lieu de
+  `count(*)`. Cela s'applique à la répartition des passages et aux visites moyennes par
+  client actif.
+- Seuils de la barre : toujours réglables par marchand (5 / 10 par défaut).
+- **Le crédit des points ne change pas** : chaque scan crédite toujours. Seules les
+  statistiques changent. Les colonnes « Scans » de l'onglet Réseau comptent toujours
+  des scans.
+- **Hors pilotage, signalé** : la rétention (« revenus au moins 2 fois ») compte aussi
+  des jours, car elle lit le même nombre de passages. Deux scans le même jour ne font
+  pas un client « revenu ».
+- Test ajouté : un client scanné 2 fois le même jour = 1 passage (visites moyennes 1,5
+  au lieu de 2 ; non « revenu »).
+- Totaux : `npm test` **238/238**, navigateur 6/6 (244/244). Contre-épreuve sur
+  `3d2f687` : 225/238.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :

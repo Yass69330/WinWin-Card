@@ -1523,6 +1523,16 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     const J1 = clientNe(MJ, 'J1', '2026-03-25');
     scanLe(MJ, J1, '2026-03-26'); scanLe(MJ, J1, '2026-03-27');
     verifier('rétention : rien (null) tant qu\'aucun client n\'a 30 jours', apercu(MJ, '2026-03-31 12:00+00').retention, null);
+    // Un passage = un jour avec scan (décision du 13/10) : D1 scanné 2 fois le même jour,
+    // D2 deux jours différents.
+    const MD = 'e2600000-0000-4000-8000-000000000005';
+    marchand(MD, 'Filet Apercu Jours');
+    const D1 = clientNe(MD, 'D1', '2026-01-10'), D2 = clientNe(MD, 'D2', '2026-01-10');
+    scanLe(MD, D1, '2026-03-20 10:00'); scanLe(MD, D1, '2026-03-20 15:00');
+    scanLe(MD, D2, '2026-03-20 10:00'); scanLe(MD, D2, '2026-03-21 10:00');
+    const aD = apercu(MD, '2026-03-31 12:00+00');
+    verifier('un client scanné 2 fois le même jour = 1 passage : visites moyennes 1,5 (et non 2), il n\'est pas « revenu » (rétention 50 %), tranche basse pour les deux',
+      [aD.actifs_30j, aD.visites_moyennes, aD.retention, (aD.distribution || {}).bas], [2, 1.5, 50, 2]);
 
     // ── Par l'API, horloge réelle : plus de 1 000 scans en 30 jours ──
     const MG = 'e2600000-0000-4000-8000-000000000003';
