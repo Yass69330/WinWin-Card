@@ -812,7 +812,7 @@ async function suivreVerifGoogle() {
   } catch (err) { el.textContent = err.message; }
 }
 document.getElementById('btn-verif-google').addEventListener('click', async () => {
-  if (!confirm('Lancer la vérification des cartes Google ? Elle demande à Google, une carte à la fois, si les clients qui ont une carte iPhone ont aussi une carte Google.')) return;
+  if (!confirm('Lancer la vérification des cartes Google ? Elle demande à Google, une carte à la fois, si les clients jamais venus et sans iPhone ont réellement ajouté la carte Google.')) return;
   const el = document.getElementById('verif-google-etat');
   const res = await api('/api/admin/google-wallet/verification', { method: 'POST' });
   const d = await res.json().catch(() => ({}));

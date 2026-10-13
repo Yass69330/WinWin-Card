@@ -139,7 +139,8 @@ router.get('/', authMarchand, asyncHandler(async (req, res) => {
     .from('clients')
     .select('id, prenom, stored_value, created_at, pass_serial_number', { count: 'exact' })
     .eq('marchand_id', req.marchandId)
-    .is('deleted_at', null);
+    .is('deleted_at', null)
+    .eq('visible', true);   // vrais clients seulement (migration 059)
   // %, _ et \ tapés par le marchand sont cherchés tels quels, pas comme jokers.
   if (q) query = query.ilike('prenom', `%${q.replace(/[\\%_]/g, c => '\\' + c)}%`);
 
@@ -185,7 +186,8 @@ router.get('/export', authMarchand, asyncHandler(async (req, res) => {
       .from('clients')
       .select('id, prenom, stored_value, email, telephone, date_anniversaire, created_at')
       .eq('marchand_id', req.marchandId)
-      .is('deleted_at', null);
+      .is('deleted_at', null)
+      .eq('visible', true);   // vrais clients seulement (migration 059)
     if (apres) q = q.or(`created_at.lt."${apres.created_at}",and(created_at.eq."${apres.created_at}",id.lt.${apres.id})`);
     return q.order('created_at', { ascending: false }).order('id', { ascending: false }).limit(PAGE_EXPORT);
   };

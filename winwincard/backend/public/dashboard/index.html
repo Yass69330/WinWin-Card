@@ -53,6 +53,8 @@
       transition: border-color .15s; -webkit-appearance: none; font-family: inherit;
     }
     .field input:focus, .field textarea:focus { border-color: var(--accent); }
+    .field select { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; color: var(--text); font-size: 16px; padding: 13px 15px; outline: none; font-family: inherit; width: 100%; }
+    .notif-dest { font-size: 12px; color: var(--muted); margin-top: 6px; min-height: 16px; }
     /* Case « rester connecté ». Hors de .field volontairement : `.field input`
        met -webkit-appearance:none, ce qui rend une case cochée visuellement
        identique à une case vide. */
@@ -522,6 +524,11 @@
           <textarea id="notif-msg" maxlength="500" placeholder="E.g.: Come enjoy 20% off all menu items this weekend!" data-i18n-ph="notifPlaceholder"></textarea>
           <div class="char-count" id="cc-msg">0 / 500</div>
         </div>
+        <div class="field">
+          <label for="notif-segment" data-i18n="segmentLabel">Recipients</label>
+          <select id="notif-segment"></select>
+          <div class="notif-dest" id="notif-dest"></div>
+        </div>
         <button type="submit" class="btn btn-primary" id="btn-send-notif" data-i18n="sendNotif">Send notification</button>
         <div id="notif-result" class="send-result"></div>
       </form>
@@ -811,6 +818,10 @@ const I18N = {
     errLoadHistory:'Error loading history', noNotifsSent:'No notifications sent yet',
     received:({envoyes,total})=>`${envoyes}/${total} received`, noDevicesShort:'No devices',
     campagneEnCours:'Campaign being sent.', etatEnCours:'Sending', etatEnvoyee:'Sent',
+    segmentLabel:'Recipients', segTous:'All customers', segInactifs:({n})=>`Inactive for ${n} days`,
+    segFideles:'Most loyal customers', segBoutique:({nom})=>`Customers of ${nom}`,
+    destCount:({n})=>`${n} customer${n === 1 ? '' : 's'} will receive this message`, destLoading:'Counting recipients…',
+    destError:'Recipients could not be counted.', destNone:'No customer in this selection: nothing would be sent.',
     deleteClientTitle:'Delete this client?',
     deleteBody:({nom})=>`Delete <strong>${nom}</strong>? This action is <strong>irreversible</strong> — the pass will become invalid.`,
     deletePermanently:'Delete permanently', cancel:'Cancel',
@@ -924,6 +935,10 @@ const I18N = {
     errLoadHistory:"Erreur de chargement de l'historique", noNotifsSent:'Aucune notification envoyée pour le moment',
     received:({envoyes,total})=>`${envoyes}/${total} reçues`, noDevicesShort:'Aucun appareil',
     campagneEnCours:"Campagne en cours d'envoi.", etatEnCours:"En cours d'envoi", etatEnvoyee:'Envoyée',
+    segmentLabel:'Destinataires', segTous:'Tous les clients', segInactifs:({n})=>`Inactifs depuis ${n} jours`,
+    segFideles:'Les plus fidèles', segBoutique:({nom})=>`Clients de ${nom}`,
+    destCount:({n})=>`${n} client${n > 1 ? 's' : ''} recevr${n > 1 ? 'ont' : 'a'} ce message`, destLoading:'Comptage des destinataires…',
+    destError:'Impossible de compter les destinataires.', destNone:'Aucun client dans cette sélection : rien ne serait envoyé.',
     deleteClientTitle:'Supprimer ce client ?',
     deleteBody:({nom})=>`Supprimer <strong>${nom}</strong> ? Cette action est <strong>irréversible</strong> — le pass deviendra invalide.`,
     deletePermanently:'Supprimer définitivement', cancel:'Annuler',
@@ -1144,7 +1159,7 @@ function switchTab(tab) {
   if (tab === 'clients')  loadClients();
   if (tab === 'scans')    loadScans();
   if (tab === 'scanner')  startScannerTab();
-  if (tab === 'notifs')   loadNotifHistory();
+  if (tab === 'notifs')   { loadNotifHistory(); remplirSegments(); }
 }
 
 // ════════════════════════════════════════════════
@@ -2194,7 +2209,7 @@ document.getElementById('notif-form').addEventListener('submit', async () => {
   if (!msg) { result.innerHTML = `<div class="alert alert-error">${t('msgRequired')}</div>`; return; }
   btn.disabled = true; btn.innerHTML = `<span class="spinner"></span> ${t('sending')}`;
   try {
-    const res  = await api('/api/notifications', { method: 'POST', body: JSON.stringify({ message: msg }) });
+    const res  = await api('/api/notifications', { method: 'POST', body: JSON.stringify({ message: msg, segment: segmentChoisi() }) });
     const data = await res.json();
     if (!res.ok) {
       result.innerHTML = `<div class="alert alert-error">${data.error || t('sendError')}</div>`;
@@ -2213,6 +2228,49 @@ document.getElementById('notif-form').addEventListener('submit', async () => {
     btn.disabled = false; btn.textContent = t('sendNotif');
   }
 });
+
+// Segments (migration 059) : un seul à la fois. « Clients d'une boutique » pour
+// les réseaux seulement (S.pdv non vide). Le nombre de destinataires est lu à la
+// demande, à chaque choix — jamais en boucle.
+function libelleSegment(seg) {
+  if (!seg) return t('segTous');
+  if (seg.type === 'inactifs') return t('segInactifs', { n: seg.jours });
+  if (seg.type === 'fideles')  return t('segFideles');
+  if (seg.type === 'boutique') return t('segBoutique', { nom: seg.nom || '' });
+  return '';
+}
+function remplirSegments() {
+  const sel = document.getElementById('notif-segment');
+  if (!sel) return;
+  const avant = sel.value;
+  const options = [null, { type: 'inactifs', jours: 15 }, { type: 'inactifs', jours: 30 }, { type: 'inactifs', jours: 60 }, { type: 'fideles' }]
+    .concat((Array.isArray(S.pdv) ? S.pdv : []).map(b => ({ type: 'boutique', boutique: b.id, nom: b.nom })));
+  sel.innerHTML = options.map(o => `<option value="${esc(o ? JSON.stringify(o) : '')}">${esc(libelleSegment(o))}</option>`).join('');
+  if ([...sel.options].some(o => o.value === avant)) sel.value = avant;
+  compterDestinataires();
+}
+function segmentChoisi() {
+  const v = (document.getElementById('notif-segment') || {}).value;
+  if (!v) return null;
+  const o = JSON.parse(v);
+  return o.type === 'boutique' ? { type: 'boutique', boutique: o.boutique } : o;
+}
+let _comptage = 0;
+async function compterDestinataires() {
+  const el = document.getElementById('notif-dest');
+  if (!el) return;
+  const n = ++_comptage;
+  el.textContent = t('destLoading');
+  try {
+    const seg = segmentChoisi();
+    const res = await api('/api/notifications/destinataires' + (seg ? '?segment=' + encodeURIComponent(JSON.stringify(seg)) : ''));
+    const d = await res.json();
+    if (n !== _comptage) return;   // un autre choix entre-temps
+    if (!res.ok) throw new Error();
+    el.textContent = d.destinataires === 0 ? t('destNone') : t('destCount', { n: d.destinataires });
+  } catch { if (n === _comptage) el.textContent = t('destError'); }
+}
+document.getElementById('notif-segment').addEventListener('change', compterDestinataires);
 
 async function loadNotifHistory(force = false) {
   if (!force && S.notifLogs) { renderNotifHistory(); return; }
@@ -2251,9 +2309,10 @@ function renderNotifHistory() {
   el.innerHTML = S.notifLogs.map(n => {
     // Étape t37 : plus de chiffre, l'état seulement.
     const dest = n.etat === 'en_cours' ? t('etatEnCours') : t('etatEnvoyee');
+    const cible = n.segment ? ' · ' + esc(libelleSegment(n.segment)) : '';
     return `<div class="notif-log-entry">
       <div class="notif-log-msg">${esc(n.message)}</div>
-      <div class="notif-log-meta"><span>${timeAgo(n.created_at)}</span><span>${dest}</span></div>
+      <div class="notif-log-meta"><span>${timeAgo(n.created_at)}${cible}</span><span>${dest}</span></div>
     </div>`;
   }).join('');
 }

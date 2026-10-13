@@ -73,6 +73,10 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     return false;
   };
   const titre = t => console.log(`\n— ${t}`);
+  // Clients créés directement en base pour des tests qui ne portent pas sur le
+  // masquage : ils représentent des porteurs réels (migration 059). Sans effet
+  // avant 059 (colonne absente : contre-épreuve).
+  const rendreVisibles = condition => { try { sql(`UPDATE clients SET visible = true WHERE NOT visible AND (${condition})`); } catch { /* avant 059 */ } };
 
   const tT = jeton(M.tampons), tP = jeton(M.points), tPP = jeton(M.pointsParr);
   const tR = jeton(M.reseau), tB1 = jeton(M.reseau, B.b1), tB2 = jeton(M.reseau, B.b2);
@@ -1071,7 +1075,7 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       camp.demarrer({ id: c4.campagne_id, marchand_id: MC, message: 'message quatre',
         curseur_apple: null, curseur_google: null, apple_fini: false, google_fini: false });
       await attendre(() => envois.apple.length >= 300, 30000);
-      panne.motif = /^\/rest\/v1\/device_tokens/;
+      panne.motif = /^\/rest\/v1\/(device_tokens|rpc\/campagne_lot_apple)/;   // lecture Apple (migration 059 : par la base)
       await attendre(() => sql(`SELECT statut FROM campagnes WHERE id = '${c4.campagne_id}'`) === 'interrompue', 10000);
       const pendantPanne = sql(`SELECT statut FROM campagnes WHERE id = '${c4.campagne_id}'`);
       const c5 = lancerSql('message cinq');
@@ -1098,7 +1102,7 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       camp._pourTests({ config: { limiteMs: 4000, relancesMs: [300], essais: 2 } });
       const journalA = [];
       console.error = (...x) => { journalA.push(x.join(' ')); };
-      panne.motif = /^\/rest\/v1\/device_tokens/;
+      panne.motif = /^\/rest\/v1\/(device_tokens|rpc\/campagne_lot_apple)/;
       const c6 = lancerSql('message six');
       const logsAvant = Number(sql(`SELECT count(*) FROM notification_logs WHERE marchand_id = '${MC}'`));
       camp.demarrer({ id: c6.campagne_id, marchand_id: MC, message: 'message six',
@@ -1299,6 +1303,7 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
                       SELECT id, client_id, '${m}', serial_number, 'app-' || serial_number, 'jeton-' || serial_number FROM p WHERE ${apple})
            INSERT INTO scans (client_id, marchand_id, stored_value_avant, stored_value_apres, date_scan, annule_le)
            SELECT client_id, '${m}', 0, 1, now() - interval '${scanIl ?? 0} days', ${annule ? 'now()' : 'NULL'} FROM p WHERE ${scanIl !== null}`);
+      rendreVisibles(`marchand_id = '${m}'`);
     }
     const relances = (m, type) => nombre(`SELECT count(*) FROM workflow_executions WHERE marchand_id = '${m}'${type ? ` AND workflow_type = '${type}'` : ''}`);
     const relancesDe = (m, prefixe) => nombre(`SELECT count(*) FROM workflow_executions w JOIN clients c ON c.id = w.client_id
@@ -1496,7 +1501,11 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     const apercu = (m, quand) => { const r = sqlOuNull(`SELECT apercu_stats('${m}', '${quand}')`); return r ? JSON.parse(r) : {}; };
     const marchand = (id, nom) => sql(`INSERT INTO marchands (id, nom, slug, forfait, type_programme, max_value, display_max_value, langue)
       VALUES ('${id}', '${nom}', '${nom.toLowerCase().replace(/\W+/g, '-')}', 'pro', 'stamps', 10, 10, 'fr')`);
-    const clientNe = (m, prenom, cree) => sql(`INSERT INTO clients (marchand_id, prenom, created_at) VALUES ('${m}', '${prenom}', '${cree}') RETURNING id`);
+    const clientNe = (m, prenom, cree) => {
+      const id = sql(`INSERT INTO clients (marchand_id, prenom, created_at) VALUES ('${m}', '${prenom}', '${cree}') RETURNING id`);
+      rendreVisibles(`id = '${id}'`);
+      return id;
+    };
     const scanLe = (m, c, quand, annule = false) => sql(`INSERT INTO scans (client_id, marchand_id, stored_value_avant, stored_value_apres, date_scan, annule_le)
       VALUES ('${c}', '${m}', 0, 1, '${quand}', ${annule ? `'${quand}'` : 'NULL'})`);
 
@@ -1720,6 +1729,7 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
            ('${ML}', 'Pour%cent', 0, now() - interval '201 days'),
            ('${ML}', '=CMD', 0, now() - interval '202 days'),
            ('${ML}', 'Dupont, Jean', 0, now() - interval '203 days');`);
+    rendreVisibles(`marchand_id = '${ML}'`);
     const tL = jwt.sign({ role: 'marchand', marchand_id: ML, tv: 1 }, secretJwt, { expiresIn: '1h' });
     // Liste et export contre un PostgREST plafonné à 1 000 lignes par lecture, comme
     // Supabase en production : c'est ce plafond qui coupait la liste et l'export.
@@ -1980,6 +1990,161 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     Object.assign(process.env, env);
     const viaAdmin = await api('POST', '/api/admin/google-wallet/verification', jetonAdmin);
     verifier('vérification par l\'admin, Google non configuré (filet) : refus clair 503', [viaAdmin.statut, viaAdmin.corps.error], [503, 'google_non_configure']);
+  }
+
+  titre('23. Vrais clients (masquage) et campagnes par segment (migration 059)');
+  {
+    const sqlOuNull = requete => { try { return sql(requete); } catch { return null; } };
+    const a059 = sqlOuNull(`SELECT 1 FROM information_schema.columns WHERE table_name = 'clients' AND column_name = 'visible'`) === '1';
+    const MS = 'e2300000-0000-4000-8000-000000000059';
+    const BS1 = 'e2300000-0000-4000-8000-0000000005b1', BS2 = 'e2300000-0000-4000-8000-0000000005b2';
+    const BAUTRE = B.b1;   // boutique d'un AUTRE marchand
+    sql(`INSERT INTO marchands (id, nom, slug, forfait, type_programme, max_value, display_max_value, langue, freq_seuil_bas, freq_seuil_haut)
+         VALUES ('${MS}', 'Filet Segments', 'filet-segments', 'pro', 'stamps', 10, 10, 'fr', 1, 2);
+         INSERT INTO points_de_vente (id, marchand_id, nom, actif, scanner_login) VALUES
+           ('${BS1}', '${MS}', 'Rive gauche', true, 'filet-seg-1'), ('${BS2}', '${MS}', 'Rive droite', true, 'filet-seg-2');`);
+    const tS = jeton(MS);
+    // c(prenom, { apple, google, ouvert, scans: [[jours, boutique?, annulé?], …] })
+    const c = (prenom, { apple = false, google = false, ouvert = false, scans = [] } = {}) => {
+      const id = crypto.randomUUID(), serial = crypto.randomUUID(), passId = crypto.randomUUID();
+      sql(`INSERT INTO clients (id, marchand_id, prenom, stored_value, pass_serial_number) VALUES ('${id}', '${MS}', '${prenom}', 0, '${serial}');
+           INSERT INTO passes (id, client_id, marchand_id, serial_number, google_pass_url, google_ouvert_le)
+             VALUES ('${passId}', '${id}', '${MS}', '${serial}', ${google ? `'https://pay.google.com/filet'` : 'NULL'}, ${ouvert ? 'now()' : 'NULL'});
+           ${apple ? `INSERT INTO device_tokens (pass_id, client_id, marchand_id, serial_number, device_id, push_token) VALUES ('${passId}', '${id}', '${MS}', '${serial}', 'app-${serial}', 'jeton-${serial}');` : ''}
+           ${scans.map(([j, b, annule]) => `INSERT INTO scans (client_id, marchand_id, point_de_vente_id, stored_value_avant, stored_value_apres, date_scan, annule_le)
+             VALUES ('${id}', '${MS}', ${b ? `'${b}'` : 'NULL'}, 0, 1, now() - interval '${j} days', ${annule ? 'now()' : 'NULL'});`).join('\n')}`);
+      return { id, serial, prenom };
+    };
+    const vis = x => sqlOuNull(`SELECT visible FROM clients WHERE id = '${x.id}'`);
+
+    // ── Indicateur tenu par la base ──
+    const fantome = c('Fantome', { google: true });           // inscrit, carte jamais ajoutée
+    const v0 = vis(fantome);
+    sql(`INSERT INTO scans (client_id, marchand_id, stored_value_avant, stored_value_apres) VALUES ('${fantome.id}', '${MS}', 0, 1)`);
+    const v1 = vis(fantome);
+    sql(`UPDATE scans SET annule_le = now() WHERE client_id = '${fantome.id}'`);
+    const v2 = vis(fantome);
+    sql(`INSERT INTO device_tokens (pass_id, client_id, marchand_id, serial_number, device_id, push_token)
+         SELECT id, '${fantome.id}', '${MS}', '${fantome.serial}', 'app-f', 'jeton-f' FROM passes WHERE serial_number = '${fantome.serial}'`);
+    const v3 = vis(fantome);
+    sql(`DELETE FROM device_tokens WHERE serial_number = '${fantome.serial}'`);
+    const v4 = vis(fantome);
+    sql(`UPDATE passes SET google_ouvert_le = now() WHERE serial_number = '${fantome.serial}'`);
+    const v5 = vis(fantome);
+    sql(`UPDATE passes SET google_ouvert_le = NULL WHERE serial_number = '${fantome.serial}'`);
+    if (a059) sql(`UPDATE clients SET visible = false WHERE id = '${fantome.id}'`);   // redevient un fantôme pour la suite
+    verifier('rendre un client visible ne touche pas à updated_at (relance near_reward : « le solde a bougé ») ; une vraie modification, si',
+      (() => {
+        const t0 = sql(`UPDATE clients SET updated_at = now() - interval '10 days' WHERE id = '${fantome.id}' RETURNING updated_at`);
+        if (a059) sql(`UPDATE clients SET visible = NOT visible WHERE id = '${fantome.id}'; UPDATE clients SET visible = NOT visible WHERE id = '${fantome.id}'`);
+        const t1 = sql(`SELECT updated_at FROM clients WHERE id = '${fantome.id}'`);
+        sql(`UPDATE clients SET prenom = 'Fantome' WHERE id = '${fantome.id}'`);
+        const t2 = sql(`SELECT updated_at FROM clients WHERE id = '${fantome.id}'`);
+        return [t1 === t0, t2 !== t0];
+      })(), [true, true]);
+    verifier('vrai client, tenu par la base : inscrit seul → masqué ; scan → visible ; scan annulé → masqué ; jeton Apple → visible ; jeton supprimé → masqué ; clic Google → visible',
+      [v0, v1, v2, v3, v4, v5], ['f', 't', 'f', 't', 'f', 't']);
+
+    // Clients du marchand MS (la suite s'appuie sur eux).
+    const C = {
+      iph:      c('Iphone',     { apple: true }),                              // carte iPhone, jamais venu
+      andr:     c('Android',    { google: true, ouvert: true }),               // carte Google (clic), jamais venu
+      inact40:  c('Inactif40',  { apple: true, scans: [[40, BS1]] }),
+      inact20:  c('Inactif20',  { google: true, scans: [[20, BS2]] }),         // Google sans signal mais venu
+      actif5:   c('Actif5',     { apple: true, scans: [[5, BS1], [70]] }),
+      fidele:   c('Fidele',     { apple: true, scans: [[1, BS2], [2, BS2], [3, BS2]] }),
+      fideleAnn:c('FideleAnn',  { apple: true, scans: [[1], [2], [3, null, true]] }),   // 2 jours non annulés : pas fidèle
+      deuxFois: c('DeuxFois',   { apple: true, scans: [[1], [1]] }),           // 2 scans le même jour = 1 passage
+      vieux:    c('Vieux',      { apple: true, scans: [[100, BS1]] }),         // Rive gauche il y a 100 jours
+      relance:  c('Relance',    { apple: true, scans: [[45]] }),               // inactif, mais relancé aujourd'hui
+      fantome,
+    };
+    sql(`INSERT INTO workflow_executions (workflow_type, client_id, marchand_id, executed_at) VALUES ('inactive', '${C.relance.id}', '${MS}', now())`);
+
+    // ── Liste, recherche, export, Aperçu ──
+    const liste = await api('GET', '/api/clients?limite=200', tS);
+    const prenoms = (Array.isArray(liste.corps) ? liste.corps : []).map(x => x.prenom);
+    const cherche = await api('GET', '/api/clients?q=fant', tS);
+    sql(`UPDATE marchands SET forfait = 'pro_plus' WHERE id = '${MS}'`);
+    const exp = await fetch(`${urlServeur}/api/clients/export`, { headers: { Authorization: `Bearer ${tS}` } });
+    const csv = await exp.text();
+    sql(`UPDATE marchands SET forfait = 'pro' WHERE id = '${MS}'`);
+    const stats = await api('GET', '/api/merchants/me/stats', tS);
+    verifier('liste, recherche, export, Aperçu : 10 vrais clients, le fantôme jamais (avant : 11 partout)',
+      [prenoms.length, prenoms.includes('Fantome'), Array.isArray(cherche.corps) ? cherche.corps.length : 'erreur',
+       csv.split('\r\n').length - 1, csv.includes('Fantome'), stats.corps && stats.corps.porteurs],
+      [10, false, 0, 10, false, 10]);
+    const scanFantome = await scan(jeton(MS, BS1), fantome.serial);   // réseau : scanner de boutique
+    const listeApres = await api('GET', '/api/clients?q=fant', tS);
+    verifier('le scanner n\'est pas filtré : le fantôme présente sa carte, il est scanné et devient visible',
+      [scanFantome.statut, vis(fantome), Array.isArray(listeApres.corps) ? listeApres.corps.length : 'erreur'], [200, 't', 1]);
+    sql(`UPDATE scans SET annule_le = now() WHERE client_id = '${fantome.id}'`);   // redevient un fantôme
+
+    // ── Relances (cron) et ancienne voie Google : vrais clients seulement ──
+    sql(`UPDATE clients SET date_anniversaire = (now() AT TIME ZONE 'UTC')::date - interval '30 years' WHERE id IN ('${fantome.id}', '${C.andr.id}')`);
+    const anniv = JSON.parse(sqlOuNull(`SELECT reserver_relances('${MS}', 'birthday', gen_random_uuid(), '{"*": "x"}', 10)`) || '{"clients":[]}');
+    const annivIds = anniv.clients.map(x => x.client_id);
+    const ancienne = (sqlOuNull(`SELECT string_agg(serial_number, ',') FROM cartes_google_campagne('${MS}', NULL, 100)`) || '').split(',');
+    verifier('relance anniversaire : le vrai client oui, le fantôme non (avant : message Google à une carte jamais ajoutée) ; ancienne voie Google : pas le fantôme',
+      [annivIds.includes(C.andr.id), annivIds.includes(fantome.id), ancienne.includes(fantome.serial), ancienne.includes(C.andr.serial)],
+      [true, false, false, true]);
+    sql(`DELETE FROM workflow_executions WHERE client_id = '${C.andr.id}' AND workflow_type = 'birthday'`);
+
+    // ── Segments : compteur ──
+    const compter = async seg => {
+      const r = await api('GET', '/api/notifications/destinataires' + (seg ? '?segment=' + encodeURIComponent(JSON.stringify(seg)) : ''), tS);
+      return r.statut === 200 ? r.corps.destinataires : r.statut;
+    };
+    const comptes = [await compter(null), await compter({ type: 'inactifs', jours: 15 }), await compter({ type: 'inactifs', jours: 30 }),
+      await compter({ type: 'inactifs', jours: 60 }), await compter({ type: 'fideles' }),
+      await compter({ type: 'boutique', boutique: BS1 }), await compter({ type: 'boutique', boutique: BS2 })];
+    // Tous : 10 joignables (le fantôme masqué). Inactifs 15 : Inactif40, Inactif20, Vieux (Relance exclu : relancé
+    // aujourd'hui). 30 : Inactif40, Vieux. 60 : Vieux. Fidèles (> 2 jours sur 30) : Fidele. Rive gauche (90 j) :
+    // Inactif40, Actif5 (pas Vieux, 100 j). Rive droite : Inactif20, Fidele.
+    verifier('compteur de destinataires : tous 10 ; inactifs 15/30/60 j : 3/2/1 (jamais venus exclus, relancé du jour exclu) ; fidèles 1 ; boutiques 2 et 2',
+      comptes, [10, 3, 2, 1, 1, 2, 2]);
+    const refus = [await compter({ type: 'inactifs', jours: 20 }), await compter({ type: 'boutique', boutique: BAUTRE }),
+      await compter({ type: 'nimporte' }), (await api('GET', '/api/notifications/destinataires?segment=%7Bpas-du-json', tS)).statut];
+    verifier('segment refusé (400) : 20 jours, boutique d\'un autre marchand, type inconnu, JSON illisible', refus, [400, 400, 400, 400]);
+
+    // ── Segments : la campagne envoie exactement au segment ──
+    const lotsDe = id => ({
+      apple: (sqlOuNull(`SELECT string_agg(serial_number, ',') FROM campagne_lot_apple('${id}', NULL, 1000)`) || '').split(',').filter(Boolean),
+      google: (sqlOuNull(`SELECT string_agg(serial_number, ',') FROM campagne_lot_google('${id}', NULL, 1000)`) || '').split(',').filter(Boolean),
+    });
+    const envoi = await api('POST', '/api/notifications', tS, { message: 'Revenez !', segment: { type: 'inactifs', jours: 15 } });
+    const idC = envoi.corps && envoi.corps.campagne_id;
+    const lotsC = idC ? lotsDe(idC) : { apple: [], google: [] };
+    verifier('campagne « inactifs 15 j » : 202, voie Apple = Inactif40 + Vieux, voie Google = Inactif20 (même définition que le compteur)',
+      [envoi.statut, lotsC.apple.sort().join(','), lotsC.google.join(',')],
+      [202, [C.inact40.serial, C.vieux.serial].sort().join(','), C.inact20.serial]);
+    if (idC) await attendre(() => sqlOuNull(`SELECT statut FROM campagnes WHERE id = '${idC}'`) === 'terminee', 15000);
+    const hist = await api('GET', '/api/notifications', tS);
+    const ligneHist = ((hist.corps && hist.corps.logs) || []).find(l => l.message === 'Revenez !');
+    verifier('… historique : la campagne porte son segment ; elle compte dans le quota comme une autre',
+      [ligneHist && JSON.stringify(ligneHist.segment), hist.corps.quota && hist.corps.quota.used], [JSON.stringify({ type: 'inactifs', jours: 15 }), 1]);
+    const lB = JSON.parse(sqlOuNull(`SELECT lancer_campagne('${MS}', 'Boutique', 5, date_trunc('month', now()), '{"type":"boutique","boutique":"${BS2}"}')`) || '{}');
+    const segB = lB.campagne_id ? sqlOuNull(`SELECT segment FROM campagnes WHERE id = '${lB.campagne_id}'`) : null;
+    const lotsB = lB.campagne_id ? lotsDe(lB.campagne_id) : { apple: [], google: [] };
+    sql(`UPDATE campagnes SET statut = 'terminee' WHERE marchand_id = '${MS}' AND statut IN ('en_cours', 'interrompue')`);
+    const lT = JSON.parse(sqlOuNull(`SELECT lancer_campagne('${MS}', 'Tous', 5, date_trunc('month', now()))`) || '{}');   // 4 paramètres : l'ancien code
+    const lotsT = lT.campagne_id ? lotsDe(lT.campagne_id) : { apple: [], google: [] };
+    sql(`UPDATE campagnes SET statut = 'terminee' WHERE marchand_id = '${MS}' AND statut IN ('en_cours', 'interrompue')`);
+    verifier('campagne « Rive droite » : segment gardé avec le nom de la boutique ; Apple = Fidele, Google = Inactif20',
+      [segB && JSON.parse(segB).nom, lotsB.apple.join(','), lotsB.google.join(',')], ['Rive droite', C.fidele.serial, C.inact20.serial]);
+    verifier('campagne « Tous » (4 paramètres, comme l\'ancien code) : tous les iPhone (relancé du jour compris), Google = vraies cartes Google, jamais le fantôme',
+      [lotsT.apple.length, lotsT.apple.includes(C.relance.serial), lotsT.google.sort().join(','), lotsT.google.includes(fantome.serial)],
+      [8, true, [C.andr.serial, C.inact20.serial].sort().join(','), false]);
+    const usedAvant = Number(sql(`SELECT count(*) FROM notification_logs WHERE marchand_id = '${MS}'`));
+    const mauvais = await api('POST', '/api/notifications', tS, { message: 'x', segment: { type: 'boutique', boutique: BAUTRE } });
+    verifier('campagne avec un segment refusé : 400 invalid_segment, rien écrit, quota non compté',
+      [mauvais.statut, mauvais.corps && mauvais.corps.error, Number(sql(`SELECT count(*) FROM notification_logs WHERE marchand_id = '${MS}'`))],
+      [400, 'invalid_segment', usedAvant]);
+    verifier('droits : fonctions de segment fermées à la clé publique, ouvertes au serveur',
+      [sqlOuNull(`SELECT has_function_privilege('anon', 'public.compter_segment(uuid,jsonb)', 'EXECUTE') OR has_function_privilege('anon', 'public.campagne_lot_apple(uuid,uuid,integer)', 'EXECUTE') OR has_function_privilege('anon', 'public.client_dans_segment(uuid,uuid,jsonb,timestamptz)', 'EXECUTE')`),
+       sqlOuNull(`SELECT has_function_privilege('service_role', 'public.compter_segment(uuid,jsonb)', 'EXECUTE') AND has_function_privilege('service_role', 'public.campagne_lot_google(uuid,uuid,integer)', 'EXECUTE')`)],
+      ['f', 't']);
+    if (!a059) console.log('(migration 059 absente : contre-épreuve)');
   }
 }
 

@@ -130,10 +130,11 @@ async function voieApple(c) {
 
   while (!arretDemande && !c.stop) {
     const lot = await avecEssais(c, 'lecture Apple', async () => {
-      let q = supabase.from('device_tokens').select('id, push_token, serial_number')
-        .eq('marchand_id', c.marchand_id).order('id', { ascending: true }).limit(config.iphoneParLot);
-      if (curseur) q = q.gt('id', curseur);
-      const { data, error } = await q;
+      // Appareils du marchand, filtrés par le segment de la campagne (migration
+      // 059, évalué à l'heure du clic) ; même curseur (id croissant) qu'avant.
+      const { data, error } = await supabase.rpc('campagne_lot_apple', {
+        p_campagne_id: c.id, p_apres: curseur, p_limite: config.iphoneParLot,
+      });
       if (error) throw new Error(error.message);
       return data || [];
     });
@@ -176,10 +177,11 @@ async function voieGoogle(c) {
   while (!arretDemande && !c.stop) {
     const debutLot = Date.now();
     const lot = await avecEssais(c, 'lecture Google', async () => {
-      // Règle D2 (étape 23, migration 057) : seulement les cartes Google réelles —
-      // lien Google ouvert, ou aucune carte Apple. Même curseur (id croissant).
-      const { data, error } = await supabase.rpc('cartes_google_campagne', {
-        p_marchand_id: c.marchand_id, p_apres: curseur, p_limite: config.googleParLot,
+      // Règle D2 (étape 23) : seulement les cartes Google réelles — lien Google
+      // ouvert, ou aucune carte Apple — des vrais clients, dans le segment de la
+      // campagne (migration 059). Même curseur (id croissant).
+      const { data, error } = await supabase.rpc('campagne_lot_google', {
+        p_campagne_id: c.id, p_apres: curseur, p_limite: config.googleParLot,
       });
       if (error) throw new Error(error.message);
       return data || [];

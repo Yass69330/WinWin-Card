@@ -3,6 +3,11 @@
 // ════════════════════════════════════════════════════════════════════════════
 // VÉRIFICATION UNIQUE DES CARTES GOOGLE (étape 23, décision du 13/10)
 //
+// Depuis la migration 058, la liste (cartes_google_a_verifier) ne contient plus
+// les cartes iPhone (vérifiées le 13/10) mais les clients qui seraient MASQUÉS :
+// jamais scannés, sans jeton Apple, sans signal, avec un lien Google. Trouvés →
+// signal posé → visibles (migration 059). Le paragraphe suivant décrit l'origine.
+//
 // Avant l'étape 23, aucun clic sur le bouton Google n'était noté. Un client
 // existant qui a une carte Apple (jeton) ET une carte Google perdrait son
 // message Google avec la règle D2. On demande donc à Google, UNE fois, pour les

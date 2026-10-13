@@ -21,7 +21,7 @@ router.get('/', authMarchand, asyncHandler(async (req, res) => {
   const [logsResult, meResult, countResult] = await Promise.all([
     supabase
       .from('notification_logs')
-      .select('id, message, envoyes_apple, envoyes_google, total_apple, total_google, created_at, campagnes(statut)')
+      .select('id, message, envoyes_apple, envoyes_google, total_apple, total_google, created_at, campagnes(statut, segment)')
       .eq('marchand_id', req.marchandId)
       .order('created_at', { ascending: false })
       .limit(50),
@@ -39,6 +39,7 @@ router.get('/', authMarchand, asyncHandler(async (req, res) => {
   const logs = (logsResult.data || []).map(({ campagnes: c, ...log }) => ({
     ...log,
     etat: (c || []).some(x => x.statut !== 'terminee') ? 'en_cours' : 'envoyee',
+    segment: ((c || []).find(x => x.segment) || {}).segment || null,
   }));
   res.json({
     logs,
@@ -46,8 +47,34 @@ router.get('/', authMarchand, asyncHandler(async (req, res) => {
   });
 }));
 
+// Segment demandé par le dashboard (migration 059). Absent ou « tous » : null,
+// tous les clients. La base vérifie le reste (jours permis, boutique du marchand).
+function lireSegment(brut) {
+  if (brut == null || brut === '' || brut === 'tous') return null;
+  if (typeof brut === 'string') { try { brut = JSON.parse(brut); } catch { return undefined; } }
+  if (typeof brut !== 'object' || Array.isArray(brut) || typeof brut.type !== 'string') return undefined;
+  return { type: brut.type, ...(brut.jours != null ? { jours: brut.jours } : {}), ...(brut.boutique != null ? { boutique: String(brut.boutique) } : {}) };
+}
+
+function baseIndisponible(res, route, error) {
+  console.error(`[notifications] ${route} indisponible :`, error.message);
+  return res.set('Retry-After', '30').status(503).json({ error: 'database_unavailable' });
+}
+
+// GET /api/notifications/destinataires?segment=<json> — nombre de personnes qui
+// recevraient la campagne (jeton Apple ou carte Google), avant l'envoi. Une
+// lecture, à la demande (choix du segment) ; aucun appel à Apple ni à Google.
+router.get('/destinataires', authMarchand, asyncHandler(async (req, res) => {
+  const segment = lireSegment(req.query.segment);
+  if (segment === undefined) return res.status(400).json({ error: 'invalid_segment' });
+  const { data, error } = await supabase.rpc('compter_segment', { p_marchand_id: req.marchandId, p_segment: segment });
+  if (error) return baseIndisponible(res, 'destinataires', error);
+  if (!data.ok) return res.status(400).json({ error: 'invalid_segment' });
+  res.json({ destinataires: data.destinataires });
+}));
+
 // POST /api/notifications — campagne depuis le dashboard marchand (étape t37)
-// Corps : { message }
+// Corps : { message, segment? } — segment : voir lireSegment (migration 059).
 // Crée la campagne et répond TOUT DE SUITE (202) ; l'envoi part ensuite par
 // lots, en arrière-plan (services/campagnes.js). En UNE transaction
 // (lancer_campagne, migration 054) : quota du mois, ligne notification_logs
@@ -57,6 +84,8 @@ router.get('/', authMarchand, asyncHandler(async (req, res) => {
 // Réponse : { statut: 'en_cours', campagne_id }
 router.post('/', authMarchand, asyncHandler(async (req, res) => {
   const { message } = req.body;
+  const segment = lireSegment(req.body.segment);
+  if (segment === undefined) return res.status(400).json({ error: 'invalid_segment' });
 
   if (!message) {
     return res.status(400).json({ error: 'message is required' });
@@ -74,9 +103,11 @@ router.post('/', authMarchand, asyncHandler(async (req, res) => {
   }
 
   const { data: lancement, error } = await supabase.rpc('lancer_campagne', {
-    p_marchand_id: req.marchandId, p_message: message, p_limite: limit, p_debut_mois: startOfMonth(),
+    p_marchand_id: req.marchandId, p_message: message, p_limite: limit, p_debut_mois: startOfMonth(), p_segment: segment,
   });
   if (error) return res.status(500).json({ error: error.message });
+
+  if (!lancement.ok && lancement.reason === 'segment') return res.status(400).json({ error: 'invalid_segment' });
 
   if (!lancement.ok && lancement.reason === 'quota') {
     return res.status(429).json({
