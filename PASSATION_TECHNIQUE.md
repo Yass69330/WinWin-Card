@@ -5813,6 +5813,46 @@ bloc, puis la mobilité et le tableau par boutique (« vs mois préc. » aux mê
   - scan puis annulation.
 - **Étape 26 close.**
 
+## 15 novemtricies. ÉTAPE 20b (EXPRESS 5, MULTER 2, SHARP 0.35) : PLAN (13/10, rien codé)
+
+Diagnostic d'Express 5 : §15 quinquatricies, inventaire toujours valable sur `53a27d3`.
+Complément relevé le 13/10 :
+
+- **sharp** : 6 appels.
+  - `strip-generator.js:797-801` : logo des tampons, `trim`, `resize`, `png`.
+  - `strip-generator.js:831-833` : image statique en 3 tailles.
+  - `admin.js:432-438` : contrôle de transparence du logo, `metadata`, `ensureAlpha`,
+    `raw`.
+
+  Des fonctions stables entre 0.33 et 0.35. Le risque est dans le rendu (libvips
+  8.15 → 8.17) : pixels du bandeau, détourage du logo.
+- **multer** : un seul usage, `admin.js:718-735` et `:842` (envoi d'images par l'admin,
+  5 Mo, images seulement). En 2.x, la même interface.
+- **Le filet ne couvre ni sharp ni l'envoi d'images** (0 test).
+
+**Plan proposé** (en un chantier, sur feu vert) :
+1. **Tests d'abord**, écrits et verts sur le code actuel avant tout changement :
+   - rendu d'un bandeau (`strip-generator.render`) : un PNG aux bonnes dimensions pour
+     les 3 tailles ;
+   - **empreinte de référence des pixels** prise sous sharp 0.33 ;
+   - contrôle de transparence ;
+   - envoi d'image admin : une image passe, un non-image donne 400, plus de 5 Mo donne
+     400, et un corps multipart mal formé donne 400 sans faire tomber le serveur.
+2. Express 5 :
+   - routes `'*'` → `'/{*chemin}'` (`scanner.js:26`, `dashboard.js:24`,
+     `admin-ui.js:24`) ;
+   - `:id` avec contrôle d'UUID dans la route (`clients.js:188`, `:256`, `:323`) ;
+   - `req.body ??= {}` après `express.json` ;
+   - `query parser` étendu ;
+   - express-rate-limit reste en 7.
+3. multer 2.x, puis sharp 0.35.x. Pour sharp, l'écart de pixels avec l'empreinte est
+   mesuré et montré : identique, ou écart chiffré avec captures avant/après du bandeau.
+4. `npm audit --omit=dev` après : il doit ne rester que node-cron et uuid (sans effet).
+5. Image construite en local (Node, sharp et libvips dans l'image), contre-épreuve sur
+   `53a27d3`, captures du bandeau.
+
+Taille estimée : ≈ 1 jour avec les tests. Pas d'environnement de test.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
