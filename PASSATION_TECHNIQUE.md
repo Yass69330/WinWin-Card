@@ -5931,7 +5931,14 @@ l'ancien code (250/250) avant toute montée de version**.
 
 - Feu vert de Yass. Poussé à **13:58:16 UTC** en avance rapide sur
   `claude/keen-goldberg-MXslu` (`53a27d3` → `a586e5e`).
-- Contrôles 4 à 9 : à faire par Yass.
+- Contrôles de Yass, tous bons :
+  - déploiement vert, `/health` v24.21.0, `/health/db` ok ;
+  - scanner, dashboard et admin s'affichent ;
+  - scan puis annulation ;
+  - fiche client ;
+  - carte iPhone mise à jour, avec le même bandeau ;
+  - envoi d'image admin.
+- **Étape 20b close.** Étape 20 terminée (20a et 20b en production).
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
