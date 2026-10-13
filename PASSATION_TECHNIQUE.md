@@ -5927,7 +5927,33 @@ l'ancien code (250/250) avant toute montée de version**.
   appels sharp le sont.
 - Pas de migration.
 
+### En production (13/10)
+
+- Feu vert de Yass. Poussé à **13:58:16 UTC** en avance rapide sur
+  `claude/keen-goldberg-MXslu` (`53a27d3` → `a586e5e`).
+- Contrôles 4 à 9 : à faire par Yass.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
+
+### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
+
+1. **JSON mal formé → 500 au lieu de 400** (`src/index.js`, gestionnaire d'erreurs
+   global).
+   - Le lecteur de corps marque l'erreur 400 (`err.status`), et le gestionnaire
+     répond toujours 500 « Internal server error ».
+   - C'est pareil sous Express 4 et sous Express 5.
+   - Correctif : renvoyer `err.status` quand il vaut 4xx (une ligne), avec un test
+     « JSON mal formé → 400 ».
+   - À glisser dans un prochain push qui touche `index.js`.
+2. **Tests navigateur joués à la suite** : les 4 fichiers de `tests/navigateur/`
+   enchaînés (`FILET_EN_PLUS=a,b,c,d`) bloquent sur la fiche client (attente de 30 s
+   dépassée).
+   - C'est pareil sous Express 4 (`e90f554`) ; chacun passe seul.
+   - Cause probable : la limite globale de requêtes par adresse (300 / 15 min),
+     épuisée par la série.
+   - Correctif côté banc seulement : relever la limite pour le serveur du filet
+     (variable d'environnement de test), ou un serveur neuf par fichier.
+   - Rien à changer en production.
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
 #2 (rôle caissier — réseaux OK via login boutique refusé sur le dashboard ; mono-site
