@@ -6310,8 +6310,17 @@ dès qu'il a cliqué sur le bouton Google ou que la vérification unique l'a tro
   Apple, sans signal Google) :
   - scan de 14:02 UTC (ancien code) : 1 ligne apple et 2 lignes google ;
   - scan de 16:50 UTC (`88899f1`) : 1 ligne apple, aucune ligne google. OK.
-- Autres contrôles (déploiement, clic Google) et bilan de la vérification unique :
-  à compléter.
+- Vérification unique (13/10, soir) : 1 640 cartes à vérifier au comptage.
+  - Bilan : `[verif-google] finie : 1645 vérifiée(s), 2 ont une carte Google,
+    1643 sans, 0 erreur(s)`. L'écart de 5 avec le comptage vient des cartes créées
+    entre les deux.
+  - Seuls 2 clients avec une carte iPhone ont aussi une carte Google. Les 1 643
+    autres ne reçoivent plus de message Google.
+  - Le suivi de l'admin a affiché « Failed to fetch » (ordinateur en veille) ; la
+    vérification, côté serveur, a continué.
+  - Le bouton reste dans l'admin : une relance relirait les 1 643 cartes sans signal.
+    À ne pas relancer sans raison ; à retirer plus tard.
+- Contrôles déploiement et clic sur le bouton Google : à compléter.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
