@@ -42,6 +42,13 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json({ limit: '2mb' }));
+// Express 5 (étape 20b) : sans corps JSON, req.body vaut undefined (Express 4 :
+// {}). Les routes déstructurent req.body : sans cette ligne, un appel sans corps
+// répondrait 500 au lieu de 400.
+app.use((req, res, next) => { if (req.body === undefined) req.body = {}; next(); });
+// Express 5 lit les paramètres d'adresse en mode « simple » ; on garde le mode
+// d'Express 4 (qs, « étendu »), aucun comportement ne change.
+app.set('query parser', 'extended');
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 // Rate limiting global
@@ -223,7 +230,10 @@ app.use((err, req, res, next) => {
 
 // ── Démarrage ────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
-const serveur = app.listen(PORT, () => {
+const serveur = app.listen(PORT, err => {
+  // Express 5 passe ici aussi l'erreur d'écoute (port pris…) : on la relance,
+  // comme Express 4 le faisait (le processus s'arrête, Railway redémarre).
+  if (err) throw err;
   console.log(`WinWin Card API démarré sur le port ${PORT}`);
   try {
     require('./workers/cron');

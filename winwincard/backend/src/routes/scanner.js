@@ -23,7 +23,8 @@ router.get('/icon-:size.png', (req, res) => {
 });
 
 // SPA fallback — all other scanner routes serve index.html
-router.get('*', (req, res) => {
+// Express 5 : « * » s'écrit « /{*chemin} » (étape 20b).
+router.get('/{*chemin}', (req, res) => {
   res.sendFile(path.join(SCANNER_DIR, 'index.html'), err => {
     if (err) res.status(500).send('Erreur serveur');
   });

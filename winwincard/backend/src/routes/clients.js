@@ -9,6 +9,13 @@ const { authMarchand, authAdmin } = require('../middleware/auth');
 const { limiterInscription } = require('../middleware/rateLimiters');
 const { notif } = require('../i18n/messages');
 
+// Express 5 (path-to-regexp 8) refuse les expressions dans un chemin : le filtre
+// d'avant (`:id([0-9a-f\-]{36})`) est fait ici, AVANT l'authentification, comme
+// avec l'ancien chemin. Un identifiant malformé passe aux routes suivantes, et au
+// final au 404 « Route not found » (étape 20b).
+const FORME_IDENTIFIANT = /^[0-9a-f-]{36}$/;
+const siIdentifiant = nom => (req, res, next) => (FORME_IDENTIFIANT.test(req.params[nom]) ? next() : next('route'));
+
 // POST /api/clients — inscription client depuis la landing page
 // Corps : { prenom, marchand_slug, email?, telephone?, date_anniversaire? }
 // Rate limit appliqué ici uniquement (anti-spam inscription), pas sur tout le routeur.
@@ -185,7 +192,7 @@ router.delete('/:id', authMarchand, asyncHandler(async (req, res) => {
 // (services/forfaits.js ; étape 7, point 8). Un marchand qui perd ce droit garde
 // en base les coordonnées déjà récoltées : sans ce filtre, l'API les lui
 // renverrait. Forfait illisible → fiche sans coordonnées, jamais l'inverse.
-router.get('/:id([0-9a-f\\-]{36})', authMarchand, asyncHandler(async (req, res) => {
+router.get('/:id', siIdentifiant('id'), authMarchand, asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const [
@@ -253,7 +260,7 @@ router.get('/:id([0-9a-f\\-]{36})', authMarchand, asyncHandler(async (req, res) 
 // 'solde_change' avec le solde actuel, rien d'écrit — plus de scan effacé.
 // Sans stored_value_attendu (écran d'avant l'étape 13b) : ajusté sans
 // vérification, mais tracé (TRANSITION).
-router.patch('/:id([0-9a-f\\-]{36})', authMarchand, asyncHandler(async (req, res) => {
+router.patch('/:id', siIdentifiant('id'), authMarchand, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { prenom, stored_value, stored_value_attendu } = req.body;
 
@@ -320,7 +327,7 @@ router.patch('/:id([0-9a-f\\-]{36})', authMarchand, asyncHandler(async (req, res
 // S'il est le dernier mouvement actif du client et que le solde n'a pas bougé
 // depuis (annuler_ajustement, migration 052) ; sinon 409 avec la raison. Même
 // resynchronisation de la carte que l'annulation d'un scan.
-router.post('/ajustements/:ajId([0-9a-f\\-]{36})/annuler', authMarchand, asyncHandler(async (req, res) => {
+router.post('/ajustements/:ajId/annuler', siIdentifiant('ajId'), authMarchand, asyncHandler(async (req, res) => {
   const { data, error } = await supabase.rpc('annuler_ajustement', {
     p_ajustement_id: req.params.ajId, p_marchand_id: req.marchandId,
   });

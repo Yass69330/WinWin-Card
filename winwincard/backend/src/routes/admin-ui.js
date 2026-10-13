@@ -21,7 +21,8 @@ router.get('/icon-:size.png', (req, res) => {
 });
 
 // SPA fallback
-router.get('*', (req, res) => {
+// Express 5 : « * » s'écrit « /{*chemin} » (étape 20b).
+router.get('/{*chemin}', (req, res) => {
   res.sendFile(path.join(ADMIN_DIR, 'index.html'), err => {
     if (err) res.status(500).send('Erreur serveur');
   });
