@@ -6320,7 +6320,10 @@ dès qu'il a cliqué sur le bouton Google ou que la vérification unique l'a tro
     vérification, côté serveur, a continué.
   - Le bouton reste dans l'admin : une relance relirait les 1 643 cartes sans signal.
     À ne pas relancer sans raison ; à retirer plus tard.
-- Contrôles déploiement et clic sur le bouton Google : à compléter.
+- `/health` ok (Yass).
+- **Reste ouvert** : le vrai clic sur le bouton Google d'une landing (pas d'Android sous
+  la main le 13/10). Requête de contrôle :
+  `SELECT serial_number, google_ouvert_le FROM passes WHERE google_ouvert_le > now() - interval '1 hour' ORDER BY google_ouvert_le DESC;`
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
