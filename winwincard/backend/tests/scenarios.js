@@ -44,7 +44,7 @@ INSERT INTO points_de_vente (id, marchand_id, nom, actif, deleted_at, scanner_lo
  ('${B.archivee}', '${M.reseau}', 'Archivée',   true,  now(), 'filet-archivee');
 `;
 
-async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur, urlSupabase, cleService }) {
+async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur, urlSupabase, cleService, urlServeur }) {
   // ── Outils ────────────────────────────────────────────────────────────────
   const jeton = (marchandId, pointDeVenteId) => jwt.sign(pointDeVenteId
     ? { role: 'scanner', marchand_id: marchandId, point_de_vente_id: pointDeVenteId, tv: 1 }
@@ -1598,6 +1598,103 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       sqlOuNull(`SELECT has_function_privilege('anon', 'public.apercu_stats(uuid,timestamptz)', 'EXECUTE') || '|'
                      || has_function_privilege('anon', 'public.group_stats(uuid)', 'EXECUTE') || '|'
                      || has_function_privilege('service_role', 'public.apercu_stats(uuid,timestamptz)', 'EXECUTE')`), 'false|false|true');
+  }
+
+  titre('20. Bandeaux (sharp), envoi d\'images (multer), routes touchées par Express 5 (étape 20b)');
+  {
+    const http = require('http');
+    const sharp = require('sharp');
+    const strip = require('../src/services/strip-generator');
+    const dims = async b => { const m = await sharp(b).metadata(); return `${m.format} ${m.width}x${m.height}`; };
+
+    // ── Bandeaux : rendu des 3 tailles, logo détouré par sharp, image statique ──
+    const logo = await sharp({ create: { width: 200, height: 200, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+      .composite([{ input: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><circle cx="100" cy="100" r="60" fill="#e63946"/></svg>') }])
+      .png().toBuffer();
+    const fond = await sharp({ create: { width: 900, height: 400, channels: 3, background: { r: 20, g: 120, b: 200 } } }).jpeg().toBuffer();
+    const avecLogo = await strip.render({ marchand: { strip_mode: 'stamps', strip_theme: 'logo_stamp', max_value: 10 }, filledCount: 4, logoBuffer: logo });
+    const sansLogo = await strip.render({ marchand: { strip_mode: 'stamps', strip_theme: 'logo_stamp', max_value: 10 }, filledCount: 4, logoBuffer: null });
+    const statique = await strip.render({ marchand: {}, filledCount: 0, staticImageBuffer: fond });
+    verifier('bandeau, thème logo : 3 PNG aux bonnes tailles (750x246, 1125x369, 1032x336)',
+      [await dims(avecLogo.strip2x), await dims(avecLogo.strip3x), await dims(avecLogo.hero)],
+      ['png 750x246', 'png 1125x369', 'png 1032x336']);
+    verifier('… le logo est bien dessiné (rendu différent sans logo)', avecLogo.strip2x.equals(sansLogo.strip2x), false);
+    verifier('bandeau, image statique (JPEG envoyé) : recadrée en 3 PNG aux bonnes tailles',
+      [await dims(statique.strip2x), await dims(statique.strip3x), await dims(statique.hero)],
+      ['png 750x246', 'png 1125x369', 'png 1032x336']);
+    const norm = Buffer.from(await strip.normalizeLogoForStamp(logo, 25), 'base64');
+    const mNorm = await sharp(norm).metadata();
+    verifier('logo des tampons : détouré et recadré en carré de 60 px, transparence gardée',
+      [mNorm.format, mNorm.width, mNorm.height, mNorm.hasAlpha], ['png', 60, 60, true]);
+    // Mêmes appels que le contrôle de transparence de l'admin (admin.js, logo-check) ;
+    // la route elle-même télécharge le logo et refuse les adresses internes.
+    const opaque = await sharp({ create: { width: 40, height: 40, channels: 3, background: '#fff' } }).jpeg().toBuffer();
+    const mL = await sharp(logo).metadata(), mO = await sharp(opaque).metadata();
+    const { data: px, info } = await sharp(logo).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    let transparents = 0;
+    for (let i = 3; i < px.length; i += info.channels) if (px[i] < 200) transparents++;
+    verifier('contrôle de transparence (appels sharp de logo-check) : canal alpha lu, 72 % de pixels transparents, JPEG sans alpha',
+      [mL.hasAlpha, mO.hasAlpha, info.channels, Math.round(100 * transparents / (info.width * info.height))], [true, false, 4, 72]);
+
+    // ── Envoi d'images par l'admin : serveur derrière un relais qui imite le stockage ──
+    const amont = new URL(urlSupabase);
+    const stockes = [];
+    const relais = http.createServer((req, res) => {
+      if (req.url.startsWith('/storage/v1')) {
+        const morceaux = [];
+        req.on('data', d => morceaux.push(d));
+        req.on('end', () => {
+          if (req.url.startsWith('/storage/v1/object/')) stockes.push({ chemin: req.url, corps: Buffer.concat(morceaux) });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ Key: req.url, name: 'passes' }));
+        });
+        return;
+      }
+      const p = http.request({ host: amont.hostname, port: amont.port, path: req.url, method: req.method,
+        headers: { ...req.headers, host: amont.host } }, r => { res.writeHead(r.statusCode, r.headers); r.pipe(res); });
+      p.on('error', () => { if (!res.headersSent) { res.writeHead(502); res.end(); } });
+      req.pipe(p);
+    });
+    await new Promise(r => relais.listen(0, '127.0.0.1', r));
+    const s20 = await demarrerServeur('envois', `http://127.0.0.1:${relais.address().port}`);
+    const envoyer = async (chemin, champs, enTetes = {}, corpsBrut) => {
+      let body = corpsBrut;
+      if (!body) { body = new FormData(); for (const [k, v] of Object.entries(champs)) { if (v.blob) body.append(k, v.blob, v.nom); else body.append(k, v); } }
+      const r = await fetch(s20.url + chemin, { method: 'POST', headers: { Authorization: `Bearer ${jetonAdmin}`, ...enTetes }, body });
+      const t = await r.text(); let c; try { c = JSON.parse(t); } catch { c = t; }
+      return { statut: r.status, corps: c };
+    };
+    const png = await sharp({ create: { width: 750, height: 246, channels: 3, background: '#336699' } }).png().toBuffer();
+    const chemin = `/api/admin/marchands/${M.tampons}/assets`;
+    const ok = await envoyer(chemin, { tier: '2', image: { blob: new Blob([png], { type: 'image/png' }), nom: 'palier.png' } });
+    verifier('envoi d\'une image de palier : 200, fichier stocké à l\'identique, palier enregistré',
+      [ok.statut, /strip_tier_2\.png$/.test(ok.corps.url || ''), stockes.length === 1 && stockes[0].corps.equals(png),
+       (ok.corps.images_tiers || []).some(t => t.min === 2 && t.max === 2)], [200, true, true, true]);
+    const texte = await envoyer(chemin, { tier: '3', image: { blob: new Blob(['pas une image'], { type: 'text/plain' }), nom: 'note.txt' } });
+    const gros = await envoyer(chemin, { tier: '3', image: { blob: new Blob([Buffer.alloc(5 * 1024 * 1024 + 10)], { type: 'image/png' }), nom: 'gros.png' } });
+    const sansFichier = await envoyer(chemin, { tier: '3' });
+    verifier('envoi refusé en 400 : fichier qui n\'est pas une image, image de plus de 5 Mo, aucun fichier',
+      [texte.statut, gros.statut, sansFichier.statut, sansFichier.corps.error], [400, 400, 400, 'image requise']);
+    const casse = await envoyer(chemin, null, { 'Content-Type': 'multipart/form-data; boundary=XYZ' },
+      '--XYZ\r\nContent-Disposition: form-data; name="image"; filename="a.png"\r\nContent-Type: image/png\r\n\r\n\x89PNG tronqué');
+    const vivant = await fetch(s20.url + '/health').then(r => r.status).catch(() => 0);
+    verifier('corps multipart mal formé : 400, et le serveur répond toujours', [casse.statut, vivant], [400, 200]);
+    const stat = await envoyer(`/api/admin/marchands/${M.tampons}/strip-static`, { image: { blob: new Blob([png], { type: 'image/png' }), nom: 'fond.png' } });
+    verifier('envoi de l\'image statique du bandeau : 200, stockée', [stat.statut, /strip_static\.png$/.test(stat.corps.url || '')], [200, true]);
+    s20.processus.kill();
+    relais.close();
+
+    // ── Routes que la montée d'Express change (comportement à garder) ──
+    const html = async chemin => (await api('GET', chemin)).statut;
+    verifier('écrans : /scanner/…, /dashboard/…, /admin/… servent la page (200)',
+      [await html('/scanner/une/page'), await html('/dashboard/une/page'), await html('/admin/une/page')], [200, 200, 200]);
+    const tT20 = jwt.sign({ role: 'marchand', marchand_id: M.tampons, tv: 1 }, secretJwt, { expiresIn: '1h' });
+    verifier('fiche client avec un identifiant malformé : 404 (lecture, modification, annulation d\'ajustement)',
+      [(await api('GET', '/api/clients/pas-un-uuid', tT20)).statut, (await api('PATCH', '/api/clients/pas-un-uuid', tT20, {})).statut,
+       (await api('POST', '/api/clients/ajustements/pas-un-uuid/annuler', tT20)).statut], [404, 404, 404]);
+    const sansCorps = async (chemin, jt) => (await fetch(urlServeur + chemin, { method: 'POST', headers: jt ? { Authorization: `Bearer ${jt}` } : {} })).status;
+    verifier('appel sans corps JSON : 400, jamais 500 (scan, connexion marchand, connexion scanner)',
+      [await sansCorps('/api/scan', tT20), await sansCorps('/api/merchants/login'), await sansCorps('/api/scanner/login')], [400, 400, 400]);
   }
 }
 
