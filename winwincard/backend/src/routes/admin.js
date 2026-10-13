@@ -676,6 +676,19 @@ router.get('/google-wallet/diagnostic', authAdmin, asyncHandler(async (req, res)
   });
 }));
 
+// Vérification unique des cartes Google (étape 23) : lancée à la main, en
+// arrière-plan, étalée, jamais entre 07:30 et 09:00 UTC. Bilan dans le journal
+// et par GET.
+router.post('/google-wallet/verification', authAdmin, (req, res) => {
+  const r = require('../services/verification-google').lancer();
+  if (r.ok) return res.status(202).json({ statut: 'lancee' });
+  const code = { en_cours: 409, fenetre_cron: 423, google_non_configure: 503 }[r.raison] || 400;
+  res.status(code).json({ error: r.raison });
+});
+router.get('/google-wallet/verification', authAdmin, (req, res) => {
+  res.json(require('../services/verification-google').lireEtat());
+});
+
 // POST /api/admin/google-wallet/class/:marchandId — créer/mettre à jour une LoyaltyClass
 router.post('/google-wallet/class/:marchandId', authAdmin, asyncHandler(async (req, res) => {
   const { isConfigured, createOrUpdateLoyaltyClass } = require('../services/google-pass');

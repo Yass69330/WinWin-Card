@@ -139,12 +139,15 @@ async function envoyer({ marchandId, langue, prenom, serial }) {
 
   const lot = registre.creerLot('avis', marchandId);
 
+  // Une lecture des jetons Apple, qui rapporte aussi le signal Google (règle D2,
+  // étape 23, canal-google.js).
+  const { lireCanaux, servirGoogle } = require('./canal-google');
+  const canaux = await lireCanaux(serial);
+  if (canaux.erreur) console.error('[avis] device_tokens:', canaux.erreur.message);
+
   const { isApnsConfigured, sendPushUpdate } = require('./apns');
   if (isApnsConfigured()) {
-    const { data: tokens, error: errTok } = await supabase
-      .from('device_tokens').select('push_token').eq('serial_number', serial);
-    if (errTok) console.error('[avis] device_tokens:', errTok.message);
-    for (const { push_token } of (tokens || [])) {
+    for (const push_token of canaux.jetons) {
       let erreur = null;
       await sendPushUpdate(push_token)
         .catch(e => { erreur = e; console.error(`[avis] APNs (…${push_token.slice(-8)}):`, e.message); });
@@ -153,7 +156,7 @@ async function envoyer({ marchandId, langue, prenom, serial }) {
   }
 
   const { addMessageToLoyaltyObject, isConfigured: googleConfigure } = require('./google-pass');
-  if (googleConfigure()) {
+  if (googleConfigure() && servirGoogle(canaux)) {
     let errG = null;
     await addMessageToLoyaltyObject(serial, null, msg)
       .catch(e => { errG = e; console.error('[avis] Google addMessage:', e.message); });

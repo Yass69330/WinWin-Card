@@ -176,11 +176,11 @@ async function voieGoogle(c) {
   while (!arretDemande && !c.stop) {
     const debutLot = Date.now();
     const lot = await avecEssais(c, 'lecture Google', async () => {
-      let q = supabase.from('passes').select('id, serial_number')
-        .eq('marchand_id', c.marchand_id).not('google_pass_url', 'is', null)
-        .order('id', { ascending: true }).limit(config.googleParLot);
-      if (curseur) q = q.gt('id', curseur);
-      const { data, error } = await q;
+      // Règle D2 (étape 23, migration 057) : seulement les cartes Google réelles —
+      // lien Google ouvert, ou aucune carte Apple. Même curseur (id croissant).
+      const { data, error } = await supabase.rpc('cartes_google_campagne', {
+        p_marchand_id: c.marchand_id, p_apres: curseur, p_limite: config.googleParLot,
+      });
       if (error) throw new Error(error.message);
       return data || [];
     });

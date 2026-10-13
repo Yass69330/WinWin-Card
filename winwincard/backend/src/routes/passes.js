@@ -3,6 +3,38 @@ const router = express.Router();
 const supabase = require('../services/supabase');
 const asyncHandler = require('../utils/asyncHandler');
 
+// GET /api/passes/:serialNumber/google — bouton « Google Wallet » de la landing
+// (étape 23, règle D2). Note le premier clic (passes.google_ouvert_le), puis
+// renvoie (302) vers le même lien Google qu'avant : pour le client, rien ne
+// change. Ce signal fait servir le client côté Google même s'il a aussi une
+// carte Apple (services/canal-google.js). Une écriture ratée ne bloque jamais
+// le client : il est renvoyé vers Google quand même.
+router.get('/:serialNumber/google', asyncHandler(async (req, res) => {
+  const serial = String(req.params.serialNumber || '').toLowerCase();
+  if (!/^[0-9a-f-]{36}$/.test(serial)) return res.status(404).json({ error: 'Carte introuvable' });
+
+  const { data: pass, error } = await supabase
+    .from('passes')
+    .select('google_pass_url, google_ouvert_le')
+    .eq('serial_number', serial)
+    .maybeSingle();
+  if (error) {
+    console.error('[passes] google : lecture impossible :', error.message);
+    return res.set('Retry-After', '30').status(503).json({ error: 'database_unavailable' });
+  }
+  if (!pass || !pass.google_pass_url) return res.status(404).json({ error: 'Carte introuvable' });
+
+  if (!pass.google_ouvert_le) {
+    const { error: errMaj } = await supabase
+      .from('passes')
+      .update({ google_ouvert_le: new Date().toISOString() })
+      .eq('serial_number', serial)
+      .is('google_ouvert_le', null);
+    if (errMaj) console.error('[passes] google : clic non noté :', errMaj.message);
+  }
+  res.redirect(302, pass.google_pass_url);
+}));
+
 // GET /api/passes/:serialNumber/apple
 // Route publique — premier téléchargement du pass (bouton "Ajouter à Apple Wallet")
 router.get('/:serialNumber/apple', asyncHandler(async (req, res) => {

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../services/supabase');
 const asyncHandler = require('../utils/asyncHandler');
+const { lireCanaux, servirGoogle } = require('../services/canal-google');   // règle D2 (étape 23)
 const { suivre } = require('../services/arret');   // envois après la réponse, attendus à l'arrêt (étape 14a)
 const { authScanner, authMarchand } = require('../middleware/auth');
 const { notif } = require('../i18n/messages');
@@ -211,8 +212,11 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   // base perdue → 500, audit 02 §3.2 ligne c). Les deux sont sans effet si la
   // carte est déjà à jour — sauf le message Google, qui s'afficherait deux fois
   // sur Android : il n'est envoyé qu'au premier passage.
-  suivre(notifierMiseAJourPass(serial, req.marchandId).catch(e => console.error('[scan] push Apple:', e.message)));
-  suivre(mettreAJourGoogleWallet(serial, req.marchandId, apresScan, maxValue, displayMaxValue, scanMessage, client.marchands.images_tiers, client.prenom, client.marchands.couleur_fond, client.marchands.couleur_fond_reward, client.marchands, { message: !dejaEnregistre }).catch(e => console.error('[scan] push Google:', e.message)));
+  // Une seule lecture des jetons Apple, partagée : elle rapporte aussi le signal
+  // Google (règle D2, étape 23, services/canal-google.js) — aucune requête de plus.
+  const canaux = lireCanaux(serial);
+  suivre(notifierMiseAJourPass(serial, req.marchandId, canaux).catch(e => console.error('[scan] push Apple:', e.message)));
+  suivre(mettreAJourGoogleWallet(serial, req.marchandId, apresScan, maxValue, displayMaxValue, scanMessage, client.marchands.images_tiers, client.prenom, client.marchands.couleur_fond, client.marchands.couleur_fond_reward, client.marchands, { message: !dejaEnregistre, canaux }).catch(e => console.error('[scan] push Google:', e.message)));
 
   // Parrainage — crédit au parrain au premier tampon/point du filleul, UNE
   // SEULE FOIS à vie. avantScan === 0 est le déclencheur (plutôt que
@@ -267,13 +271,11 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   }
 }));
 
-async function notifierMiseAJourPass(serialNumber, marchandId) {
-  const { data: tokens } = await supabase
-    .from('device_tokens')
-    .select('push_token')
-    .eq('serial_number', serialNumber);
+// `canaux` : lecture partagée avec mettreAJourGoogleWallet (lireCanaux).
+async function notifierMiseAJourPass(serialNumber, marchandId, canaux = lireCanaux(serialNumber)) {
+  const tokens = (await canaux).jetons.map(push_token => ({ push_token }));
 
-  if (!tokens || tokens.length === 0) return;
+  if (tokens.length === 0) return;
 
   const registre = require('../services/notif-registre');
   const lot = registre.creerLot('scan', marchandId);
@@ -291,7 +293,11 @@ async function notifierMiseAJourPass(serialNumber, marchandId) {
 
 // options.message = false : met à jour l'objet (solde, visuel) sans ajouter de
 // message — renvoi d'un scan déjà enregistré (le message s'afficherait deux fois).
-async function mettreAJourGoogleWallet(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, scanMessage, imagesTiers, prenom, couleurFond, couleurFondReward, marchand, { message = true } = {}) {
+// options.canaux : lecture partagée avec le push Apple. Règle D2 (étape 23) :
+// carte sur iPhone seulement (jeton Apple, lien Google jamais ouvert) → rien
+// vers Google, ni mise à jour ni message.
+async function mettreAJourGoogleWallet(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, scanMessage, imagesTiers, prenom, couleurFond, couleurFondReward, marchand, { message = true, canaux = lireCanaux(serialNumber) } = {}) {
+  if (!servirGoogle(await canaux)) return;
   const { updateLoyaltyObjectPoints, addMessageToLoyaltyObject } = require('../services/google-pass');
   const registre = require('../services/notif-registre');
   const lot = registre.creerLot('scan', marchandId);
@@ -375,13 +381,15 @@ async function creditReferrerIfApplicable(filleulClientId, marchandId, bonusPoin
     .eq('serial_number', parrain.pass_serial_number)
     .eq('marchand_id', marchandId);
 
-  // Push Apple + Google au parrain
-  suivre(notifierMiseAJourPass(parrain.pass_serial_number, marchandId)
+  // Push Apple + Google au parrain (une lecture des jetons, partagée ; règle D2)
+  const canauxParrain = lireCanaux(parrain.pass_serial_number);
+  suivre(notifierMiseAJourPass(parrain.pass_serial_number, marchandId, canauxParrain)
     .catch(e => console.error('[scan] referral push Apple:', e.message)));
   suivre(mettreAJourGoogleWallet(
     parrain.pass_serial_number, marchandId, newValue, maxValue, displayMax,
     msg, parrain.marchands.images_tiers, parrain.prenom,
-    parrain.marchands.couleur_fond, parrain.marchands.couleur_fond_reward, parrain.marchands
+    parrain.marchands.couleur_fond, parrain.marchands.couleur_fond_reward, parrain.marchands,
+    { canaux: canauxParrain }
   ).catch(e => console.error('[scan] referral push Google:', e.message)));
 
   console.log(`[scan] referral credit OK parrain=${parrainClientId} +${bonusPoints}pts → ${newValue}/${maxValue}`);

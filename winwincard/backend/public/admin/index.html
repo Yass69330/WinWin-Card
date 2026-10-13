@@ -225,6 +225,12 @@
       <div class="skeleton" style="height:82px"></div>
     </div>
 
+    <!-- Vérification unique des cartes Google (étape 23) -->
+    <div id="verif-google" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:-6px 0 16px;font-size:12px;color:var(--muted)">
+      <button class="btn btn-outline btn-sm" id="btn-verif-google" type="button">Vérifier les cartes Google (une fois)</button>
+      <span id="verif-google-etat"></span>
+    </div>
+
     <!-- Barre de recherche + bouton créer -->
     <div class="action-bar">
       <div class="search-wrap">
@@ -783,6 +789,38 @@ async function api(path, opts = {}) {
   if (res.status === 401) { clearToken(); showLogin(); throw new Error('Session expirée'); }
   return res;
 }
+
+// ════════════════════════════════════
+// VÉRIFICATION UNIQUE DES CARTES GOOGLE (étape 23)
+// Les clients existants qui ont une carte iPhone ET une carte Google gardent
+// leurs messages Google. Lancée à la main ; l'état n'est relu que pendant
+// qu'elle tourne, à la demande de cet écran.
+// ════════════════════════════════════
+function texteVerifGoogle(e) {
+  const b = e && e.bilan;
+  if (!b) return '';
+  const chiffres = `${b.verifiees} vérifiée(s), ${b.avecCarteGoogle} ont une carte Google, ${b.sansCarteGoogle} sans, ${b.erreurs} erreur(s)`;
+  if (e.enCours) return `En cours : ${chiffres}`;
+  return `${b.arret ? 'Interrompue (' + b.arret + ')' : 'Terminée'} : ${chiffres}`;
+}
+async function suivreVerifGoogle() {
+  const el = document.getElementById('verif-google-etat');
+  try {
+    const e = await (await api('/api/admin/google-wallet/verification')).json();
+    el.textContent = texteVerifGoogle(e);
+    if (e.enCours) setTimeout(suivreVerifGoogle, 5000);
+  } catch (err) { el.textContent = err.message; }
+}
+document.getElementById('btn-verif-google').addEventListener('click', async () => {
+  if (!confirm('Lancer la vérification des cartes Google ? Elle demande à Google, une carte à la fois, si les clients qui ont une carte iPhone ont aussi une carte Google.')) return;
+  const el = document.getElementById('verif-google-etat');
+  const res = await api('/api/admin/google-wallet/verification', { method: 'POST' });
+  const d = await res.json().catch(() => ({}));
+  if (res.ok) { el.textContent = 'Lancée…'; setTimeout(suivreVerifGoogle, 2000); return; }
+  el.textContent = ({ en_cours: 'Déjà en cours.', fenetre_cron: 'Refusée entre 07:30 et 09:00 UTC (passage du cron).',
+    google_non_configure: 'Google Wallet non configuré.' })[d.error] || (d.error || 'Erreur');
+  if (d.error === 'en_cours') suivreVerifGoogle();
+});
 
 // ════════════════════════════════════
 // LOGIN

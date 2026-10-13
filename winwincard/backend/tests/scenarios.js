@@ -973,6 +973,10 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
                     SELECT id, '${MC}', pass_serial_number, 'https://pay.google.com/filet' FROM c RETURNING id, client_id, serial_number)
          INSERT INTO device_tokens (pass_id, client_id, marchand_id, serial_number, device_id, push_token)
          SELECT id, client_id, '${MC}', serial_number, 'app-' || serial_number, 'jeton-' || serial_number FROM p;`);
+    // Chaque client a ses deux cartes : depuis l'étape 23 (règle D2), la carte
+    // Google porte le signal qui la distingue d'un iPhone seul.
+    sql(`DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'passes' AND column_name = 'google_ouvert_le')
+         THEN EXECUTE 'UPDATE passes SET google_ouvert_le = now() WHERE marchand_id = ''${MC}'''; END IF; END $$;`);
     const lancerSql = msg => JSON.parse(sql(`SELECT lancer_campagne('${MC}', '${msg}', 5, date_trunc('month', now()))`));
     const envois = { apple: [], google: [] };
     const env = { ...process.env };
@@ -1792,6 +1796,171 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     const mal = await fetch(`${urlServeur}/api/scan`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tL}` }, body: '{"serial_number": ' });
     verifier('JSON mal formé : 400 invalid_json (avant : 500 « Internal server error »)',
       [mal.status, (await mal.json().catch(() => ({}))).error], [400, 'invalid_json']);
+  }
+
+  titre('22. Google seulement pour les vraies cartes Google (étape 23, règle D2)');
+  {
+    const attendreMs = ms => new Promise(ok => setTimeout(ok, ms));
+    const http = require('http');
+    const path = require('path');
+    const sqlOuNull = requete => { try { return sql(requete); } catch { return null; } };
+    const MG = 'e2300000-0000-4000-8000-000000000001';
+    const LIEN = 'https://pay.google.com/gp/v/save/filet';
+    sql(`INSERT INTO marchands (id, nom, slug, forfait, type_programme, max_value, display_max_value, langue)
+         VALUES ('${MG}', 'Filet Google', 'filet-google', 'pro', 'stamps', 10, 10, 'fr')`);
+    // carte(prenom, { apple, google, ouvert }) : jeton Apple ? lien Google ? lien Google ouvert ?
+    const carte = (prenom, { apple = false, google = true, ouvert = false } = {}) => {
+      const id = crypto.randomUUID(), serial = crypto.randomUUID(), passId = crypto.randomUUID();
+      sql(`INSERT INTO clients (id, marchand_id, prenom, stored_value, pass_serial_number) VALUES ('${id}', '${MG}', '${prenom}', 3, '${serial}');
+           INSERT INTO passes (id, client_id, marchand_id, serial_number, google_pass_url${sqlOuNull(`SELECT 1 FROM information_schema.columns WHERE table_name = 'passes' AND column_name = 'google_ouvert_le'`) === '1' ? ', google_ouvert_le' : ''})
+             VALUES ('${passId}', '${id}', '${MG}', '${serial}', ${google ? `'${LIEN}'` : 'NULL'}${sqlOuNull(`SELECT 1 FROM information_schema.columns WHERE table_name = 'passes' AND column_name = 'google_ouvert_le'`) === '1' ? (ouvert ? ', now()' : ', NULL') : ''});
+           ${apple ? `INSERT INTO device_tokens (pass_id, client_id, marchand_id, serial_number, device_id, push_token) VALUES ('${passId}', '${id}', '${MG}', '${serial}', 'app-${serial}', 'jeton-${serial}');` : ''}
+           INSERT INTO scans (client_id, marchand_id, stored_value_avant, stored_value_apres, date_scan) VALUES ('${id}', '${MG}', 0, 1, now() - interval '40 days');`);
+      return { id, serial };
+    };
+    const IPH = carte('Iphone', { apple: true });                 // carte sur iPhone seulement
+    const AND = carte('Android');                                // carte Google seulement
+    const DEUX = carte('LesDeux', { apple: true, ouvert: true }); // a les deux cartes
+    carte('Aucune', { google: false });                          // ni Apple ni lien Google
+
+    // ── Cron (reserver_relances) et campagnes (cartes_google_campagne), dans la base ──
+    const res = sqlOuNull(`SELECT reserver_relances('${MG}', 'inactive', gen_random_uuid(), '{"*": "x"}', 10, 30)`);
+    const google = {};
+    for (const c of (res ? JSON.parse(res).clients : [])) google[c.serial] = c.google;
+    verifier('cron : Google pour la carte Google et pour le client qui a les deux, PAS pour la carte iPhone seule',
+      [google[IPH.serial], google[AND.serial], google[DEUX.serial]], [false, true, true]);
+    const camp = (sqlOuNull(`SELECT string_agg(serial_number, ',') FROM cartes_google_campagne('${MG}', NULL, 50)`) || '').split(',');
+    verifier('campagne, voie Google : la carte Google et le client aux deux cartes, pas la carte iPhone seule ni la carte sans lien',
+      [camp.includes(AND.serial), camp.includes(DEUX.serial), camp.includes(IPH.serial), camp.length], [true, true, false, 2]);
+    const aVerifier = (sqlOuNull(`SELECT string_agg(serial_number, ',') FROM cartes_google_a_verifier(NULL, 1000)`) || '').split(',');
+    verifier('vérification unique : seulement les cartes avec jeton Apple, lien Google et sans signal (iPhone seule : oui ; deux cartes : non)',
+      [aVerifier.includes(IPH.serial), aVerifier.includes(DEUX.serial), aVerifier.includes(AND.serial)], [true, false, false]);
+
+    // ── Bouton Google de la landing : la route note le clic, puis renvoie vers Google ──
+    const CLIC = carte('Clic', { apple: true });
+    const ouvertLe = s => sqlOuNull(`SELECT coalesce(google_ouvert_le::text, '') FROM passes WHERE serial_number = '${s}'`);
+    const clic = s => fetch(`${urlServeur}/api/passes/${s}/google`, { redirect: 'manual' });
+    const r1 = await clic(CLIC.serial);
+    const premier = ouvertLe(CLIC.serial);
+    const r2 = await clic(CLIC.serial);
+    verifier('bouton Google : 302 vers le même lien Google, clic noté une fois (le second clic ne le réécrit pas)',
+      [r1.status, r1.headers.get('location'), premier !== '' && premier !== null, ouvertLe(CLIC.serial) === premier, r2.status],
+      [302, LIEN, true, true, 302]);
+    verifier('bouton Google : carte inconnue, identifiant malformé, carte sans lien Google → 404',
+      [(await clic(crypto.randomUUID())).status, (await clic('pas-une-carte')).status,
+       (await clic(sql(`SELECT pass_serial_number FROM clients WHERE marchand_id = '${MG}' AND prenom = 'Aucune'`))).status], [404, 404, 404]);
+    sql(`REVOKE SELECT ON public.passes FROM service_role`);
+    const consoleError = console.error; console.error = () => {};
+    const enPanne = await clic(CLIC.serial);
+    console.error = consoleError;
+    sql(`GRANT SELECT ON public.passes TO service_role`);
+    verifier('bouton Google, base en panne : 503 + Retry-After', [enPanne.status, enPanne.headers.get('retry-after')], [503, '30']);
+
+    // ── Scan (et ajustement) : derrière un relais qui compte les lectures ──
+    const amont = new URL(urlSupabase);
+    const vues = [];
+    const relais = http.createServer((req, res) => {
+      vues.push(req.url);
+      const p = http.request({ host: amont.hostname, port: amont.port, path: req.url, method: req.method,
+        headers: { ...req.headers, host: amont.host } }, r => { res.writeHead(r.statusCode, r.headers); r.pipe(res); });
+      p.on('error', () => { if (!res.headersSent) { res.writeHead(502); res.end(); } });
+      req.pipe(p);
+    });
+    await new Promise(r => relais.listen(0, '127.0.0.1', r));
+    const s22 = await demarrerServeur('google', `http://127.0.0.1:${relais.address().port}`);
+    const tG = jwt.sign({ role: 'marchand', marchand_id: MG, tv: 1 }, secretJwt, { expiresIn: '1h' });
+    const lignes = (s, plateforme, source) => Number(sql(`SELECT count(*) FROM notification_envois WHERE serial_number = '${s}' AND plateforme = '${plateforme}' AND source = '${source}'`));
+    const scanner = async s => {
+      vues.length = 0;
+      const r = await fetch(`${s22.url}/api/scan`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tG}` },
+        body: JSON.stringify({ serial_number: s }) });
+      return r.status;
+    };
+    const statutIph = await scanner(IPH.serial);
+    await attendre(() => lignes(IPH.serial, 'apple', 'scan') > 0, 8000);
+    await attendreMs(500);
+    const lecturesJetons = vues.filter(u => u.startsWith('/rest/v1/device_tokens')).length;
+    verifier('scan d\'une carte iPhone seule : 200, push Apple, AUCUN appel Google (avant : mise à jour + message), une seule lecture des jetons',
+      [statutIph, lignes(IPH.serial, 'apple', 'scan'), lignes(IPH.serial, 'google', 'scan'), lecturesJetons], [200, 1, 0, 1]);
+    await scanner(AND.serial);
+    await attendre(() => lignes(AND.serial, 'google', 'scan') >= 2, 8000);
+    await scanner(DEUX.serial);
+    await attendre(() => lignes(DEUX.serial, 'google', 'scan') >= 2, 8000);
+    verifier('scan : carte Google → mise à jour + message Google ; deux cartes → Apple ET Google (rien de perdu)',
+      [lignes(AND.serial, 'google', 'scan'), lignes(DEUX.serial, 'apple', 'scan'), lignes(DEUX.serial, 'google', 'scan')], [2, 1, 2]);
+    s22.processus.kill();
+    relais.close();
+
+    // ── Campagne, dans ce processus : voie Google ──
+    const env = { ...process.env };
+    Object.assign(process.env, { SUPABASE_URL: urlSupabase, SUPABASE_SERVICE_KEY: cleService });
+    const modules = ['supabase', 'notif-registre', 'debit', 'campagnes', 'verification-google'].map(m => path.resolve(__dirname, `../src/services/${m}.js`));
+    modules.forEach(m => delete require.cache[m]);
+    const dejaCharges = new Set(Object.keys(require.cache));
+    const campagnes = require('../src/services/campagnes');
+    const envois = { apple: [], google: [] };
+    campagnes._pourTests({ envoyeurs: { appleActif: () => true, googleActif: () => true,
+      apple: async j => { envois.apple.push(j); }, google: async s => { envois.google.push(s); } }, config: { lotMs: 10 } });
+    const lanceC = JSON.parse(sql(`SELECT lancer_campagne('${MG}', 'Campagne Google', 5, date_trunc('month', now()))`));
+    await campagnes.demarrer({ id: lanceC.campagne_id, marchand_id: MG, message: 'Campagne Google',
+      curseur_apple: null, curseur_google: null, apple_fini: false, google_fini: false }).catch(() => {});
+    verifier('campagne : voie Google = carte Google + deux cartes (2), voie Apple = tous les iPhone (3)',
+      [envois.google.includes(AND.serial), envois.google.includes(DEUX.serial), envois.google.includes(IPH.serial), envois.apple.length],
+      [true, true, false, 3]);
+
+    // ── Ajustement du solde, dans ce processus, Google imité (non configuré dans le filet) ──
+    const cheminGoogle = path.resolve(__dirname, '../src/services/google-pass.js');
+    const appelsGoogle = [];
+    require.cache[cheminGoogle] = { id: cheminGoogle, filename: cheminGoogle, loaded: true, exports: { isConfigured: () => true,
+      updateLoyaltyObjectPoints: async s => { appelsGoogle.push(s); }, addMessageToLoyaltyObject: async s => { appelsGoogle.push(s); } } };
+    const { syncPassAfterAdjustment } = require('../src/routes/clients');
+    await syncPassAfterAdjustment(IPH.serial, MG, 'Iph', 7);
+    await syncPassAfterAdjustment(AND.serial, MG, 'And', 7);
+    await syncPassAfterAdjustment(DEUX.serial, MG, 'Deux', 7);
+    const appelsDe = c => appelsGoogle.filter(s => s === c.serial).length;
+    verifier('ajustement du solde : rien vers Google pour la carte iPhone seule ; carte Google et deux cartes : mise à jour + message',
+      [appelsDe(IPH), appelsDe(AND), appelsDe(DEUX)], [0, 2, 2]);
+    delete require.cache[cheminGoogle];
+
+    // ── Vérification unique, dans ce processus, Google imité ──
+    let verif = null; try { verif = require('../src/services/verification-google'); } catch { /* absente avant l'étape 23 */ }
+    if (!verif) {
+      verifier('vérification unique : module présent (services/verification-google.js)', false, true);
+    } else {
+      const V = { avec: carte('VAvec', { apple: true }), sans: carte('VSans', { apple: true }),
+                  plante: carte('VPlante', { apple: true }), refus: carte('VRefus', { apple: true }) };
+      const vus = [];
+      verif._pourTests({ config: { pauseMs: 1 }, maintenant: () => new Date('2026-10-13T12:00:00Z'), google: { isConfigured: () => true,
+        lireObjet: async s => { vus.push(s);
+          if (s === V.avec.serial) return { statut: 200, aDesUtilisateurs: true };
+          if (s === V.sans.serial) return { statut: 200, aDesUtilisateurs: false };
+          if (s === V.plante.serial) throw new Error('Google injoignable');
+          if (s === V.refus.serial) return { statut: 500, aDesUtilisateurs: false };
+          return { statut: 404, aDesUtilisateurs: false }; } } });
+      const lance = verif.lancer();
+      const deuxieme = verif.lancer();
+      await verif._pourTests().promesse;
+      const b = verif.lireEtat().bilan;
+      verifier('vérification unique : carte Google trouvée → même signal que le clic ; sans carte, erreur Google, refus → rien posé',
+        [lance.ok, deuxieme.raison, ouvertLe(V.avec.serial) !== '', ouvertLe(V.sans.serial), ouvertLe(V.plante.serial), ouvertLe(V.refus.serial)],
+        [true, 'en_cours', true, '', '', '']);
+      verifier('… bilan : une carte Google, deux erreurs, chaque carte à vérifier lue UNE fois, jamais la carte qui a déjà le signal',
+        [b.avecCarteGoogle, b.erreurs, b.verifiees === vus.length, new Set(vus).size === vus.length, vus.includes(DEUX.serial), vus.includes(AND.serial)],
+        [1, 2, true, true, false, false]);
+      const encore = verif.lancer(); await verif._pourTests().promesse;
+      verifier('… relancée : la carte trouvée n\'est plus redemandée à Google', [encore.ok, verif.lireEtat().bilan.avecCarteGoogle], [true, 0]);
+      verif._pourTests({ maintenant: () => new Date('2026-10-14T08:00:00Z') });
+      verifier('… refusée entre 07:30 et 09:00 UTC (passage du cron), bornes comprises',
+        [verif.lancer().raison, verif.dansFenetreCron(new Date('2026-10-14T07:29:59Z')), verif.dansFenetreCron(new Date('2026-10-14T07:30:00Z')),
+         verif.dansFenetreCron(new Date('2026-10-14T08:59:59Z')), verif.dansFenetreCron(new Date('2026-10-14T09:00:00Z'))],
+        ['fenetre_cron', false, true, true, false]);
+    }
+    for (const m of Object.keys(require.cache)) if (!dejaCharges.has(m)) delete require.cache[m];
+    modules.forEach(m => delete require.cache[m]);
+    for (const k of Object.keys(process.env)) if (!(k in env)) delete process.env[k];
+    Object.assign(process.env, env);
+    const viaAdmin = await api('POST', '/api/admin/google-wallet/verification', jetonAdmin);
+    verifier('vérification par l\'admin, Google non configuré (filet) : refus clair 503', [viaAdmin.statut, viaAdmin.corps.error], [503, 'google_non_configure']);
   }
 }
 

@@ -103,7 +103,9 @@ router.post('/', limiterInscription, asyncHandler(async (req, res) => {
     prenom:           client.prenom,
     stored_value:     0,
     apple_pass_url:   applePassUrl,
-    google_wallet_url: googleWalletUrl,
+    // Le bouton Google de la landing passe par notre serveur, qui note le clic
+    // (google_ouvert_le, règle D2, étape 23) puis renvoie vers le même lien Google.
+    google_wallet_url: googleWalletUrl ? `${apiBase}/api/passes/${serialNumber}/google` : null,
   });
 }));
 
@@ -428,15 +430,17 @@ async function syncPassAfterAdjustment(serialNumber, marchandId, prenom, newValu
 
   const lot = require('../services/notif-registre').creerLot(source, marchandId);
 
+  // Une lecture des jetons Apple, qui rapporte aussi le signal Google (règle D2,
+  // étape 23, services/canal-google.js).
+  const { lireCanaux, servirGoogle } = require('../services/canal-google');
+  const canaux = await lireCanaux(serialNumber);
+
   // Apple Wallet — silent APNs push si configuré
   const { isApnsConfigured, sendPushUpdate } = require('../services/apns');
   if (!isApnsConfigured()) {
     console.warn('[clients] syncPass: APNs non configuré (APPLE_APN_KEY_ID ou clé manquante) — push ignoré');
   } else {
-    const { data: tokens } = await supabase
-      .from('device_tokens')
-      .select('push_token')
-      .eq('serial_number', serialNumber);
+    const tokens = canaux.jetons.map(push_token => ({ push_token }));
 
     console.log(`[clients] syncPass: ${(tokens || []).length} device token(s) trouvé(s) pour serial=${serialNumber}`);
 
@@ -451,7 +455,7 @@ async function syncPassAfterAdjustment(serialNumber, marchandId, prenom, newValu
 
   // Google Wallet — update points, tier hero image, and push notification
   const { updateLoyaltyObjectPoints, addMessageToLoyaltyObject, isConfigured: isGoogleConfigured } = require('../services/google-pass');
-  if (isGoogleConfigured()) {
+  if (isGoogleConfigured() && servirGoogle(canaux)) {
     let errUpd = null;
     await updateLoyaltyObjectPoints(serialNumber, marchandId, newValue, marchand.max_value, marchand.display_max_value || marchand.max_value, marchand.images_tiers, prenom, marchand.couleur_fond, marchand.couleur_fond_reward, marchand)
       .catch(e => { errUpd = e; console.error('[clients] Google update:', e.message); });

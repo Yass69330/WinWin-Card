@@ -524,8 +524,20 @@ async function addMessageToLoyaltyObject(serialNumber, titre, message) {
   }
 }
 
+// Lecture d'un objet (vérification unique, étape 23). `hasUsers` : Google le met
+// à vrai quand au moins un utilisateur a enregistré la carte. Rend
+// { statut, aDesUtilisateurs } ; ne lève que si Google n'est pas configuré ou
+// injoignable.
+async function lireObjet(serialNumber) {
+  if (!isConfigured()) throw new Error('Google Wallet non configuré');
+  const token = await getAccessToken();
+  const { status, data } = await walletRequest('GET', `/loyaltyObject/${encodeURIComponent(objectId(serialNumber))}`, null, token);
+  return { statut: status, aDesUtilisateurs: status === 200 && data && data.hasUsers === true };
+}
+
 module.exports = {
   isConfigured,
+  lireObjet,
   createOrUpdateLoyaltyClass,
   getClassInfo,
   generateGoogleWalletUrl,
