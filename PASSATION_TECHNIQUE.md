@@ -6406,6 +6406,86 @@ réseau qui envoie.
   - Le scanner n'est pas filtré : un client masqué qui présente sa carte est scanné
     et devient visible.
 
+### Décisions de Yass (13/10)
+
+- Inactifs = venus au moins une fois, plus depuis N jours.
+- Client d'une boutique = au moins un passage dans cette boutique sur 90 jours.
+- Exclusion des clients relancés le jour même : seulement pour les campagnes
+  ciblées. « Tous les clients » et le cron sont inchangés.
+- Nombre de destinataires affiché avant l'envoi ; une campagne ciblée compte dans le
+  quota comme une autre.
+
+### En production : migration 058 et vérification étendue (13/10)
+
+- Migration 058 exécutée par Yass.
+- Bilan de la vérification étendue :
+  `[verif-google] finie : 333 vérifiée(s), 104 ont une carte Google, 229 sans, 0 erreur(s)`.
+- Requête du point a, chiffres définitifs : 230 clients seraient masqués au total.
+  - Les démos en comptent 117 (WinWin Card DEMO 78, Demo Winwin Card 36, Démo France
+    2, Ray Test 1).
+  - Pizz'Amore : 22 masqués sur 388, 25 sauvés par Google. Les clients à 0 point qui
+    ont la carte dans leur Wallet restent visibles.
+
+### Livré en local : masquage et segments (commit `44bffab`, rien poussé)
+
+- **Migration 059** (`database/migration_059_vrais_clients_segments.sql`) :
+  - `clients.visible`, remplie une fois, puis tenue par des déclencheurs :
+    - un scan non annulé, un jeton Apple (insertion ou mise à jour) ou le signal
+      Google (à l'insertion ou à la mise à jour de la carte) l'allument ;
+    - l'annulation d'un scan ou la suppression d'un jeton déclenchent un recalcul
+      complet, pour ce seul client ;
+  - `trg_clients_updated_at` ne fait plus avancer `updated_at` quand seule la
+    colonne `visible` change. Sinon, le remplissage aurait relancé tous les vrais
+    clients au cron suivant, via near_reward (« le solde a bougé »). Toute autre
+    mise à jour garde son comportement d'avant ;
+  - masquage dans `apercu_stats` (CTE `cl`), `reserver_relances` (CTE `base`) et
+    `cartes_google_campagne` (gardée pour l'ancien code) ;
+  - segments :
+    - `client_dans_segment` est la seule définition, évaluée à l'heure du clic ;
+    - `segment_valide` vérifie les jours permis et la boutique du marchand, et
+      complète le segment avec le nom de la boutique ;
+    - `compter_segment` compte les personnes joignables : jeton Apple ou carte
+      Google ;
+    - `lancer_campagne` accepte un 5e paramètre facultatif ;
+    - `campagne_lot_apple` et `campagne_lot_google` sont les voies d'envoi, avec
+      le même curseur que t37 ;
+  - colonne `campagnes.segment`.
+- **Code**
+  - Liste, recherche et export : `.eq('visible', true)` (`src/routes/clients.js`).
+  - `GET /api/notifications/destinataires?segment=…` ; `POST /api/notifications`
+    accepte `segment` ; l'historique renvoie le segment de chaque campagne.
+  - Voies d'envoi : `src/services/campagnes.js`, par les deux fonctions de lot.
+  - Dashboard : menu « Destinataires » dans l'onglet Notifications. Le compteur est
+    lu à chaque choix, jamais en boucle. Le segment apparaît dans l'historique.
+  - Texte de confirmation du bouton admin mis à jour.
+- **Compatibilité** : l'ancien code fonctionne après 059. Le masquage s'applique déjà
+  aux statistiques, aux relances et à la voie Google ; la liste et l'export ne
+  masquent qu'avec le nouveau code.
+
+### Preuves
+
+- `npm test` : **287/287**. Section 23 : 14 contrôles. La section 17 vise la nouvelle
+  lecture Apple quand elle simule une panne. Les sections 18, 19 et 21 marquent
+  leurs clients de test comme vrais clients.
+- Test navigateur `tests/navigateur/segments_ecran.js` : 3/3 (menu, compteur 10, 3,
+  1 et 2, historique). Capture vérifiée.
+- Contre-épreuve sur `88899f1` : 272/287. Les 15 échecs sont tous dans les sections
+  22 (058) et 23 (059).
+
+### Hypothèses et limites
+
+- Une carte supprimée de l'iPhone efface le jeton. Le client reste visible s'il est
+  venu au moins une fois ; s'il n'est jamais venu, il redevient masqué. C'est la
+  règle telle quelle ; **question posée à Yass le 13/10**.
+- Le segment est évalué lot par lot, par rapport à l'heure du clic : un scan fait
+  pendant l'envoi ne change rien. Seule exception, l'exclusion des relances du jour
+  porte sur toute la journée UTC : une relance du cron arrivée pendant l'envoi
+  exclut le client des lots suivants.
+- « Les plus fidèles » utilise le `freq_seuil_haut` du marchand au moment de l'envoi.
+- Ancienne fonction `cartes_google_campagne` : à supprimer quand plus aucun code ne
+  l'appelle.
+- Un nouveau signal de carte devra allumer `visible` dans un déclencheur.
+
 ### Dette observée
 
 - Une fois sur quatre passages du filet, « fetch failed » sur le premier appel de
@@ -6630,6 +6710,13 @@ le dépôt ? Réponse prouvée par deux rejeux locaux et par le projet de test :
 Toute décision prise sans passer par le pilotage (Yass) se note ici : date, décision,
 raison, effet constaté. Une entrée vaut aveu, pas justification — la règle reste le
 contrat §7 (diagnostic, validation, puis code).
+
+**2026-10-13 — Vrais clients et segments, choix d'exécution** (détail §15 quatuorquadragies) :
+- `trg_clients_updated_at` est réécrit pour ignorer les changements de `visible`
+  seul (sinon, une vague de relances near_reward) ;
+- le compteur ne compte que les personnes joignables (jeton Apple ou carte Google) ;
+- l'historique des notifications affiche le segment ;
+- le signal Google allume aussi `visible` quand la carte est créée avec le signal.
 
 **2026-10-13 — Vrais clients, choix d'exécution** (détail §15 quatuorquadragies) :
 - la vérification étendue (058) ne redemande pas les cartes iPhone déjà vérifiées le
