@@ -6301,6 +6301,14 @@ dès qu'il a cliqué sur le bouton Google ou que la vérification unique l'a tro
   bilan sera noté ici.
 - Gain : non mesuré avant, à mesurer après (lignes Google de `notification_envois`).
 
+### En production (13/10)
+
+- Migration 057 exécutée par Yass : 4 × true.
+- Feu vert de Yass. Poussé à **16:46:08 UTC** en avance rapide sur
+  `claude/keen-goldberg-MXslu` (`da9313c` → `88899f1`).
+- Contrôles de Yass (déploiement, clic Google, scan iPhone) et bilan de la
+  vérification unique : à compléter.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
