@@ -5191,6 +5191,135 @@ coupée à 1 000 comme Supabase).
   le bilan par marchand (éligibles, relancés, reportés). C'est la taille réelle de la
   vague.
 
+## 15 quinquatricies. ÉTAPE 20 (NODE, EXPRESS, DÉPENDANCES) : DIAGNOSTIC (13/10, rien codé)
+
+Demande du pilotage : avis sur la coupure 20a (Node 24 à jour) / 20b (Express 5), versions,
+ampleur, dépendances en retard. Faits relevés le 13/10 (registre npm, nodejs.org,
+`npm audit --omit=dev`, Docker Hub).
+
+### Node
+
+- Production : `node:24.10.0-trixie` épinglé par empreinte (`Dockerfile:15`). Le même
+  `24.10.0` figure dans `package.json` (`engines`) et dans `.nvmrc`.
+- Publications de sécurité de la branche 24 depuis 24.10.0 : **24.13.0 (12/01),
+  24.14.1 (24/03), 24.17.0 (17/06), 24.18.1 (28/07)**. Il y en a quatre, pas deux.
+- Dernière version de la branche : **24.21.0** (07/09/2026, LTS « Krypton »). Image
+  `node:24.21.0-trixie`, empreinte
+  `sha256:1278a37eb510ec1606fba0e80f554bcc941ae0b44f35ae373c4822ae7717c64d` (relevée le
+  13/10).
+- La nouvelle image renouvelle aussi les paquets Debian. On y trouve **openssl**, qui
+  signe les cartes Apple (`apple-pass.js`, `execFile('openssl')`) : c'est le seul vrai
+  risque fonctionnel de 20a.
+- **Trou du filet découvert** : `npm test` tourne sous le Node de la machine (22.22.0
+  ici), pas sous celui de la production. Le filet n'a jamais prouvé le comportement sous
+  Node 24.
+
+### npm audit (dépendances de production, 13/10) : 11 alertes
+
+| Paquet | Gravité | Nous touche ? | Correctif |
+|---|---|---|---|
+| proxy-addr ≤ 2.0.7 (via express) | critique | **non** en pratique : la faille vise un `trust proxy` par sous-réseau ; nous comptons les relais (`trust proxy` 2, `index.js:30`) | 2.0.8, sans changement de version majeure |
+| qs ≤ 6.15.3, body-parser ≤ 1.20.6 (via express) | moyenne | **oui** : tout client, sans connexion, envoie une chaîne de requête lue par qs (Express 4) ; risque de saturation de mémoire | express 4.22.3, body-parser 1.20.8, sans changement majeur |
+| @opentelemetry/* (via @sentry/node) | moyenne | un peu : en-tête `baggage` entrant, borné par la limite d'en-têtes de Node (16 Ko) | sans changement majeur |
+| morgan ≤ 1.12.0 | moyenne | journaux falsifiables (User-Agent) ; aucun effet sur le service | 1.12.1 |
+| sharp ≤ 0.35.5-rc.1 (libvips, libheif, librsvg) | **haute** | limité : sharp ne lit que des images téléversées par l'ADMIN (`admin.js:718+`) et les images du stockage (`strip-generator.js`) | **0.35.5, version majeure** (0.33 → 0.35) |
+| node-cron (via uuid), uuid < 11.1.1 | moyenne | **non** : la faille vise uuid v3/v5/v6 avec tampon ; nous n'utilisons que v4 (`clients.js:3`) | majeures, inutiles maintenant |
+
+Hors audit :
+- **multer 1.4.5-lts.2** est déprécié (« 1.x impacted by a number of vulnerabilities,
+  patched in 2.x »). Un seul usage, l'envoi d'images par l'ADMIN (`admin.js:719-735`,
+  `:842`), derrière `authAdmin`. Il faut un jeton admin pour l'atteindre. 2.x garde la
+  même interface.
+- Express 4 : 4.22.3 est sortie le 14/09/2026. Plus rien n'est prévu après la fin de
+  maintenance du 01/10/2026.
+
+### Express 5 dans notre code (inventaire)
+
+| Point | Où | Changement |
+|---|---|---|
+| `router.get('*')` refusé (path-to-regexp 8) : le serveur ne démarre plus | `routes/scanner.js:26`, `routes/dashboard.js:24`, `routes/admin-ui.js:24` | `'/{*chemin}'` |
+| expressions régulières dans les chemins refusées | `routes/clients.js:188`, `:256`, `:323` (`:id([0-9a-f\-]{36})`) | `:id` simple, plus un contrôle d'UUID dans la route : 404 pour un id malformé, comme aujourd'hui. L'ordre des routes ne change rien (`/export` est déclarée avant, `/admin/all` a deux segments). |
+| `req.body` vaut `undefined` sans corps JSON (avant : `{}`) | 10 déstructurations sans repli, dont **`scan.js:22`** ; aussi `apple-wallet.js:38`, `notifications.js:59`, `merchants.js:11`, `clients.js:16`/`:258`, `admin.js:12`/`:176`/`:365`, `scanner-auth.js:19` ; plus 10 accès `req.body.x` directs | une ligne après `express.json` (`index.js:44`) : `req.body ??= {}`. Sinon, un appel sans corps donne 500 au lieu de 400. |
+| analyseur de requête « simple » par défaut (avant : qs « étendu ») | toutes les routes | `app.set('query parser', 'extended')` pour garder le comportement, ou vérifier qu'aucune route ne lit `a[b]=` (aucune trouvée) |
+| erreurs des fonctions `async` transmises d'office | 14 fichiers avec `asyncHandler` | rien à faire : `asyncHandler` reste valable |
+| `res.status(n).send()`, `res.redirect(301, …)`, `express.static`, gestionnaire d'erreurs à 4 arguments (`index.js:214`) | — | compatibles |
+| express-rate-limit 7.5.1, helmet 7.2.0, cors, Sentry | — | compatibles avec Express 5 ; **ne pas** monter express-rate-limit en 8 dans le même chantier (clés IPv6 changées) |
+
+**Taille** : ≈ 20 à 40 lignes changées dans 6 fichiers, plus le fichier de verrouillage.
+Compter ≈ ½ à 1 journée avec les tests à ajouter : appel sans corps → 400 au scan et
+à la connexion ; id malformé → 404 ; routes d'écran (`/scanner/x`, `/dashboard/x`)
+servies. Le filet (224) couvre déjà presque toutes les routes : un oubli se voit au
+démarrage ou au premier test.
+
+### Avis sur la recommandation du pilotage
+
+- **Coupure 20a / 20b : d'accord.** Un ajout à 20a : y mettre aussi la **mise à jour
+  sans changement majeur du fichier de verrouillage** (`npm audit fix` sans `--force`).
+  Elle corrige qs et body-parser (seule faille joignable sans connexion), proxy-addr,
+  morgan et OpenTelemetry. `package.json` ne change pas (les plages `^` l'autorisent),
+  c'est du même ordre de risque que Node, et les mêmes contrôles servent.
+- **20b** : Express 5, **multer 2** et **sharp 0.35**. Ce sont les trois montées de
+  version majeure, chacune testée. Après 26 : d'accord, mais pas loin derrière. Le jour
+  où Express 4 aura une faille, il n'y aura plus de correctif. sharp et multer ne sont
+  joignables que par l'admin : ils peuvent attendre 20b.
+- **Reste de t17 avant l'API (28)** : d'accord. Désinscrire un appareil suppose de
+  connaître son identifiant d'appareil Apple (aléatoire), et le logo Google doit sortir
+  avant de rendre le dépôt privé.
+- **27 en fin de liste** : d'accord.
+
+### Plan proposé pour 20a (sur feu vert)
+
+**Fichiers à toucher :**
+- `Dockerfile:15` : tag `24.21.0-trixie` et nouvelle empreinte, commentaire mis à jour ;
+- `package.json` : `engines` à `24.21.0` ;
+- `.nvmrc` : `24.21.0` ;
+- `package-lock.json` : `npm audit fix` sans `--force` ;
+- `tests/lancer.js` : le filet vérifie sous quel Node il tourne et le dit, et il doit
+  passer sous 24.21.0.
+
+**Ce qui change pour nous :** rien de visible. Ce sont des versions de maintenance de la
+même branche 24 : fetch (undici), serveur http, OpenSSL interne de Node (jetons des
+sessions).
+
+**Risques :**
+1. **Signature des cartes Apple** (openssl du système renouvelé dans l'image) : le filet
+   local ne la couvre pas (pas de certificats Apple). Il faut une carte iPhone réelle
+   après le déploiement.
+2. Le délai par appel à la base (fetch, `AbortSignal`) et l'arrêt propre
+   (`closeIdleConnections`) dépendent de Node : ils sont couverts par le filet, **à
+   condition** de le jouer sous 24.21.0.
+3. `npm ci` avec le npm de l'image (11.x) : même format de verrouillage.
+
+**Tests :**
+- `npm test` sous Node **24.21.0** (binaire officiel téléchargé dans le cache du filet) :
+  224/224 attendu ;
+- contre-épreuve sous 24.10.0 ;
+- construction locale de l'image (Docker est présent sur la machine de session) :
+  `node --version` et `openssl version` dans l'image.
+
+**Environnement de test** : utile seulement pour la carte Apple signée par le serveur
+avant la production. Il existe jusqu'au 31/10. Sans lui, contrôle immédiat en
+production, et retour arrière en une minute (« Redeploy » du déploiement précédent).
+**Je recommande la production directe** avec ce contrôle : le changement est
+réversible et l'environnement de test n'apporte que la carte Apple, vérifiable tout de
+suite en production.
+
+**Contrôles après le déploiement :**
+- `/health` affiche `"node":"v24.21.0"` (`index.js:142`) ;
+- `/health/db` ;
+- scan puis annulation ;
+- ajout d'une carte iPhone et réception d'une mise à jour ;
+- carte Google.
+
+### Autres points relevés (e)
+
+1. **Le filet ne tourne pas sous le Node de la production** : à corriger dans 20a (ci-dessus).
+2. **Routine d'entretien, sans requête** : une fois par mois, `npm audit --omit=dev` et
+   la liste des publications de sécurité de Node 24 (nodejs.org), notés dans la
+   passation. Sans cela, on retrouvera le même retard de 12 mois.
+3. Rien de plus urgent que 20a : la seule faille joignable sans connexion (qs et
+   body-parser) est dans 20a.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
