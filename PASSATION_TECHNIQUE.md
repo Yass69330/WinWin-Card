@@ -5414,6 +5414,227 @@ suite en production.
 - Retour arrière préparé et NON poussé : commit `9c532de` (revert de `fb4b4e8`) sur la
   branche locale `retour-20a`. Il est sans objet si rien ne casse.
 
+## 15 septtricies. ÉTAPE 26 + APERÇU CALCULÉ EN BASE : DIAGNOSTIC ET PROPOSITION (13/10, rien codé)
+
+Base : production `3d2f687`. Ce rapport reprend l'audit 05 (§3, §4.1 à 4.5), revérifié
+sur le code d'aujourd'hui. Les mesures sont faites sur un banc local (PostgreSQL 16,
+base jetable supprimée ensuite) avec deux marchands :
+- 5 000 porteurs, 40 000 scans sur un an, dont 11 600 sur 30 jours ;
+- 50 000 porteurs, 400 000 scans, dont 115 000 sur 30 jours (≈ 3 800 par jour, plus
+  lourd que la réalité).
+
+### 1. Chaque statistique aujourd'hui
+
+**Aperçu** : `GET /api/merchants/me/stats`, trois lectures par l'API de données, calcul
+en JS (`src/routes/merchants.js:67-92`), affichage `public/dashboard/index.html:1318-1325`.
+
+| Chiffre | Calcul | Juste ? |
+|---|---|---|
+| Clients au total | comptage exact, clients non effacés (`merchants.js:71`) | oui |
+| Scans aujourd'hui | comptage exact depuis **minuit UTC** (`:72`, `toISOString().split('T')[0]`) | jour UTC, pas le jour local (point 6) |
+| Actifs 30 j | clients distincts d'une **liste** de scans (`:73`, `:76-77`) | **faux au-delà de 1 000 scans en 30 j** (≈ 33 par jour) : liste coupée, chiffre sous-estimé et instable |
+| Taux de rétention | (clients avec ≥ 2 scans dans la liste) ÷ **toute la base** (`:79-83`) | **biaisé** (point 3), et coupé à 1 000 comme Actifs |
+| Visites moyennes | scans de la liste ÷ actifs (`:84`) | coupé à 1 000 |
+| En panne | les erreurs ne sont pas lues : « – » ou **0 / 0 % / 0x** (point 5) | faux |
+
+**Onglet Réseau** : `GET /me/group-stats` → `group_stats` (migration 039), calcul en
+base, sans plafond ; affichage `index.html:1218-1300`.
+
+| Chiffre | Calcul | Juste ? |
+|---|---|---|
+| Porteurs, Actifs 30 j, mobilité (90 j) | comptages en base | oui (la fenêtre de 90 j de la mobilité n'est pas dite) |
+| Nouveaux ce mois | inscrits depuis le 1er à 00:00 (fuseau de la base, UTC) | oui, en UTC |
+| Taux de retour | actifs du mois (entamé) ∩ actifs du mois précédent (complet) ÷ actifs du mois | **juste** : c'est la part des clients de ce mois déjà venus le mois dernier, le mois précédent doit rester complet |
+| **Barre de fréquence** (répartition des passages) | scans par porteur **depuis le 1er du mois** (`039:84-93`) | **biaisée** : en début de mois, tout le monde tombe dans la première tranche (audit 05 D1 : le 05/09, 45/0/0 au lieu de 0/60/0) |
+| Par boutique : scans, clients, récompenses | depuis le 1er du mois | oui (mois entamé, affiché comme tel) |
+| Par boutique : « vs mois préc. » | mois entamé ÷ mois précédent **complet** (`039:62-67`, `:108`) | **faux** : toute boutique stable paraît en baisse, en rouge (−85 % le 5 du mois) |
+| Scans non attribués | depuis le 1er | oui |
+| En panne | la route répond 500 avec `error.message` (`merchants.js:102`) ; l'écran lit le corps sans le statut (`index.html:1223-1225`) : **réseau vide affiché**, gardé en mémoire | faux |
+
+### 2. Mois en cours contre les mêmes jours du mois précédent (décision de Yass)
+
+Règle : fenêtre précédente = [1er du mois précédent, 1er du mois précédent + temps
+écoulé depuis le 1er de ce mois), **bornée au 1er de ce mois**. Le 31 mars se compare
+donc à tout février, pas au-delà.
+
+**Où l'appliquer** :
+- **« vs mois préc. » par boutique** (`group_stats`, `scans_prec`) : c'est le chiffre
+  faux d'aujourd'hui ;
+- **Nouveaux ce mois**, si une comparaison est affichée (« 147, contre 185 aux mêmes
+  jours du mois dernier ») : proposé, à décider ;
+- **pas au taux de retour** : il ne compare pas des volumes, il regarde si les clients
+  de ce mois étaient là le mois dernier, qui doit rester complet ;
+- **pas à la barre de fréquence** : ce n'est pas une comparaison. Proposition : la
+  calculer sur **30 jours glissants** (audit 05 D1 : 0/60/0 juste tous les jours), avec
+  le libellé « passages sur 30 jours ».
+
+### 3. Rétention : les deux calculs (exemple chiffré pour Yass)
+
+Marchand qui grandit : 100, 150, 200, 250, 300 et 350 inscrits par mois. La part des
+clients revenus (≥ 2 passages en 30 jours) dépend de l'ancienneté :
+- 15 % pour les inscrits du mois ;
+- 45 % à un mois ;
+- 40 % à deux mois ;
+- 35 % à trois mois ;
+- 32 % à quatre mois ;
+- 30 % au-delà.
+
+| Mois | Base | Inscrits depuis ≥ 30 j | Revenus | dont anciens | **(a) revenus ÷ toute la base** (aujourd'hui) | **(b) revenus anciens ÷ inscrits depuis ≥ 30 j** |
+|---|---|---|---|---|---|---|
+| M1 | 100 | 0 | 15 | 0 | 15 % | — (pas encore de recul) |
+| M2 | 250 | 100 | 68 | 45 | 27 % | 45 % |
+| M3 | 450 | 250 | 138 | 108 | 31 % | 43 % |
+| M4 | 700 | 450 | 222 | 185 | 32 % | 41 % |
+| M5 | 1 000 | 700 | 322 | 277 | 32 % | 40 % |
+| M6 | 1 350 | 1 000 | 436 | 383 | 32 % | 38 % |
+
+Lecture :
+- **(a)** monte de 15 à 32 % : le marchand croit que sa fidélité progresse. C'est
+  l'arrivée de nouveaux qui fait bouger le chiffre ; leur faible taux de début tire vers
+  le bas, puis se dilue.
+- **(b)** baisse de 45 à 38 % : c'est la vraie tendance de la clientèle installée (elle
+  s'érode doucement).
+- Pour un marchand qui ne grandit plus, (a) baisse sans fin : les partis ne quittent
+  jamais le dénominateur (audit 05 §4.1).
+- **(b)** n'affiche rien le premier mois (« pas encore de recul »).
+- Mesuré au banc (5 000 / 50 000 porteurs, inscriptions étalées sur un an) : (a) 51 et
+  49 %, (b) 46 et 45 %.
+
+**À trancher par Yass** (le numérateur, « ≥ 2 passages en 30 jours », reste le même
+dans les deux cas).
+
+### 4. Aperçu calculé en base
+
+**Proposition** : une fonction `apercu_stats(p_marchand_id)` en lecture seule, migration
+056. Elle rend en UN jsonb, pour TOUT marchand (mono-boutique ou réseau) :
+- porteurs ;
+- scans aujourd'hui ;
+- actifs 30 j ;
+- visites moyennes ;
+- rétention (a ou b) ;
+- nouveaux du mois, et aux mêmes jours du mois précédent ;
+- taux de retour ;
+- répartition des passages sur 30 jours.
+
+**Aucune donnée par boutique** (exclusion du Socle : pas de comparaison entre
+boutiques).
+
+`group_stats` garde sa signature et prend son bloc « réseau » **dans `apercu_stats`** :
+les deux écrans affichent les mêmes chiffres par construction. Elle garde son tableau
+par boutique (écran Réseau déjà décidé), avec la correction du point 2.
+
+**Coût** :
+- 1 appel RPC au lieu de 3 lectures à l'ouverture de l'Aperçu, à la demande
+  uniquement ;
+- aucune requête régulière, aucun index nouveau (`idx_scans_marchand_date`,
+  `idx_clients_marchand` suffisent) ;
+- rien ne change pour le scan.
+
+| Prototype (banc local, 3 essais) | 5 000 porteurs | 50 000 porteurs |
+|---|---|---|
+| `apercu_stats` (toutes les mesures ci-dessus, fuseau compris) | **28 à 32 ms** | **112 à 163 ms** |
+| `group_stats` actuel, pour comparaison | 42 ms | 340 ms |
+
+Facteur production de ×1 à ×6 (calage de l'audit 05, HYPOTHÈSE) : au pire ≈ 1 s à
+50 000. **Le client court (5 s) suffit** : marge ×5. Le client long garderait le
+marchand devant un écran figé 30 s en cas de panne. Je ne le propose que si la mesure
+réelle dépasse 2 s.
+
+### 5. Une panne affichée comme une panne
+
+**Serveur** :
+- `/me/stats` (puis `apercu_stats`) et `/me/group-stats` lisent `error` ;
+- base injoignable ou délai dépassé → **503 `database_unavailable` + Retry-After**,
+  comme le scan (étape 16) ;
+- plus de `error.message` brut dans la réponse (`merchants.js:102` aujourd'hui).
+
+**Écran** :
+- `loadOverview` et `loadReseau` regardent `res.ok` ;
+- en cas d'échec : un message « Statistiques indisponibles pour le moment » avec un
+  bouton Réessayer ;
+- **rien n'est gardé en mémoire** (`S.stats` / `S.reseau` restent vides) : le retour
+  sur l'onglet redemande ;
+- jamais de 0 ni de « – » trompeur.
+
+Coût : aucune requête de plus.
+
+### 6. Fuseau
+
+**Tout est compté en UTC** :
+- « aujourd'hui » de l'Aperçu (`merchants.js:72`) ;
+- mois de `group_stats` (`date_trunc('month', now())`, fuseau de la base, UTC chez
+  Supabase) ;
+- quota des campagnes (`notifications.js:10-12`, heure du serveur, UTC sur Railway) ;
+- export (`clients.js:165`) ;
+- cron (08:00 UTC) ;
+- anniversaires (étape 22).
+
+**Effets** :
+- **Dubaï (UTC+4)** :
+  - la journée « d'aujourd'hui » commence à **04:00** heure locale ;
+  - un scan à 01:00 heure locale le 1er du mois compte dans le **mois précédent** ;
+  - le quota de campagnes repart le 1er à 04:00 ;
+  - « scans aujourd'hui » affiché à 02:00 locales montre encore la veille.
+- **Lyon (UTC+1 en hiver, +2 en été)** : la journée commence à 01:00 ou 02:00 locales.
+  Effet faible, sauf pour un commerce ouvert après minuit (scans de 00:00 à 02:00
+  comptés la veille).
+
+**Proposition (sans coder)** :
+- colonne `marchands.fuseau` (nom IANA : `Europe/Paris`, `Asia/Dubai`), par défaut
+  `Europe/Paris`, réglée dans l'admin ;
+- `apercu_stats` et `group_stats` calculent leurs bornes avec
+  `date_trunc(..., now() AT TIME ZONE fuseau) AT TIME ZONE fuseau` : prouvé au
+  prototype, sans coût mesurable ;
+- les index servent toujours, les bornes restant des constantes ;
+- même colonne, plus tard, pour le quota, l'export et les heures du cron (parking
+  « fuseau par marchand »).
+
+**Décision demandée** :
+- la liste des marchands de Dubaï, pour régler leur fuseau à la migration ;
+- ou tout à `Europe/Paris`, avec réglage à la main.
+
+### 7. Plan de test (`npm test` sous Node 24.21.0)
+
+**Section 19 du filet** :
+- **Actifs, visites et rétention justes au-delà de 1 000 scans en 30 jours** :
+  1 200 clients, 2 scans chacun ;
+- scans annulés exclus ;
+- **rétention (a) et (b)** sur une base fabriquée : inscrits de 10 et de 60 jours ;
+- **mêmes jours du mois précédent** : horloge figée par paramètre de test, et une
+  boutique stable donne 0 % (audit 05 D1) ;
+- passages sur 30 jours glissants ;
+- **Aperçu et Réseau identiques** sur un réseau ;
+- un mono-site sans boutique ;
+- **panne** : relais en panne → 503 + Retry-After, et l'écran ne garde rien ;
+- **fuseau** : un scan à 23:30 UTC compte « aujourd'hui » pour Dubaï le lendemain, pas
+  pour Paris ;
+- les droits : `apercu_stats` fermée à `anon` ;
+- contre-épreuve sur `3d2f687`.
+
+Environnement de test : **pas nécessaire** (lecture seule, coût mesuré au banc).
+
+### 8. Avant le premier marchand à ≈ 1 000 porteurs / ce qui peut attendre
+
+**Avant** :
+- Aperçu en base (Actifs coupé à 1 000 scans) ;
+- panne lue ;
+- « vs mois préc. » à jours égaux ;
+- répartition sur 30 jours ;
+- la définition de la rétention choisie.
+
+**Peut attendre** :
+- fuseau par marchand (sauf si un marchand de Dubaï lit ses chiffres la nuit) ;
+- comparaison des nouveaux ;
+- graphique par jour.
+
+**Décisions demandées** :
+1. rétention (a) ou (b) ;
+2. répartition sur 30 jours glissants ;
+3. afficher « nouveaux » avec la comparaison aux mêmes jours ;
+4. fuseau : liste de Dubaï, ou `Europe/Paris` par défaut ;
+5. quels chiffres de `apercu_stats` montrer à un mono-site (aujourd'hui 5 cartes ; la
+   fonction en donne 9).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
