@@ -5940,12 +5940,118 @@ l'ancien code (250/250) avant toute montée de version**.
   - envoi d'image admin.
 - **Étape 20b close.** Étape 20 terminée (20a et 20b en production).
 
+## 15 unquadragies. RESTE DE L'ÉTAPE 21 : CODÉ EN LOCAL (13/10, rien poussé)
+
+**Décision du pilotage (13/10)** : le reste de l'étape 21 passe avant l'étape 23
+(troncature silencieuse de données que le marchand voit et exporte ; Pizz'Amore :
+384 porteurs, +133 par mois). Diagnostic et code enchaînés sans attendre, arrêt
+seulement sur une décision produit (aucune rencontrée, voir « Choix »).
+
+**Table `consentements`** (question du pilotage) :
+- une ligne par coordonnée donnée (email, téléphone, date d'anniversaire), avec
+  `valeur = true` et l'horodatage ;
+- écrite à l'inscription du client sur la **landing premium** (`POST /api/clients`,
+  `clients.js:67-77`) quand il remplit le champ ;
+- **lue par aucun code**, supprimée seulement par l'effacement RGPD ;
+- écriture non vérifiée : un échec est invisible (dette t40 §7.1, toujours ouverte).
+
+### Ce qui cassait (avant, `a586e5e`)
+
+- **Liste** (`GET /api/clients`) : une seule lecture, coupée à **1 000** par l'API de
+  données.
+  - Au-delà, des clients sont introuvables et le compteur reste bloqué à 1 000.
+  - La recherche se faisait dans le navigateur sur ces 1 000 seulement.
+- **Export** (`GET /api/clients/export`) : une seule lecture coupée à 1 000, **sans
+  le dire**. Les clients les plus anciens manquaient.
+- **JSON mal formé** : 500 « Internal server error » (le gestionnaire global ignorait
+  le 400 du lecteur de corps).
+- Panne de base : liste et export répondaient 500 avec le message brut.
+
+### Livré (commit local `3fc9ee8`)
+
+- **`src/routes/clients.js`** :
+  - `GET /api/clients?debut=&limite=&q=` : pages de 100 par défaut, 200 au plus.
+    - Ordre : points décroissants, puis identifiant (stable d'une page à l'autre).
+    - **Recherche dans la base** : prénom contenant le texte, sans tenir compte de la
+      casse ; `%`, `_` et `\` sont cherchés tels quels.
+    - Total dans l'en-tête **`X-Total-Count`**. La réponse reste un tableau (même
+      forme qu'avant : un onglet ouvert pendant le déploiement continue de
+      marcher).
+    - Page au-delà de la fin : page vide. Panne : 503 `database_unavailable` +
+      `Retry-After`.
+  - `GET /api/clients/export` : lu par **pages de 1 000** (curseur sur la date
+    d'inscription puis l'identifiant), **écrit au fil de l'eau**. Il est complet,
+    sans plafond, et la mémoire reste bornée.
+    - Même contenu, mêmes colonnes, même ordre (plus récent d'abord), même BOM,
+      même neutralisation des formules.
+    - Panne avant la première ligne : 503.
+    - **Panne en cours : la connexion est coupée**, le téléchargement échoue, jamais
+      un fichier tronqué qui aurait l'air complet.
+  - Client court (5 s) par page : aucune page ne dépasse 1 000 lignes.
+- **`src/index.js`** : les erreurs 4xx du lecteur de corps sont rendues telles quelles.
+  - JSON mal formé : **400 `invalid_json`** ; corps trop gros : 413.
+  - Elles ne sont plus journalisées comme des erreurs serveur. Le reste : 500,
+    inchangé.
+- **`public/dashboard/index.html`** (onglet Clients) :
+  - total réel (« 2500 clients ») ;
+  - 100 clients, puis un bouton **« Afficher plus »** (+100) ;
+  - recherche envoyée au serveur 300 ms après la dernière frappe ; une recherche
+    plus récente l'emporte sur une réponse en retard ;
+  - la recherche est remise à zéro à la déconnexion ;
+  - l'initiale de l'avatar est échappée (`esc`), comme le prénom.
+- **Tests** :
+  - `tests/scenarios.js`, section 21 : 9 contrôles. La liste et l'export tournent
+    contre un **second PostgREST plafonné à 1 000 lignes, comme Supabase** (le
+    PostgREST principal du filet n'a pas de plafond : un test de liste ou d'export
+    n'y aurait rien prouvé).
+  - `tests/lancer.js` : plusieurs PostgREST possibles (un relais par PostgREST, un
+    fichier de configuration chacun), et `demarrerPostgrest` exposé aux scénarios.
+  - `tests/navigateur/clients_liste.js` : 4 contrôles et 2 captures.
+
+### Preuves
+
+- `npm test` sous Node 24.21.0 : **259/259** (250 + 9).
+- **Contre-épreuve** : nouveaux tests sur `a586e5e` → **251/259**, soit 8 échecs.
+  - Liste : 1 000 clients sur 2 500.
+  - Export : 1 001 lignes, soit 1 000 clients sur 2 500.
+  - Recherche « zo » : Zoé introuvable.
+  - Pannes : 500.
+  - Export coupé : « fichier reçu ».
+  - JSON mal formé : 500.
+- **Navigateur** : onglet Clients 4/4. Il affiche le total réel et 100 clients ;
+  « Afficher plus » donne 200 ; la recherche « zo » trouve Zoé au-delà des 1 000
+  premiers ; le bouton CSV télécharge 2 501 lignes. La fiche client (13/13) passe
+  toujours.
+- **Mesure locale, 50 000 clients** (PostgREST plafonné à 1 000) :
+  - **export complet : 50 000 lignes, 3,1 Mo, 1,6 s** ; mémoire du serveur de 93 Mo
+    avant à **144 Mo au pic** ;
+  - première page de la liste : 36 ms ;
+  - recherche : 86 ms.
+
+  Aucun index nouveau (`idx_clients_marchand` suffit).
+
+### Choix (hors pilotage, signalés)
+
+- Pages de 100 et un bouton « Afficher plus », plutôt que des numéros de pages.
+- Total dans un en-tête plutôt qu'un changement de forme de la réponse.
+- Une panne pendant l'export coupe la connexion. Je n'ajoute ni ligne de fin ni
+  marqueur dans le fichier : son contenu ne change pas.
+- 503 au lieu de 500 pour une panne de base (règle des étapes 16 et 26).
+
+### Hypothèses et limites
+
+- Un client modifié entre deux pages de la liste peut changer de place (tri par
+  points) : doublon possible à l'écran (filtré par identifiant au chargement) ou
+  client sauté jusqu'au prochain « Actualiser ». L'export, lui, est trié par date
+  d'inscription : il est stable.
+- Pas de migration.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
 
-1. **JSON mal formé → 500 au lieu de 400** (`src/index.js`, gestionnaire d'erreurs
-   global).
+1. ~~**JSON mal formé → 500 au lieu de 400**~~ : **corrigé à l'étape 21** (`3fc9ee8`,
+   §15 unquadragies). (`src/index.js`, gestionnaire d'erreurs global.)
    - Le lecteur de corps marque l'erreur 400 (`err.status`), et le gestionnaire
      répond toujours 500 « Internal server error ».
    - C'est pareil sous Express 4 et sous Express 5.
