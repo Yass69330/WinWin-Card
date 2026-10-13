@@ -60,7 +60,7 @@ const POSTGREST = {
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'winwin-filet-'));
 const enfants = [];
-let proxy = null;
+const proxies = [];   // un relais /rest/v1 par PostgREST démarré
 
 // ── PostgreSQL ──────────────────────────────────────────────────────────────
 const PSQL = process.env.PSQL
@@ -182,7 +182,9 @@ function lancer(nom, commande, args, options) {
 //   maxLignes : plafond de lignes par lecture, comme Supabase (1 000 en production).
 async function demarrerPostgrest({ delaiMs = 0, stockage = null, maxLignes = null } = {}) {
   const port = await portLibre();
-  const conf = path.join(TMP, 'postgrest.conf');
+  // Un fichier par PostgREST : le filet peut en démarrer un second, plafonné à
+  // 1 000 lignes comme Supabase (étape 21).
+  const conf = path.join(TMP, `postgrest-${port}.conf`);
   fs.writeFileSync(conf, [
     `db-uri = "postgres://filet_authenticator:filet_local@127.0.0.1:${PGPORT}/${BASE}"`,
     'db-schemas = "public"', 'db-anon-role = "anon"',
@@ -193,7 +195,7 @@ async function demarrerPostgrest({ delaiMs = 0, stockage = null, maxLignes = nul
   await attendreHttp(`http://127.0.0.1:${port}/`);
   // Préfixe /rest/v1 comme chez Supabase : supabase-js l'ajoute à SUPABASE_URL.
   const portProxy = await portLibre();
-  proxy = http.createServer((req, res) => {
+  const proxy = http.createServer((req, res) => {
     let cible;
     if (req.url.startsWith('/rest/v1')) {
       cible = { host: '127.0.0.1', port, path: req.url.slice('/rest/v1'.length) || '/' };
@@ -210,6 +212,7 @@ async function demarrerPostgrest({ delaiMs = 0, stockage = null, maxLignes = nul
     if (delaiMs > 0) { req.pause(); setTimeout(() => { req.resume(); envoyer(); }, delaiMs); } else envoyer();
   });
   await new Promise(r => proxy.listen(portProxy, '127.0.0.1', r));
+  proxies.push(proxy);
   return `http://127.0.0.1:${portProxy}`;
 }
 
@@ -255,7 +258,7 @@ function verifier(nom, obtenu, attendu) {
 
 function nettoyer() {
   for (const p of enfants) { try { p.kill(); } catch { /* déjà arrêté */ } }
-  if (proxy) proxy.close();
+  for (const p of proxies) p.close();
   if (process.env.FILET_GARDER === '1') {
     console.log(`(base ${BASE} et journaux gardés dans ${TMP})`);
     return;
@@ -305,6 +308,7 @@ if (require.main === module) (async () => {
     urlSupabase,
     cleService: jwt.sign({ role: 'service_role' }, SECRET_PGRST),
     demarrerServeur: (nom, url = urlSupabase, env = {}) => demarrerServeur(url, nom, env),
+    demarrerPostgrest: options => demarrerPostgrest(options),
     async api(methode, chemin, jeton, corps) {
       const r = await fetch(urlServeur + chemin, { method: methode,
         headers: { 'Content-Type': 'application/json', ...(jeton ? { Authorization: `Bearer ${jeton}` } : {}) },

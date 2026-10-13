@@ -44,7 +44,7 @@ INSERT INTO points_de_vente (id, marchand_id, nom, actif, deleted_at, scanner_lo
  ('${B.archivee}', '${M.reseau}', 'Archivée',   true,  now(), 'filet-archivee');
 `;
 
-async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur, urlSupabase, cleService, urlServeur }) {
+async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur, demarrerPostgrest, urlSupabase, cleService, urlServeur }) {
   // ── Outils ────────────────────────────────────────────────────────────────
   const jeton = (marchandId, pointDeVenteId) => jwt.sign(pointDeVenteId
     ? { role: 'scanner', marchand_id: marchandId, point_de_vente_id: pointDeVenteId, tv: 1 }
@@ -1695,6 +1695,103 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     const sansCorps = async (chemin, jt) => (await fetch(urlServeur + chemin, { method: 'POST', headers: jt ? { Authorization: `Bearer ${jt}` } : {} })).status;
     verifier('appel sans corps JSON : 400, jamais 500 (scan, connexion marchand, connexion scanner)',
       [await sansCorps('/api/scan', tT20), await sansCorps('/api/merchants/login'), await sansCorps('/api/scanner/login')], [400, 400, 400]);
+  }
+
+  titre('21. Liste des clients par pages, recherche en base, export complet, JSON mal formé (étape 21)');
+  {
+    const http = require('http');
+    const ML = 'e2100000-0000-4000-8000-000000000001';
+    sql(`INSERT INTO marchands (id, nom, slug, forfait, type_programme, max_value, display_max_value, langue)
+         VALUES ('${ML}', 'Filet Liste, Export', 'filet-liste', 'pro_plus', 'stamps', 10, 10, 'fr')`);
+    // 2 500 clients : soldes de 0 à 9, inscriptions étalées ; « Zoé » est au solde 0,
+    // donc au-delà des 1 000 premiers dans l'ordre de la liste.
+    sql(`INSERT INTO clients (marchand_id, prenom, stored_value, email, created_at)
+         SELECT '${ML}', 'Client ' || g, g % 9 + 1, 'c' || g || '@filet.test', now() - g * interval '1 hour'
+           FROM generate_series(1, 2496) g;
+         INSERT INTO clients (marchand_id, prenom, stored_value, created_at) VALUES
+           ('${ML}', 'Zoé', 0, now() - interval '200 days'),
+           ('${ML}', 'Pour%cent', 0, now() - interval '201 days'),
+           ('${ML}', '=CMD', 0, now() - interval '202 days'),
+           ('${ML}', 'Dupont, Jean', 0, now() - interval '203 days');`);
+    const tL = jwt.sign({ role: 'marchand', marchand_id: ML, tv: 1 }, secretJwt, { expiresIn: '1h' });
+    // Liste et export contre un PostgREST plafonné à 1 000 lignes par lecture, comme
+    // Supabase en production : c'est ce plafond qui coupait la liste et l'export.
+    const urlPlafond = await demarrerPostgrest({ maxLignes: 1000 });
+    const sPlafond = await demarrerServeur('plafond', urlPlafond);
+    const liste = async (params = '') => {
+      const r = await fetch(`${sPlafond.url}/api/clients${params}`, { headers: { Authorization: `Bearer ${tL}` } });
+      return { statut: r.status, total: r.headers.get('x-total-count'), corps: await r.json().catch(() => null) };
+    };
+
+    const p0 = await liste('?debut=0&limite=100');
+    verifier('liste : une page de 100, total 2 500 dans l\'en-tête (avant : tout d\'un coup, coupé à 1 000)',
+      [p0.statut, Array.isArray(p0.corps) && p0.corps.length, p0.total], [200, 100, '2500']);
+    const vus = new Set(); let ordreOk = true, precedent = Infinity;
+    for (let debut = 0; debut < 2500; debut += 200) {
+      const p = await liste(`?debut=${debut}&limite=200`);
+      for (const c of p.corps || []) { vus.add(c.id); if (c.stored_value > precedent) ordreOk = false; precedent = c.stored_value; }
+    }
+    verifier('liste : les 13 pages de 200 couvrent les 2 500 clients, sans doublon, points décroissants',
+      [vus.size, ordreOk], [2500, true]);
+    const zoe = await liste('?q=zo');
+    const pct = await liste('?q=' + encodeURIComponent('%'));
+    verifier('recherche dans la base : « zo » trouve Zoé (au-delà des 1 000 premiers), « % » est cherché tel quel',
+      [zoe.total, (zoe.corps || []).map(c => c.prenom).join(), pct.total, (pct.corps || []).map(c => c.prenom).join()],
+      ['1', 'Zoé', '1', 'Pour%cent']);
+    verifier('liste : jamais de coordonnées (email) dans la liste', Object.keys((p0.corps || [])[0] || {}).includes('email'), false);
+
+    // ── Export complet ──
+    const exp = await fetch(`${sPlafond.url}/api/clients/export`, { headers: { Authorization: `Bearer ${tL}` } });
+    const octets = Buffer.from(await exp.arrayBuffer());
+    const csv = octets.toString('utf8');
+    const lignesCsv = csv.replace(/^﻿/, '').split('\r\n');
+    verifier('export : 2 500 clients + l\'en-tête (avant : 1 000, les plus anciens manquaient), le plus récent en premier, le plus ancien en dernier',
+      [exp.status, lignesCsv.length, lignesCsv[0], lignesCsv[1].startsWith('Client 1,'), lignesCsv[lignesCsv.length - 1].startsWith('"Dupont, Jean"')],
+      [200, 2501, 'Prénom,Points,Email,Téléphone,Date anniversaire,Inscrit le', true, true]);
+    verifier('export : formule neutralisée, virgule entre guillemets, BOM pour Excel, aucun client en double',
+      [lignesCsv.some(l => l.startsWith("'=CMD,")), octets.subarray(0, 3).equals(Buffer.from([0xEF, 0xBB, 0xBF])), new Set(lignesCsv.slice(1).map(l => l.split(',')[2])).size >= 2496],
+      [true, true, true]);
+
+    sPlafond.processus.kill();
+
+    // ── Pannes : serveur derrière un relais qui coupe une lecture précise ──
+    const amont = new URL(urlPlafond);
+    const regle = { panne: null, vues: 0 };
+    const relais = http.createServer((req, res) => {
+      if (regle.panne && regle.panne(req)) { res.writeHead(500, { 'Content-Type': 'application/json' }); return res.end('{"message":"panne simulée"}'); }
+      const p = http.request({ host: amont.hostname, port: amont.port, path: req.url, method: req.method,
+        headers: { ...req.headers, host: amont.host } }, r => { res.writeHead(r.statusCode, r.headers); r.pipe(res); });
+      p.on('error', () => { if (!res.headersSent) { res.writeHead(502); res.end(); } });
+      req.pipe(p);
+    });
+    await new Promise(r => relais.listen(0, '127.0.0.1', r));
+    const s21 = await demarrerServeur('liste', `http://127.0.0.1:${relais.address().port}`);
+    const consoleError = console.error; console.error = () => {};
+    regle.panne = req => /^\/rest\/v1\/clients\?/.test(req.url) && req.method === 'GET';
+    const lP = await fetch(`${s21.url}/api/clients`, { headers: { Authorization: `Bearer ${tL}` } });
+    const eP = await fetch(`${s21.url}/api/clients/export`, { headers: { Authorization: `Bearer ${tL}` } });
+    // Deuxième page de l'export en panne : la première est déjà partie.
+    let lectures = 0;
+    regle.panne = req => /^\/rest\/v1\/clients\?/.test(req.url) && ++lectures === 2;
+    let exportCoupe;
+    try {
+      const r = await fetch(`${s21.url}/api/clients/export`, { headers: { Authorization: `Bearer ${tL}` } });
+      await r.text();
+      exportCoupe = 'fichier reçu';
+    } catch { exportCoupe = 'téléchargement en échec'; }
+    regle.panne = null;
+    console.error = consoleError;
+    verifier('panne de base : liste 503, export 503 avant la première ligne (avant : 500 avec le message brut)',
+      [lP.status, lP.headers.get('retry-after'), eP.status], [503, '30', 503]);
+    verifier('panne pendant l\'export : la connexion est coupée, jamais un fichier tronqué qui aurait l\'air complet',
+      exportCoupe, 'téléchargement en échec');
+    s21.processus.kill();
+    relais.close();
+
+    // ── JSON mal formé ──
+    const mal = await fetch(`${urlServeur}/api/scan`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tL}` }, body: '{"serial_number": ' });
+    verifier('JSON mal formé : 400 invalid_json (avant : 500 « Internal server error »)',
+      [mal.status, (await mal.json().catch(() => ({}))).error], [400, 'invalid_json']);
   }
 }
 

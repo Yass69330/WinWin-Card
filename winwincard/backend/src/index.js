@@ -219,6 +219,12 @@ if (sentryEnabled) {
 
 // Gestionnaire d'erreurs global — reçoit les rejets transmis par asyncHandler.
 app.use((err, req, res, next) => {
+  // Erreurs du client signalées par le lecteur de corps (JSON mal formé, corps
+  // trop gros) : leur statut 4xx, pas 500, et pas de trace d'erreur serveur
+  // (étape 21). Le reste : journalisé, 500.
+  if (!res.headersSent && err.expose && err.status >= 400 && err.status < 500) {
+    return res.status(err.status).json({ error: err.type === 'entity.parse.failed' ? 'invalid_json' : (err.type || 'bad_request') });
+  }
   console.error(err);
   if (res.headersSent) return next(err); // délègue au handler par défaut d'Express
   res.status(500).json({ error: 'Internal server error' });

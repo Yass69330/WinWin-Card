@@ -755,7 +755,7 @@ const I18N = {
     statsUnavailable:'Statistics unavailable right now.',
     loginUnavailable:'Service temporarily unavailable. Please try again in a moment.',
     copyLink:'📋 Copy link', copied:'✓ Copied', share:'↗ Share', qrShareTitle:'Loyalty program',
-    clientsTitle:'Clients', csvBtn:'⬇ CSV', exportCsv:'Export CSV', refresh:'Refresh',
+    clientsTitle:'Clients', csvBtn:'⬇ CSV', exportCsv:'Export CSV', refresh:'Refresh', showMore:'Show more',
     searchClients:'Search by first name…',
     clientsCount:({n,found})=>`${n} client${n>1?'s':''}${found?' found':''}`,
     noResults:'No results', noClients:'No clients', tryAnotherName:'Try another name',
@@ -868,7 +868,7 @@ const I18N = {
     statsUnavailable:'Statistiques indisponibles pour le moment.',
     loginUnavailable:'Service momentanément indisponible. Réessayez dans un instant.',
     copyLink:'📋 Copier le lien', copied:'✓ Copié', share:'↗ Partager', qrShareTitle:'Programme de fidélité',
-    clientsTitle:'Clients', csvBtn:'⬇ CSV', exportCsv:'Exporter CSV', refresh:'Actualiser',
+    clientsTitle:'Clients', csvBtn:'⬇ CSV', exportCsv:'Exporter CSV', refresh:'Actualiser', showMore:'Afficher plus',
     searchClients:'Rechercher par prénom…',
     clientsCount:({n,found})=>`${n} client${n>1?'s':''}${found?' trouvé'+(n>1?'s':''):''}`,
     noResults:'Aucun résultat', noClients:'Aucun client', tryAnotherName:'Essayez un autre nom',
@@ -1122,6 +1122,7 @@ document.getElementById('btn-logout').addEventListener('click', () => {
   if (!confirm(t('signOutConfirm'))) return;
   clearSession();
   S.clients = null; S.scans = null; S.stats = null; S.qr = null; S.notifLogs = null;
+  S.clientsQ = ''; document.getElementById('search-clients').value = '';
   showLogin();
 });
 
@@ -1385,36 +1386,69 @@ function renderOverview() {
 // ════════════════════════════════════════════════
 // TAB: CLIENTS
 // ════════════════════════════════════════════════
+// Liste par pages, recherche faite par le serveur (étape 21) : plus de plafond de
+// 1 000 clients. S.clients = pages déjà chargées ; S.clientsTotal = total des
+// clients qui correspondent (en-tête X-Total-Count) ; S.clientsQ = recherche.
+const PAGE_CLIENTS = 100;
+
+async function pageClients(debut) {
+  const q = S.clientsQ ? `&q=${encodeURIComponent(S.clientsQ)}` : '';
+  const res = await api(`/api/clients?debut=${debut}&limite=${PAGE_CLIENTS}${q}`);
+  if (!res.ok) throw new Error(t('errorGeneric'));
+  const page = await res.json();
+  return { page, total: parseInt(res.headers.get('X-Total-Count'), 10) };
+}
+
 async function loadClients(force = false) {
   if (!force && S.clients) { renderClients(); return; }
   document.getElementById('clients-list').innerHTML = Array(4).fill('<div class="skeleton skeleton-card"></div>').join('');
   document.getElementById('clients-meta').textContent = '';
+  const demande = S.clientsDemande = Symbol();   // une recherche plus récente l'emporte
   try {
-    const res = await api('/api/clients');
-    S.clients = await res.json();
+    const { page, total } = await pageClients(0);
+    if (demande !== S.clientsDemande) return;
+    S.clients = page;
+    S.clientsTotal = Number.isFinite(total) ? total : page.length;
     renderClients();
   } catch (e) {
-    document.getElementById('clients-list').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+    if (demande !== S.clientsDemande) return;
+    S.clients = null;
+    document.getElementById('clients-list').innerHTML = `<div class="alert alert-error">${esc(e.message)}</div>`;
   }
 }
 
-function renderClients(filter = '') {
+async function plusDeClients(btn) {
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const { page, total } = await pageClients(S.clients.length);
+    const deja = new Set(S.clients.map(c => c.id));
+    S.clients = S.clients.concat(page.filter(c => !deja.has(c.id)));
+    if (Number.isFinite(total)) S.clientsTotal = total;
+    if (!page.length) S.clientsTotal = S.clients.length;
+    renderClients();
+  } catch (e) {
+    btn.disabled = false; btn.textContent = t('showMore');
+    alert(e.message);
+  }
+}
+
+function renderClients() {
   const list = document.getElementById('clients-list');
   const meta = document.getElementById('clients-meta');
   if (!S.clients) return;
-  const q = filter.trim().toLowerCase();
-  const shown = q ? S.clients.filter(c => c.prenom.toLowerCase().includes(q)) : S.clients;
+  const q = S.clientsQ || '';
+  const shown = S.clients;
   if (shown.length === 0) {
     meta.textContent = '';
     list.innerHTML = `<div class="empty"><div class="empty-icon">👤</div><div class="empty-title">${q ? t('noResults') : t('noClients')}</div><div class="empty-sub">${q ? t('tryAnotherName') : t('clientsWillAppear')}</div></div>`;
     return;
   }
-  meta.textContent = t('clientsCount', { n: shown.length, found: !!q });
+  meta.textContent = t('clientsCount', { n: Math.max(S.clientsTotal || 0, shown.length), found: !!q });
   list.innerHTML = shown.map(c => {
     const pct = Math.min(c.stored_value / S.displayMax * 100, 100);
     const full = c.stored_value >= S.maxValue;
     return `<div class="client-card" data-id="${c.id}" style="cursor:pointer">
-      <div class="client-avatar" style="background:${colorFrom(c.prenom)}">${c.prenom.charAt(0).toUpperCase()}</div>
+      <div class="client-avatar" style="background:${colorFrom(c.prenom)}">${esc(c.prenom.charAt(0).toUpperCase())}</div>
       <div class="client-info">
         <div class="client-name">${esc(c.prenom)}</div>
         <div class="client-progress">
@@ -1424,13 +1458,20 @@ function renderClients(filter = '') {
       </div>
       <span style="color:var(--muted);font-size:20px;flex-shrink:0">›</span>
     </div>`;
-  }).join('');
+  }).join('') + (shown.length < (S.clientsTotal || 0)
+    ? `<button class="btn btn-outline" id="btn-more-clients" style="width:100%;margin-top:8px">${t('showMore')}</button>` : '');
   list.querySelectorAll('.client-card').forEach(card => {
     card.addEventListener('click', () => openClientSheet(card.dataset.id));
   });
+  document.getElementById('btn-more-clients')?.addEventListener('click', e => plusDeClients(e.currentTarget));
 }
 
-document.getElementById('search-clients').addEventListener('input', e => renderClients(e.target.value));
+// Recherche par le serveur, 300 ms après la dernière frappe.
+let minuteurRecherche = null;
+document.getElementById('search-clients').addEventListener('input', e => {
+  clearTimeout(minuteurRecherche);
+  minuteurRecherche = setTimeout(() => { S.clientsQ = e.target.value.trim(); loadClients(true); }, 300);
+});
 document.getElementById('btn-refresh-clients').addEventListener('click', () => { S.clients = null; loadClients(true); });
 
 document.getElementById('btn-export-csv').addEventListener('click', async () => {
@@ -2501,7 +2542,7 @@ document.getElementById('btn-confirm-delete').addEventListener('click', async ()
     const res = await api(`/api/clients/${id}`, { method: 'DELETE' });
     if (!res.ok) { const d = await res.json(); throw new Error(d.error || t('errorGeneric')); }
     document.getElementById('modal-delete').classList.remove('open');
-    if (S.clients) S.clients = S.clients.filter(c => c.id !== id);
+    if (S.clients) { S.clients = S.clients.filter(c => c.id !== id); S.clientsTotal = Math.max(0, (S.clientsTotal || 1) - 1); }
     renderClients(document.getElementById('search-clients').value);
     if (S.stats) { S.stats.porteurs = Math.max(0, (S.stats.porteurs || 1) - 1); renderOverview(); }
   } catch (e) {

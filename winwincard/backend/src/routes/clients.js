@@ -107,45 +107,86 @@ router.post('/', limiterInscription, asyncHandler(async (req, res) => {
   });
 }));
 
-// GET /api/clients — liste des clients du marchand connecté.
+// Base indisponible (panne, délai de 5 s dépassé) : 503, comme le scan et les
+// statistiques (étapes 16 et 26), jamais une liste vide ou un fichier tronqué.
+function baseIndisponible(res, route, error) {
+  console.error(`[clients] ${route} indisponible :`, error.message);
+  return res.set('Retry-After', '30').status(503).json({ error: 'database_unavailable' });
+}
+
+// GET /api/clients — liste des clients du marchand connecté, PAR PAGES (étape 21).
 // Sans coordonnées (email, téléphone, anniversaire), quel que soit le forfait :
 // la liste du dashboard n'affiche que prénom et points, et charger toutes les
 // coordonnées dans le navigateur multipliait les copies. Elles restent sur la
 // fiche et dans l'export CSV, pour les marchands qui y ont droit
 // (services/forfaits.js, droitCoordonnees ; étape 7, point 8).
+// Avant : une seule lecture, coupée à 1 000 lignes par l'API de données, et une
+// recherche faite dans le navigateur sur ces 1 000 seulement.
+//   ?debut=N&limite=M (100 par défaut, 200 au plus) ; ?q=texte : prénom contenant
+//   le texte, sans tenir compte de la casse, recherché DANS LA BASE.
+//   Réponse : le tableau de la page (même forme qu'avant) ; le total des clients
+//   qui correspondent est dans l'en-tête X-Total-Count.
+//   Ordre : points décroissants, puis identifiant (stable d'une page à l'autre).
+const PAGE_LISTE_MAX = 200;
 router.get('/', authMarchand, asyncHandler(async (req, res) => {
-  const { data, error } = await supabase
-    .from('clients')
-    .select('id, prenom, stored_value, created_at, pass_serial_number')
-    .eq('marchand_id', req.marchandId)
-    .is('deleted_at', null)
-    .order('stored_value', { ascending: false });
+  const limite = Math.min(Math.max(parseInt(req.query.limite, 10) || 100, 1), PAGE_LISTE_MAX);
+  const debut  = Math.max(parseInt(req.query.debut, 10) || 0, 0);
+  const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 50) : '';
 
-  if (error) return res.status(500).json({ error: error.message });
+  let query = supabase
+    .from('clients')
+    .select('id, prenom, stored_value, created_at, pass_serial_number', { count: 'exact' })
+    .eq('marchand_id', req.marchandId)
+    .is('deleted_at', null);
+  // %, _ et \ tapés par le marchand sont cherchés tels quels, pas comme jokers.
+  if (q) query = query.ilike('prenom', `%${q.replace(/[\\%_]/g, c => '\\' + c)}%`);
+
+  const { data, error, count } = await query
+    .order('stored_value', { ascending: false })
+    .order('id', { ascending: true })
+    .range(debut, debut + limite - 1);
+
+  // Page au-delà de la fin (clients effacés entre-temps) : page vide, pas une panne.
+  if (error && error.code === 'PGRST103') return res.set('X-Total-Count', String(debut)).json([]);
+  if (error) return baseIndisponible(res, 'liste', error);
+  res.set('X-Total-Count', String(count ?? data.length));
   res.json(data);
 }));
 
-// GET /api/clients/export — export CSV (Pro+, ou landing premium active)
+// GET /api/clients/export — export CSV (Pro+, ou landing premium active).
+// COMPLET (étape 21) : lu par pages de PAGE_EXPORT clients et écrit au fur et à
+// mesure dans la réponse, sans plafond et sans tout garder en mémoire. Chaque
+// page est une requête courte (client de 5 s). Avant : une seule lecture, coupée
+// à 1 000 lignes sans le dire (les plus anciens manquaient).
+// Une panne AVANT la première ligne : 503. Une panne EN COURS : la connexion est
+// coupée, le téléchargement échoue ; jamais un fichier tronqué qui aurait l'air
+// complet.
+const PAGE_EXPORT = 1000;
 router.get('/export', authMarchand, asyncHandler(async (req, res) => {
-  const { data: marchand } = await supabase
+  const { data: marchand, error: errM } = await supabase
     .from('marchands')
     .select('nom, forfait, landing_premium')
     .eq('id', req.marchandId)
     .single();
+  if (errM && errM.code !== 'PGRST116') return baseIndisponible(res, 'export (marchand)', errM);
 
   const { droitCoordonnees } = require('../services/forfaits');
   if (!droitCoordonnees(marchand)) {
     return res.status(403).json({ error: 'CSV export requires the Pro+ plan or the premium landing page.' });
   }
 
-  const { data: clients, error } = await clientLong
-    .from('clients')
-    .select('prenom, stored_value, email, telephone, date_anniversaire, created_at')
-    .eq('marchand_id', req.marchandId)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false });
-
-  if (error) return res.status(500).json({ error: error.message });
+  // Ordre d'avant : inscriptions les plus récentes d'abord ; l'identifiant
+  // départage deux inscriptions à la même microseconde. Page suivante : tout ce
+  // qui vient strictement après la dernière ligne écrite.
+  const lirePage = apres => {
+    let q = supabase
+      .from('clients')
+      .select('id, prenom, stored_value, email, telephone, date_anniversaire, created_at')
+      .eq('marchand_id', req.marchandId)
+      .is('deleted_at', null);
+    if (apres) q = q.or(`created_at.lt."${apres.created_at}",and(created_at.eq."${apres.created_at}",id.lt.${apres.id})`);
+    return q.order('created_at', { ascending: false }).order('id', { ascending: false }).limit(PAGE_EXPORT);
+  };
 
   function cell(v) {
     if (v == null || v === '') return '';
@@ -156,24 +197,36 @@ router.get('/export', authMarchand, asyncHandler(async (req, res) => {
     return (s.includes(',') || s.includes('"') || s.includes('\n'))
       ? '"' + s.replace(/"/g, '""') + '"' : s;
   }
-
-  const header = 'Prénom,Points,Email,Téléphone,Date anniversaire,Inscrit le';
-  const rows = (clients || []).map(c => [
+  const ligne = c => [
     cell(c.prenom),
     cell(c.stored_value),
     cell(c.email),
     cell(c.telephone),
     cell(c.date_anniversaire),
     cell(new Date(c.created_at).toLocaleDateString('fr-FR')),
-  ].join(','));
+  ].join(',');
 
-  const csv  = '﻿' + [header, ...rows].join('\r\n'); // BOM pour Excel
+  let page = await lirePage(null);
+  if (page.error) return baseIndisponible(res, 'export', page.error);
+
   const slug = (marchand.nom || 'clients').toLowerCase().replace(/[^a-z0-9]+/g, '-');
   const date = new Date().toISOString().split('T')[0];
-
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="clients-${slug}-${date}.csv"`);
-  res.send(csv);
+  res.write('\uFEFF' + 'Prénom,Points,Email,Téléphone,Date anniversaire,Inscrit le'); // BOM pour Excel
+
+  for (;;) {
+    const lignes = page.data || [];
+    if (lignes.length) res.write('\r\n' + lignes.map(ligne).join('\r\n'));
+    if (lignes.length < PAGE_EXPORT) break;
+    page = await lirePage(lignes[lignes.length - 1]);
+    if (page.error) {
+      console.error('[clients] export interrompu :', page.error.message);
+      res.destroy();                 // téléchargement en échec, pas un fichier tronqué
+      return;
+    }
+  }
+  res.end();
 }));
 
 // DELETE /api/clients/:id — droit à l'effacement RGPD
