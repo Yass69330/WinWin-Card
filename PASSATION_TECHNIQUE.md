@@ -6328,6 +6328,92 @@ dès qu'il a cliqué sur le bouton Google ou que la vérification unique l'a tro
 - **Étape 23 close.** Gain à mesurer dans quelques jours : lignes google de
   `notification_envois` par source, avant et après le 13/10.
 
+## 15 quatuorquadragies. CAMPAGNES PAR SEGMENT ET VRAIS CLIENTS : DIAGNOSTIC (13/10)
+
+Demande du pilotage (13/10). Prérequis : le marchand ne voit que ses vrais clients.
+Règle de Yass : visible = au moins un scan non annulé, OU un jeton Apple, OU le
+signal Google. Aucun statut affiché, rien supprimé en base. Ensuite, un segment par
+campagne : inactifs 15, 30 ou 60 jours ; les plus fidèles ; clients d'une boutique
+(réseaux).
+
+**Décision de Yass** : le segment « clients d'une boutique » est une exception
+voulue à l'exclusion « pas de notifications par boutique » du Socle. C'est le
+réseau qui envoie.
+
+### Fait en local (rien poussé)
+
+- `database/requetes/vrais_clients_par_marchand.sql` : la requête de lecture du
+  point a. Par marchand : clients aujourd'hui, après masquage, masqués, sauvés par
+  le signal Google, masqués à vérifier.
+- **Migration 058** (`c2691af`) : `cartes_google_a_verifier` rend les cartes qui
+  seraient masquées (lien Google, sans signal, sans jeton Apple, jamais scannées,
+  client non effacé). Aucun code à déployer : le bouton admin appelle déjà cette
+  fonction.
+  - Filet : 274/274.
+  - Contre-épreuve sur `88899f1` : 271/274. Les 3 échecs portent sur la
+    vérification étendue.
+- Filet, section 17 : la date limite du test « campagne abandonnée » passe de 1,5 s
+  à 4 s (`ea3236b`).
+  - Avant, le premier lot Google pouvait finir après la date limite. La campagne
+    était alors abandonnée sans avoir été interrompue : échec 1 fois sur 3.
+  - L'ancien code avait la même course.
+
+### Tenue à long terme (50 000 porteurs, plusieurs années)
+
+- **Indicateur plutôt que calcul.** Une colonne `clients.visible`, tenue par des
+  déclencheurs en base :
+  - un scan l'allume ;
+  - un jeton Apple l'allume ;
+  - `google_ouvert_le` l'allume ;
+  - une annulation de scan ou un jeton supprimé la recalculent pour ce seul client.
+
+  Les lectures (liste, recherche, export, statistiques) filtrent alors sur une
+  colonne. Leur coût ne dépend pas du nombre de scans accumulés. Calculer la règle
+  à chaque lecture (EXISTS sur les scans pour chaque client, à chaque page et à
+  chaque comptage) grossirait avec l'historique.
+- **Accumulation** : aucune table nouvelle, donc aucune purge à prévoir.
+  - Colonnes ajoutées : `clients.visible`, segment sur `campagnes` et sur
+    `notification_logs`.
+  - Une ligne client change une fois dans sa vie (de masqué à visible).
+  - Au scan, le déclencheur ne réécrit rien quand le client est déjà visible.
+- **Segments** : évalués au moment de l'envoi, par lot, par rapport à l'heure du
+  clic.
+  - Les lectures sont bornées par la fenêtre du segment : `idx_scans_marchand_date`
+    pour les fenêtres, `idx_scans_client` pour « déjà venu ».
+  - Aucun index nouveau.
+  - Pas de table de destinataires figée : elle grossirait de N lignes par campagne.
+- **Apple et Google** : la charge baisse.
+  - Les cartes Google jamais finalisées (objet Google sans utilisateur) ne
+    reçoivent plus de messages, ni par campagne ni par relance.
+  - Les segments envoient à des sous-ensembles.
+  - Le compteur de destinataires ne coûte aucun appel à Apple ou à Google : c'est
+    une lecture en base, faite à la demande.
+- **Entretien**
+  - Un nouveau signal de carte (un autre portefeuille) devra allumer `visible`
+    dans un déclencheur.
+  - Une future API marchand devra lire les clients visibles : prévoir une vue, un
+    seul endroit.
+  - Un segment nouveau = une branche dans une seule fonction SQL, partagée par le
+    compteur et les deux voies d'envoi.
+- **Où appliquer la règle**, sans requête régulière en plus :
+  - `src/routes/clients.js:139` (liste et recherche) ;
+  - `src/routes/clients.js:185` (export) ;
+  - `apercu_stats`, CTE `cl` (migration 056) ;
+  - `reserver_relances`, CTE `base` (057) ;
+  - `cartes_google_campagne` (057) ;
+  - voie Apple : `src/services/campagnes.js:133`. Pour elle, seul le segment
+    compte, puisqu'un jeton Apple rend le client visible.
+  - Le scanner n'est pas filtré : un client masqué qui présente sa carte est scanné
+    et devient visible.
+
+### Dette observée
+
+- Une fois sur quatre passages du filet, « fetch failed » sur le premier appel de
+  la section 22, après environ 5 s sans requête.
+  - Hypothèse non prouvée : une connexion gardée ouverte, que le serveur ferme
+    pendant que le client la réutilise.
+  - Sans effet en production.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
@@ -6544,6 +6630,11 @@ le dépôt ? Réponse prouvée par deux rejeux locaux et par le projet de test :
 Toute décision prise sans passer par le pilotage (Yass) se note ici : date, décision,
 raison, effet constaté. Une entrée vaut aveu, pas justification — la règle reste le
 contrat §7 (diagnostic, validation, puis code).
+
+**2026-10-13 — Vrais clients, choix d'exécution** (détail §15 quatuorquadragies) :
+- la vérification étendue (058) ne redemande pas les cartes iPhone déjà vérifiées le
+  13/10 : seulement les cartes qui seraient masquées ;
+- le scanner n'applique pas le masquage (un scan rend le client visible).
 
 **2026-10-13 — Étape 23, choix d'exécution** (détail §15 tresquadragies) :
 - la vérification unique se lance depuis un bouton de l'admin (pas au démarrage du
