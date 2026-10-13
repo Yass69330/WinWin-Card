@@ -1811,14 +1811,16 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     const LIEN = 'https://pay.google.com/gp/v/save/filet';
     sql(`INSERT INTO marchands (id, nom, slug, forfait, type_programme, max_value, display_max_value, langue)
          VALUES ('${MG}', 'Filet Google', 'filet-google', 'pro', 'stamps', 10, 10, 'fr')`);
-    // carte(prenom, { apple, google, ouvert }) : jeton Apple ? lien Google ? lien Google ouvert ?
-    const carte = (prenom, { apple = false, google = true, ouvert = false } = {}) => {
+    // carte(prenom, { apple, google, ouvert, scan, efface }) : jeton Apple ? lien Google ?
+    // lien Google ouvert ? déjà scanné (il y a 40 jours) ? client effacé ?
+    const carte = (prenom, { apple = false, google = true, ouvert = false, scan = true, efface = false } = {}) => {
       const id = crypto.randomUUID(), serial = crypto.randomUUID(), passId = crypto.randomUUID();
       sql(`INSERT INTO clients (id, marchand_id, prenom, stored_value, pass_serial_number) VALUES ('${id}', '${MG}', '${prenom}', 3, '${serial}');
            INSERT INTO passes (id, client_id, marchand_id, serial_number, google_pass_url${sqlOuNull(`SELECT 1 FROM information_schema.columns WHERE table_name = 'passes' AND column_name = 'google_ouvert_le'`) === '1' ? ', google_ouvert_le' : ''})
              VALUES ('${passId}', '${id}', '${MG}', '${serial}', ${google ? `'${LIEN}'` : 'NULL'}${sqlOuNull(`SELECT 1 FROM information_schema.columns WHERE table_name = 'passes' AND column_name = 'google_ouvert_le'`) === '1' ? (ouvert ? ', now()' : ', NULL') : ''});
            ${apple ? `INSERT INTO device_tokens (pass_id, client_id, marchand_id, serial_number, device_id, push_token) VALUES ('${passId}', '${id}', '${MG}', '${serial}', 'app-${serial}', 'jeton-${serial}');` : ''}
-           INSERT INTO scans (client_id, marchand_id, stored_value_avant, stored_value_apres, date_scan) VALUES ('${id}', '${MG}', 0, 1, now() - interval '40 days');`);
+           ${scan ? `INSERT INTO scans (client_id, marchand_id, stored_value_avant, stored_value_apres, date_scan) VALUES ('${id}', '${MG}', 0, 1, now() - interval '40 days');` : ''}
+           ${efface ? `UPDATE clients SET deleted_at = now() WHERE id = '${id}';` : ''}`);
       return { id, serial };
     };
     const IPH = carte('Iphone', { apple: true });                 // carte sur iPhone seulement
@@ -1835,9 +1837,23 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     const camp = (sqlOuNull(`SELECT string_agg(serial_number, ',') FROM cartes_google_campagne('${MG}', NULL, 50)`) || '').split(',');
     verifier('campagne, voie Google : la carte Google et le client aux deux cartes, pas la carte iPhone seule ni la carte sans lien',
       [camp.includes(AND.serial), camp.includes(DEUX.serial), camp.includes(IPH.serial), camp.length], [true, true, false, 2]);
+    // Vérification étendue (migration 058) : les cartes qui seraient masquées — lien
+    // Google, sans signal, sans jeton Apple, jamais scannées. Les cartes iPhone de
+    // l'étape 23 ont déjà été vérifiées une fois (13/10) : plus redemandées.
+    const MASQ = carte('Masquee', { scan: false });
+    const MASQ_ANNULE = carte('MasqueeAnnule', { scan: false });
+    sql(`INSERT INTO scans (client_id, marchand_id, stored_value_avant, stored_value_apres, date_scan, annule_le)
+         VALUES ('${MASQ_ANNULE.id}', '${MG}', 0, 1, now() - interval '2 days', now())`);
+    const MASQ_CLIC = carte('MasqueeClic', { scan: false, ouvert: true });
+    const MASQ_IPH = carte('MasqueeIphone', { scan: false, apple: true });
+    const MASQ_SANS_LIEN = carte('MasqueeSansLien', { scan: false, google: false });
+    const MASQ_EFFACE = carte('MasqueeEffacee', { scan: false, efface: true });
     const aVerifier = (sqlOuNull(`SELECT string_agg(serial_number, ',') FROM cartes_google_a_verifier(NULL, 1000)`) || '').split(',');
-    verifier('vérification unique : seulement les cartes avec jeton Apple, lien Google et sans signal (iPhone seule : oui ; deux cartes : non)',
-      [aVerifier.includes(IPH.serial), aVerifier.includes(DEUX.serial), aVerifier.includes(AND.serial)], [true, false, false]);
+    verifier('vérification étendue : les cartes Google jamais scannées sans jeton ni signal (scan annulé compris) ; plus les cartes iPhone, ni les clients venus, ni les effacés',
+      [aVerifier.includes(MASQ.serial), aVerifier.includes(MASQ_ANNULE.serial), aVerifier.includes(IPH.serial), aVerifier.includes(DEUX.serial),
+       aVerifier.includes(AND.serial), aVerifier.includes(MASQ_CLIC.serial), aVerifier.includes(MASQ_IPH.serial),
+       aVerifier.includes(MASQ_SANS_LIEN.serial), aVerifier.includes(MASQ_EFFACE.serial)],
+      [true, true, false, false, false, false, false, false, false]);
 
     // ── Bouton Google de la landing : la route note le clic, puis renvoie vers Google ──
     const CLIC = carte('Clic', { apple: true });
@@ -1907,9 +1923,9 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     const lanceC = JSON.parse(sql(`SELECT lancer_campagne('${MG}', 'Campagne Google', 5, date_trunc('month', now()))`));
     await campagnes.demarrer({ id: lanceC.campagne_id, marchand_id: MG, message: 'Campagne Google',
       curseur_apple: null, curseur_google: null, apple_fini: false, google_fini: false }).catch(() => {});
-    verifier('campagne : voie Google = carte Google + deux cartes (2), voie Apple = tous les iPhone (3)',
+    verifier('campagne : voie Google = carte Google + deux cartes, pas la carte iPhone seule ; voie Apple = tous les iPhone (4)',
       [envois.google.includes(AND.serial), envois.google.includes(DEUX.serial), envois.google.includes(IPH.serial), envois.apple.length],
-      [true, true, false, 3]);
+      [true, true, false, 4]);
 
     // ── Ajustement du solde, dans ce processus, Google imité (non configuré dans le filet) ──
     const cheminGoogle = path.resolve(__dirname, '../src/services/google-pass.js');
@@ -1930,8 +1946,8 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     if (!verif) {
       verifier('vérification unique : module présent (services/verification-google.js)', false, true);
     } else {
-      const V = { avec: carte('VAvec', { apple: true }), sans: carte('VSans', { apple: true }),
-                  plante: carte('VPlante', { apple: true }), refus: carte('VRefus', { apple: true }) };
+      const V = { avec: carte('VAvec', { scan: false }), sans: carte('VSans', { scan: false }),
+                  plante: carte('VPlante', { scan: false }), refus: carte('VRefus', { scan: false }) };
       const vus = [];
       verif._pourTests({ config: { pauseMs: 1 }, maintenant: () => new Date('2026-10-13T12:00:00Z'), google: { isConfigured: () => true,
         lireObjet: async s => { vus.push(s);
