@@ -5671,6 +5671,104 @@ Environnement de test : **pas nécessaire** (lecture seule, coût mesuré au ban
 5. quels chiffres de `apercu_stats` montrer à un mono-site (aujourd'hui 5 cartes ; la
    fonction en donne 9).
 
+## 15 octotricies. ÉTAPE 26 : CODÉE EN LOCAL (13/10, rien poussé)
+
+**Décisions de Yass (13/10)** :
+1. Rétention (b) : revenus ÷ inscrits depuis au moins 30 jours. Rien n'est affiché tant
+   qu'il n'y a pas 30 jours de recul.
+2. Barre de fréquence sur 30 jours glissants.
+3. « vs mois préc. » par boutique et « nouveaux ce mois » comparés aux mêmes jours du
+   mois précédent. Le taux de retour est inchangé.
+4. Mono-boutique : les mêmes chiffres qu'un réseau, sans rien qui compare ou détaille
+   des boutiques.
+5. Fuseau : tout en UTC, sujet clos.
+6. Panne : 503 + Retry-After ; à l'écran, « Statistiques indisponibles » + Réessayer ;
+   rien gardé en mémoire.
+7. Écran de connexion du dashboard : message lisible au lieu de `database_unavailable`.
+   Le scanner n'est pas touché.
+
+De plus : la vague des marchands activés le 13/10 est laissée telle quelle (décision de
+Yass).
+
+### Livré (commit local `06e5494`)
+
+- **`database/migration_056_apercu_stats.sql`** :
+  - `apercu_stats(p_marchand_id, p_maintenant DEFAULT now())`, lecture seule,
+    `SET timezone = 'UTC'`, lectures bornées à `p_maintenant` (sans effet en
+    production). Elle rend :
+    - `porteurs`, `scans_aujourdhui`, `actifs_30j`, `visites_moyennes` ;
+    - `retention` (b, NULL sans recul) ;
+    - `nouveaux_ce_mois`, `nouveaux_mois_prec_memes_jours` ;
+    - `taux_retour` (inchangé) ;
+    - `distribution` (30 jours glissants).
+  - `group_stats(uuid)`, même signature et mêmes clés qu'avant :
+    - `reseau` et `distribution` sont tirés d'`apercu_stats`, et la clé `apercu`
+      est ajoutée ;
+    - `scans_prec` par boutique compte les mêmes jours du mois précédent.
+  - `REVOKE` de `group_stats` à PUBLIC, anon, authenticated (hors pilotage, voir §17).
+- **`src/routes/merchants.js`** :
+  - `/me/stats` appelle `apercu_stats` (client court, 5 s) ;
+  - `/me/stats` et `/me/group-stats` répondent 503 `database_unavailable` +
+    `Retry-After: 30` en cas d'erreur (avant : `/me/group-stats` renvoyait 500 avec le
+    message brut).
+- **`public/dashboard/index.html`** :
+  - `statsBlocHtml` : un seul bloc, pour l'Aperçu (tous les marchands) et pour l'onglet
+    Réseau ;
+  - `statsPanneHtml` : le message de panne et le bouton Réessayer ;
+  - `loadOverview` et `loadReseau` regardent `res.ok`, et ne gardent rien en cas
+    d'échec ;
+  - connexion : 503 ou `database_unavailable` donnent « Service momentanément
+    indisponible. Réessayez dans un instant. » ;
+  - libellés de la répartition : « (30 jours) », « passages en 30 jours ».
+- **Tests** :
+  - `tests/scenarios.js`, section 19 : 13 contrôles ;
+  - `tests/lancer.js` : `api()` rend aussi `retry` (en-tête Retry-After) ;
+  - `tests/navigateur/apercu_ecrans.js` : 6 contrôles et 5 captures. Hors `npm test`,
+    car il faut Playwright.
+
+### Ce qui s'affiche (Aperçu, identique pour une mono-boutique et pour un réseau)
+
+1. Clients au total.
+2. Scans aujourd'hui.
+3. Actifs (30 jours).
+4. Visites moy. / client actif (30j).
+5. Taux de rétention, avec la note « clients inscrits depuis 30 jours ou plus, revenus
+   au moins 2 fois en 30 jours ». Sans recul : « – » et « disponible après 30 jours ».
+6. Taux de retour, avec la note « clients du mois déjà venus le mois dernier ».
+7. Nouveaux ce mois, avec la note « aux mêmes jours du mois préc. : N ».
+8. Répartition des passages (30 jours), en 3 tranches selon les seuils du marchand.
+
+Rien par boutique, pas de mobilité. L'onglet Réseau (réseaux seulement) affiche le même
+bloc, puis la mobilité et le tableau par boutique (« vs mois préc. » aux mêmes jours).
+
+### Preuves
+
+- `npm test` sous Node 24.21.0 : **237/237** (224 + 13).
+- Navigateur (Chromium, Playwright) : **6/6**, soit 243/243 avec le filet. Captures :
+  1. Aperçu mono-boutique ;
+  2. Aperçu d'un réseau ;
+  3. onglet Réseau ;
+  4. Aperçu en panne ;
+  5. connexion, base indisponible.
+- **Contre-épreuve** : nouveaux tests sur `3d2f687` (sans 056) → **225/237**, soit 12
+  échecs, dont « boutique stable : −57 % » avec l'ancien calcul. Le contrôle « mono :
+  rien par boutique » passe aussi sur l'ancien code (non-régression).
+- Coût mesuré au prototype (§15 septtricies) : 28 à 32 ms à 5 000 porteurs, 112 à
+  163 ms à 50 000 (banc local).
+
+### Hypothèses et limites
+
+- **Onglets restés ouverts pendant le déploiement** : l'ancien écran lit les anciennes
+  clés de `/me/stats`. Il affiche donc « – » jusqu'au rechargement de la page (les
+  clés ont changé ; aucun alias gardé).
+- **Entre la migration et le push** : l'ancien écran Réseau reçoit déjà la répartition
+  sur 30 jours et « vs mois préc. » aux mêmes jours, sous les anciens libellés
+  (« mensuels »). Sans gravité, quelques minutes.
+- « Actifs 30 j » compte, comme avant, les scans des clients effacés (RGPD). La
+  rétention (b) ne compte que les clients non effacés.
+- `p_maintenant` n'est passé que par les tests. Une valeur fausse ne peut venir que du
+  serveur (service_role).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 **Résolu depuis :** #14 (migration 029). Partiellement résolu par le chantier :
@@ -5867,6 +5965,17 @@ le dépôt ? Réponse prouvée par deux rejeux locaux et par le projet de test :
 Toute décision prise sans passer par le pilotage (Yass) se note ici : date, décision,
 raison, effet constaté. Une entrée vaut aveu, pas justification — la règle reste le
 contrat §7 (diagnostic, validation, puis code).
+
+**2026-10-13 — Étape 26, choix d'exécution** (détail §15 octotricies) :
+- `group_stats` n'est plus exécutable par PUBLIC, anon, authenticated (migration 056).
+  Seul le serveur l'appelait (service_role) ; avant, la clé publique pouvait lire les
+  chiffres de n'importe quel réseau.
+- `apercu_stats` prend un paramètre `p_maintenant` (défaut now()) pour figer l'horloge
+  dans les tests ; ses lectures sont bornées à cet instant.
+- Pas d'alias des anciennes clés de `/me/stats` : un onglet resté ouvert affiche « – »
+  jusqu'au rechargement.
+- Les notes sous les cartes sont en petit (style des libellés) après lecture des
+  captures.
 
 **2026-10-12 — Étape 22, choix d'exécution non tranchés en pilotage** (détail
 §15 quatertricies) :
