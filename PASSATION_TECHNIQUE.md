@@ -6917,7 +6917,19 @@ Le rapport à Yass comporte les options et la recommandation.
     en `14:30-15:30` UTC tous les jours ;
   - journal : `[geo] mise à jour (admin) … : 2 iPhone, 0 erreur(s)` (cartes Test
     Docker et Yacine) ;
-  - observations sur place : à compléter.
+  - créneau final : `14:00-17:00` UTC (18:00–21:00 à Dubaï) ;
+  - observations de Yass :
+    - arrivé sur place à 19:10, sans ouvrir l'app Cartes ;
+    - la carte de **Test Docker seulement** est apparue vers **19:40**, soit
+      environ 30 minutes plus tard ;
+    - elle **est repartie alors que Yass était toujours sur place**, dans le
+      créneau, contrairement au premier test où elle restait « collante » ;
+    - la carte Yacine n'est pas apparue ;
+  - conclusion : le déclenchement **réel, sans toucher au téléphone, fonctionne**.
+    Mais iOS décide seul du moment, de la durée et de la carte affichée (une sur
+    deux). C'est une suggestion « au mieux », pas une notification garantie. À
+    présenter ainsi aux marchands.
+  - contrôle « hors créneau » (après 21:00 à Dubaï) : non rapporté.
 - Leçon : la saisie en UTC prête à confusion. À surveiller (aide de saisie
   possible : afficher l'heure de Dubaï correspondante).
 
