@@ -78,18 +78,29 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur }) {
     const premium = await bloc('filet-smart-premium', 'pro_plus', 'smart-1-premium-points.png', true);
     const simple = await bloc('filet-smart-simple', 'pro', 'smart-2-sans-premium-points.png');
     const tampons = await bloc('filet-smart-tampons', 'pro', 'smart-3-tampons.png');
+    verifier('navigateur, rapport des 7 jours : singulier et zéro (« 1 smart notification envoyée », « 0 smart notification envoyée »), pluriel',
+      await (async () => {
+        const ctx = await navigateur.newContext({ serviceWorkers: 'block' });
+        const p = await ctx.newPage();
+        await p.goto(urlServeur + '/dashboard/');
+        const r = await p.evaluate(() => { setLang('fr'); return [0, 1, 2].map(n => t('smart7j', { n })); });
+        await ctx.close();
+        return r;
+      })(),
+      ['Rapport des 7 derniers jours : 0 smart notification envoyée', 'Rapport des 7 derniers jours : 1 smart notification envoyée',
+       'Rapport des 7 derniers jours : 2 smart notifications envoyées']);
     verifier('navigateur, landing premium (points) : une phrase, une ligne courte par smart notification (avis compris), le compte sur une ligne, « Modifier » ; sous l\'historique',
       [premium.texte.join(' | '), premium.ordre],
-      ['Envoyées automatiquement à vos clients. | Relance · après 21 j | Boost · à 50 points | Anniversaire | Avis Google | Ces 7 derniers jours : 5 smart notifications | Modifier', true]);
+      ['Envoyées automatiquement à vos clients. | Relance · après 21 j | Boost · à 50 points | Anniversaire | Avis Google | Rapport des 7 derniers jours : 5 smart notifications envoyées | Modifier', true]);
     verifier('navigateur, « Modifier » : 5 jours refusé avec un message clair ; 14 jours, seuil 40 et message du boost enregistrés ; « Revenir au réglage WinWin » remet 21 jours et 50 points',
       [premium.formulaire.erreur, premium.formulaire.apres, premium.formulaire.winwinVisible, premium.formulaire.retour],
       ['Choisissez entre 7 et 90 jours.',
        'Relance · après 14 j | Boost · à 40 points | Anniversaire | Avis Google', true,
        'Relance · après 21 j | Boost · à 50 points | Anniversaire | Avis Google']);
     verifier('navigateur, sans landing premium : pas d\'anniversaire ; « à 1 point » au singulier',
-      simple.texte.join(' | '), 'Envoyées automatiquement à vos clients. | Relance · après 30 j | Boost · à 1 point | Ces 7 derniers jours : 2 smart notifications | Modifier');
-    verifier('navigateur, tampons : « à 2 tampons », relance d\'inactivité désactivée absente, « 0 smart notification »',
-      tampons.texte.join(' | '), 'Envoyées automatiquement à vos clients. | Boost · à 2 tampons | Anniversaire | Ces 7 derniers jours : 0 smart notification | Modifier');
+      simple.texte.join(' | '), 'Envoyées automatiquement à vos clients. | Relance · après 30 j | Boost · à 1 point | Rapport des 7 derniers jours : 2 smart notifications envoyées | Modifier');
+    verifier('navigateur, tampons : « à 2 tampons », relance d\'inactivité désactivée absente, « 0 smart notification envoyée »',
+      tampons.texte.join(' | '), 'Envoyées automatiquement à vos clients. | Boost · à 2 tampons | Anniversaire | Rapport des 7 derniers jours : 0 smart notification envoyée | Modifier');
 
     // Fiche admin d'un marchand qui a fait ses réglages : bloc orange, puis « Effacer ».
     const [idS] = sql(`SELECT id FROM marchands WHERE slug = 'filet-smart-simple'`).split('|');

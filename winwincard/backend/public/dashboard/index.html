@@ -63,8 +63,8 @@
     .smart-liste li:first-child { border-top: none; }
     .smart-liste .nom { font-weight: 600; }
     .smart-liste .val { color: var(--muted); }
-    .smart-pied { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-    .smart-notifs .smart-7j { font-size: 13px; color: var(--muted); margin: 0; white-space: nowrap; }
+    .smart-pied { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+    .smart-notifs .smart-7j { font-size: 12px; color: var(--muted); margin: 0; }
     .smart-form { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
     .smart-form .ligne { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
     .smart-form input[type=number] { width: 76px; background: var(--bg); border: 1px solid var(--border); border-radius: 9px; color: var(--text); font-size: 16px; padding: 8px 10px; font-family: inherit; }
@@ -841,7 +841,7 @@ const I18N = {
     smartRelance:'Reminder', smartRelanceVal:({n})=>`after ${n} d`,
     smartBoostNom:'Boost', smartBoostVal:({n, unite})=>`at ${n} ${unite === 'points' ? 'point' : 'stamp'}${n > 1 ? 's' : ''}`,
     smartAnniv:'Birthday', smartAvis:'Google review', smartProximite:'Nearby',
-    smart7j:({n})=>`Last 7 days: ${n} smart notification${n === 1 ? '' : 's'}`,
+    smart7j:({n})=>`Last 7 days report: ${n} smart notification${n === 1 ? '' : 's'} sent`,
     smartModifier:'Edit', smartFermer:'Close',
     smartJoursAvant:'Reminder after', smartJoursApres:'days without a visit (7 to 90)',
     smartMessage:'Reminder message', smartMessageAide:'150 characters max, no link. « {prenom} » = the customer\'s first name.',
@@ -974,7 +974,7 @@ const I18N = {
     smartRelance:'Relance', smartRelanceVal:({n})=>`après ${n} j`,
     smartBoostNom:'Boost', smartBoostVal:({n, unite})=>`à ${n} ${unite === 'points' ? 'point' : 'tampon'}${n > 1 ? 's' : ''}`,
     smartAnniv:'Anniversaire', smartAvis:'Avis Google', smartProximite:'À proximité',
-    smart7j:({n})=>`Ces 7 derniers jours : ${n} smart notification${n > 1 ? 's' : ''}`,
+    smart7j:({n})=>`Rapport des 7 derniers jours : ${n} smart notification${n > 1 ? 's' : ''} envoyée${n > 1 ? 's' : ''}`,
     smartModifier:'Modifier', smartFermer:'Fermer',
     smartJoursAvant:'Relance après', smartJoursApres:'jours sans visite (7 à 90)',
     smartMessage:'Message de la relance', smartMessageAide:'150 caractères maximum, sans lien. « {prenom} » = prénom du client.',

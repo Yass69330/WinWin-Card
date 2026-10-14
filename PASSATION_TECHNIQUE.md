@@ -6756,8 +6756,10 @@ Le rapport à Yass comporte les options et la recommandation.
 ### Preuves
 
 - `npm test` : 304/304.
-- Test navigateur : 5/5, captures vérifiées (bloc, formulaire ouvert, sans
-  premium, tampons, fiche admin).
+- Test navigateur : 6/6, captures vérifiées (bloc, formulaire ouvert, sans
+  premium, tampons, fiche admin). Le rapport est vérifié au singulier, à zéro et
+  au pluriel.
+- Captures validées par Yass, avec une modification : le libellé du compteur.
 - Contre-épreuve sur `87c8a20` : 297/304. Les 7 échecs portent tous sur f18.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
@@ -6984,7 +6986,12 @@ contrat §7 (diagnostic, validation, puis code).
   remplace « Only 2 more points to unlock ».
 - `{reste}` contient le nombre ET l'unité (« 2 tampons »), pour gérer le pluriel
   sans autre mot réservé ;
-- le compteur des 7 jours garde le libellé validé (« N smart notifications »).
+- compteur des 7 jours : libellé de Yass « Rapport des 7 derniers jours : N smart
+  notifications envoyées » (singulier et zéro : « … smart notification envoyée »).
+  Il tient sur une ligne à partir d'environ 400 px de large ; sur un écran plus
+  étroit (375 px), il passe sur deux lignes plutôt que de déborder de la carte.
+- texte du boost dans la bonne unité (tampons ou points) et tournure anglaise :
+  **validés par Yass** (14/10).
 
 **2026-10-14 — f15, choix d'exécution** (détail §15 duoquinquagies) :
 - un boost que le seuil de l'admin rend inerte ne peut pas être réglé par le
