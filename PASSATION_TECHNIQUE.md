@@ -6663,7 +6663,18 @@ l'onglet Notifications, les leur fait connaître, d'après leurs réglages réel
     Les colonnes `marchand_*` n'y figurent pas.
   - Risque : l'admin croit régler un marchand alors que c'est la valeur du marchand
     qui part.
-  - Correctif proposé à Yass, rien codé.
+  - Décision de Yass (14/10) : **voir et effacer** (option a). L'admin ne modifie
+    pas le réglage du marchand.
+  - Codé en local (`707e8d5`, rien poussé) :
+    - fiche admin : bloc orange « Réglages faits par le marchand », avec la valeur
+      WinWin en regard, lu dans la fiche déjà chargée (aucune requête de plus) ;
+    - bouton « Effacer les réglages du marchand » →
+      `POST /api/admin/workflows/:id/effacer-reglages-marchand`, réservé à l'admin
+      (403 avec un jeton marchand, 404 si le marchand est inconnu) ;
+    - texte d'aide : les champs sont le réglage WinWin, par défaut.
+  - Preuves : `npm test` 301/301. Test navigateur avec capture de la fiche admin.
+    Contre-épreuve sur `45a72b2` : 300/301, le seul échec est le nouveau contrôle.
+  - Pas de migration. Mise en production : un push.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
