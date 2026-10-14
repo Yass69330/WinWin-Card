@@ -6809,7 +6809,23 @@ Le rapport à Yass comporte les options et la recommandation.
   - **À retirer au code définitif de f10.**
   - Feu vert de Yass. Poussé à **11:26:32 UTC** en avance rapide sur
     `claude/keen-goldberg-MXslu` (`a0e044b` → `4446e38`). Créneau proposé :
-    11:45–12:15 UTC. Résultat du test sur iPhone : à compléter.
+    11:45–12:15 UTC.
+  - **Résultat du test sur l'iPhone de Yass (14/10)** :
+    - rien jusqu'à 15:52 (Dubaï). La localisation de l'app Cartes (Wallet) était
+      désactivée sur l'iPhone ; Yass l'a activée en « lorsque l'app est active » ;
+    - la carte est ensuite apparue sur l'écran verrouillé, sur place, dans le
+      créneau, avec le texte de repli ;
+    - elle s'est retirée vers 16:17, soit environ 2 minutes après la fin du
+      créneau (16:15) ; Yass avait aussi fermé l'app Cartes ;
+    - elle n'est pas revenue en rouvrant l'app, hors créneau.
+  - **Conclusion** :
+    - sur une carte de fidélité, `locations` + `relevantDates` fonctionnent sur cet
+      iPhone : l'affichage est limité au créneau ;
+    - limite : il faut que la localisation de l'app Cartes soit activée, ce qui
+      n'était pas le cas par défaut chez Yass ;
+    - constat de Yass : ce n'est pas une notification. La suggestion ne se balaie
+      pas et reste affichée tant qu'on est sur place dans le créneau (« très
+      collante »). Décision produit posée à Yass.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
