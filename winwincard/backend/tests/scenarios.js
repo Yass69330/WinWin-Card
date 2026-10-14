@@ -2522,9 +2522,11 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
 
       // ── Routes du marchand et de l'admin ──
       const MT = 'e3600000-0000-4000-8000-000000000001', MPRO = 'e3600000-0000-4000-8000-000000000002';
-      sql(`INSERT INTO marchands (id, nom, slug, langue, forfait, type_programme, max_value, display_max_value, couleur_fond, couleur_texte)
-           VALUES ('${MT}', 'Filet Thème', 'filet-theme', 'fr', 'pro_plus', 'stamps', 10, 10, '#111111', '#f5f5f5'),
-                  ('${MPRO}', 'Filet Thème Pro', 'filet-theme-pro', 'fr', 'pro', 'stamps', 10, 10, '#111111', '#f5f5f5')`);
+      // Marchand réaliste (tampons, bannière générée, logo) : l'aperçu montre la vraie carte.
+      sql(`INSERT INTO marchands (id, nom, slug, langue, forfait, type_programme, max_value, display_max_value, couleur_fond, couleur_texte,
+                                  couleur_label, strip_mode, stamp_icon, logo_url)
+           VALUES ('${MT}', 'Filet Thème', 'filet-theme', 'fr', 'pro_plus', 'stamps', 9, 9, '#4a1a2a', '#ffffff', '#e8b4a0', 'stamps', 'coffee', 'https://logos.exemple/standard.png'),
+                  ('${MPRO}', 'Filet Thème Pro', 'filet-theme-pro', 'fr', 'pro', 'stamps', 10, 10, '#111111', '#f5f5f5', '#a0a0b0', NULL, 'coffee', NULL)`);
       const tMT = jeton(MT);
       const mauvais = await api('POST', `/api/admin/marchands/${MT}/themes`, jetonAdmin, { ...theme, id: undefined, couleur_fond: 'vert' });
       const cree = await api('POST', `/api/admin/marchands/${MT}/themes`, jetonAdmin, { ...theme, id: undefined });
@@ -2538,7 +2540,13 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       const liste = await api('GET', '/api/merchants/me/themes', tMT);
       verifier('« Ma carte » : réservé à Pro+ (Pro : non éligible, choix refusé 403) ; Pro+ : carte standard + chaque thème avec son aperçu',
         [pro.corps.eligible, proPost.statut, liste.corps.eligible, liste.corps.standard.couleur_fond, liste.corps.themes.map(x => `${x.nom}:${x.apercu.couleur_fond}:${x.apercu.texte_case}`).join(','), liste.corps.actif],
-        [false, 403, true, '#111111', 'Ramadan:#0b3d2e:Ramadan Kareem,Fête nationale:#00732f:null', null]);
+        [false, 403, true, '#4a1a2a', 'Ramadan:#0b3d2e:Ramadan Kareem,Fête nationale:#00732f:null', null]);
+      const cartes = [liste.corps.standard, ...liste.corps.themes.map(x => x.apercu)];
+      const fondBanniere = async a => (a.banniere || '').startsWith('data:image/png;base64,')
+        ? pixel(Buffer.from(a.banniere.split(',')[1], 'base64')) : null;
+      verifier('aperçu = la vraie carte : la VRAIE bannière (générée, avec sa progression) peinte sur le fond de chaque carte ; logo réel (celui du thème, sinon le logo de base) ; progression « 3 / 9 » ; QR d\'exemple',
+        [await Promise.all(cartes.map(fondBanniere)), cartes.map(a => a.logo_url), cartes.map(a => `${a.rempli} / ${a.max}`), /^data:image\/png/.test(liste.corps.qr || '')],
+        [['#4a1a2a', '#0b3d2e', '#00732f'], ['https://logos.exemple/standard.png', theme.logo_url, 'https://logos.exemple/standard.png'], ['3 / 9', '3 / 9', '3 / 9'], true]);
       const jour = T.aujourdhui(), demain = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
       const erreurs = [];
       for (const [d, f] of [['2026-13-01', jour], ['2020-01-01', jour], [jour, '2020-01-01'], [jour, '2099-01-01']]) {

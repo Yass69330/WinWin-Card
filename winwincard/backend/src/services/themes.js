@@ -86,18 +86,28 @@ function avecTheme(marchand, theme) {
 }
 
 // ── Aperçu d'une carte (6e point d'entrée) ────────────────────────────────
-// Ce que l'onglet « Ma carte » dessine : couleurs, logo, texte de la case et
-// bannière (générée et mise en cache comme celle des vraies cartes).
+// La vraie carte, montée avec les vrais éléments : la bannière est CELLE des
+// cartes (même cache, même générateur, même progression d'exemple), le logo est
+// celui que la carte Apple affiche, les couleurs et le texte de la case sont
+// ceux du thème. La bannière part dans la réponse (data:) : l'aperçu ne dépend
+// pas de la lecture publique de Storage. Coût : une bannière par carte affichée,
+// générée une fois (≈ 0,1 à 0,3 s de calcul) puis servie par le cache.
 async function apercu(marchand) {
   const m = appliquerTheme(marchand);
   const max = m.max_value || 10;
+  const points = m.type_programme === 'points';
+  const rempli = points ? Math.round(max * 0.4) : Math.min(3, max - 1);
   let banniere = null;
-  const genere = m.strip_mode === 'points_bar' || (m.strip_mode && m.type_programme !== 'points');
-  if (m.image_strip_url) banniere = m.image_strip_url;
+  const genere = m.strip_mode === 'points_bar' || (m.strip_mode && !points);
+  // Même précédence que la carte Apple : image fixe, puis bannière générée.
+  const tier = Array.isArray(m.images_tiers) ? m.images_tiers.find(t => rempli >= t.min && rempli <= t.max) : null;
+  if (tier && tier.url) banniere = tier.url;
+  else if (m.image_strip_url) banniere = m.image_strip_url;
   else if (genere) {
-    const { getPublicUrl } = require('./strip-cache');
-    const rempli = m.type_programme === 'points' ? Math.round(max * 0.4) : Math.min(3, max - 1);
-    banniere = await getPublicUrl({ marchand: m, filledCount: rempli, variant: 'strip2x' }).catch(() => null);
+    const { getOrGenerate } = require('./strip-cache');
+    const buf = await getOrGenerate({ marchand: m, filledCount: rempli, variant: 'strip2x' })
+      .catch(e => { console.error('[theme] aperçu, bannière :', e.message); return null; });
+    if (buf) banniere = `data:image/png;base64,${buf.toString('base64')}`;
   }
   return {
     couleur_fond: m.couleur_fond || '#1a1a2e',
@@ -107,6 +117,8 @@ async function apercu(marchand) {
     texte_case: m._theme ? m._theme.texte_case : null,
     nom: m.pass_display_name || m.nom,
     banniere,
+    rempli,
+    max: m.display_max_value || max,
   };
 }
 

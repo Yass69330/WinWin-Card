@@ -315,9 +315,12 @@ router.get('/me/themes', authMarchand, asyncHandler(async (req, res) => {
   const standard = { ...m, theme_actif: null };
   const [apercuStandard, ...apercus] = await Promise.all([
     themes.apercu(standard), ...liste.map(t => themes.apercu(themes.avecTheme(standard, t)))]);
+  // QR d'exemple (le vrai est propre à chaque client) : la carte entière, comme en Wallet.
+  const qr = await require('qrcode').toDataURL('https://app.winwin-card.com', { margin: 1, width: 220 }).catch(() => null);
   res.json({
     eligible: true,
     aujourdhui: themes.aujourdhui(),
+    qr,
     standard: apercuStandard,
     themes: liste.map((t, i) => ({ id: t.id, nom: t.nom, message_ouverture: t.message_ouverture, apercu: apercus[i] })),
     actif: m.theme_actif ? { id: m.theme_actif.id, nom: m.theme_actif.nom, debut: m.theme_actif.debut, fin: m.theme_actif.fin, etat: m.theme_actif.etat } : null,

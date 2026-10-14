@@ -7157,6 +7157,35 @@ rendu réel sur un marchand de test.
 - L'aperçu de bannière de l'admin (`strip-preview`) reste celui de la carte
   standard : il sert à régler la carte standard.
 
+### Reprise de l'aperçu « Ma carte » (14/10, demande du pilotage)
+
+Retour du pilotage : les rectangles de l'aperçu ne montraient pas la carte. Le reste
+de la livraison est validé tel quel.
+
+- L'aperçu est désormais **la vraie carte**, disposée comme dans Wallet (maquette
+  3 Poivres) :
+  - logo à gauche, nom du marchand à droite ;
+  - la **vraie bannière** (même cache, même générateur, même progression d'exemple),
+    sur le fond du thème ;
+  - CLIENT et PROGRESS, avec les libellés de la vraie carte ;
+  - le texte de la case ;
+  - un QR d'exemple.
+- La bannière est servie dans la réponse (`data:` PNG, environ 5 à 20 Ko par carte).
+  L'aperçu ne dépend donc pas de la lecture publique de Storage.
+- Le logo est celui que la carte Apple affiche : celui du thème, sinon le logo de
+  base. Le navigateur le charge depuis son adresse.
+- Le filet vérifie que chaque bannière d'aperçu est générée et peinte sur le fond de
+  sa carte, avec le bon logo et la progression.
+- Le test navigateur vérifie que logo, bannière et QR sont chargés dans chaque
+  aperçu. Les logos y sont servis par interception, faute de Storage dans le filet.
+- `npm test` + test navigateur : **341/341**.
+- Coût et limite :
+  - à la première ouverture de l'onglet, une bannière par carte affichée est
+    générée (0,1 à 0,3 s de calcul chacune, sur le même fil que la caisse), puis
+    servie par le cache ;
+  - fidélité : couleurs, logo, bannière et textes sont les vrais. La mise en page
+    imite Wallet sans en être une copie au pixel (polices, tailles).
+
 ### Reste à faire
 
 - Exécuter 063 dans Supabase, puis pousser sur feu vert.

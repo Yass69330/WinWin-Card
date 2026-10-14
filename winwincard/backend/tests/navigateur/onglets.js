@@ -34,11 +34,19 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur }) {
   sql(`INSERT INTO points_de_vente (marchand_id, nom, actif, scanner_login) VALUES ('${id}', 'Boutique Thème', true, 'filet-theme-b1') ON CONFLICT DO NOTHING`);
   const jeton = jwt.sign({ role: 'marchand', marchand_id: id, tv: 1 }, secretJwt, { expiresIn: '1h' });
 
+  const sharp = require('sharp');
+  const logo = svg => sharp(Buffer.from(svg)).png().toBuffer();
+  const logos = {
+    'standard.png': await logo(`<svg xmlns="http://www.w3.org/2000/svg" width="320" height="100"><text x="4" y="66" font-family="Georgia, serif" font-style="italic" font-weight="700" font-size="58" fill="#f0a35e">3Poivres</text></svg>`),
+    'ramadan.png': await logo(`<svg xmlns="http://www.w3.org/2000/svg" width="320" height="100"><circle cx="48" cy="50" r="34" fill="#d4af37"/><circle cx="62" cy="42" r="30" fill="#0b3d2e"/><text x="96" y="64" font-family="Georgia, serif" font-weight="700" font-size="40" fill="#d4af37">Ramadan</text></svg>`),
+  };
   const navigateur = await chromium.launch();
-  async function ouvrir({ largeur = 420, casser = false } = {}) {
-    const contexte = await navigateur.newContext({ serviceWorkers: 'block', viewport: { width: largeur, height: 1100 } });
+  async function ouvrir({ largeur = 420, hauteur = 1100, casser = false } = {}) {
+    const contexte = await navigateur.newContext({ serviceWorkers: 'block', viewport: { width: largeur, height: hauteur } });
     await contexte.addInitScript(s => { for (const [k, v] of Object.entries(s)) localStorage.setItem(k, v); },
       { ww_dash_token: jeton, ww_dash_id: id, ww_dash_nom: nom, ww_dash_slug: slug, ww_dash_lang: 'fr', ww_dash_forfait: 'pro_plus' });
+    // Logos préfabriqués : servis ici comme le ferait Storage (le filet n'a pas de Storage).
+    await contexte.route('https://logos.exemple/**', r => r.fulfill({ contentType: 'image/png', body: logos[r.request().url().split('/').pop()] || logos['standard.png'] }));
     if (casser) await contexte.route('**/dashboard/ma-carte.js*', r => r.fulfill({ contentType: 'application/javascript', body: 'window.MaCarte = { charger( ;' }));
     const page = await contexte.newPage();
     const erreurs = [];
@@ -66,7 +74,7 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur }) {
 
   try {
     // 1. Tous les onglets, sans erreur.
-    const a = await ouvrir();
+    const a = await ouvrir({ hauteur: 2600 });   // l'onglet entier visible pour les captures
     const tous = await toutOuvrir(a.page);
     verifier('navigateur, tous les onglets (Pro+, réseau) : chacun s\'ouvre, rempli, sans aucune erreur de page ni de console',
       [tous.onglets.join(','), Object.values(tous.etat).every(Boolean), a.erreurs],
@@ -77,7 +85,12 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur }) {
     // L'onglet a déjà été ouvert une fois : attendre SA nouvelle lecture, puis le rendu.
     await Promise.all([p.waitForResponse(r => r.url().includes('/api/merchants/me/themes')), p.click('.nav-btn[data-tab="carte"]')]);
     await p.waitForSelector('#tab-carte .mc-carte');
+    await p.waitForFunction(() => [...document.querySelectorAll('#tab-carte img')].every(i => i.complete));
     await p.waitForTimeout(200);
+    const images = await p.$$eval('#tab-carte .mc-carte', els => els.map(e =>
+      [e.querySelector('.mc-logo'), e.querySelector('.mc-banniere'), e.querySelector('.mc-qr')].map(i => !!(i && i.naturalWidth > 0)).join('')));
+    verifier('navigateur, « Ma carte » : chaque aperçu affiche un vrai logo, la vraie bannière et le QR (images chargées)',
+      images, ['truetruetrue', 'truetruetrue', 'truetruetrue']);
     const noms = await p.$$eval('#tab-carte .mc-nom', els => els.map(e => e.textContent.trim()));
     const fonds = await p.$$eval('#tab-carte .mc-carte', els => els.map(e => getComputedStyle(e).backgroundColor));
     const cases = await p.$$eval('#tab-carte .mc-case', els => els.map(e => e.textContent.trim()));
@@ -98,7 +111,7 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur }) {
     verifier('navigateur, « Ma carte » : carte standard + 2 thèmes (fond et texte de la case dessinés) ; message d\'ouverture affiché avant activation ; activé → « en cours », plus de choix possible ; arrêt → carte standard ; aucune erreur',
       [noms, fonds, cases, message, /Thème « Ramadan » en cours/.test(etat), boutons, fiche,
        sql(`SELECT theme_actif IS NULL FROM marchands WHERE id = '${id}'`), a.erreurs],
-      [['Carte standard', 'Ramadan', 'Fête nationale'], ['rgb(17, 17, 17)', 'rgb(11, 61, 46)', 'rgb(0, 115, 47)'], ['', 'Ramadan Kareem', ''],
+      [['Carte standard', 'Ramadan', 'Fête nationale'], ['rgb(74, 26, 42)', 'rgb(11, 61, 46)', 'rgb(0, 115, 47)'], ['Ramadan Kareem'],
        'À l\'ouverture, vos clients reçoivent : « Ramadan Kareem ! Votre carte se met aux couleurs du mois. »', true, 0, 'en_cours', 't', []]);
     await a.contexte.close();
 
@@ -107,6 +120,7 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur }) {
     const deborde = await tel.page.evaluate(() => document.querySelector('.dash-nav').scrollWidth > document.querySelector('.dash-nav').clientWidth);
     await tel.page.click('.nav-btn[data-tab="carte"]');
     await tel.page.waitForSelector('#tab-carte .mc-carte');
+    await tel.page.waitForFunction(() => [...document.querySelectorAll('#tab-carte img')].every(i => i.complete));
     await tel.page.screenshot({ path: path.join(captures, 'f17-4-telephone-375.png') });
     verifier('navigateur, téléphone (375 px) : la barre des 7 onglets ne déborde pas', deborde, false);
     await tel.contexte.close();

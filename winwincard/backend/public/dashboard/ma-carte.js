@@ -32,7 +32,6 @@
       bascule: 'Mise à jour des cartes de vos clients en cours…',
       unSeul: 'Un seul thème à la fois : arrêtez le thème en cours pour en choisir un autre.',
       remplace: 'Le thème programmé sera remplacé.',
-      client: 'CLIENT', progression: 'PROGRESSION',
       erreur: 'Impossible de charger l\'onglet. Réessayez.',
       reessayer: 'Réessayer',
       active: 'Thème activé.', programmeOk: 'Thème programmé.',
@@ -63,7 +62,6 @@
       bascule: 'Updating your customers\' cards…',
       unSeul: 'One theme at a time: stop the current theme to choose another one.',
       remplace: 'The scheduled theme will be replaced.',
-      client: 'CLIENT', progression: 'PROGRESS',
       erreur: 'Could not load this tab. Please retry.',
       reessayer: 'Retry',
       active: 'Theme activated.', programmeOk: 'Theme scheduled.',
@@ -94,15 +92,17 @@
     #tab-carte .mc-grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
     #tab-carte .mc-bloc { display: flex; flex-direction: column; gap: 8px; }
     #tab-carte .mc-nom { font-weight: 600; font-size: 14px; }
-    #tab-carte .mc-carte { border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,.35); font-family: -apple-system, system-ui, sans-serif; }
-    #tab-carte .mc-tete { display: flex; align-items: center; gap: 8px; padding: 10px 12px; min-height: 44px; }
-    #tab-carte .mc-tete img { max-height: 30px; max-width: 110px; object-fit: contain; }
-    #tab-carte .mc-tete span { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #tab-carte .mc-carte { width: 100%; max-width: 360px; margin: 0 auto; border-radius: 14px; overflow: hidden; box-shadow: 0 6px 22px rgba(0,0,0,.45);
+      font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', system-ui, sans-serif; padding-bottom: 16px; }
+    #tab-carte .mc-tete { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; min-height: 58px; }
+    #tab-carte .mc-logo { max-height: 42px; max-width: 48%; object-fit: contain; object-position: left center; }
+    #tab-carte .mc-marchand { font-size: 15px; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
     #tab-carte .mc-banniere { display: block; width: 100%; aspect-ratio: 750 / 246; object-fit: cover; }
-    #tab-carte .mc-champs { display: flex; justify-content: space-between; padding: 8px 12px 4px; }
-    #tab-carte .mc-champs small { display: block; font-size: 10px; letter-spacing: .5px; }
-    #tab-carte .mc-champs b { font-size: 16px; font-weight: 500; }
-    #tab-carte .mc-case { padding: 0 12px 12px; font-size: 14px; min-height: 18px; }
+    #tab-carte .mc-champs { display: flex; justify-content: space-between; padding: 12px 16px 0; }
+    #tab-carte .mc-champs small { display: block; font-size: 11px; font-weight: 600; letter-spacing: .8px; }
+    #tab-carte .mc-champs b { display: block; font-size: 22px; font-weight: 400; margin-top: 1px; }
+    #tab-carte .mc-case { padding: 8px 16px 0; font-size: 15px; }
+    #tab-carte .mc-qr { display: block; width: 116px; height: 116px; margin: 16px auto 0; background: #fff; border-radius: 8px; padding: 6px; }
     #tab-carte .mc-form { display: grid; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
     #tab-carte .mc-form .mc-ligne { display: flex; gap: 8px; }
     #tab-carte .mc-form label { flex: 1; font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
@@ -123,19 +123,24 @@
     document.head.appendChild(st);
   }
 
-  // Aperçu d'une carte, à partir de ce que dessine le serveur.
+  // La vraie carte : bannière et logo réels (servis par le serveur), couleurs,
+  // nom, prénom + progression, texte de la case, disposés comme dans Wallet.
+  // Libellés CLIENT / PROGRESS : ceux de la carte (en anglais sur toutes les cartes).
   function carte(a) {
-    const max = (typeof S !== 'undefined' && S.displayMax) || 10;
-    const exemple = (typeof S !== 'undefined' && S.typeProgramme === 'points') ? Math.round(max * 0.4) : Math.min(3, max - 1);
+    const qr = donnees && donnees.qr;
     return `
       <div class="mc-carte" style="background:${esc(a.couleur_fond)};color:${esc(a.couleur_texte)}">
-        <div class="mc-tete">${a.logo_url ? `<img src="${esc(a.logo_url)}" alt="">` : ''}<span>${esc(a.nom || '')}</span></div>
+        <div class="mc-tete">
+          ${a.logo_url ? `<img class="mc-logo" src="${esc(a.logo_url)}" alt="" onerror="this.style.visibility='hidden'">` : '<span></span>'}
+          <span class="mc-marchand">${esc(a.nom || '')}</span>
+        </div>
         ${a.banniere ? `<img class="mc-banniere" src="${esc(a.banniere)}" alt="">` : ''}
         <div class="mc-champs">
-          <div><small style="color:${esc(a.couleur_label)}">${esc(tx('client'))}</small><b>Sarah</b></div>
-          <div style="text-align:right"><small style="color:${esc(a.couleur_label)}">${esc(tx('progression'))}</small><b>${exemple} / ${max}</b></div>
+          <div><small style="color:${esc(a.couleur_label)}">CLIENT</small><b>Sarah</b></div>
+          <div style="text-align:right"><small style="color:${esc(a.couleur_label)}">PROGRESS</small><b>${esc(a.rempli)} / ${esc(a.max)}</b></div>
         </div>
-        <div class="mc-case">${a.texte_case ? esc(a.texte_case) : ''}</div>
+        ${a.texte_case ? `<div class="mc-case">${esc(a.texte_case)}</div>` : ''}
+        ${qr ? `<img class="mc-qr" src="${esc(qr)}" alt="">` : ''}
       </div>`;
   }
 
