@@ -6833,6 +6833,78 @@ Le rapport à Yass comporte les options et la recommandation.
     - f10 peut être mis en place, **comme un workflow activable ou non par
       marchand depuis l'admin**.
 
+## 15 quinquinquagies. f10 « À PROXIMITÉ » SUR IPHONE : CODÉ EN LOCAL (14/10, rien poussé)
+
+### Décisions de Yass (14/10)
+
+- iPhone seul ; Android mis de côté.
+- Activable par marchand depuis l'admin, sans restriction de forfait.
+- Pas de réduction du rayon.
+- Horaires saisis en UTC.
+- Union des horaires de tous les lieux : une boutique fermée peut apparaître
+  pendant qu'une autre est ouverte (marge d'erreur acceptée).
+- Pas de classement des boutiques par fréquentation.
+- Mise à jour mensuelle automatique acceptée : elle est sans risque de surcharge.
+- Texte : produit favori plus tard (f06), sinon le repli prénom + solde.
+- Ligne « À proximité » sans compteur.
+
+### Livré (commits locaux `b6533a4`, filet tolérant ensuite)
+
+- **Migration 062** :
+  - `marchands.geo_actif` ;
+  - `marchands.geo_lieux` (jsonb, 10 au plus : nom, lat, lng, horaires
+    `{"1".."7": ["HH:MM-HH:MM"]}` en UTC) ;
+  - source `geo` ajoutée au registre `notification_envois`.
+- `src/services/geo.js` :
+  - `validerLieux` ;
+  - `creneaux` : union des horaires, plages fusionnées, 60 jours, créneaux
+    terminés retirés, 24:00 → 23:59:59 ;
+  - `texteProximite` (repli) ;
+  - `champsPass` : rien si f10 inactif, sans lieu ou sans horaire ;
+  - `rafraichir` : par lots de 30, `passes.updated_at` avancé (sinon l'iPhone
+    reçoit 304), un push silencieux par iPhone au débit partagé, registre
+    `geo` ;
+  - `rafraichirTous`.
+- Carte Apple (`apple-pass.js`) : `locations` et `relevantDates` ajoutés si f10
+  est actif. Colonnes lues avec la carte, dans la même requête
+  (`apple-wallet.js`, `passes.js`).
+- **Carte de test provisoire retirée** : la variable `CARTE_TEST_GEO` n'a plus
+  d'effet, Yass peut la supprimer.
+- Cron : le 1er du mois à 02:00 UTC, `rafraichirTous`, arrêté avec la
+  planification.
+- Admin :
+  - section « Notification à proximité » : interrupteur, lieux, 7 jours en UTC ;
+  - route contrôlée (400 lisible) ;
+  - mise à jour des cartes en arrière-plan **seulement si** l'interrupteur ou les
+    lieux ont réellement changé, car la fiche renvoie tous les champs à chaque
+    enregistrement.
+- Dashboard : `proximite` dans le bloc ; ligne « À proximité » sans compteur.
+
+### Preuves
+
+- `npm test` : 313/313. Section 25 : 10 contrôles (lieux, créneaux, carte, admin,
+  bloc, mise à jour silencieuse et mensuelle).
+- Test navigateur : 8/8, dont la fiche admin (capture) et le bloc tampons avec
+  « À proximité ».
+- Contre-épreuve sur `4446e38` : 304/305. Le seul échec est l'absence de
+  `services/geo.js`.
+
+### Hypothèses et limites
+
+- **Hypothèse** : iOS respecte `relevantDates` sur une carte de fidélité,
+  vérifié une fois chez Yass. Le test en se déplaçant reste à faire.
+- Il faut que l'app Cartes ait accès à la localisation, ce qui est hors de notre
+  main. La portée réelle sera donc plus faible que le nombre de cartes iPhone.
+- **Il n'y a pas de limite documentée** au nombre de créneaux par carte. Avec 2
+  plages par jour, une carte en porte environ 120 sur 60 jours.
+- Une carte est fabriquée avec les créneaux des 60 prochains jours ; la mise à
+  jour mensuelle les prolonge. Si elle échoue un mois, les clients actifs restent
+  couverts par leurs scans, les inactifs le mois suivant.
+- La suggestion « colle » sur l'écran verrouillé tant qu'on est dans la zone,
+  pendant un créneau (constat de Yass).
+- La ligne « À proximité » n'apparaît qu'aux forfaits Pro et Pro+, comme tout le
+  bloc ; f10 fonctionne pourtant pour tous les forfaits.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
@@ -7049,6 +7121,12 @@ le dépôt ? Réponse prouvée par deux rejeux locaux et par le projet de test :
 Toute décision prise sans passer par le pilotage (Yass) se note ici : date, décision,
 raison, effet constaté. Une entrée vaut aveu, pas justification — la règle reste le
 contrat §7 (diagnostic, validation, puis code).
+
+**2026-10-14 — f10, choix d'exécution** (détail §15 quinquinquagies) :
+- horizon des créneaux : 60 jours ; mise à jour le 1er du mois à 02:00 UTC ;
+- un lieu sans horaire n'affiche rien, plutôt qu'une carte affichée à toute heure ;
+- lieux saisis par marchand (10 au plus), sans lien avec la table des boutiques ;
+- les mises à jour silencieuses sont tracées sous la source `geo`.
 
 **2026-10-14 — f18, choix d'exécution** (détail §15 quatuorquinquagies) :
 - **texte WinWin du boost en tampons** : un programme en tampons reçoit « Plus que
