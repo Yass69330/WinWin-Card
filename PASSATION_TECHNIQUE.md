@@ -6902,6 +6902,16 @@ Le rapport à Yass comporte les options et la recommandation.
   En cas de retour arrière, la variable `CARTE_TEST_GEO` doit avoir été supprimée,
   sinon la carte de Test Docker retrouverait l'adresse et le créneau du test.
 
+### En production (14/10)
+
+- Migration 062 exécutée par Yass : 3 × true.
+- Feu vert. Poussé à **13:26:30 UTC** en avance rapide sur
+  `claude/keen-goldberg-MXslu` (`4446e38` → `70caa3c`).
+- f10 éteint chez tout le monde (`geo_actif` à false) jusqu'au test de Yass en se
+  déplaçant, chez hamza-salon.
+- `CARTE_TEST_GEO` : à supprimer dans Railway une fois le déploiement vert.
+- Contrôles et test en se déplaçant : à compléter.
+
 ### Hypothèses et limites
 
 - **Hypothèse** : iOS respecte `relevantDates` sur une carte de fidélité,
