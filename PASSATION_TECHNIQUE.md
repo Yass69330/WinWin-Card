@@ -6792,6 +6792,11 @@ Le rapport à Yass comporte les options et la recommandation.
   compteur.
 - Prochaine étape : la carte de test iPhone seule (feu vert de Yass), puis un test
   Android équivalent.
+- **Mise à jour (14/10, plus tard) : Android est mis de côté** par Yass (« trop de
+  restrictions » : texte imposé par Google, localisation permanente obligatoire,
+  test de la notification parasite). f10 se fait **sur iPhone seulement**.
+- Fuseau horaire : au plus simple. Yass saisit les horaires d'ouverture déjà
+  convertis en heure UTC ; aucun fuseau n'est stocké.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
