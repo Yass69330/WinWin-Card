@@ -2307,34 +2307,95 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     Object.assign(process.env, env);
   }
 
-  titre('25. f10 : carte de test géolocalisée, une seule carte (provisoire, 14/10)');
+  titre('25. f10 : notification « À proximité » sur iPhone (migration 062)');
   {
-    const envAvant = { ...process.env };
-    Object.assign(process.env, { SUPABASE_URL: urlSupabase, SUPABASE_SERVICE_KEY: cleService });
-    const { carteTestGeo } = require('../src/services/apple-pass');
-    const avant = process.env.CARTE_TEST_GEO;
-    const SERIAL = '1fdd5493-3b78-42e0-8072-38e2fe0a7a61';
-    const m = { nom: 'Hamza Salon', langue: 'fr', max_value: 10, type_programme: 'stamps' };
-    const base = () => ({ formatVersion: 1, storeCard: {} });
-    process.env.CARTE_TEST_GEO = JSON.stringify({ serial: SERIAL, lat: 25.086111, lng: 55.382388,
-      debut: '2026-10-14T11:30:00+00:00', fin: '2026-10-14T12:00:00+00:00' });
-    const visee = carteTestGeo(base(), { client: { prenom: 'Test Docker', stored_value: 7 }, marchand: m, serialNumber: SERIAL });
-    const autre = carteTestGeo(base(), { client: { prenom: 'X', stored_value: 7 }, marchand: m, serialNumber: '00000000-0000-4000-8000-000000000000' });
-    const pleine = carteTestGeo(base(), { client: { prenom: 'Test Docker', stored_value: 10 }, marchand: m, serialNumber: SERIAL });
-    process.env.CARTE_TEST_GEO = '{pas du json';
-    const casse = carteTestGeo(base(), { client: { prenom: 'Test Docker', stored_value: 7 }, marchand: m, serialNumber: SERIAL });
-    if (avant === undefined) delete process.env.CARTE_TEST_GEO; else process.env.CARTE_TEST_GEO = avant;
-    const sans = carteTestGeo(base(), { client: { prenom: 'Test Docker', stored_value: 7 }, marchand: m, serialNumber: SERIAL });
-    for (const k of Object.keys(process.env)) if (!(k in envAvant)) delete process.env[k];
-    Object.assign(process.env, envAvant);
-    verifier('carte visée : une adresse avec le texte de repli (prénom + solde) et le créneau ; récompense atteinte : autre texte',
-      [JSON.stringify(visee.locations), JSON.stringify(visee.relevantDates), pleine.locations[0].relevantText],
+    const sqlOuNull = requete => { try { return sql(requete); } catch { return null; } };
+    const path = require('path');
+    const geo = require('../src/services/geo');
+    const lieu = (nom, lat, lng, horaires) => ({ nom, lat, lng, horaires });
+
+    // ── Contrôle des lieux ──
+    const erreurs = [
+      geo.validerLieux('x').erreur, geo.validerLieux(Array(11).fill(lieu('a', 1, 1, {}))).erreur,
+      geo.validerLieux([lieu('a', 91, 1, {})]).erreur, geo.validerLieux([lieu('a', 1, 'abc', {})]).erreur,
+      geo.validerLieux([lieu('a', 1, 1, { 8: ['09:00-10:00'] })]).erreur, geo.validerLieux([lieu('a', 1, 1, { 1: ['9h-10h'] })]).erreur,
+      geo.validerLieux([lieu('a', 1, 1, { 1: ['18:00-02:00'] })]).erreur,
+    ].map(e => !!e);
+    const bon = geo.validerLieux([{ nom: ' Centre ', lat: '25.086111', lng: '55.382388', horaires: { 1: [' 08:00-12:00 ', '14:00-24:00'], 2: [] } }]);
+    verifier('lieux : liste, 10 au plus, latitude/longitude, jour 1 à 7, format HH:MM-HH:MM, fin après le début dans la journée UTC ; forme normalisée',
+      [erreurs.every(Boolean), JSON.stringify(bon.lieux)],
+      [true, JSON.stringify([{ nom: 'Centre', lat: 25.086111, lng: 55.382388, horaires: { 1: ['08:00-12:00', '14:00-24:00'] } }])]);
+
+    // ── Créneaux : union des lieux, 60 jours, créneaux passés retirés ──
+    const lundi = new Date('2026-10-19T10:00:00Z');   // un lundi, 10:00 UTC
+    const deuxLieux = [lieu('A', 1, 1, { 1: ['08:00-12:00'], 3: ['09:00-10:00'] }), lieu('B', 2, 2, { 1: ['11:00-13:00', '18:00-24:00'] })];
+    const c = geo.creneaux(deuxLieux, lundi);
+    verifier('créneaux : lundi 08:00-12:00 + 11:00-13:00 réunis en 08:00-13:00, 18:00-24:00 → 23:59:59 ; mercredi 09:00-10:00 ; un créneau en cours est gardé',
+      [JSON.stringify(c.slice(0, 3)), c.length],
+      [JSON.stringify([{ startDate: '2026-10-19T08:00:00Z', endDate: '2026-10-19T13:00:00Z' },
+                       { startDate: '2026-10-19T18:00:00Z', endDate: '2026-10-19T23:59:59Z' },
+                       { startDate: '2026-10-21T09:00:00Z', endDate: '2026-10-21T10:00:00Z' }]),
+       // 60 jours à partir du lundi 19/10 : 9 lundis (2 créneaux) + 9 mercredis (1) = 27
+       27]);
+    verifier('… un créneau déjà terminé ce jour-là n\'est pas écrit (lundi 14:00 UTC : 08:00-13:00 est passé)',
+      geo.creneaux(deuxLieux, new Date('2026-10-19T14:00:00Z'))[0].startDate, '2026-10-19T18:00:00Z');
+
+    // ── Ce que reçoit la carte ──
+    const mq = { nom: 'Hamza Salon', langue: 'fr', max_value: 10, type_programme: 'stamps', geo_actif: true,
+      geo_lieux: [lieu('Salon', 25.086111, 55.382388, { 1: ['10:00-18:00'] })] };
+    const cl = { prenom: 'Test Docker', stored_value: 7 };
+    const champs = geo.champsPass(mq, cl, lundi);
+    verifier('carte : chaque lieu avec le texte de repli (prénom + solde) et les créneaux ; récompense atteinte : autre texte',
+      [JSON.stringify(champs.locations), champs.relevantDates[0].startDate, geo.champsPass(mq, { prenom: 'A', stored_value: 10 }, lundi).locations[0].relevantText],
       [JSON.stringify([{ latitude: 25.086111, longitude: 55.382388, relevantText: 'Test Docker, plus que 3 tampons pour ta récompense chez Hamza Salon !' }]),
-       JSON.stringify([{ startDate: '2026-10-14T11:30:00+00:00', endDate: '2026-10-14T12:00:00+00:00' }]),
-       'Test Docker, ta récompense t\'attend chez Hamza Salon !']);
-    verifier('toute autre carte, variable illisible ou absente : carte inchangée (ni adresse ni créneau)',
-      [JSON.stringify(autre), JSON.stringify(casse), JSON.stringify(sans)],
-      [JSON.stringify(base()), JSON.stringify(base()), JSON.stringify(base())]);
+       '2026-10-19T10:00:00Z', 'A, ta récompense t\'attend chez Hamza Salon !']);
+    verifier('rien sur la carte : f10 désactivé, aucun lieu, aucun horaire (plutôt qu\'une carte affichée à toute heure)',
+      [geo.champsPass({ ...mq, geo_actif: false }, cl, lundi), geo.champsPass({ ...mq, geo_lieux: [] }, cl, lundi),
+       geo.champsPass({ ...mq, geo_lieux: [lieu('X', 1, 1, {})] }, cl, lundi)], [null, null, null]);
+
+    // ── Admin : enregistrement contrôlé ; bloc « Mes smart notifications » ──
+    const ST = 'e2400000-0000-4000-8000-000000000003';   // « Filet Smart Tampons » (section 24)
+    const mauvais = await api('PATCH', `/api/admin/marchands/${ST}`, jetonAdmin, { geo_actif: true, geo_lieux: [lieu('X', 200, 1, {})] });
+    const ok = await api('PATCH', `/api/admin/marchands/${ST}`, jetonAdmin,
+      { geo_actif: true, geo_lieux: [{ nom: 'Centre', lat: '25.086111', lng: '55.382388', horaires: { 1: ['08:00-20:00'] } }] });
+    const bloc = (await api('GET', '/api/merchants/me/smart-notifications', jeton(ST))).corps;
+    verifier('admin : lieu invalide refusé (400 lisible) ; lieu valide enregistré ; « À proximité » mentionné dans le bloc du marchand',
+      [mauvais.statut, /latitude/.test(mauvais.corps.error || ''), ok.statut, ok.corps.geo_actif, ok.corps.geo_lieux && ok.corps.geo_lieux[0].lat, bloc.proximite],
+      [400, true, 200, true, 25.086111, true]);
+
+    // ── Mise à jour silencieuse des cartes d'un marchand ──
+    const env = { ...process.env };
+    Object.assign(process.env, { SUPABASE_URL: urlSupabase, SUPABASE_SERVICE_KEY: cleService, DEBIT_RAFALE: '1000' });
+    const modules = ['services/supabase', 'services/notif-registre', 'services/debit', 'services/geo'].map(x => path.resolve(__dirname, `../src/${x}.js`));
+    modules.forEach(x => delete require.cache[x]);
+    const geoP = require('../src/services/geo');
+    const pousses = [];
+    geoP._pourTests({ actif: () => true, parLot: 2, envoyeur: async jeton => { pousses.push(jeton); if (jeton.endsWith('-panne')) throw new Error('APNs 410'); } });
+    const MGEO = 'e2500000-0000-4000-8000-000000000001', MAUTRE = 'e2500000-0000-4000-8000-000000000002';
+    sql(`INSERT INTO marchands (id, nom, slug, langue, forfait, type_programme, max_value, display_max_value, geo_actif)
+         VALUES ('${MGEO}', 'Filet Geo', 'filet-geo', 'fr', 'pro', 'stamps', 10, 10, true), ('${MAUTRE}', 'Filet Geo Autre', 'filet-geo-autre', 'fr', 'pro', 'stamps', 10, 10, false)`);
+    const carteGeo = (mid, jeton) => {
+      const id = crypto.randomUUID(), serial = crypto.randomUUID(), passId = crypto.randomUUID();
+      sql(`INSERT INTO clients (id, marchand_id, prenom, pass_serial_number) VALUES ('${id}', '${mid}', 'G', '${serial}');
+           INSERT INTO passes (id, client_id, marchand_id, serial_number, updated_at) VALUES ('${passId}', '${id}', '${mid}', '${serial}', now() - interval '3 days');
+           INSERT INTO device_tokens (pass_id, client_id, marchand_id, serial_number, device_id, push_token) VALUES ('${passId}', '${id}', '${mid}', '${serial}', 'app-${serial}', '${jeton}');`);
+      return serial;
+    };
+    const s1 = carteGeo(MGEO, 'geo-1'), s2 = carteGeo(MGEO, 'geo-2'), s3 = carteGeo(MGEO, 'geo-3-panne'), autre = carteGeo(MAUTRE, 'autre-1');
+    const bilan = await geoP.rafraichir(MGEO, 'test');
+    const majRecente = s => sql(`SELECT updated_at > now() - interval '1 minute' FROM passes WHERE serial_number = '${s}'`);
+    verifier('mise à jour silencieuse : un push par iPhone du marchand, par lots (3 iPhone, lots de 2), cartes marquées modifiées (sinon 304), jamais un autre marchand',
+      [bilan.iphones, bilan.erreurs, pousses.slice().sort().join(','), [s1, s2, s3].map(majRecente).join(''), majRecente(autre)],
+      [3, 1, 'geo-1,geo-2,geo-3-panne', 'ttt', 'f']);
+    verifier('… chaque envoi tracé dans notification_envois (source « geo », CLAUDE.md), l\'échec compris',
+      sql(`SELECT count(*) || '|' || count(*) FILTER (WHERE NOT ok) FROM notification_envois WHERE source = 'geo' AND marchand_id = '${MGEO}'`), '3|1');
+    pousses.length = 0;
+    await geoP.rafraichirTous();
+    verifier('mise à jour mensuelle : tous les marchands qui ont f10, et eux seuls',
+      [pousses.includes('autre-1'), pousses.filter(j => j.startsWith('geo-')).length >= 3], [false, true]);
+    modules.forEach(x => delete require.cache[x]);
+    for (const k of Object.keys(process.env)) if (!(k in env)) delete process.env[k];
+    Object.assign(process.env, env);
   }
 }
 

@@ -421,39 +421,13 @@ function buildPassJson({ client, marchand, serialNumber, passNotification }) {
 }
 
 // ── Point d'entrée principal ─────────────────────────────────
-// ── f10 : carte de TEST géolocalisée (PROVISOIRE, décision du 14/10) ──────────
-// Une seule carte, désignée par son numéro de série dans la variable Railway
-// CARTE_TEST_GEO = {"serial","lat","lng","debut","fin"} (dates ISO, UTC), reçoit
-// une adresse (locations + relevantText) et un créneau (relevantDates, iOS 18).
-// Toutes les autres cartes sont fabriquées comme avant. Supprimer la variable
-// (puis un scan) rend la carte normale. À retirer quand f10 sera codé.
-// Texte : le repli décidé par Yass (prénom + solde, façon boost).
-function carteTestGeo(passJson, { client, marchand, serialNumber }) {
-  const brut = process.env.CARTE_TEST_GEO;
-  if (!brut) return passJson;
-  let c;
-  try { c = JSON.parse(brut); } catch { return passJson; }
-  if (!c || c.serial !== serialNumber) return passJson;
-  const lat = Number(c.lat), lng = Number(c.lng);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return passJson;
-  const { reste } = require('./smart-messages');
-  const fr = marchand.langue === 'fr';
-  const restant = (marchand.max_value || 10) - (client.stored_value || 0);
-  const unite = marchand.type_programme === 'points' ? 'points' : 'tampons';
-  const texte = restant > 0
-    ? (fr ? `${client.prenom}, plus que ${reste(restant, unite, 'fr')} pour ta récompense chez ${marchand.nom} !`
-          : `${client.prenom}, only ${reste(restant, unite, 'en')} left for your reward at ${marchand.nom}!`)
-    : (fr ? `${client.prenom}, ta récompense t'attend chez ${marchand.nom} !`
-          : `${client.prenom}, your reward is waiting at ${marchand.nom}!`);
-  passJson.locations = [{ latitude: lat, longitude: lng, relevantText: texte }];
-  if (c.debut && c.fin) passJson.relevantDates = [{ startDate: c.debut, endDate: c.fin }];
-  return passJson;
-}
-
 async function generateApplePass({ client, marchand, serialNumber, passNotification = null }) {
   const certs = loadCerts();
-  const passJson = carteTestGeo(buildPassJson({ client, marchand, serialNumber, passNotification }),
-    { client, marchand, serialNumber });
+  const passJson = buildPassJson({ client, marchand, serialNumber, passNotification });
+  // f10 (migration 062) : lieux et créneaux si le marchand a la notification
+  // « À proximité » (services/geo.js). Rien sinon : carte identique à avant.
+  const geo = require('./geo').champsPass(marchand, client);
+  if (geo) Object.assign(passJson, geo);
 
   const doré = isPassDoré(client, marchand);
   const rewardHex = doré && marchand.couleur_fond_reward ? marchand.couleur_fond_reward : null;
@@ -566,4 +540,4 @@ async function generateApplePass({ client, marchand, serialNumber, passNotificat
   return buffer;
 }
 
-module.exports = { generateApplePass, computeAuthToken, createSolidPng, loadCerts, fetchImage, carteTestGeo };
+module.exports = { generateApplePass, computeAuthToken, createSolidPng, loadCerts, fetchImage };

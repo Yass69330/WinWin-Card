@@ -255,6 +255,8 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
     'telephone', 'adresse',
     'referral_enabled', 'referral_bonus_points',
     'how_it_works', 'workflow_inactive_message', 'workflow_near_reward_message',
+    // Notification « À proximité » (f10, migration 062) : contrôlée plus bas.
+    'geo_actif', 'geo_lieux',
     'couleur_fond_reward',
     'couleur_pastille_fond', 'couleur_pastille_contour', 'couleur_pastille_icone',
     'couleur_barre_principale', 'couleur_barre_secondaire',
@@ -286,6 +288,22 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
         message_sans_reste: 'le mot {reste} est obligatoire' })[v.erreur] || v.erreur}` });
       updates.workflow_near_reward_message = v.texte;
     }
+  }
+
+  // Notification « À proximité » (f10) : lieux contrôlés (services/geo.js).
+  if (updates.geo_lieux !== undefined) {
+    const v = require('../services/geo').validerLieux(updates.geo_lieux || []);
+    if (v.erreur) return res.status(400).json({ error: `À proximité : ${v.erreur}` });
+    updates.geo_lieux = v.lieux;
+  }
+  if (updates.geo_actif !== undefined) updates.geo_actif = updates.geo_actif === true;
+  // État avant l'écriture : les cartes ne sont mises à jour que si l'interrupteur
+  // ou les lieux ont VRAIMENT changé (la fiche renvoie tous les champs à chaque
+  // enregistrement).
+  let geoAvant = null;
+  if (updates.geo_actif !== undefined || updates.geo_lieux !== undefined) {
+    const { data: g } = await supabase.from('marchands').select('geo_actif, geo_lieux').eq('id', req.params.id).single();
+    geoAvant = g || null;
   }
 
   // Seuils de fréquence : entiers cohérents. Le formulaire admin envoie toujours
@@ -370,6 +388,13 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
 
   const { createOrUpdateLoyaltyClass } = require('../services/google-pass');
   suivre(createOrUpdateLoyaltyClass(data).catch(e => console.error('[Google Wallet] classe:', e.message)));
+
+  // f10 : interrupteur ou lieux changés (activation, désactivation, adresses,
+  // horaires) → les cartes iPhone du marchand sont mises à jour en arrière-plan.
+  if (geoAvant && (geoAvant.geo_actif !== data.geo_actif
+      || (data.geo_actif && JSON.stringify(geoAvant.geo_lieux) !== JSON.stringify(data.geo_lieux)))) {
+    suivre(require('../services/geo').rafraichir(data.id, 'admin').catch(e => console.error('[geo] mise à jour :', e.message)));
+  }
 
   res.json(data);
 }));

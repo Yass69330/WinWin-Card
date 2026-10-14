@@ -86,7 +86,7 @@ const COLONNES_SMART = 'forfait, landing_premium, type_programme, max_value, lie
   + 'workflow_inactive_enabled, workflow_inactive_days, workflow_inactive_message, '
   + 'workflow_near_reward_enabled, workflow_near_reward_threshold, workflow_birthday_enabled, '
   + 'marchand_inactive_days, marchand_inactive_message, marchand_near_reward_threshold, '
-  + 'workflow_near_reward_message, marchand_near_reward_message';
+  + 'workflow_near_reward_message, marchand_near_reward_message, geo_actif, geo_lieux';
 
 function resumeSmart(m, envoyees7j) {
   if (!FORFAITS_SMART.includes(m.forfait)) return { eligible: false };
@@ -119,9 +119,9 @@ function resumeSmart(m, envoyees7j) {
     avis: !!lienValide(m.lien_avis_google),
     personnalise: m.marchand_inactive_days != null || m.marchand_inactive_message != null
       || m.marchand_near_reward_threshold != null || m.marchand_near_reward_message != null,
-    // Place réservée à la notification « À proximité » (f10) : mentionnée et
-    // comptée comme l'avis Google quand elle existera.
-    proximite: false,
+    // Notification « À proximité » (f10, migration 062) : mentionnée, sans
+    // compteur (décision du 14/10).
+    proximite: m.geo_actif === true && Array.isArray(m.geo_lieux) && m.geo_lieux.length > 0,
     envoyees_7j: envoyees7j,
   };
 }

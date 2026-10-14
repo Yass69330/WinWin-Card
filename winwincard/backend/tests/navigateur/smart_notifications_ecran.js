@@ -99,8 +99,8 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur }) {
        'Relance · après 21 j | Boost · à 50 points | Anniversaire | Avis Google']);
     verifier('navigateur, sans landing premium : pas d\'anniversaire ; « à 1 point » au singulier',
       simple.texte.join(' | '), 'Envoyées automatiquement à vos clients. | Relance · après 30 j | Boost · à 1 point | Rapport des 7 derniers jours : 2 smart notifications envoyées | Modifier');
-    verifier('navigateur, tampons : « à 2 tampons », relance d\'inactivité désactivée absente, « 0 smart notification envoyée »',
-      tampons.texte.join(' | '), 'Envoyées automatiquement à vos clients. | Boost · à 2 tampons | Anniversaire | Rapport des 7 derniers jours : 0 smart notification envoyée | Modifier');
+    verifier('navigateur, tampons : « à 2 tampons », relance d\'inactivité désactivée absente, « À proximité » (f10, sans compteur), « 0 smart notification envoyée »',
+      tampons.texte.join(' | '), 'Envoyées automatiquement à vos clients. | Boost · à 2 tampons | Anniversaire | À proximité | Rapport des 7 derniers jours : 0 smart notification envoyée | Modifier');
 
     // Fiche admin d'un marchand qui a fait ses réglages : bloc orange, puis « Effacer ».
     const [idS] = sql(`SELECT id FROM marchands WHERE slug = 'filet-smart-simple'`).split('|');
@@ -122,6 +122,17 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur }) {
     verifier('navigateur, fiche admin : réglages du marchand en orange (12 jours, message, boost 3) à côté du réglage WinWin (30) ; « Effacer » les retire',
       [blocAdmin, champAdmin, sql(`SELECT coalesce(marchand_inactive_days::text, 'null') FROM marchands WHERE id = '${idS}'`)],
       ['• Relance après 12 jours sans visite (réglage WinWin : 30 jours)\n• Message de relance : « Reviens vite {prenom} ! »\n• Boost à 3 de la récompense (réglage WinWin : 1)\n• Message du boost : « Encore {reste} ! »', '30', 'null']);
+    // f10 : section « À proximité » de la fiche admin (marchand tampons, lieu de la section 25).
+    const [idT] = sql(`SELECT id FROM marchands WHERE slug = 'filet-smart-tampons'`).split('|');
+    await admin.click('#sheet-close').catch(() => {});
+    await admin.goto(urlServeur + '/admin/');
+    await admin.waitForSelector(`.btn-edit[data-id="${idT}"]`);
+    await admin.click(`.btn-edit[data-id="${idT}"]`);
+    await admin.waitForSelector('#section-geo .geo-lieu');
+    await admin.locator('#section-geo').screenshot({ path: path.join(captures, 'f10-admin-a-proximite.png') });
+    verifier('navigateur, fiche admin : section « À proximité » cochée, le lieu et ses horaires (UTC) relus',
+      [await admin.isChecked('#f-geo-actif'), await admin.inputValue('#section-geo .geo-lat'), await admin.inputValue('#section-geo .geo-jour[data-jour="1"]')],
+      [true, '25.086111', '08:00-20:00']);
     await ctxA.close();
     console.log(`captures : ${captures}`);
   } finally {

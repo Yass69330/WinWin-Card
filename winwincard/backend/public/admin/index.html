@@ -449,6 +449,18 @@
         <div class="field-hint">⏱ Déduplication : relance/récompense max une fois par 7 jours ; anniversaire max une fois par an.</div>
       </div>
 
+      <!-- Section : Notification « À proximité » (f10, iPhone, tous forfaits, mode édition) -->
+      <div class="form-section" id="section-geo" style="display:none">
+        <div class="form-section-title">Notification « À proximité » <span style="color:var(--warning);font-size:10px">iPhone</span></div>
+        <div class="field-hint" style="margin-bottom:8px">Près d'un lieu, pendant ses horaires, l'iPhone du client affiche la carte sur l'écran verrouillé (texte : prénom + solde). Horaires <b>en UTC</b> (Dubaï = heure locale − 4 h). Plages « HH:MM-HH:MM » séparées par des virgules ; jour vide = fermé. 10 lieux au plus. Activer, désactiver ou modifier les lieux met à jour les cartes iPhone du marchand (en arrière-plan, au débit des campagnes).</div>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;font-weight:600;margin-bottom:10px">
+          <input type="checkbox" id="f-geo-actif" style="width:18px;height:18px;accent-color:var(--accent)">
+          Activer la notification à proximité
+        </label>
+        <div id="geo-lieux" style="display:flex;flex-direction:column;gap:10px"></div>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-geo-ajouter" style="margin-top:8px;align-self:flex-start">+ Ajouter un lieu</button>
+      </div>
+
       <!-- Section : Landing page premium (Pro et Pro+, visible en mode édition) -->
       <div class="form-section" id="section-landing-fields" style="display:none">
         <div class="form-section-title">Landing page <span style="color:var(--warning);font-size:10px">Pro / Pro+</span></div>
@@ -1087,6 +1099,42 @@ document.getElementById('btn-effacer-reglages-marchand').addEventListener('click
   } catch (e) { etat.textContent = e.message; }
 });
 
+// ── f10 : lieux de la notification « À proximité » ──────────────────────────
+const JOURS_GEO = [['1', 'Lun'], ['2', 'Mar'], ['3', 'Mer'], ['4', 'Jeu'], ['5', 'Ven'], ['6', 'Sam'], ['7', 'Dim']];
+function ajouterLieuGeo(l = {}) {
+  const liste = document.getElementById('geo-lieux');
+  if (liste.children.length >= 10) return;
+  const div = document.createElement('div');
+  div.className = 'geo-lieu';
+  div.style.cssText = 'background:var(--surface2);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px';
+  const champ = 'background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:6px 8px;outline:none';
+  div.innerHTML = `
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <input class="geo-nom" placeholder="Nom (ex. Boutique centre)" style="${champ};flex:1;min-width:140px" value="${esc(l.nom || '')}">
+      <input class="geo-lat" placeholder="Latitude" style="${champ};width:110px" value="${l.lat ?? ''}">
+      <input class="geo-lng" placeholder="Longitude" style="${champ};width:110px" value="${l.lng ?? ''}">
+      <button type="button" class="btn btn-ghost btn-sm geo-retirer">Retirer</button>
+    </div>
+    <div style="display:grid;grid-template-columns:42px 1fr;gap:4px 8px;align-items:center;font-size:12px;color:var(--muted)">
+      ${JOURS_GEO.map(([k, nom]) => `<span>${nom}</span><input class="geo-jour" data-jour="${k}" placeholder="fermé" style="${champ}"
+        value="${esc(((l.horaires || {})[k] || []).join(', '))}">`).join('')}
+    </div>`;
+  div.querySelector('.geo-retirer').addEventListener('click', () => div.remove());
+  liste.appendChild(div);
+}
+function lireLieuxGeo() {
+  return [...document.querySelectorAll('#geo-lieux .geo-lieu')].map(div => {
+    const horaires = {};
+    div.querySelectorAll('.geo-jour').forEach(inp => {
+      const plages = inp.value.split(',').map(x => x.trim()).filter(Boolean);
+      if (plages.length) horaires[inp.dataset.jour] = plages;
+    });
+    return { nom: div.querySelector('.geo-nom').value.trim(), lat: div.querySelector('.geo-lat').value.trim(),
+      lng: div.querySelector('.geo-lng').value.trim(), horaires };
+  });
+}
+document.getElementById('btn-geo-ajouter').addEventListener('click', () => ajouterLieuGeo());
+
 async function openEditSheet(id) {
   S.editId = id;
   resetForm();
@@ -1251,6 +1299,9 @@ function resetForm() {
   document.getElementById('slug-preview').textContent = '…';
   document.getElementById('sheet-err').style.display = 'none';
   document.getElementById('section-strip-tiers').style.display = 'none';
+  document.getElementById('section-geo').style.display = 'none';
+  document.getElementById('f-geo-actif').checked = false;
+  document.getElementById('geo-lieux').innerHTML = '';
   document.getElementById('section-workflows').style.display     = 'none';
   document.getElementById('section-landing-fields').style.display = 'none';
   document.getElementById('strip-tiers-list').innerHTML = '';
@@ -1314,6 +1365,11 @@ function fillForm(m) {
   document.getElementById('slug-preview').textContent = m.slug || '…';
   // Section strip tiers — visible en mode édition uniquement
   document.getElementById('section-strip-tiers').style.display = '';
+  // f10 : « À proximité », tous forfaits.
+  document.getElementById('section-geo').style.display = '';
+  document.getElementById('f-geo-actif').checked = m.geo_actif === true;
+  document.getElementById('geo-lieux').innerHTML = '';
+  (Array.isArray(m.geo_lieux) ? m.geo_lieux : []).forEach(ajouterLieuGeo);
   renderStripTiers(m.images_tiers);
   // Workflows : Pro ET Pro+ (basic exclu). Miroir exact de FORFAITS_WORKFLOWS
   // côté cron — sans ça, un Pro n'aurait aucun interrupteur à cocher.
@@ -1567,6 +1623,12 @@ function collectForm() {
 
   if (!S.editId && pwd) body.password = pwd;
   if (S.editId  && pwd) body.new_password = pwd;
+
+  // f10 : « À proximité » (édition seulement). Le serveur contrôle le détail.
+  if (S.editId && document.getElementById('section-geo').style.display !== 'none') {
+    body.geo_actif = document.getElementById('f-geo-actif').checked;
+    body.geo_lieux = lireLieuxGeo();
+  }
 
   // Champs des workflows (édition, forfait Pro ou Pro+)
   if (S.editId && document.getElementById('section-workflows').style.display === 'flex') {

@@ -116,7 +116,7 @@ router.get('/v1/devices/:deviceId/registrations/:passTypeId', asyncHandler(async
 }));
 
 // Colonnes du marchand nécessaires à la génération de la carte.
-const COLONNES_MARCHAND_CARTE = 'id, nom, slug, forfait, langue, type_programme, pass_display_name, how_it_works, couleur_fond, couleur_fond_reward, couleur_pastille_fond, couleur_pastille_contour, couleur_pastille_icone, couleur_label_strip, couleur_barre_principale, couleur_barre_secondaire,couleur_texte, couleur_texte_reward, couleur_label, logo_url, logo_reward_url, icon_url, image_strip_url, images_tiers, max_value, display_max_value, notification_titre, notification_message, referral_enabled, referral_bonus_points, telephone, adresse, strip_mode, strip_theme, strip_illustration, strip_produit, strip_vide, stamp_icon, strip_custom_background_url, strip_config_version, strip_label, lien_avis_google';
+const COLONNES_MARCHAND_CARTE = 'id, nom, slug, forfait, langue, type_programme, pass_display_name, how_it_works, couleur_fond, couleur_fond_reward, couleur_pastille_fond, couleur_pastille_contour, couleur_pastille_icone, couleur_label_strip, couleur_barre_principale, couleur_barre_secondaire,couleur_texte, couleur_texte_reward, couleur_label, logo_url, logo_reward_url, icon_url, image_strip_url, images_tiers, max_value, display_max_value, notification_titre, notification_message, referral_enabled, referral_bonus_points, telephone, adresse, strip_mode, strip_theme, strip_illustration, strip_produit, strip_vide, stamp_icon, strip_custom_background_url, strip_config_version, strip_label, lien_avis_google, geo_actif, geo_lieux';
 
 // GET /v1/passes/:passTypeId/:serialNumber
 // Apple télécharge le pass mis à jour (appelé après push APNs)
