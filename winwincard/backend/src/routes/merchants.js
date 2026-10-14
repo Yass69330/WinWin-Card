@@ -52,7 +52,7 @@ router.post('/login', asyncHandler(async (req, res) => {
 router.get('/me', authMarchand, asyncHandler(async (req, res) => {
   const { data, error } = await supabase
     .from('marchands')
-    .select('id, nom, slug, logo_url, couleur_fond, couleur_texte, couleur_label, image_strip_url, texte_landing, max_value, display_max_value, forfait, langue, type_programme, email_contact, landing_premium')
+    .select('id, nom, slug, logo_url, couleur_fond, couleur_texte, couleur_label, image_strip_url, texte_landing, max_value, display_max_value, forfait, langue, type_programme, email_contact, landing_premium, themes_actifs')
     .eq('id', req.marchandId)
     .single();
 
@@ -295,11 +295,14 @@ router.patch('/me/points-de-vente/:id/actif', authMarchand, asyncHandler(async (
 // jours UTC : ouverture au passage du cron (08:00 UTC) du jour de début, ou tout
 // de suite si le début est aujourd'hui ; fin au passage qui suit le jour de fin.
 const FORFAITS_THEMES = ['pro_plus'];
+// Ouvert par l'admin, marchand par marchand (marchands.themes_actifs, comme la
+// landing premium), ET réservé au Pro+.
+const themesOuverts = m => FORFAITS_THEMES.includes(m.forfait) && m.themes_actifs === true;
 const COLONNES_THEME_MARCHAND = 'id, nom, couleur_fond, couleur_texte, couleur_label, logo_url, google_logo_url, texte_case, message_ouverture';
 
 async function ficheCarte(marchandId) {
   const { COLONNES_MARCHAND_CARTE } = require('../services/colonnes-carte');
-  return supabase.from('marchands').select(`${COLONNES_MARCHAND_CARTE}, theme_bascule`).eq('id', marchandId).single();
+  return supabase.from('marchands').select(`${COLONNES_MARCHAND_CARTE}, theme_bascule, themes_actifs`).eq('id', marchandId).single();
 }
 
 let _qr = null;
@@ -315,7 +318,7 @@ router.get('/me/themes', authMarchand, asyncHandler(async (req, res) => {
   const themes = require('../services/themes');
   const { data: m, error } = await ficheCarte(req.marchandId);
   if (error || !m) return statsIndisponibles(res, 'themes', error || new Error('marchand introuvable'));
-  if (!FORFAITS_THEMES.includes(m.forfait)) return res.json({ eligible: false });
+  if (!themesOuverts(m)) return res.json({ eligible: false });
   const { data: liste, error: errT } = await supabase.from('themes_marchand')
     .select(COLONNES_THEME_MARCHAND).eq('marchand_id', req.marchandId).order('cree_le');
   if (errT) return statsIndisponibles(res, 'themes', errT);
@@ -341,9 +344,9 @@ router.get('/me/themes', authMarchand, asyncHandler(async (req, res) => {
 router.post('/me/theme', authMarchand, asyncHandler(async (req, res) => {
   const themes = require('../services/themes');
   const { theme_id: themeId, debut, fin } = req.body || {};
-  const { data: m, error } = await supabase.from('marchands').select('forfait, theme_actif').eq('id', req.marchandId).single();
+  const { data: m, error } = await supabase.from('marchands').select('forfait, theme_actif, themes_actifs').eq('id', req.marchandId).single();
   if (error || !m) return statsIndisponibles(res, 'theme', error || new Error('marchand introuvable'));
-  if (!FORFAITS_THEMES.includes(m.forfait)) return res.status(403).json({ error: 'plan_not_eligible' });
+  if (!themesOuverts(m)) return res.status(403).json({ error: 'plan_not_eligible' });
   const erreurDates = themes.validerDates(debut, fin);
   if (erreurDates) return res.status(400).json({ error: erreurDates });
   // Un seul thème à la fois : celui en cours s'arrête d'abord (retour à la carte

@@ -154,10 +154,11 @@ async function listerFichiers(dossier, profondeur = 1) {
   return chemins;
 }
 
-// `garder` : chemins à ne pas supprimer (la bannière d'aperçu « Ma carte » du
-// thème, préparée en admin : le marchand doit pouvoir la revoir sans calcul).
-async function purgerTheme(slug, themeId, garder = []) {
-  const chemins = (await listerFichiers(dossierTheme(slug, themeId))).filter(c => !garder.includes(c));
+// `garderPrefixe` : dossier à garder (les bannières de la configuration actuelle,
+// préparées en admin) ; absent : tout le thème part (thème supprimé).
+async function purgerTheme(slug, themeId, { garderPrefixe = null } = {}) {
+  const chemins = (await listerFichiers(dossierTheme(slug, themeId)))
+    .filter(c => !(garderPrefixe && c.startsWith(garderPrefixe)));
   let supprimes = 0;
   for (let i = 0; i < chemins.length; i += LOT_REMOVE) {
     const lot = chemins.slice(i, i + LOT_REMOVE);

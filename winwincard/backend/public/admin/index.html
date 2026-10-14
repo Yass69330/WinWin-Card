@@ -465,6 +465,11 @@
       <div class="form-section" id="section-themes" style="display:none">
         <div class="form-section-title">Thèmes de carte <span style="color:var(--warning);font-size:10px">Pro+</span></div>
         <div class="field-hint" style="margin-bottom:8px">Thèmes préparés pour ce marchand ; il en choisit un, avec ses dates, dans l'onglet « Ma carte » de son dashboard. Un thème choisi (programmé ou en cours) ne se modifie ni ne se supprime. Le message d'ouverture est envoyé à toutes ses cartes à l'ouverture (hors quota).</div>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;font-weight:600;margin-bottom:10px">
+          <input type="checkbox" id="f-themes-actifs" style="width:18px;height:18px;accent-color:var(--accent)">
+          Ouvrir les cartes à thème à ce marchand (onglet « Ma carte »)
+        </label>
+        <div class="field-hint" style="margin-bottom:8px">Enregistré avec la fiche. Décocher pendant un thème en cours le termine (retour silencieux à la carte standard). Préparez les thèmes avant d'ouvrir : leurs bannières sont calculées ici, jamais chez le marchand.</div>
         <div id="themes-etat" class="field-hint" style="margin-bottom:8px"></div>
         <div id="themes-liste" style="display:flex;flex-direction:column;gap:10px"></div>
         <div id="theme-form" style="background:var(--surface2);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;margin-top:10px">
@@ -1465,6 +1470,7 @@ function fillForm(m) {
   // f17 : thèmes de carte, Pro+ seulement.
   if (m.forfait === 'pro_plus') {
     document.getElementById('section-themes').style.display = '';
+    document.getElementById('f-themes-actifs').checked = m.themes_actifs === true;
     chargerThemes();
   }
   renderStripTiers(m.images_tiers);
@@ -1744,6 +1750,10 @@ function collectForm() {
   // valeur en base reste telle quelle (et ne compte pas : services/forfaits.js).
   if (S.editId && document.getElementById('section-landing-fields').style.display === 'flex') {
     body.landing_premium = document.getElementById('f-landing-premium').checked;
+  }
+  // f17 : interrupteur des cartes à thème, envoyé seulement si la section (Pro+) est visible.
+  if (S.editId && document.getElementById('section-themes').style.display !== 'none') {
+    body.themes_actifs = document.getElementById('f-themes-actifs').checked;
   }
 
   body.referral_enabled      = document.getElementById('f-referral-enabled').checked;

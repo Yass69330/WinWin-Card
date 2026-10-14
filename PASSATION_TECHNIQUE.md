@@ -7206,9 +7206,49 @@ de la livraison est validé tel quel.
   pourrait aussi les précalculer en admin (tous les états), mais cela coûte
   0,2 à 1,3 Mo de stockage par thème, même jamais activé.
 
+### Précalcul de tous les états et interrupteur admin (14/10, demande du pilotage)
+
+Le pilotage donne le feu vert au push : la fonction arrive dormante en production.
+La mise en service chez de vrais marchands (thèmes, logos, ouverture) viendra plus
+tard.
+
+- **Option (b) : tous les états des vraies cartes sont précalculés en admin**, à la
+  préparation (`themes.preparerApercus`, voir plus haut pour les moments
+  déclencheurs) :
+  - d'abord les aperçus, puis pour chaque thème chaque solde, avec les 3 variantes
+    (Apple 2x, 3x, Google) ;
+  - l'un après l'autre, avec une pause entre deux rendus ; une préparation à la
+    fois par marchand ;
+  - les bannières périmées du thème (ancienne version de bannière, ancienne
+    empreinte de couleurs ou de logo) sont purgées à la préparation suivante.
+- À l'activation, la bascule et le retour des iPhone ne font que **lire le cache**.
+- Fin de thème : **plus de purge**. Les bannières restent pour une réactivation
+  sans calcul (0,2 à 1,3 Mo par thème). Elles partent à la suppression du thème
+  dans l'admin.
+- **Limite, mode points** : la bannière dépend du solde exact (`valeurAffichee`,
+  une image par valeur), il n'y a donc pas de liste finie d'états. On précalcule
+  0 et les soldes détenus par les clients au moment de la préparation (1 000
+  lignes lues au plus). Un solde apparu entre la préparation et l'activation est
+  dessiné à la demande (environ 24 ms), comme la carte standard à chaque scan
+  aujourd'hui. **Hypothèse : préparer (ou rouvrir la fiche admin) peu avant
+  l'activation d'un marchand en points.** En tampons : tous les états, de 0 au
+  seuil.
+- Autre limite : si une préparation n'est pas finie ou a échoué, la carte n'est
+  jamais bloquée. Le rendu se fait alors à la demande, comme avant.
+- **Interrupteur de l'admin `marchands.themes_actifs`** (migration 063, faux
+  partout : fonction dormante), comme la landing premium :
+  - la case « Ouvrir les cartes à thème à ce marchand » apparaît dans la section
+    « Thèmes de carte » de la fiche (Pro+) et s'enregistre avec la fiche ;
+  - onglet « Ma carte » et routes du marchand : Pro+ **et** interrupteur ouvert
+    (`GET /me` renvoie `themes_actifs`, le dashboard cache l'onglet sinon) ;
+  - décocher pendant un thème le termine, avec un retour silencieux. Le passage du
+    cron referme aussi un thème dont le marchand n'est plus ouvert.
+- Tests : `npm test` **340/340** ; avec le test navigateur **345/345**.
+  Contre-épreuve sur `70caa3c` : **316/317** (seul KO attendu : module f17 absent).
+
 ### Reste à faire
 
-- Exécuter 063 dans Supabase, puis pousser sur feu vert.
+- Exécuter 063 dans Supabase, puis pousser (feu vert du pilotage donné le 14/10).
 - Rendu réel sur hamza-salon (comme f10) :
   - préparer un thème dans l'admin, l'activer depuis « Ma carte » ;
   - contrôler : iPhone (couleurs, case, bannière, notification), Android, arrêt
@@ -7430,6 +7470,13 @@ le dépôt ? Réponse prouvée par deux rejeux locaux et par le projet de test :
 Toute décision prise sans passer par le pilotage (Yass) se note ici : date, décision,
 raison, effet constaté. Une entrée vaut aveu, pas justification — la règle reste le
 contrat §7 (diagnostic, validation, puis code).
+
+**2026-10-14 — f17, suite (précalcul, interrupteur)** :
+- mode points : précalcul limité à 0 et aux soldes détenus au moment de la
+  préparation (aucune liste finie n'existe) ;
+- fin de thème : bannières gardées (réactivation sans calcul), purgées à la
+  suppression du thème ;
+- interrupteur `themes_actifs` : décocher termine le thème en cours.
 
 **2026-10-14 — f17, choix d'exécution** (détail §15 septquinquagies) :
 - pendant un thème, les couleurs manuelles de la bannière (pastilles, barre, titre)

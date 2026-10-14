@@ -1076,7 +1076,7 @@ function saveSession(d) {
 
 function clearSession() {
   Object.assign(S, { token: null, marchandId: null, marchandNom: null, marchandSlug: null, forfait: null, coordonnees: null, typeProgramme: 'stamps' });
-  try { ['ww_dash_token','ww_dash_id','ww_dash_nom','ww_dash_slug','ww_dash_forfait','ww_dash_coordonnees','ww_dash_type_programme'].forEach(k => localStorage.removeItem(k)); } catch {}
+  try { ['ww_dash_token','ww_dash_id','ww_dash_nom','ww_dash_slug','ww_dash_forfait','ww_dash_coordonnees','ww_dash_type_programme','ww_dash_themes'].forEach(k => localStorage.removeItem(k)); } catch {}
 }
 
 function restoreSession() {
@@ -1091,6 +1091,7 @@ function restoreSession() {
     const coord   = localStorage.getItem('ww_dash_coordonnees');
     S.coordonnees = coord === null ? null : coord === '1';
     S.typeProgramme = localStorage.getItem('ww_dash_type_programme') === 'points' ? 'points' : 'stamps';
+    S.themesActifs = localStorage.getItem('ww_dash_themes') === '1';
     return true;
   } catch { return false; }
 }
@@ -1111,6 +1112,9 @@ function applyForfaitGating() {
     const req = { basic: 0, pro: 1, pro_plus: 2 }[btn.dataset.minPlan] ?? 1;
     btn.style.display = rank >= req ? '' : 'none';
   });
+  // « Ma carte » (f17) : en plus du Pro+, ouvert par l'admin (GET /me → themes_actifs).
+  const navCarte = document.querySelector('.nav-btn[data-tab="carte"]');
+  if (navCarte && !S.themesActifs) navCarte.style.display = 'none';
 
   // Export CSV : droit calculé par le serveur (GET /me → coordonnees : Pro+, ou
   // landing premium active). Avant la première réponse, repli sur le forfait.
@@ -1251,7 +1255,9 @@ async function loadOverview(force = false) {
     S.forfait   = me.forfait || 'pro';
     S.coordonnees = me.coordonnees === true;
     S.typeProgramme = me.type_programme === 'points' ? 'points' : 'stamps';
+    S.themesActifs = me.themes_actifs === true;
     try {
+      localStorage.setItem('ww_dash_themes', S.themesActifs ? '1' : '0');
       localStorage.setItem('ww_dash_forfait', S.forfait);
       localStorage.setItem('ww_dash_coordonnees', S.coordonnees ? '1' : '0');
       localStorage.setItem('ww_dash_type_programme', S.typeProgramme);

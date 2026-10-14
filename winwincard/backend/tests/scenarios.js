@@ -2524,9 +2524,9 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       const MT = 'e3600000-0000-4000-8000-000000000001', MPRO = 'e3600000-0000-4000-8000-000000000002';
       // Marchand réaliste (tampons, bannière générée, logo) : l'aperçu montre la vraie carte.
       sql(`INSERT INTO marchands (id, nom, slug, langue, forfait, type_programme, max_value, display_max_value, couleur_fond, couleur_texte,
-                                  couleur_label, strip_mode, stamp_icon, logo_url)
-           VALUES ('${MT}', 'Filet Thème', 'filet-theme', 'fr', 'pro_plus', 'stamps', 9, 9, '#4a1a2a', '#ffffff', '#e8b4a0', 'stamps', 'coffee', 'https://logos.exemple/standard.png'),
-                  ('${MPRO}', 'Filet Thème Pro', 'filet-theme-pro', 'fr', 'pro', 'stamps', 10, 10, '#111111', '#f5f5f5', '#a0a0b0', NULL, 'coffee', NULL)`);
+                                  couleur_label, strip_mode, stamp_icon, logo_url, themes_actifs)
+           VALUES ('${MT}', 'Filet Thème', 'filet-theme', 'fr', 'pro_plus', 'stamps', 9, 9, '#4a1a2a', '#ffffff', '#e8b4a0', 'stamps', 'coffee', 'https://logos.exemple/standard.png', true),
+                  ('${MPRO}', 'Filet Thème Pro', 'filet-theme-pro', 'fr', 'pro', 'stamps', 10, 10, '#111111', '#f5f5f5', '#a0a0b0', NULL, 'coffee', NULL, true)`);
       const tMT = jeton(MT);
       const mauvais = await api('POST', `/api/admin/marchands/${MT}/themes`, jetonAdmin, { ...theme, id: undefined, couleur_fond: 'vert' });
       const cree = await api('POST', `/api/admin/marchands/${MT}/themes`, jetonAdmin, { ...theme, id: undefined });
@@ -2539,6 +2539,14 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       const proPost = await api('POST', '/api/merchants/me/theme', jeton(MPRO), { theme_id: idT, debut: T.aujourdhui(), fin: T.aujourdhui() });
       // « La caisse prime » : les aperçus se préparent en admin (ici, l'ouverture des
       // thèmes dans la fiche admin) ; le marchand ne fait que lire le cache.
+      // Interrupteur de l'admin (comme la landing premium) : Pro+ fermé → rien.
+      sql(`UPDATE marchands SET themes_actifs = false WHERE id = '${MT}'`);
+      const ferme = await api('GET', '/api/merchants/me/themes', tMT);
+      const fermePost = await api('POST', '/api/merchants/me/theme', tMT, { theme_id: idT, debut: T.aujourdhui(), fin: T.aujourdhui() });
+      const meFerme = (await api('GET', '/api/merchants/me', tMT)).corps.themes_actifs;
+      sql(`UPDATE marchands SET themes_actifs = true WHERE id = '${MT}'`);
+      verifier('interrupteur admin : Pro+ non ouvert par l\'admin → onglet non éligible, choix refusé (403), /me le dit (le dashboard cache l\'onglet)',
+        [ferme.corps.eligible, fermePost.statut, meFerme, (await api('GET', '/api/merchants/me', tMT)).corps.themes_actifs], [false, 403, false, true]);
       const adminListe = await api('GET', `/api/admin/marchands/${MT}/themes`, jetonAdmin);
       const liste = await api('GET', '/api/merchants/me/themes', tMT);
       verifier('« Ma carte » : réservé à Pro+ (Pro : non éligible, choix refusé 403) ; Pro+ : carte standard + chaque thème avec son aperçu',
@@ -2583,6 +2591,24 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       verifier('arrêt par le marchand : retour à la carte standard (fiche sans thème) ; bascule silencieuse lancée et terminée',
         [arret.statut, sql(`SELECT theme_actif IS NULL FROM marchands WHERE id = '${MT}'`),
          await attendre(async () => sql(`SELECT theme_bascule IS NULL FROM marchands WHERE id = '${MT}'`) === 't')], [200, 't', true]);
+      const rouvert = await api('POST', '/api/merchants/me/theme', tMT, { theme_id: idT, debut: jour, fin: jour });
+      const coupe = await api('PATCH', `/api/admin/marchands/${MT}`, jetonAdmin, { themes_actifs: false });
+      const ferme2 = await attendre(async () => sql(`SELECT theme_actif IS NULL AND theme_bascule IS NULL FROM marchands WHERE id = '${MT}'`) === 't');
+      await api('PATCH', `/api/admin/marchands/${MT}`, jetonAdmin, { themes_actifs: true });
+      verifier('admin décoche les cartes à thème pendant un thème en cours : retour silencieux à la carte standard',
+        [rouvert.corps.etat, coupe.statut, coupe.corps.themes_actifs, ferme2], ['en_cours', 200, false, true]);
+
+      // Précalcul en admin de TOUS les états des vraies cartes (tampons : 0 à 9) :
+      // à l'activation, tout sort du cache, rien n'est dessiné.
+      const prep = await T.preparerApercus(MT);
+      const themesMT = JSON.parse(sql(`SELECT json_agg(t) FROM themes_marchand t WHERE marchand_id = '${MT}'`));
+      const ficheMT = JSON.parse(sql(`SELECT row_to_json(m) FROM marchands m WHERE id = '${MT}'`));
+      const manquants = [];
+      for (const t of themesMT) for (let v = 0; v <= 9; v++) for (const variante of ['strip2x', 'strip3x', 'hero']) {
+        if (!await stripCache.lireCache({ marchand: T.avecTheme({ ...ficheMT, theme_actif: null }, t), filledCount: v, variant: variante })) manquants.push(`${t.nom}:${v}:${variante}`);
+      }
+      verifier('préparation en admin : aperçus (standard + 2 thèmes) puis TOUS les états des vraies cartes de chaque thème (2 × 10 soldes), les 3 variantes (Apple 2x, 3x, Google) en cache',
+        [prep.apercus, prep.bannieres, manquants], [3, 20, []]);
 
       // ── Bascule : iPhone et Google, par lots, au débit, tracée ──
       const pousses = [], objets = [], messages = [], classes = [];
@@ -2597,6 +2623,7 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       sql(`INSERT INTO marchands (id, nom, slug, langue, forfait, type_programme, max_value, display_max_value, couleur_fond)
            VALUES ('${MB}', 'Filet Bascule', 'filet-bascule', 'fr', 'pro_plus', 'stamps', 10, 10, '#111111'),
                   ('${MAUTRE}', 'Filet Bascule Autre', 'filet-bascule-autre', 'fr', 'pro_plus', 'stamps', 10, 10, '#111111')`);
+      sql(`UPDATE marchands SET themes_actifs = true WHERE id IN ('${MB}', '${MAUTRE}')`);
       const carte = (mid, { jeton: j = null, google = false, ouvert = false } = {}) => {
         const id = crypto.randomUUID(), serial = crypto.randomUUID(), passId = crypto.randomUUID();
         sql(`INSERT INTO clients (id, marchand_id, prenom, stored_value, pass_serial_number) VALUES ('${id}', '${mid}', 'B${serial.slice(0, 2)}', 4, '${serial}');

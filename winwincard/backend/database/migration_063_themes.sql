@@ -8,6 +8,7 @@
 -- solde ne changent jamais. Un seul thème à la fois.
 --
 -- CE QUE FAIT LA MIGRATION.
+--   - marchands.themes_actifs : interrupteur de l'admin (faux partout : dormant) ;
 --   - themes_marchand : les thèmes préparés par WinWin, par marchand (l'admin
 --     les crée ; le marchand ne fait que choisir). RLS sans politique : seul le
 --     serveur (service_role) y accède.
@@ -49,6 +50,9 @@ CREATE TABLE IF NOT EXISTS public.themes_marchand (
 ALTER TABLE public.themes_marchand ENABLE ROW LEVEL SECURITY;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.themes_marchand TO service_role;
 
+-- Interrupteur par marchand, réglé par l'admin (comme landing_premium) : faux
+-- partout à l'arrivée, la fonction est donc dormante tant que l'admin ne l'ouvre pas.
+ALTER TABLE public.marchands ADD COLUMN IF NOT EXISTS themes_actifs boolean NOT NULL DEFAULT false;
 ALTER TABLE public.marchands ADD COLUMN IF NOT EXISTS theme_actif jsonb;
 ALTER TABLE public.marchands ADD COLUMN IF NOT EXISTS theme_bascule jsonb;
 ALTER TABLE public.marchands DROP CONSTRAINT IF EXISTS marchands_theme_actif_check;
@@ -58,6 +62,8 @@ ALTER TABLE public.marchands ADD CONSTRAINT marchands_theme_actif_check
 
 COMMENT ON TABLE public.themes_marchand IS
   'Thèmes de carte préparés par WinWin pour un marchand (f17, migration 063).';
+COMMENT ON COLUMN public.marchands.themes_actifs IS
+  'Cartes à thème ouvertes à ce marchand par l''admin (Pro+ en plus) (migration 063).';
 COMMENT ON COLUMN public.marchands.theme_actif IS
   'Thème choisi par le marchand : copie du thème + debut, fin (dates UTC) + etat programme|en_cours (migration 063).';
 COMMENT ON COLUMN public.marchands.theme_bascule IS
@@ -103,14 +109,15 @@ ALTER TABLE public.notification_envois
 COMMIT;
 
 -- ── VÉRIFICATION (à coller juste après) ──────────────────────────────────
--- Les cinq colonnes doivent valoir true.
+-- Les six colonnes doivent valoir true.
 --
 -- SELECT
 --   to_regclass('public.themes_marchand') IS NOT NULL
 --     AND has_table_privilege('service_role', 'public.themes_marchand', 'INSERT')
 --     AND NOT has_table_privilege('anon', 'public.themes_marchand', 'SELECT') AS table_ok,
 --   (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'marchands'
---     AND column_name IN ('theme_actif', 'theme_bascule')) = 2 AS colonnes_ok,
+--     AND column_name IN ('themes_actifs', 'theme_actif', 'theme_bascule')) = 3 AS colonnes_ok,
+--   NOT EXISTS (SELECT 1 FROM marchands WHERE themes_actifs) AS dormant_ok,
 --   EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'marchands_theme_actif_check') AS garde_fou_ok,
 --   has_function_privilege('service_role', 'public.theme_lot_google(uuid,uuid,integer)', 'EXECUTE')
 --     AND NOT has_function_privilege('anon', 'public.theme_lot_google(uuid,uuid,integer)', 'EXECUTE') AS fonction_ok,

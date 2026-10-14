@@ -135,34 +135,97 @@ async function apercu(marchand, { generer = false } = {}) {
   };
 }
 
-// Chemin Storage de la bannière d'aperçu d'un thème : gardé à la purge de fin de
-// thème (le marchand peut le reprendre plus tard sans recalcul).
-function cheminApercu(marchand, theme) {
+// Dossier Storage des bannières d'un thème pour la configuration ACTUELLE du
+// marchand (version de bannière + empreinte du thème). Tout le reste du dossier
+// du thème est périmé.
+function dossierCourant(marchand, theme) {
   const m = avecTheme(marchand, theme);
   if (!banniereGeneree(m)) return null;
-  return require('./strip-cache').storageKey(m, exempleProgression(m), 'strip2x');
+  const cle = require('./strip-cache').storageKey(m, 0, 'strip2x');
+  return cle.slice(0, cle.lastIndexOf('/') + 1);
 }
 
-// Préparation en admin : carte standard + chaque thème du marchand, l'un après
-// l'autre (jamais en rafale). Appelée à la création ou modification d'un thème,
-// à l'envoi d'un logo, à la modification de la fiche (la version de bannière
-// change) et à l'ouverture des thèmes dans la fiche admin. Ne lève jamais.
-async function preparerApercus(marchandId) {
-  try {
-    const supabase = require('./supabase');
-    const [{ data: m, error }, { data: liste, error: errT }] = await Promise.all([
-      supabase.from('marchands').select('*').eq('id', marchandId).single(),
-      supabase.from('themes_marchand').select('*').eq('marchand_id', marchandId).order('cree_le'),
-    ]);
-    if (error || errT || !m || !liste || !liste.length) return 0;
-    const standard = { ...m, theme_actif: null };
-    await apercu(standard, { generer: true });
-    for (const t of liste) await apercu(avecTheme(standard, t), { generer: true });
-    return liste.length + 1;
-  } catch (e) {
-    console.error(`[theme] préparation des aperçus, marchand ${marchandId} :`, e.message);
-    return 0;
+// Soldes à précalculer pour les vraies cartes d'un thème :
+//   - tampons : TOUS les états, 0 à seuil (le solde ne dépasse jamais le seuil) ;
+//   - points : la bannière dépend du solde EXACT (valeurAffichee, une image par
+//     valeur) : pas de liste finie. On précalcule les soldes détenus par les
+//     clients au moment de la préparation (1 000 lignes lues au plus) + 0. Un
+//     solde apparu depuis sera dessiné à la demande, comme pour la carte
+//     standard à chaque scan aujourd'hui.
+async function soldesAPreparer(supabase, m) {
+  if (m.type_programme !== 'points') return Array.from({ length: (m.max_value || 10) + 1 }, (_, k) => k);
+  const { data, error } = await supabase.from('clients').select('stored_value')
+    .eq('marchand_id', m.id).is('deleted_at', null).limit(1000);
+  if (error) throw new Error(`soldes : ${error.message}`);
+  const { valeurAffichee } = require('./strip-generator');
+  return [...new Set([0, ...(data || []).map(c => valeurAffichee(c.stored_value))])].sort((a, b) => a - b);
+}
+
+// Préparation en admin (« la caisse prime », décisions du pilotage du 14/10) :
+//   1. l'aperçu « Ma carte » de la carte standard et de chaque thème ;
+//   2. puis, pour chaque thème, les bannières de TOUS les états des vraies cartes
+//      (3 variantes : Apple 2x, 3x, Google) : à l'activation, la bascule et le
+//      retour des iPhone ne font que lire le cache ;
+//   3. et les bannières périmées du thème (ancienne version, ancienne empreinte)
+//      sont purgées.
+// L'un après l'autre, jamais en rafale, une pause entre deux rendus. Appelée à la
+// création ou modification d'un thème, à l'envoi d'un logo, à l'enregistrement de
+// la fiche, et à l'ouverture des thèmes dans la fiche admin. Une préparation à la
+// fois par marchand (une demande pendant une préparation la relance à la fin).
+// Ne lève jamais.
+const preparations = new Map();   // marchand_id → { relancer, promesse }
+const pause = () => new Promise(r => setImmediate(r));
+
+function preparerApercus(marchandId) {
+  const enCoursP = preparations.get(marchandId);
+  if (enCoursP) { enCoursP.relancer = true; return enCoursP.promesse; }
+  const e = { relancer: false };
+  preparations.set(marchandId, e);
+  e.promesse = (async () => {
+    let bilan;
+    try {
+      do { e.relancer = false; bilan = await preparer(marchandId); } while (e.relancer);
+    } catch (err) {
+      console.error(`[theme] préparation, marchand ${marchandId} :`, err.message);
+      bilan = { erreur: err.message };
+    } finally { preparations.delete(marchandId); }
+    return bilan;
+  })();
+  return e.promesse;
+}
+
+async function preparer(marchandId) {
+  const supabase = require('./supabase');
+  const cache = require('./strip-cache');
+  const [{ data: m, error }, { data: liste, error: errT }] = await Promise.all([
+    supabase.from('marchands').select('*').eq('id', marchandId).single(),
+    supabase.from('themes_marchand').select('*').eq('marchand_id', marchandId).order('cree_le'),
+  ]);
+  if (error) throw new Error(error.message);
+  if (errT) throw new Error(errT.message);
+  const bilan = { apercus: 0, bannieres: 0, themes: (liste || []).length };
+  if (!m || !liste || !liste.length) return bilan;
+  const standard = { ...m, theme_actif: null };
+  // 1. Aperçus d'abord : le marchand les voit au plus tôt.
+  await apercu(standard, { generer: true }); bilan.apercus++;
+  for (const t of liste) { await apercu(avecTheme(standard, t), { generer: true }); bilan.apercus++; }
+  // 2. Tous les états des vraies cartes, thème par thème.
+  const soldes = await soldesAPreparer(supabase, m);
+  for (const t of liste) {
+    const mt = avecTheme(standard, t);
+    if (!banniereGeneree(mt)) continue;
+    for (const v of soldes) {
+      await pause();
+      // getOrGenerate dessine les 3 variantes d'un coup ; déjà en cache → rien.
+      await cache.getOrGenerate({ marchand: mt, filledCount: v, variant: 'strip2x' });
+      bilan.bannieres++;
+    }
+    // 3. Purge de ce qui est périmé dans le dossier du thème.
+    await cache.purgerTheme(m.slug, t.id, { garderPrefixe: dossierCourant(standard, t) })
+      .catch(err => console.error(`[theme] purge des bannières périmées (${t.nom}) :`, err.message));
   }
+  console.log(`[theme] préparation marchand ${marchandId} : ${bilan.apercus} aperçu(s), ${bilan.bannieres} état(s) de bannière, ${bilan.themes} thème(s)`);
+  return bilan;
 }
 
 // ── Contrôle d'un thème saisi par l'admin ─────────────────────────────────
@@ -342,14 +405,10 @@ async function executer(marchandId) {
     }
   }
 
-  // Fin de bascule. Thème terminé : ses bannières sont purgées (par lots).
+  // Fin de bascule. Les bannières d'un thème terminé RESTENT en cache : le
+  // marchand peut le reprendre sans aucun calcul. Elles ne partent qu'à la
+  // suppression du thème (admin) ou, périmées, à la préparation suivante.
   if (!await avancer(supabase, marchandId, b, null)) return bilan;
-  if (b.sens === 'fin' && b.theme_id) {
-    const { data: t } = await supabase.from('themes_marchand').select('*').eq('id', b.theme_id).maybeSingle();
-    const garder = t ? [cheminApercu({ ...m, theme_actif: null }, t)].filter(Boolean) : [];
-    await require('./strip-cache').purgerTheme(m.slug, b.theme_id, garder)
-      .catch(e => console.error('[theme] purge des bannières :', e.message));
-  }
   console.log(`[theme] bascule ${b.sens} marchand ${marchandId} : ${bilan.iphones} iPhone, ${bilan.google} Google, ${bilan.erreurs} erreur(s)`);
   return bilan;
 }
@@ -395,7 +454,7 @@ async function fermer(marchandId, theme) {
 // inachevées. Rend 'ok' ; lève si la lecture est impossible.
 async function passage(maintenant = new Date()) {
   const supabase = require('./supabase').clientLong;
-  const { data, error } = await supabase.from('marchands').select('id, theme_actif, theme_bascule')
+  const { data, error } = await supabase.from('marchands').select('id, theme_actif, theme_bascule, themes_actifs')
     .or('theme_actif.not.is.null,theme_bascule.not.is.null');
   if (error) throw new Error(error.message);
   const jour = aujourdhui(maintenant);
@@ -403,7 +462,8 @@ async function passage(maintenant = new Date()) {
   for (const m of data || []) {
     const t = m.theme_actif;
     try {
-      if (t && t.fin < jour) { if (await fermer(m.id, t)) bilan.fermes++; continue; }
+      // Fin passée, ou cartes à thème refermées par l'admin : retour au standard.
+      if (t && (t.fin < jour || m.themes_actifs !== true)) { if (await fermer(m.id, t)) bilan.fermes++; continue; }
       if (t && t.etat === 'programme' && t.debut <= jour) { if (await ouvrir(m.id, t)) bilan.ouverts++; continue; }
       if (m.theme_bascule && !enCours.has(m.id)) { lancer(m.id); bilan.reprises++; }
     } catch (e) {
@@ -431,6 +491,6 @@ function _pourTests({ envoyeurs: e, config: c, attendre: a } = {}) {
 }
 
 module.exports = {
-  appliquerTheme, avecTheme, apercu, preparerApercus, cheminApercu, validerTheme, validerDates, aujourdhui,
+  appliquerTheme, avecTheme, apercu, preparerApercus, dossierCourant, validerTheme, validerDates, aujourdhui,
   lancer, ouvrir, fermer, passage, planifierReprise, _pourTests,
 };

@@ -252,6 +252,7 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
     'workflow_near_reward_enabled', 'workflow_near_reward_threshold',
     'workflow_birthday_enabled', 'workflow_birthday_message',
     'landing_premium',
+    'themes_actifs',   // f17 : cartes à thème ouvertes à ce marchand (migration 063)
     'telephone', 'adresse',
     'referral_enabled', 'referral_bonus_points',
     'how_it_works', 'workflow_inactive_message', 'workflow_near_reward_message',
@@ -391,6 +392,12 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
   // f17 : la fiche a pu changer la bannière (version, couleurs, logo) : aperçus
   // « Ma carte » recalculés ici, en admin, jamais à l'ouverture par le marchand.
   if (data && data.forfait === 'pro_plus') suivre(require('../services/themes').preparerApercus(data.id));
+  // f17 : cartes à thème refermées par l'admin pendant un thème → retour
+  // silencieux à la carte standard.
+  if (data && data.themes_actifs === false && data.theme_actif) {
+    suivre(require('../services/themes').fermer(data.id, data.theme_actif)
+      .catch(e => console.error('[theme] fermeture par l\'admin :', e.message)));
+  }
 
   // f10 : interrupteur ou lieux changés (activation, désactivation, adresses,
   // horaires) → les cartes iPhone du marchand sont mises à jour en arrière-plan.
@@ -1009,6 +1016,10 @@ router.delete('/marchands/:id/themes/:themeId', authAdmin, asyncHandler(async (r
     .eq('id', req.params.themeId).eq('marchand_id', req.params.id).select('id');
   if (error) return res.status(500).json({ error: error.message });
   if (!data.length) return res.status(404).json({ error: 'Thème introuvable' });
+  // Ses bannières partent avec lui (par lots, en arrière-plan).
+  const { data: m } = await supabase.from('marchands').select('slug').eq('id', req.params.id).single();
+  if (m) suivre(require('../services/strip-cache').purgerTheme(m.slug, req.params.themeId)
+    .catch(e => console.error('[theme] purge du thème supprimé :', e.message)));
   res.json({ ok: true });
 }));
 

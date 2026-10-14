@@ -44,7 +44,7 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur }) {
   async function ouvrir({ largeur = 420, hauteur = 1100, casser = false } = {}) {
     const contexte = await navigateur.newContext({ serviceWorkers: 'block', viewport: { width: largeur, height: hauteur } });
     await contexte.addInitScript(s => { for (const [k, v] of Object.entries(s)) localStorage.setItem(k, v); },
-      { ww_dash_token: jeton, ww_dash_id: id, ww_dash_nom: nom, ww_dash_slug: slug, ww_dash_lang: 'fr', ww_dash_forfait: 'pro_plus' });
+      { ww_dash_token: jeton, ww_dash_id: id, ww_dash_nom: nom, ww_dash_slug: slug, ww_dash_lang: 'fr', ww_dash_forfait: 'pro_plus', ww_dash_themes: '1' });
     // Logos préfabriqués : servis ici comme le ferait Storage (le filet n'a pas de Storage).
     await contexte.route('https://logos.exemple/**', r => r.fulfill({ contentType: 'image/png', body: logos[r.request().url().split('/').pop()] || logos['standard.png'] }));
     if (casser) await contexte.route('**/dashboard/ma-carte.js*', r => r.fulfill({ contentType: 'application/javascript', body: 'window.MaCarte = { charger( ;' }));
