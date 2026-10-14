@@ -2306,6 +2306,36 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     for (const k of Object.keys(process.env)) if (!(k in env)) delete process.env[k];
     Object.assign(process.env, env);
   }
+
+  titre('25. f10 : carte de test géolocalisée, une seule carte (provisoire, 14/10)');
+  {
+    const envAvant = { ...process.env };
+    Object.assign(process.env, { SUPABASE_URL: urlSupabase, SUPABASE_SERVICE_KEY: cleService });
+    const { carteTestGeo } = require('../src/services/apple-pass');
+    const avant = process.env.CARTE_TEST_GEO;
+    const SERIAL = '1fdd5493-3b78-42e0-8072-38e2fe0a7a61';
+    const m = { nom: 'Hamza Salon', langue: 'fr', max_value: 10, type_programme: 'stamps' };
+    const base = () => ({ formatVersion: 1, storeCard: {} });
+    process.env.CARTE_TEST_GEO = JSON.stringify({ serial: SERIAL, lat: 25.086111, lng: 55.382388,
+      debut: '2026-10-14T11:30:00+00:00', fin: '2026-10-14T12:00:00+00:00' });
+    const visee = carteTestGeo(base(), { client: { prenom: 'Test Docker', stored_value: 7 }, marchand: m, serialNumber: SERIAL });
+    const autre = carteTestGeo(base(), { client: { prenom: 'X', stored_value: 7 }, marchand: m, serialNumber: '00000000-0000-4000-8000-000000000000' });
+    const pleine = carteTestGeo(base(), { client: { prenom: 'Test Docker', stored_value: 10 }, marchand: m, serialNumber: SERIAL });
+    process.env.CARTE_TEST_GEO = '{pas du json';
+    const casse = carteTestGeo(base(), { client: { prenom: 'Test Docker', stored_value: 7 }, marchand: m, serialNumber: SERIAL });
+    if (avant === undefined) delete process.env.CARTE_TEST_GEO; else process.env.CARTE_TEST_GEO = avant;
+    const sans = carteTestGeo(base(), { client: { prenom: 'Test Docker', stored_value: 7 }, marchand: m, serialNumber: SERIAL });
+    for (const k of Object.keys(process.env)) if (!(k in envAvant)) delete process.env[k];
+    Object.assign(process.env, envAvant);
+    verifier('carte visée : une adresse avec le texte de repli (prénom + solde) et le créneau ; récompense atteinte : autre texte',
+      [JSON.stringify(visee.locations), JSON.stringify(visee.relevantDates), pleine.locations[0].relevantText],
+      [JSON.stringify([{ latitude: 25.086111, longitude: 55.382388, relevantText: 'Test Docker, plus que 3 tampons pour ta récompense chez Hamza Salon !' }]),
+       JSON.stringify([{ startDate: '2026-10-14T11:30:00+00:00', endDate: '2026-10-14T12:00:00+00:00' }]),
+       'Test Docker, ta récompense t\'attend chez Hamza Salon !']);
+    verifier('toute autre carte, variable illisible ou absente : carte inchangée (ni adresse ni créneau)',
+      [JSON.stringify(autre), JSON.stringify(casse), JSON.stringify(sans)],
+      [JSON.stringify(base()), JSON.stringify(base()), JSON.stringify(base())]);
+  }
 }
 
 module.exports = { FIXTURES, jouer, M, B };

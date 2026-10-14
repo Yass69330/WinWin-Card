@@ -6797,6 +6797,16 @@ Le rapport à Yass comporte les options et la recommandation.
   test de la notification parasite). f10 se fait **sur iPhone seulement**.
 - Fuseau horaire : au plus simple. Yass saisit les horaires d'ouverture déjà
   convertis en heure UTC ; aucun fuseau n'est stocké.
+- **Carte de test iPhone (14/10, provisoire)** : `carteTestGeo` dans
+  `src/services/apple-pass.js`.
+  - Elle n'agit que si la variable Railway `CARTE_TEST_GEO` désigne exactement le
+    numéro de série de la carte : celle de Test Docker chez hamza-salon,
+    `1fdd5493-3b78-42e0-8072-38e2fe0a7a61`.
+  - La carte reçoit alors `locations` (1 adresse, avec le texte de repli prénom +
+    solde) et `relevantDates` (1 créneau).
+  - Toute autre carte est inchangée (filet, section 25).
+  - Retour arrière : supprimer la variable, puis un scan.
+  - **À retirer au code définitif de f10.**
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
