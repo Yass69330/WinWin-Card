@@ -6909,8 +6909,17 @@ Le rapport à Yass comporte les options et la recommandation.
   `claude/keen-goldberg-MXslu` (`4446e38` → `70caa3c`).
 - f10 éteint chez tout le monde (`geo_actif` à false) jusqu'au test de Yass en se
   déplaçant, chez hamza-salon.
-- `CARTE_TEST_GEO` : à supprimer dans Railway une fois le déploiement vert.
-- Contrôles et test en se déplaçant : à compléter.
+- Contrôles de Yass (14/10) : déploiement vert, `CARTE_TEST_GEO` supprimée,
+  section admin visible.
+- Test en se déplaçant (14/10, soir) :
+  - f10 activé chez hamza-salon, avec un lieu à 1 km de chez Yass ;
+  - créneau d'abord saisi en « 22-23 » (confusion UTC / heure de Dubaï), corrigé
+    en `14:30-15:30` UTC tous les jours ;
+  - journal : `[geo] mise à jour (admin) … : 2 iPhone, 0 erreur(s)` (cartes Test
+    Docker et Yacine) ;
+  - observations sur place : à compléter.
+- Leçon : la saisie en UTC prête à confusion. À surveiller (aide de saisie
+  possible : afficher l'heure de Dubaï correspondante).
 
 ### Hypothèses et limites
 
