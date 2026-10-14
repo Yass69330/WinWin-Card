@@ -559,6 +559,9 @@
       <div id="smart-notifs" class="smart-notifs" style="display:none"></div>
     </div>
 
+    <!-- ── Ma carte (f17, Pro+) : tout le code dans ma-carte.js ── -->
+    <div id="tab-carte" class="tab-panel"></div>
+
   </div><!-- /dash-content -->
 
   <nav class="dash-nav">
@@ -579,6 +582,9 @@
     </button>
     <button class="nav-btn" data-tab="notifs" data-min-plan="pro">
       <span class="nav-icon">🔔</span><span data-i18n="navNotifs">Notifs</span>
+    </button>
+    <button class="nav-btn" data-tab="carte" data-min-plan="pro_plus">
+      <span class="nav-icon">🎨</span><span data-i18n="navCarte">My card</span>
     </button>
   </nav>
 
@@ -884,7 +890,7 @@ const I18N = {
     fillAllFields:'Please fill in all fields', invalidCreds:'Invalid credentials',
     justNow:'just now', minAgo:({m})=>`${m} min ago`, hoursAgo:({h})=>`${h}h ago`,
     yesterday:'yesterday', daysAgo:({d})=>`${d} days ago`,
-    navOverview:'Overview', navClients:'Clients', navScans:'Scans', navScanner:'Scanner', navNotifs:'Notifs',
+    navOverview:'Overview', navClients:'Clients', navScans:'Scans', navScanner:'Scanner', navNotifs:'Notifs', navCarte:'My card',
     navReseau:'Network',
     rsPorteurs:'Carriers', rsActifs30:'Active (30d)', rsNouveaux:'New this month', rsRetour:'Return rate',
     rsMobilite:'Carriers visiting more than one store', rsDistribTitle:'Visit distribution (30 days)',
@@ -1017,7 +1023,7 @@ const I18N = {
     fillAllFields:'Veuillez remplir tous les champs', invalidCreds:'Identifiants invalides',
     justNow:"à l'instant", minAgo:({m})=>`il y a ${m} min`, hoursAgo:({h})=>`il y a ${h} h`,
     yesterday:'hier', daysAgo:({d})=>`il y a ${d} jours`,
-    navOverview:'Aperçu', navClients:'Clients', navScans:'Scans', navScanner:'Scanner', navNotifs:'Notifs',
+    navOverview:'Aperçu', navClients:'Clients', navScans:'Scans', navScanner:'Scanner', navNotifs:'Notifs', navCarte:'Ma carte',
     navReseau:'Réseau',
     rsPorteurs:'Porteurs', rsActifs30:'Actifs (30 j)', rsNouveaux:'Nouveaux ce mois', rsRetour:'Taux de retour',
     rsMobilite:'Porteurs fréquentant plusieurs boutiques', rsDistribTitle:'Répartition des passages (30 jours)',
@@ -1211,6 +1217,12 @@ function switchTab(tab) {
   if (tab === 'scans')    loadScans();
   if (tab === 'scanner')  startScannerTab();
   if (tab === 'notifs')   { loadNotifHistory(); remplirSegments(); chargerSmartNotifs(); }
+  // « Ma carte » (f17) vit dans ma-carte.js : s'il ne charge pas, seul cet onglet
+  // l'affiche, les autres continuent de fonctionner.
+  if (tab === 'carte') {
+    if (window.MaCarte) window.MaCarte.charger();
+    else document.getElementById('tab-carte').innerHTML = `<div class="alert alert-info">${esc(_lang === 'fr' ? 'Onglet momentanément indisponible. Rechargez la page.' : 'Tab temporarily unavailable. Reload the page.')}</div>`;
+  }
 }
 
 // ════════════════════════════════════════════════
@@ -2786,5 +2798,7 @@ applyI18n();
 
 if (restoreSession()) showDashboard();
 </script>
+<!-- f17 : onglet « Ma carte », fichier à part (versionné : ?v=). -->
+<script src="/dashboard/ma-carte.js?v=1"></script>
 </body>
 </html>

@@ -150,6 +150,10 @@ async function walletRequest(method, endpoint, body, token) {
 // ── Construction LoyaltyClass ────────────────────────────────
 
 async function buildLoyaltyClass(cId, marchand) {
+  // f17, point d'entrée 3 : la classe (partagée par toutes les cartes Google du
+  // marchand) porte le fond, le logo et le texte du thème en cours. Toute
+  // réécriture de la classe (admin, inscription) garde donc le thème.
+  marchand = require('./themes').appliquerTheme(marchand);
   const logoUrl = googleLogoUrl(marchand);
   const heroUrl = await googleHeroUrl(marchand);
 
@@ -183,6 +187,12 @@ async function buildLoyaltyClass(cId, marchand) {
     };
   }
 
+  // f17 : texte court du thème. Sur la CLASSE : une seule écriture pour toutes
+  // les cartes, retiré à la fin du thème (la classe est réécrite en entier).
+  if (marchand._theme && marchand._theme.texte_case) {
+    obj.textModulesData = [{ id: 'theme', header: marchand._theme.nom || '', body: marchand._theme.texte_case }];
+  }
+
   // Hero image 1032×336 px (bas de carte)
   if (heroUrl) {
     obj.heroImage = {
@@ -214,6 +224,7 @@ function blocLiensAvis(marchand, serialNumber) {
 }
 
 function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {
+  marchand = require('./themes').appliquerTheme(marchand);   // f17, point d'entrée 4
   const isRecompense = client.stored_value > 0 && client.stored_value >= (marchand.max_value || 1);
   const displayMax = marchand.display_max_value || marchand.max_value;
   // Mode points : le surplus est reporté (migration_022), jamais clampé —
@@ -412,6 +423,13 @@ async function generateGoogleWalletUrl({ client, marchand, serialNumber }) {
 async function updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, imagesTiers, prenom, couleurFond, couleurFondReward, marchand) {
   if (!isConfigured()) return;
 
+  // f17, point d'entrée 5 : pendant un thème, le fond hors récompense et la
+  // bannière sont ceux du thème (le doré de la récompense garde la priorité).
+  if (marchand) {
+    marchand = require('./themes').appliquerTheme(marchand);
+    if (marchand._theme) couleurFond = marchand.couleur_fond;
+  }
+
   const oId = objectId(serialNumber);
   const token = await getAccessToken();
   const isRecompense = storedValue > 0 && storedValue >= (maxValue || 1);
@@ -543,4 +561,7 @@ module.exports = {
   generateGoogleWalletUrl,
   updateLoyaltyObjectPoints,
   addMessageToLoyaltyObject,
+  // Exposées pour le filet (f17 : le thème s'applique à la classe et à l'objet).
+  buildLoyaltyClass,
+  buildLoyaltyObject,
 };

@@ -1439,9 +1439,11 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     await cronMod.passageQuotidien();
     console.error = consoleError;
     sql(`GRANT SELECT ON public.marchands TO service_role`);
-    verifier('lecture des marchands impossible : passage « erreurs » (avant : « ok » avec 0 envoi), les trois relances en erreur',
+    // f17 : l'étape « themes » lit aussi les marchands, elle est donc en erreur aussi.
+    const avecThemes = require('fs').existsSync(require('path').resolve(__dirname, '../src/services/themes.js'));
+    verifier('lecture des marchands impossible : passage « erreurs » (avant : « ok » avec 0 envoi), les trois relances en erreur (et les thèmes, f17)',
       sql(`SELECT statut || '|' || (details -> 'erreurs')::text FROM cron_passages ORDER BY debut DESC LIMIT 1`),
-      'erreurs|["birthday", "near_reward", "inactive"]');
+      `erreurs|["birthday", "near_reward", "inactive"${avecThemes ? ', "themes"' : ''}]`);
 
     // ── I : purge à 90 jours, la dernière relance de chaque (client, type) gardée ──
     const MG = 'e2200000-0000-4000-8000-000000000010';
@@ -2399,6 +2401,234 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     modules.forEach(x => delete require.cache[x]);
     for (const k of Object.keys(process.env)) if (!(k in env)) delete process.env[k];
     Object.assign(process.env, env);
+    }
+  }
+
+  titre('26. f17 : cartes à thème (migration 063)');
+  {
+    let themes = null;
+    try { themes = require('../src/services/themes'); } catch { /* absent avant f17 */ }
+    if (!themes) verifier('f17 : module services/themes.js présent', false, true);
+    else {
+    const path = require('path');
+    const fs = require('fs');
+    const os = require('os');
+    const { execFileSync } = require('child_process');
+
+    const theme = { id: 'e3600000-0000-4000-8000-0000000000aa', nom: 'Ramadan', couleur_fond: '#0b3d2e', couleur_texte: '#ffffff',
+      couleur_label: '#d4af37', logo_url: 'https://logos.exemple/ramadan.png', google_logo_url: 'https://logos.exemple/ramadan-carre.png',
+      texte_case: 'Ramadan Kareem', message_ouverture: 'Ramadan Kareem ! Votre carte se met aux couleurs du mois.' };
+    const base = { id: 'x', nom: 'Filet Thème', slug: 'filet-theme', langue: 'fr', forfait: 'pro_plus', type_programme: 'stamps',
+      max_value: 10, display_max_value: 10, couleur_fond: '#111111', couleur_texte: '#eeeeee', couleur_label: '#999999',
+      couleur_fond_reward: '#aa0000', couleur_pastille_fond: '#222222', couleur_label_strip: '#333333', logo_url: 'https://logos.exemple/std.png' };
+    const enCours = { ...base, theme_actif: { ...theme, etat: 'en_cours', debut: '2026-10-14', fin: '2026-10-20' } };
+    const programme = { ...base, theme_actif: { ...theme, etat: 'programme', debut: '2026-10-20', fin: '2026-10-25' } };
+
+    // ── La fonction unique ──
+    const h = themes.appliquerTheme(enCours);
+    verifier('appliquerTheme : hors thème ou thème seulement programmé → fiche intacte (même objet) ; en cours → couleurs, logos, texte du thème ; couleurs manuelles de bannière remises au calcul auto ; doré de la récompense intact ; idempotente',
+      [themes.appliquerTheme(base) === base, themes.appliquerTheme(programme) === programme,
+       h.couleur_fond, h.couleur_texte, h.couleur_label, h.logo_url, h.google_logo_url, h.couleur_pastille_fond, h.couleur_label_strip,
+       h.couleur_fond_reward, h._theme.texte_case, themes.appliquerTheme(h) === h, base.couleur_fond],
+      [true, true, '#0b3d2e', '#ffffff', '#d4af37', theme.logo_url, theme.google_logo_url, null, null, '#aa0000', 'Ramadan Kareem', true, '#111111']);
+
+    // Les modules qui parlent à la base ou à Google sont rechargés avec la clé
+    // locale (comme la section 25) ; Apple et Google sont imités.
+    const env = { ...process.env };
+    const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'filet-theme-'));
+    execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', path.join(dossier, 'k.pem'),
+      '-out', path.join(dossier, 'c.pem'), '-subj', '/CN=filet', '-days', '1'], { stdio: 'ignore' });
+    const b64 = f => fs.readFileSync(path.join(dossier, f)).toString('base64');
+    Object.assign(process.env, { SUPABASE_URL: urlSupabase, SUPABASE_SERVICE_KEY: cleService, DEBIT_RAFALE: '1000', JWT_SECRET: secretJwt,
+      APPLE_WWDR_CERT_B64: b64('c.pem'), APPLE_SIGNER_CERT_B64: b64('c.pem'), APPLE_SIGNER_KEY_B64: b64('k.pem'),
+      GOOGLE_WALLET_ISSUER_ID: '3388000000000000000',
+      GOOGLE_SERVICE_ACCOUNT_JSON: JSON.stringify({ client_email: 'filet@exemple.iam', private_key: fs.readFileSync(path.join(dossier, 'k.pem'), 'utf8') }) });
+    const modules = ['services/supabase', 'services/notif-registre', 'services/debit', 'services/themes', 'services/strip-cache',
+      'services/apple-pass', 'services/google-pass'].map(x => path.resolve(__dirname, `../src/${x}.js`));
+    modules.forEach(x => delete require.cache[x]);
+    const T = require('../src/services/themes');
+    const applePass = require('../src/services/apple-pass');
+    const googlePass = require('../src/services/google-pass');
+    const stripCache = require('../src/services/strip-cache');
+    const sharp = require('sharp');
+    const fetchOrigine = globalThis.fetch;
+    const appelsGoogle = [];
+    globalThis.fetch = async (url, opts = {}) => {
+      const u = String(url);
+      if (u.startsWith('https://oauth2.googleapis.com/')) return new Response(JSON.stringify({ access_token: 'filet' }));
+      if (u.startsWith('https://walletobjects.googleapis.com/')) {
+        appelsGoogle.push({ methode: opts.method, url: u, corps: opts.body ? JSON.parse(opts.body) : null });
+        return new Response('{}', { status: 200 });
+      }
+      return fetchOrigine(url, opts);
+    };
+    try {
+      // ── Point d'entrée 1 : la carte Apple (generateApplePass → buildPassJson) ──
+      const fichiers = zip => {
+        const f = {};
+        for (let i = 0; zip.readUInt32LE(i) === 0x04034b50;) {
+          const taille = zip.readUInt32LE(i + 18), lnom = zip.readUInt16LE(i + 26);
+          f[zip.slice(i + 30, i + 30 + lnom).toString()] = zip.slice(i + 30 + lnom, i + 30 + lnom + taille);
+          i += 30 + lnom + taille;
+        }
+        return f;
+      };
+      const pixel = async buf => { const { data } = await sharp(buf).extract({ left: 3, top: 3, width: 1, height: 1 }).raw().toBuffer({ resolveWithObject: true });
+        return '#' + [...data.slice(0, 3)].map(v => v.toString(16).padStart(2, '0')).join(''); };
+      const sansLogo = m => ({ ...m, logo_url: null, theme_actif: m.theme_actif ? { ...m.theme_actif, logo_url: null } : null });
+      const zip = await applePass.generateApplePass({ client: { prenom: 'Sarah', stored_value: 3 }, marchand: sansLogo({ ...enCours, strip_mode: 'stamps', strip_label: 'off' }), serialNumber: 'filet-theme-1' });
+      const f = fichiers(zip);
+      const pj = JSON.parse(f['pass.json']);
+      const dore = applePass.buildPassJson({ client: { prenom: 'Sarah', stored_value: 10 }, marchand: enCours, serialNumber: 's' });
+      const std = applePass.buildPassJson({ client: { prenom: 'Sarah', stored_value: 3 }, marchand: base, serialNumber: 's' });
+      verifier('entrée 1 (carte Apple) : fond, textes, libellés du thème ; texte du thème dans la case sous le prénom ; bannière peinte sur le fond du thème ; icône à la couleur STANDARD ; prénom et solde inchangés',
+        [pj.backgroundColor, pj.foregroundColor, pj.labelColor, JSON.stringify(pj.storeCard.auxiliaryFields), await pixel(f['strip@2x.png']),
+         f['icon.png'].equals(applePass.createSolidPng(29, 29, 17, 17, 17)), pj.storeCard.secondaryFields.map(x => x.value).join('|')],
+        ['rgb(11, 61, 46)', 'rgb(255, 255, 255)', 'rgb(212, 175, 55)', JSON.stringify([{ key: 'theme', label: '', value: 'Ramadan Kareem' }]), '#0b3d2e', true, 'Sarah|3 / 10']);
+      verifier('… récompense atteinte pendant le thème : le doré (ici la couleur de récompense du marchand) garde la priorité ; hors thème : aucune case, couleurs standard',
+        [dore.backgroundColor, std.backgroundColor, std.storeCard.auxiliaryFields.length], ['rgb(170, 0, 0)', 'rgb(17, 17, 17)', 0]);
+
+      // ── Point d'entrée 2 : les bannières (cache) ──
+      const cleStd = stripCache.storageKey({ ...base, strip_mode: 'stamps' }, 3, 'strip2x');
+      const cleTheme = stripCache.storageKey(T.appliquerTheme({ ...enCours, strip_mode: 'stamps' }), 3, 'strip2x');
+      const banniere = await stripCache.getOrGenerate({ marchand: sansLogo({ ...enCours, slug: 'filet-theme-b', strip_mode: 'stamps', strip_label: 'off' }), filledCount: 4, variant: 'strip2x' });
+      verifier('entrée 2 (bannière) : peinte sur le fond du thème, rangée à part dans le dossier du thème (purgé à sa fin) ; hors thème, chemin inchangé',
+        [await pixel(banniere), cleTheme.startsWith(`marchands/filet-theme/theme/${theme.id}/v1_`), cleStd],
+        ['#0b3d2e', true, 'marchands/filet-theme/gen/v1/stamps_3_strip2x.png']);
+
+      // ── Points d'entrée 3, 4, 5 : Google ──
+      const classe = await googlePass.buildLoyaltyClass('c', enCours);
+      const classeStd = await googlePass.buildLoyaltyClass('c', base);
+      const objet = googlePass.buildLoyaltyObject('o', 'c', { prenom: 'Sarah', stored_value: 3 }, enCours, 's');
+      const objetDore = googlePass.buildLoyaltyObject('o', 'c', { prenom: 'Sarah', stored_value: 10 }, enCours, 's');
+      verifier('entrée 3 (classe Google) : fond, logo carré et texte du thème ; hors thème : classe standard, sans texte',
+        [classe.hexBackgroundColor, classe.programLogo.sourceUri.uri, JSON.stringify(classe.textModulesData), classeStd.hexBackgroundColor, classeStd.textModulesData],
+        ['#0b3d2e', theme.google_logo_url, JSON.stringify([{ id: 'theme', header: 'Ramadan', body: 'Ramadan Kareem' }]), '#111111', undefined]);
+      verifier('entrée 4 (carte Google à l\'inscription) : fond du thème (le marchand a une couleur de récompense, l\'objet porte donc le fond) ; récompense : doré prioritaire',
+        [objet.hexBackgroundColor, objetDore.hexBackgroundColor], ['#0b3d2e', '#aa0000']);
+      appelsGoogle.length = 0;
+      await googlePass.updateLoyaltyObjectPoints('s5', 'x', 3, 10, 10, null, 'Sarah', '#111111', '#aa0000', enCours);
+      await googlePass.updateLoyaltyObjectPoints('s5', 'x', 10, 10, 10, null, 'Sarah', '#111111', '#aa0000', enCours);
+      await googlePass.updateLoyaltyObjectPoints('s5', 'x', 3, 10, 10, null, 'Sarah', '#111111', '#aa0000', base);
+      verifier('entrée 5 (mise à jour Google : scan, ajustement, bascule) : fond du thème même si l\'appelant passe la couleur standard ; doré prioritaire ; hors thème : couleur standard',
+        appelsGoogle.filter(a => a.methode === 'PATCH').map(a => a.corps.hexBackgroundColor), ['#0b3d2e', '#aa0000', '#111111']);
+
+      // ── Point d'entrée 6 : l'aperçu « Ma carte » ──
+      const ap = await T.apercu(T.avecTheme(base, theme));
+      const apStd = await T.apercu(base);
+      verifier('entrée 6 (aperçu « Ma carte ») : couleurs, logo et texte du thème ; carte standard sans texte',
+        [ap.couleur_fond, ap.logo_url, ap.texte_case, apStd.couleur_fond, apStd.texte_case],
+        ['#0b3d2e', theme.logo_url, 'Ramadan Kareem', '#111111', null]);
+
+      // ── Routes du marchand et de l'admin ──
+      const MT = 'e3600000-0000-4000-8000-000000000001', MPRO = 'e3600000-0000-4000-8000-000000000002';
+      sql(`INSERT INTO marchands (id, nom, slug, langue, forfait, type_programme, max_value, display_max_value, couleur_fond, couleur_texte)
+           VALUES ('${MT}', 'Filet Thème', 'filet-theme', 'fr', 'pro_plus', 'stamps', 10, 10, '#111111', '#f5f5f5'),
+                  ('${MPRO}', 'Filet Thème Pro', 'filet-theme-pro', 'fr', 'pro', 'stamps', 10, 10, '#111111', '#f5f5f5')`);
+      const tMT = jeton(MT);
+      const mauvais = await api('POST', `/api/admin/marchands/${MT}/themes`, jetonAdmin, { ...theme, id: undefined, couleur_fond: 'vert' });
+      const cree = await api('POST', `/api/admin/marchands/${MT}/themes`, jetonAdmin, { ...theme, id: undefined });
+      const cree2 = await api('POST', `/api/admin/marchands/${MT}/themes`, jetonAdmin, { nom: 'Fête nationale', couleur_fond: '#00732f', message_ouverture: 'Bonne fête nationale !' });
+      const doublon = await api('POST', `/api/admin/marchands/${MT}/themes`, jetonAdmin, { nom: 'Ramadan', couleur_fond: '#000000', message_ouverture: 'x' });
+      verifier('admin : thème mal formé refusé (400 lisible) ; thèmes créés ; même nom refusé (409)',
+        [mauvais.statut, /couleur_fond/.test(mauvais.corps.error || ''), cree.statut, cree2.statut, doublon.statut], [400, true, 201, 201, 409]);
+      const idT = cree.corps.id, idT2 = cree2.corps.id;
+      const pro = await api('GET', '/api/merchants/me/themes', jeton(MPRO));
+      const proPost = await api('POST', '/api/merchants/me/theme', jeton(MPRO), { theme_id: idT, debut: T.aujourdhui(), fin: T.aujourdhui() });
+      const liste = await api('GET', '/api/merchants/me/themes', tMT);
+      verifier('« Ma carte » : réservé à Pro+ (Pro : non éligible, choix refusé 403) ; Pro+ : carte standard + chaque thème avec son aperçu',
+        [pro.corps.eligible, proPost.statut, liste.corps.eligible, liste.corps.standard.couleur_fond, liste.corps.themes.map(x => `${x.nom}:${x.apercu.couleur_fond}:${x.apercu.texte_case}`).join(','), liste.corps.actif],
+        [false, 403, true, '#111111', 'Ramadan:#0b3d2e:Ramadan Kareem,Fête nationale:#00732f:null', null]);
+      const jour = T.aujourdhui(), demain = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+      const erreurs = [];
+      for (const [d, f] of [['2026-13-01', jour], ['2020-01-01', jour], [jour, '2020-01-01'], [jour, '2099-01-01']]) {
+        erreurs.push((await api('POST', '/api/merchants/me/theme', tMT, { theme_id: idT, debut: d, fin: f })).corps.error);
+      }
+      verifier('dates contrôlées : invalide, début passé, fin avant début, plus de 3 mois',
+        erreurs, ['dates_invalides', 'debut_passe', 'fin_avant_debut', 'duree_trop_longue']);
+      const prog = await api('POST', '/api/merchants/me/theme', tMT, { theme_id: idT2, debut: demain, fin: demain });
+      const remplace = await api('POST', '/api/merchants/me/theme', tMT, { theme_id: idT, debut: jour, fin: demain });
+      const actif = JSON.parse(sql(`SELECT theme_actif FROM marchands WHERE id = '${MT}'`));
+      const second = await api('POST', '/api/merchants/me/theme', tMT, { theme_id: idT2, debut: demain, fin: demain });
+      const modif = await api('PATCH', `/api/admin/marchands/${MT}/themes/${idT}`, jetonAdmin, { texte_case: 'autre' });
+      const suppr = await api('DELETE', `/api/admin/marchands/${MT}/themes/${idT}`, jetonAdmin);
+      const basculeFinie = await attendre(async () => sql(`SELECT theme_bascule IS NULL FROM marchands WHERE id = '${MT}'`) === 't');
+      verifier('choix : début demain → programmé ; remplacé par un autre dont le début est aujourd\'hui → ouvert tout de suite (copie du thème sur la fiche) ; un seul thème à la fois (409) ; thème choisi ni modifiable ni supprimable (409) ; bascule terminée (serveur du filet sans Apple ni Google)',
+        [prog.corps.etat, remplace.corps.etat, actif.etat, actif.nom, actif.texte_case, actif.debut, second.statut, second.corps.error, modif.statut, suppr.statut, basculeFinie],
+        ['programme', 'en_cours', 'en_cours', 'Ramadan', 'Ramadan Kareem', jour, 409, 'theme_en_cours', 409, 409, true]);
+      const arret = await api('DELETE', '/api/merchants/me/theme', tMT);
+      verifier('arrêt par le marchand : retour à la carte standard (fiche sans thème) ; bascule silencieuse lancée et terminée',
+        [arret.statut, sql(`SELECT theme_actif IS NULL FROM marchands WHERE id = '${MT}'`),
+         await attendre(async () => sql(`SELECT theme_bascule IS NULL FROM marchands WHERE id = '${MT}'`) === 't')], [200, 't', true]);
+
+      // ── Bascule : iPhone et Google, par lots, au débit, tracée ──
+      const pousses = [], objets = [], messages = [], classes = [];
+      T._pourTests({ config: { iphoneParLot: 2, googleParLot: 2, lotMs: 0 }, envoyeurs: {
+        appleActif: () => true, googleActif: () => true,
+        apple: async j => { pousses.push(j); if (j.endsWith('-panne')) throw new Error('APNs 410'); },
+        classe: async m => { classes.push(T.appliquerTheme(m).couleur_fond); },
+        objet: async (carte, m) => { objets.push(`${carte.serial_number.slice(0, 6)}:${carte.prenom}:${carte.stored_value}:${T.appliquerTheme(m).couleur_fond}`); },
+        message: async (serial, texte) => { messages.push(texte); },
+      } });
+      const MB = 'e3600000-0000-4000-8000-000000000003', MAUTRE = 'e3600000-0000-4000-8000-000000000004';
+      sql(`INSERT INTO marchands (id, nom, slug, langue, forfait, type_programme, max_value, display_max_value, couleur_fond)
+           VALUES ('${MB}', 'Filet Bascule', 'filet-bascule', 'fr', 'pro_plus', 'stamps', 10, 10, '#111111'),
+                  ('${MAUTRE}', 'Filet Bascule Autre', 'filet-bascule-autre', 'fr', 'pro_plus', 'stamps', 10, 10, '#111111')`);
+      const carte = (mid, { jeton: j = null, google = false, ouvert = false } = {}) => {
+        const id = crypto.randomUUID(), serial = crypto.randomUUID(), passId = crypto.randomUUID();
+        sql(`INSERT INTO clients (id, marchand_id, prenom, stored_value, pass_serial_number) VALUES ('${id}', '${mid}', 'B${serial.slice(0, 2)}', 4, '${serial}');
+             INSERT INTO passes (id, client_id, marchand_id, serial_number, updated_at, google_pass_url) VALUES ('${passId}', '${id}', '${mid}', '${serial}', now() - interval '3 days', ${google ? "'https://pay.google.com/x'" : 'NULL'});
+             ${j ? `INSERT INTO device_tokens (pass_id, client_id, marchand_id, serial_number, device_id, push_token) VALUES ('${passId}', '${id}', '${mid}', '${serial}', 'app-${serial}', '${j}');` : ''}
+             ${ouvert ? `UPDATE passes SET google_ouvert_le = now() WHERE id = '${passId}';` : ''}`);
+        rendreVisibles(`id = '${id}'`);
+        return serial;
+      };
+      const a1 = carte(MB, { jeton: 'th-1' }), a2 = carte(MB, { jeton: 'th-2' }), a3 = carte(MB, { jeton: 'th-3-panne' });
+      const g1 = carte(MB, { google: true }), g2 = carte(MB, { google: true, jeton: 'th-4', ouvert: true });
+      const iphoneSeul = carte(MB, { google: true, jeton: 'th-5' });   // lien Google jamais ouvert : D2, pas de Google
+      const autre = carte(MAUTRE, { jeton: 'autre-1' });
+      const choisi = { ...theme, id: idT, debut: jour, fin: demain, etat: 'programme' };
+      sql(`UPDATE marchands SET theme_actif = '${JSON.stringify(choisi).replace(/'/g, "''")}' WHERE id = '${MB}'`);
+      const majRecente = sr => sql(`SELECT updated_at > now() - interval '1 minute' FROM passes WHERE serial_number = '${sr}'`);
+      const passage1 = await T.passage();
+      await attendre(async () => sql(`SELECT theme_bascule IS NULL FROM marchands WHERE id = '${MB}'`) === 't', 8000);
+      verifier('ouverture au passage du cron (début arrivé) : un push par iPhone du marchand (5, lots de 2), message d\'ouverture sur ses cartes iPhone, cartes marquées modifiées ; jamais un autre marchand',
+        [passage1.ouverts, pousses.slice().sort().join(','), [a1, a2, a3, g2, iphoneSeul].map(sr => messageCarte(sr) === theme.message_ouverture ? 'm' : '-').join(''),
+         [a1, a2, a3].map(majRecente).join(''), majRecente(autre), messageCarte(autre)],
+        [1, 'th-1,th-2,th-3-panne,th-4,th-5', 'mmmmm', 'ttt', 'f', '']);
+      verifier('… Google : la classe une fois aux couleurs du thème, puis chaque carte Google réelle (règle D2) redessinée (prénom, solde, fond du thème) avec le message d\'ouverture',
+        [classes, objets.map(o => o.split(':').slice(1).join(':')).sort(), objets.map(o => o.slice(0, 6)).sort().join(','), messages],
+        [['#0b3d2e'], [`B${g1.slice(0, 2)}:4:#0b3d2e`, `B${g2.slice(0, 2)}:4:#0b3d2e`].sort(), [g1, g2].map(x => x.slice(0, 6)).sort().join(','), [theme.message_ouverture, theme.message_ouverture]]);
+      verifier('… chaque envoi tracé dans notification_envois, source « theme » (CLAUDE.md), l\'échec compris ; aucun quota consommé',
+        [sql(`SELECT count(*) || '|' || count(*) FILTER (WHERE NOT ok) || '|' || count(*) FILTER (WHERE plateforme = 'google') FROM notification_envois WHERE source = 'theme' AND marchand_id = '${MB}'`),
+         sql(`SELECT count(*) FROM campagnes WHERE marchand_id = '${MB}'`)], ['7|1|2', '0']);
+
+      // Reprise après redémarrage : bascule de fin interrompue après le premier lot iPhone.
+      pousses.length = 0; objets.length = 0; messages.length = 0; classes.length = 0;
+      const premier = sql(`SELECT id FROM device_tokens WHERE marchand_id = '${MB}' ORDER BY id LIMIT 1 OFFSET 1`);
+      const enCoursB = JSON.parse(sql(`SELECT theme_actif FROM marchands WHERE id = '${MB}'`));
+      sql(`UPDATE marchands SET theme_actif = NULL, theme_bascule = '${JSON.stringify({ sens: 'fin', theme_id: idT, message: null, cree_le: '2026-10-14T00:00:00.000Z',
+        apple_apres: premier, apple_fini: false, google_apres: null, google_fini: false, classe_ok: false })}' WHERE id = '${MB}'`);
+      const passage2 = await T.passage();
+      await attendre(async () => sql(`SELECT theme_bascule IS NULL FROM marchands WHERE id = '${MB}'`) === 't', 8000);
+      verifier('fin de thème interrompue (redémarrage) : reprise au curseur par le passage suivant (seuls les iPhone restants), retour SILENCIEUX (aucun message, ni iPhone ni Google), classe et cartes Google remises au standard',
+        [enCoursB.etat, passage2.reprises, pousses.length, messages.length, classes, objets.map(o => o.split(':')[3])],
+        ['en_cours', 1, 3, 0, ['#111111'], ['#111111', '#111111']]);
+      const avant = Number(sql(`SELECT count(*) FROM notification_envois WHERE source = 'theme' AND marchand_id = '${MB}'`));
+      sql(`UPDATE marchands SET theme_actif = '${JSON.stringify({ ...choisi, etat: 'en_cours', fin: '2026-01-01' }).replace(/'/g, "''")}' WHERE id = '${MB}'`);
+      const passage3 = await T.passage();
+      await attendre(async () => sql(`SELECT theme_bascule IS NULL FROM marchands WHERE id = '${MB}'`) === 't', 8000);
+      verifier('fin de thème au passage du cron (jour de fin passé) : fiche remise au standard, toutes les cartes mises à jour sans message, tracé',
+        [passage3.fermes, sql(`SELECT theme_actif IS NULL FROM marchands WHERE id = '${MB}'`), messages.length,
+         Number(sql(`SELECT count(*) FROM notification_envois WHERE source = 'theme' AND marchand_id = '${MB}'`)) - avant],
+        [1, 't', 0, 7]);
+    } finally {
+      globalThis.fetch = fetchOrigine;
+      modules.forEach(x => delete require.cache[x]);
+      for (const k of Object.keys(process.env)) if (!(k in env)) delete process.env[k];
+      Object.assign(process.env, env);
+      fs.rmSync(dossier, { recursive: true, force: true });
+    }
     }
   }
 }

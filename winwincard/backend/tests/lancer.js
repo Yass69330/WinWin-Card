@@ -292,6 +292,9 @@ function verifierNode() {
 if (require.main === module) (async () => {
   if (!verifierNode()) { fs.rmSync(TMP, { recursive: true, force: true }); process.exit(2); }
   console.log(`Node ${process.version} (celui de la production)`);
+  // Contrôle de syntaxe des écrans (f17) : sans base ni serveur.
+  console.log('\n— Syntaxe des écrans (scripts en ligne du dashboard, de l\'admin, de la caisse ; JS du dashboard)');
+  for (const { nom, erreur } of require('./syntaxe').controlerTout()) verifier(`syntaxe : ${nom}`, erreur, null);
   const scenarios = require('./scenarios');
   demarrerPostgresSiBesoin();
   const nb = preparerBase(scenarios.FIXTURES);

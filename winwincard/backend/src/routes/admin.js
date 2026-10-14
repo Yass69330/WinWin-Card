@@ -936,4 +936,93 @@ router.delete('/marchands/:id/strip-static', authAdmin, asyncHandler(async (req,
   res.json({ ok: true });
 }));
 
+// ── f17 : thèmes de carte préparés par WinWin (migration 063) ─────────────
+// L'admin crée, modifie, supprime les thèmes d'un marchand ; le marchand ne fait
+// que choisir (onglet « Ma carte »). Un thème choisi (programmé ou en cours) ne
+// se modifie ni ne se supprime : la carte en porte une copie (theme_actif).
+const COLONNES_THEME = 'id, nom, couleur_fond, couleur_texte, couleur_label, logo_url, google_logo_url, texte_case, message_ouverture, cree_le';
+
+async function themeChoisi(marchandId, themeId) {
+  const { data, error } = await supabase.from('marchands').select('theme_actif').eq('id', marchandId).single();
+  if (error) throw new Error(error.message);
+  return !!(data && data.theme_actif && data.theme_actif.id === themeId);
+}
+
+// GET /api/admin/marchands/:id/themes — thèmes, thème choisi, aperçus
+router.get('/marchands/:id/themes', authAdmin, asyncHandler(async (req, res) => {
+  const themes = require('../services/themes');
+  const [{ data: m, error }, { data: liste, error: errT }] = await Promise.all([
+    supabase.from('marchands').select('*').eq('id', req.params.id).single(),
+    supabase.from('themes_marchand').select(COLONNES_THEME).eq('marchand_id', req.params.id).order('cree_le'),
+  ]);
+  if (error || !m) return res.status(404).json({ error: 'Marchand introuvable' });
+  if (errT) return res.status(500).json({ error: errT.message });
+  const apercus = await Promise.all(liste.map(t => themes.apercu(themes.avecTheme(m, t))));
+  res.json({ themes: liste.map((t, i) => ({ ...t, apercu: apercus[i] })), actif: m.theme_actif || null, bascule: !!m.theme_bascule });
+}));
+
+// POST /api/admin/marchands/:id/themes — nouveau thème
+router.post('/marchands/:id/themes', authAdmin, asyncHandler(async (req, res) => {
+  const { validerTheme } = require('../services/themes');
+  const { theme, erreur } = validerTheme(req.body || {});
+  if (erreur) return res.status(400).json({ error: erreur });
+  const { data, error } = await supabase.from('themes_marchand')
+    .insert({ ...theme, marchand_id: req.params.id }).select(COLONNES_THEME).single();
+  if (error) {
+    if (error.code === '23505') return res.status(409).json({ error: 'Un thème porte déjà ce nom' });
+    if (error.code === '23503') return res.status(404).json({ error: 'Marchand introuvable' });
+    return res.status(500).json({ error: error.message });
+  }
+  res.status(201).json(data);
+}));
+
+// PATCH /api/admin/marchands/:id/themes/:themeId — modification
+router.patch('/marchands/:id/themes/:themeId', authAdmin, asyncHandler(async (req, res) => {
+  const { validerTheme } = require('../services/themes');
+  const { theme, erreur } = validerTheme(req.body || {}, { partiel: true });
+  if (erreur) return res.status(400).json({ error: erreur });
+  if (await themeChoisi(req.params.id, req.params.themeId)) return res.status(409).json({ error: 'theme_choisi' });
+  const { data, error } = await supabase.from('themes_marchand').update(theme)
+    .eq('id', req.params.themeId).eq('marchand_id', req.params.id).select(COLONNES_THEME).maybeSingle();
+  if (error) return res.status(error.code === '23505' ? 409 : 500).json({ error: error.code === '23505' ? 'Un thème porte déjà ce nom' : error.message });
+  if (!data) return res.status(404).json({ error: 'Thème introuvable' });
+  res.json(data);
+}));
+
+// DELETE /api/admin/marchands/:id/themes/:themeId
+router.delete('/marchands/:id/themes/:themeId', authAdmin, asyncHandler(async (req, res) => {
+  if (await themeChoisi(req.params.id, req.params.themeId)) return res.status(409).json({ error: 'theme_choisi' });
+  const { data, error } = await supabase.from('themes_marchand').delete()
+    .eq('id', req.params.themeId).eq('marchand_id', req.params.id).select('id');
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data.length) return res.status(404).json({ error: 'Thème introuvable' });
+  res.json({ ok: true });
+}));
+
+// POST /api/admin/marchands/:id/themes/:themeId/logo?type=apple|google — logo
+// préfabriqué du thème, rangé hors du dossier des bannières (jamais purgé avec
+// elles). Nom horodaté : une nouvelle image n'est jamais servie depuis un cache.
+router.post('/marchands/:id/themes/:themeId/logo', authAdmin, (req, res, next) => {
+  uploadMem.single('image')(req, res, err => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'image requise' });
+  const colonne = req.query.type === 'google' ? 'google_logo_url' : 'logo_url';
+  const { data: m } = await supabase.from('marchands').select('slug').eq('id', req.params.id).single();
+  if (!m) return res.status(404).json({ error: 'Marchand introuvable' });
+  if (await themeChoisi(req.params.id, req.params.themeId)) return res.status(409).json({ error: 'theme_choisi' });
+  const chemin = `marchands/${m.slug}/themes-logos/${req.params.themeId}-${colonne === 'google_logo_url' ? 'google' : 'apple'}-${Date.now()}.png`;
+  const { error: upErr } = await supabase.storage.from('passes')
+    .upload(chemin, req.file.buffer, { contentType: req.file.mimetype, upsert: true });
+  if (upErr) return res.status(500).json({ error: `Upload Storage: ${upErr.message}` });
+  const { data: { publicUrl } } = supabase.storage.from('passes').getPublicUrl(chemin);
+  const { data, error } = await supabase.from('themes_marchand').update({ [colonne]: publicUrl })
+    .eq('id', req.params.themeId).eq('marchand_id', req.params.id).select(COLONNES_THEME).maybeSingle();
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: 'Thème introuvable' });
+  res.json(data);
+}));
+
 module.exports = router;

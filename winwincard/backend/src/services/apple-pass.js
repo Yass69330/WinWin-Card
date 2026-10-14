@@ -311,6 +311,8 @@ function selectStripImageUrl(marchand, storedValue) {
 
 // ── Génération pass.json ─────────────────────────────────────
 function buildPassJson({ client, marchand, serialNumber, passNotification }) {
+  // f17, point d'entrée 1 : carte aux couleurs du thème en cours (services/themes.js).
+  marchand = require('./themes').appliquerTheme(marchand);
   const doré = isPassDoré(client, marchand);
   const displayMax = marchand.display_max_value || marchand.max_value;
   // Mode points : le surplus est désormais reporté (migration_022), jamais
@@ -357,7 +359,12 @@ function buildPassJson({ client, marchand, serialNumber, passNotification }) {
           textAlignment: 'PKTextAlignmentRight',
         },
       ],
-      auxiliaryFields: [],
+      // f17 : texte court du thème, dans la case sous le prénom. Vide hors thème.
+      auxiliaryFields: marchand._theme && marchand._theme.texte_case ? [{
+        key:   'theme',
+        label: '',
+        value: marchand._theme.texte_case,
+      }] : [],
       backFields: [
         {
           // Toujours présent même vide — iOS compare old/new value et déclenche
@@ -423,6 +430,10 @@ function buildPassJson({ client, marchand, serialNumber, passNotification }) {
 // ── Point d'entrée principal ─────────────────────────────────
 async function generateApplePass({ client, marchand, serialNumber, passNotification = null }) {
   const certs = loadCerts();
+  // f17, point d'entrée 1 : fond, textes, logo et bannière du thème en cours.
+  // L'icône garde la couleur STANDARD du marchand (voir plus bas) : fiche brute.
+  const brut = marchand;
+  marchand = require('./themes').appliquerTheme(marchand);
   const passJson = buildPassJson({ client, marchand, serialNumber, passNotification });
   // f10 (migration 062) : lieux et créneaux si le marchand a la notification
   // « À proximité » (services/geo.js). Rien sinon : carte identique à avant.
@@ -439,7 +450,7 @@ async function generateApplePass({ client, marchand, serialNumber, passNotificat
 
   // L'icône (notification + Wallet) utilise toujours la couleur du marchand,
   // pas l'or du pass doré — garantit une couleur uniforme sur tous les appareils.
-  const [ri, gi, bi] = hexToRgb(marchand.couleur_fond || '#1a1a2e').match(/\d+/g).map(Number);
+  const [ri, gi, bi] = hexToRgb(brut.couleur_fond || '#1a1a2e').match(/\d+/g).map(Number);
   const iconPng  = createSolidPng(29,  29,  ri, gi, bi);
   const icon2Png = createSolidPng(58,  58,  ri, gi, bi);
   const icon3Png = createSolidPng(87,  87,  ri, gi, bi);
@@ -540,4 +551,4 @@ async function generateApplePass({ client, marchand, serialNumber, passNotificat
   return buffer;
 }
 
-module.exports = { generateApplePass, computeAuthToken, createSolidPng, loadCerts, fetchImage };
+module.exports = { generateApplePass, buildPassJson, computeAuthToken, createSolidPng, loadCerts, fetchImage };

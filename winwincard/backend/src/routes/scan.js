@@ -82,7 +82,7 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   //   • Backup code (6 derniers caractères du serial) → filet de secours caisse
   //     → match par suffixe insensible à la casse
   // L'incrément passe ensuite par le même RPC atomique, quel que soit le format.
-  const SELECT_CLIENT = 'id, prenom, stored_value, marchand_id, pass_serial_number, marchands(id, max_value, display_max_value, actif, nom, slug, forfait, langue, type_programme, images_tiers, couleur_fond, couleur_fond_reward, couleur_pastille_fond, couleur_pastille_contour, couleur_pastille_icone, couleur_label_strip, couleur_barre_principale, couleur_barre_secondaire,logo_url, strip_mode, strip_theme, strip_illustration, strip_produit, strip_vide, stamp_icon, strip_custom_background_url, strip_config_version, referral_enabled, referral_bonus_points, lien_avis_google)';
+  const SELECT_CLIENT = 'id, prenom, stored_value, marchand_id, pass_serial_number, marchands(id, max_value, display_max_value, actif, nom, slug, forfait, langue, type_programme, images_tiers, couleur_fond, couleur_fond_reward, couleur_pastille_fond, couleur_pastille_contour, couleur_pastille_icone, couleur_label_strip, couleur_barre_principale, couleur_barre_secondaire,logo_url, strip_mode, strip_theme, strip_illustration, strip_produit, strip_vide, stamp_icon, strip_custom_background_url, strip_config_version, referral_enabled, referral_bonus_points, lien_avis_google, theme_actif)';
   const raw = String(serial_input).trim().toLowerCase();
   let client = null;
 
@@ -335,7 +335,7 @@ async function creditReferrerIfApplicable(filleulClientId, marchandId, bonusPoin
   // Récupérer pass + infos du parrain (même marchand)
   const { data: parrain } = await supabase
     .from('clients')
-    .select('prenom, pass_serial_number, marchands(id, max_value, display_max_value, images_tiers, couleur_fond, couleur_fond_reward, couleur_pastille_fond, couleur_pastille_contour, couleur_pastille_icone, couleur_label_strip, couleur_barre_principale, couleur_barre_secondaire,slug, forfait, langue, type_programme, logo_url, strip_mode, strip_theme, strip_illustration, strip_produit, strip_vide, stamp_icon, strip_custom_background_url, strip_config_version, lien_avis_google)')
+    .select('prenom, pass_serial_number, marchands(id, max_value, display_max_value, images_tiers, couleur_fond, couleur_fond_reward, couleur_pastille_fond, couleur_pastille_contour, couleur_pastille_icone, couleur_label_strip, couleur_barre_principale, couleur_barre_secondaire,slug, forfait, langue, type_programme, logo_url, strip_mode, strip_theme, strip_illustration, strip_produit, strip_vide, stamp_icon, strip_custom_background_url, strip_config_version, lien_avis_google, theme_actif)')
     .eq('id', parrainClientId)
     .eq('marchand_id', marchandId)
     .single();

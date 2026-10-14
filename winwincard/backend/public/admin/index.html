@@ -461,6 +461,27 @@
         <button type="button" class="btn btn-outline btn-sm" id="btn-geo-ajouter" style="margin-top:8px;align-self:flex-start">+ Ajouter un lieu</button>
       </div>
 
+      <!-- Section : Thèmes de carte (f17, Pro+, mode édition) -->
+      <div class="form-section" id="section-themes" style="display:none">
+        <div class="form-section-title">Thèmes de carte <span style="color:var(--warning);font-size:10px">Pro+</span></div>
+        <div class="field-hint" style="margin-bottom:8px">Thèmes préparés pour ce marchand ; il en choisit un, avec ses dates, dans l'onglet « Ma carte » de son dashboard. Un thème choisi (programmé ou en cours) ne se modifie ni ne se supprime. Le message d'ouverture est envoyé à toutes ses cartes à l'ouverture (hors quota).</div>
+        <div id="themes-etat" class="field-hint" style="margin-bottom:8px"></div>
+        <div id="themes-liste" style="display:flex;flex-direction:column;gap:10px"></div>
+        <div id="theme-form" style="background:var(--surface2);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;margin-top:10px">
+          <div style="font-weight:600;font-size:13px">Nouveau thème</div>
+          <input id="th-nom" placeholder="Nom (ex. Ramadan)" maxlength="40">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)">
+            <label>Fond <input type="color" id="th-fond" value="#0b3d2e"></label>
+            <label>Texte <input type="color" id="th-texte" value="#ffffff"></label>
+            <label>Libellés <input type="color" id="th-label" value="#d4af37"></label>
+          </div>
+          <input id="th-case" placeholder="Texte sous le prénom (40 car. max, facultatif)" maxlength="40">
+          <textarea id="th-message" placeholder="Message d'ouverture (150 car. max)" maxlength="150" rows="2"></textarea>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-theme-creer" style="align-self:flex-start">Créer le thème</button>
+          <div id="theme-statut" class="field-hint"></div>
+        </div>
+      </div>
+
       <!-- Section : Landing page premium (Pro et Pro+, visible en mode édition) -->
       <div class="form-section" id="section-landing-fields" style="display:none">
         <div class="form-section-title">Landing page <span style="color:var(--warning);font-size:10px">Pro / Pro+</span></div>
@@ -1135,6 +1156,76 @@ function lireLieuxGeo() {
 }
 document.getElementById('btn-geo-ajouter').addEventListener('click', () => ajouterLieuGeo());
 
+// ── f17 : thèmes de carte ───────────────────────────────────────────────────
+async function chargerThemes() {
+  const liste = document.getElementById('themes-liste');
+  const etat = document.getElementById('themes-etat');
+  liste.innerHTML = '<span class="field-hint">Chargement…</span>';
+  try {
+    const res = await api(`/api/admin/marchands/${S.editId}/themes`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'Erreur');
+    etat.textContent = d.actif
+      ? `Thème choisi : « ${d.actif.nom} », ${d.actif.etat === 'en_cours' ? 'en cours' : 'programmé'} du ${d.actif.debut} au ${d.actif.fin}${d.bascule ? ' (mise à jour des cartes en cours)' : ''}.`
+      : (d.bascule ? 'Mise à jour des cartes en cours.' : 'Aucun thème choisi.');
+    liste.innerHTML = d.themes.length ? '' : '<span class="field-hint">Aucun thème.</span>';
+    for (const th of d.themes) {
+      const choisi = d.actif && d.actif.id === th.id;
+      const div = document.createElement('div');
+      div.style.cssText = 'display:flex;gap:10px;align-items:center;background:var(--surface2);border-radius:10px;padding:10px';
+      const a = th.apercu || {};
+      div.innerHTML = `
+        <div style="width:150px;flex-shrink:0;border-radius:8px;overflow:hidden;background:${esc(a.couleur_fond || th.couleur_fond)};color:${esc(a.couleur_texte || '#fff')};font-size:11px">
+          <div style="padding:5px 7px;display:flex;gap:5px;align-items:center">${a.logo_url ? `<img src="${esc(a.logo_url)}" style="max-height:16px;max-width:60px">` : ''}<b>${esc(a.nom || '')}</b></div>
+          ${a.banniere ? `<img src="${esc(a.banniere)}" style="display:block;width:100%">` : ''}
+          <div style="padding:4px 7px 6px">${esc(a.texte_case || '')}</div>
+        </div>
+        <div style="flex:1;min-width:0;font-size:12px">
+          <div style="font-weight:600;font-size:13px">${esc(th.nom)}${choisi ? ' <span style="color:var(--warning)">(choisi)</span>' : ''}</div>
+          <div style="color:var(--muted);margin:2px 0 6px">« ${esc(th.message_ouverture)} »</div>
+          <label class="btn btn-ghost btn-sm" style="cursor:pointer">Logo Apple<input type="file" accept="image/*" data-logo="apple" hidden ${choisi ? 'disabled' : ''}></label>
+          <label class="btn btn-ghost btn-sm" style="cursor:pointer">Logo Google<input type="file" accept="image/*" data-logo="google" hidden ${choisi ? 'disabled' : ''}></label>
+          <button type="button" class="btn btn-ghost btn-sm" data-suppr="1" ${choisi ? 'disabled' : ''}>Supprimer</button>
+          <div class="theme-ligne-statut field-hint"></div>
+        </div>`;
+      const statut = div.querySelector('.theme-ligne-statut');
+      div.querySelectorAll('input[data-logo]').forEach(inp => inp.addEventListener('change', async () => {
+        if (!inp.files[0]) return;
+        statut.textContent = 'Envoi…';
+        const fd = new FormData();
+        fd.append('image', inp.files[0]);
+        const res = await apiUpload(`/api/admin/marchands/${S.editId}/themes/${th.id}/logo?type=${inp.dataset.logo}`, fd);
+        const r = await res.json().catch(() => ({}));
+        if (!res.ok) { statut.textContent = r.error || 'Erreur'; return; }
+        chargerThemes();
+      }));
+      div.querySelector('[data-suppr]').addEventListener('click', async () => {
+        if (!confirm(`Supprimer le thème « ${th.nom} » ?`)) return;
+        const res = await api(`/api/admin/marchands/${S.editId}/themes/${th.id}`, { method: 'DELETE' });
+        const r = await res.json().catch(() => ({}));
+        if (!res.ok) { statut.textContent = r.error || 'Erreur'; return; }
+        chargerThemes();
+      });
+      liste.appendChild(div);
+    }
+  } catch (e) { liste.innerHTML = ''; etat.textContent = e.message; }
+}
+document.getElementById('btn-theme-creer').addEventListener('click', async () => {
+  const statut = document.getElementById('theme-statut');
+  statut.textContent = '';
+  const corps = {
+    nom: document.getElementById('th-nom').value, couleur_fond: document.getElementById('th-fond').value,
+    couleur_texte: document.getElementById('th-texte').value, couleur_label: document.getElementById('th-label').value,
+    texte_case: document.getElementById('th-case').value, message_ouverture: document.getElementById('th-message').value,
+  };
+  const res = await api(`/api/admin/marchands/${S.editId}/themes`, { method: 'POST', body: JSON.stringify(corps) });
+  const r = await res.json().catch(() => ({}));
+  if (!res.ok) { statut.textContent = r.error || 'Erreur'; return; }
+  ['th-nom', 'th-case', 'th-message'].forEach(id => { document.getElementById(id).value = ''; });
+  statut.textContent = `✓ Thème « ${r.nom} » créé. Ajoutez ses logos ci-dessus.`;
+  chargerThemes();
+});
+
 async function openEditSheet(id) {
   S.editId = id;
   resetForm();
@@ -1300,6 +1391,7 @@ function resetForm() {
   document.getElementById('sheet-err').style.display = 'none';
   document.getElementById('section-strip-tiers').style.display = 'none';
   document.getElementById('section-geo').style.display = 'none';
+  document.getElementById('section-themes').style.display = 'none';
   document.getElementById('f-geo-actif').checked = false;
   document.getElementById('geo-lieux').innerHTML = '';
   document.getElementById('section-workflows').style.display     = 'none';
@@ -1370,6 +1462,11 @@ function fillForm(m) {
   document.getElementById('f-geo-actif').checked = m.geo_actif === true;
   document.getElementById('geo-lieux').innerHTML = '';
   (Array.isArray(m.geo_lieux) ? m.geo_lieux : []).forEach(ajouterLieuGeo);
+  // f17 : thèmes de carte, Pro+ seulement.
+  if (m.forfait === 'pro_plus') {
+    document.getElementById('section-themes').style.display = '';
+    chargerThemes();
+  }
   renderStripTiers(m.images_tiers);
   // Workflows : Pro ET Pro+ (basic exclu). Miroir exact de FORFAITS_WORKFLOWS
   // côté cron — sans ça, un Pro n'aurait aucun interrupteur à cocher.

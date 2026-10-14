@@ -249,6 +249,8 @@ const serveur = app.listen(PORT, err => {
   }
   // Campagnes interrompues par un arrêt : reprises UNE fois, après un délai (t37).
   require('./services/campagnes').planifierReprise();
+  // f17 : bascule de thème interrompue par un arrêt, reprise une fois, après un délai.
+  require('./services/themes').planifierReprise();
 });
 
 // ── Arrêt propre au redéploiement (étape 14a, services/arret.js) ─

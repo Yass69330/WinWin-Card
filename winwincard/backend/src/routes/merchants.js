@@ -289,6 +289,87 @@ router.patch('/me/points-de-vente/:id/actif', authMarchand, asyncHandler(async (
   res.json(data);
 }));
 
+// ── f17 : onglet « Ma carte » (Pro+, migration 063) ───────────────────────
+// Le marchand voit sa carte standard et chacun des thèmes préparés pour lui,
+// en choisit un avec ses dates, ou arrête le thème en cours. Les dates sont des
+// jours UTC : ouverture au passage du cron (08:00 UTC) du jour de début, ou tout
+// de suite si le début est aujourd'hui ; fin au passage qui suit le jour de fin.
+const FORFAITS_THEMES = ['pro_plus'];
+const COLONNES_THEME_MARCHAND = 'id, nom, couleur_fond, couleur_texte, couleur_label, logo_url, google_logo_url, texte_case, message_ouverture';
+
+async function ficheCarte(marchandId) {
+  const { COLONNES_MARCHAND_CARTE } = require('../services/colonnes-carte');
+  return supabase.from('marchands').select(`${COLONNES_MARCHAND_CARTE}, theme_bascule`).eq('id', marchandId).single();
+}
+
+// GET /merchants/me/themes
+router.get('/me/themes', authMarchand, asyncHandler(async (req, res) => {
+  const themes = require('../services/themes');
+  const { data: m, error } = await ficheCarte(req.marchandId);
+  if (error || !m) return statsIndisponibles(res, 'themes', error || new Error('marchand introuvable'));
+  if (!FORFAITS_THEMES.includes(m.forfait)) return res.json({ eligible: false });
+  const { data: liste, error: errT } = await supabase.from('themes_marchand')
+    .select(COLONNES_THEME_MARCHAND).eq('marchand_id', req.marchandId).order('cree_le');
+  if (errT) return statsIndisponibles(res, 'themes', errT);
+  // Carte standard : la fiche SANS le thème en cours.
+  const standard = { ...m, theme_actif: null };
+  const [apercuStandard, ...apercus] = await Promise.all([
+    themes.apercu(standard), ...liste.map(t => themes.apercu(themes.avecTheme(standard, t)))]);
+  res.json({
+    eligible: true,
+    aujourdhui: themes.aujourdhui(),
+    standard: apercuStandard,
+    themes: liste.map((t, i) => ({ id: t.id, nom: t.nom, message_ouverture: t.message_ouverture, apercu: apercus[i] })),
+    actif: m.theme_actif ? { id: m.theme_actif.id, nom: m.theme_actif.nom, debut: m.theme_actif.debut, fin: m.theme_actif.fin, etat: m.theme_actif.etat } : null,
+    bascule: m.theme_bascule ? m.theme_bascule.sens : null,
+  });
+}));
+
+// POST /merchants/me/theme { theme_id, debut, fin } — choisir un thème
+router.post('/me/theme', authMarchand, asyncHandler(async (req, res) => {
+  const themes = require('../services/themes');
+  const { theme_id: themeId, debut, fin } = req.body || {};
+  const { data: m, error } = await supabase.from('marchands').select('forfait, theme_actif').eq('id', req.marchandId).single();
+  if (error || !m) return statsIndisponibles(res, 'theme', error || new Error('marchand introuvable'));
+  if (!FORFAITS_THEMES.includes(m.forfait)) return res.status(403).json({ error: 'plan_not_eligible' });
+  const erreurDates = themes.validerDates(debut, fin);
+  if (erreurDates) return res.status(400).json({ error: erreurDates });
+  // Un seul thème à la fois : celui en cours s'arrête d'abord (retour à la carte
+  // standard). Un thème seulement programmé est remplacé.
+  if (m.theme_actif && m.theme_actif.etat === 'en_cours') return res.status(409).json({ error: 'theme_en_cours' });
+  if (typeof themeId !== 'string') return res.status(400).json({ error: 'theme_id requis' });
+  const { data: t, error: errT } = await supabase.from('themes_marchand').select(COLONNES_THEME_MARCHAND)
+    .eq('id', themeId).eq('marchand_id', req.marchandId).maybeSingle();
+  if (errT) return statsIndisponibles(res, 'theme', errT);
+  if (!t) return res.status(404).json({ error: 'theme_introuvable' });
+  const choisi = { ...t, debut, fin, etat: 'programme', choisi_le: new Date().toISOString() };
+  let q = supabase.from('marchands').update({ theme_actif: choisi }).eq('id', req.marchandId);
+  q = m.theme_actif ? q.eq('theme_actif->>id', m.theme_actif.id).eq('theme_actif->>etat', 'programme') : q.is('theme_actif', null);
+  const { data: maj, error: errMaj } = await q.select('id');
+  if (errMaj) return statsIndisponibles(res, 'theme', errMaj);
+  if (!maj.length) return res.status(409).json({ error: 'theme_modifie_entre_temps' });
+  let etat = 'programme';
+  if (debut <= themes.aujourdhui()) {
+    try { if (await themes.ouvrir(req.marchandId, choisi)) etat = 'en_cours'; } catch (e) {
+      // Ouverture ratée : le thème reste programmé, le passage du cron l'ouvrira.
+      console.error('[theme] ouverture immédiate :', e.message);
+    }
+  }
+  res.json({ id: t.id, nom: t.nom, debut, fin, etat });
+}));
+
+// DELETE /merchants/me/theme — arrêter (en cours) ou annuler (programmé) : retour
+// silencieux à la carte standard.
+router.delete('/me/theme', authMarchand, asyncHandler(async (req, res) => {
+  const themes = require('../services/themes');
+  const { data: m, error } = await supabase.from('marchands').select('forfait, theme_actif').eq('id', req.marchandId).single();
+  if (error || !m) return statsIndisponibles(res, 'theme', error || new Error('marchand introuvable'));
+  if (!m.theme_actif) return res.json({ ok: true, etat: null });
+  const ok = await themes.fermer(req.marchandId, m.theme_actif);
+  if (!ok) return res.status(409).json({ error: 'theme_modifie_entre_temps' });
+  res.json({ ok: true, etat: null });
+}));
+
 // GET /merchants/:slug/public — infos publiques pour la landing page
 router.get('/:slug/public', asyncHandler(async (req, res) => {
   const { data, error } = await supabase

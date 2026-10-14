@@ -44,6 +44,10 @@ const ETAPES = [
   ['near_reward', runNearRewardWorkflow],
   ['inactive',    runInactiveWorkflow],
   ['purge',       purgeOldExecutions],
+  // f17 (migration 063) : ouverture et fin des thèmes de carte, reprise des
+  // bascules inachevées. Les bascules tournent en arrière-plan, au débit
+  // partagé : le passage ne les attend pas.
+  ['themes',      () => require('../services/themes').passage()],
 ];
 
 // Le passage planifié. Chaque étape attrape sa propre erreur : un workflow en

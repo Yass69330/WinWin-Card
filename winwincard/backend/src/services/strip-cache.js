@@ -48,7 +48,17 @@ function storageKey(marchand, filledCount, variant) {
     const { valeurAffichee } = require('./strip-generator');
     mode = `points_${valeurAffichee(filledCount)}`;
   }
+  // f17 (migration 063) : pendant un thème, bannières à part, dans le dossier du
+  // thème (purgé à sa fin), indexées par l'empreinte de ses couleurs et de son
+  // logo. Hors thème : chemin inchangé.
+  if (marchand._theme) {
+    return `${dossierTheme(slug, marchand._theme.id)}/v${version}_${marchand._theme.empreinte}/${mode}_${variant}.png`;
+  }
   return `marchands/${slug}/gen/v${version}/${mode}_${variant}.png`;
+}
+
+function dossierTheme(slug, themeId) {
+  return `marchands/${slug}/theme/${themeId}`;
 }
 
 // ── Purge des anciennes versions ──────────────────────────────────────────
@@ -124,6 +134,40 @@ async function purgeOldVersions(marchand, variant) {
   }
 }
 
+// ── Purge des bannières d'un thème terminé (f17) ─────────────────────────
+// Même méthode que purgeOldVersions : tout lister, puis supprimer par lots,
+// séquentiellement. Le dossier du thème contient un sous-dossier par version
+// (v<N>_<empreinte>) ; Storage les liste comme des entrées sans id.
+async function listerFichiers(dossier, profondeur = 1) {
+  const chemins = [];
+  let offset = 0;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const { data, error } = await supabase.storage.from(BUCKET).list(dossier, { limit: PAGE_LIST, offset });
+    if (error) throw new Error(`list ${dossier}: ${error.message}`);
+    if (!data || data.length === 0) break;
+    for (const f of data) {
+      if (f.id == null && profondeur > 0) chemins.push(...await listerFichiers(`${dossier}/${f.name}`, profondeur - 1));
+      else if (f.id != null) chemins.push(`${dossier}/${f.name}`);
+    }
+    offset += data.length;
+  }
+  return chemins;
+}
+
+async function purgerTheme(slug, themeId) {
+  const chemins = await listerFichiers(dossierTheme(slug, themeId));
+  let supprimes = 0;
+  for (let i = 0; i < chemins.length; i += LOT_REMOVE) {
+    const lot = chemins.slice(i, i + LOT_REMOVE);
+    const { error } = await supabase.storage.from(BUCKET).remove(lot);
+    if (error) throw new Error(`remove: ${error.message}`);
+    supprimes += lot.length;
+    for (const k of lot) _lru.delete(k);
+  }
+  if (supprimes) console.log(`[strip-cache] thème ${themeId} (${slug}) : ${supprimes} bannière(s) purgée(s)`);
+  return supprimes;
+}
+
 // ── Lecture depuis Storage ────────────────────────────────────────────────
 async function fetchFromStorage(key) {
   const { data, error } = await supabase.storage.from(BUCKET).download(key);
@@ -150,6 +194,9 @@ function publicUrl(key) {
 // variant: 'strip2x' | 'strip3x' | 'hero'
 // Retourne le Buffer PNG.
 async function getOrGenerate({ marchand, filledCount, variant }) {
+  // Point d'entrée 2 de f17 : la bannière d'une carte à thème est peinte sur le
+  // fond du thème (services/themes.js, la seule fonction qui l'applique).
+  marchand = require('./themes').appliquerTheme(marchand);
   if (!marchand.strip_mode) throw new Error('strip_mode not set');
 
   const key = storageKey(marchand, filledCount, variant);
@@ -208,6 +255,7 @@ async function getOrGenerate({ marchand, filledCount, variant }) {
 // Retourne l'URL sans attendre la génération si le fichier existe déjà,
 // sinon déclenche la génération et retourne l'URL calculée.
 async function getPublicUrl({ marchand, filledCount, variant = 'hero' }) {
+  marchand = require('./themes').appliquerTheme(marchand);   // f17, point d'entrée 2
   if (!marchand.strip_mode) return null;
   const key = storageKey(marchand, filledCount, variant);
 
@@ -235,7 +283,7 @@ async function _fetchCustomBg(marchand) {
 }
 
 module.exports = {
-  getOrGenerate, getPublicUrl, storageKey, publicUrl,
+  getOrGenerate, getPublicUrl, storageKey, publicUrl, purgerTheme,
   // Exposée pour les tests : la purge est le seul chemin qui parle à Storage
   // en écriture massive, elle doit être vérifiable sans réseau.
   __purgeOldVersionsForTest: purgeOldVersions,

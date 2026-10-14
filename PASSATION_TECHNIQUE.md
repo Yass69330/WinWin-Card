@@ -7040,6 +7040,131 @@ Rapport, recommandations et décisions demandées : envoyés au pilotage le 14/1
     navigateur (hors `npm test`) couvrent l'Aperçu, le Réseau, les Clients, la
     fiche client, les Notifications et la caisse, mais pas l'onglet Scans.
 
+## 15 septquinquagies. f17 CARTES À THÈME : CODÉ EN LOCAL (14/10, rien poussé, migration 063 non exécutée)
+
+Feu vert du pilotage : « Chiffrage validé, feu vert : tu codes », avec trois
+non-négociables (tous livrés, voir plus bas) et la validation par le filet plus un
+rendu réel sur un marchand de test.
+
+### Livré (commits locaux)
+
+- **Migration 063** (`database/migration_063_themes.sql`) :
+  - table `themes_marchand` : nom, 3 couleurs, logo Apple, logo Google, texte de la
+    case (40 car.), message d'ouverture (150 car.). RLS sans politique ; droits
+    SELECT, INSERT, UPDATE, DELETE pour `service_role` seulement ;
+  - `marchands.theme_actif` : copie du thème choisi + `debut`, `fin` (jours UTC),
+    `etat` (`programme` | `en_cours`) ; garde-fou en base sur la forme ;
+  - `marchands.theme_bascule` : avancement de la mise à jour des cartes ;
+  - fonction `theme_lot_google` : cartes Google réelles (règle D2) avec prénom et
+    solde, par lots ;
+  - source `theme` ajoutée au registre `notification_envois` (CLAUDE.md).
+- **`src/services/themes.js`** :
+  - `appliquerTheme(marchand)` : **la seule fonction qui applique le thème**. Rend la
+    fiche aux couleurs du thème quand `etat = en_cours`, la fiche telle quelle sinon.
+    Idempotente (marqueur `_theme`) ;
+  - `apercu`, `avecTheme` : aperçu « Ma carte » ;
+  - `validerTheme`, `validerDates` ;
+  - bascule : `ouvrir` (avec message), `fermer` (silencieuse), `lancer`, `passage`
+    (cron), `planifierReprise` (démarrage du serveur).
+- **Les 6 points d'entrée** qui fabriquent une carte appellent `appliquerTheme` :
+  1. carte Apple (`generateApplePass` et `buildPassJson`). Le texte du thème va dans
+     `auxiliaryFields`, la case sous le prénom, vide hors thème ;
+  2. bannières (`strip-cache.js`, `getOrGenerate` et `getPublicUrl`), rangées dans
+     `marchands/<slug>/theme/<id>/v<version>_<empreinte>/`, purgées à la fin du thème ;
+  3. classe Google (`buildLoyaltyClass`) : fond, logo carré, texte du thème
+     (`textModulesData` de la classe) ;
+  4. carte Google à l'inscription (`buildLoyaltyObject`) ;
+  5. mise à jour Google (`updateLoyaltyObjectPoints` : scan, ajustement, bascule) ;
+  6. aperçu « Ma carte » (`themes.apercu`).
+  Le filet vérifie chacun (section 26).
+- **Colonne `theme_actif` ajoutée aux lectures** de la fiche : retour d'un iPhone
+  (liste partagée, `services/colonnes-carte.js`), téléchargement (`passes.js`), scan
+  (2 lectures), inscription et ajustement (`clients.js`), Google (`google-wallet.js`).
+  L'admin lit déjà `*`. Aucune requête de plus.
+- **Bascule** (ouverture et fin) :
+  - la fiche change d'abord : toute carte fabriquée ensuite a le bon visuel (scan,
+    nouvel inscrit, retour d'un iPhone) ;
+  - puis les cartes installées, par lots :
+    - iPhone : lots de 30, cartes marquées modifiées, message d'ouverture posé sur la
+      carte (ouverture seulement), un push par iPhone au **débit partagé t37** ;
+    - Google : la classe une fois, puis chaque carte réelle par lots de 50 toutes les
+      10 s (comme les campagnes) : fond et bannière, plus le message à l'ouverture ;
+  - avancement écrit après chaque lot. Reprise au curseur après un redémarrage : une
+    fois au démarrage du serveur (après 60 s), puis au passage du cron ;
+  - la bascule la plus récente remplace celle en cours ;
+  - à la fin : bannières du thème purgées par lots.
+- **Cron** : étape `themes` du passage de 08:00 UTC. Elle ouvre les thèmes dont le
+  début est arrivé, ferme ceux dont la fin est passée et reprend les bascules
+  inachevées. Le passage ne les attend pas.
+- **Routes du marchand** (Pro+) :
+  - `GET /api/merchants/me/themes` : carte standard + chaque thème avec son aperçu,
+    thème choisi, bascule en cours ;
+  - `POST /api/merchants/me/theme {theme_id, debut, fin}` : dates contrôlées (pas dans
+    le passé, fin après début, début dans l'année, 3 mois au plus). Ouverture
+    immédiate si le début est aujourd'hui. 409 si un thème est déjà en cours ;
+  - `DELETE /api/merchants/me/theme` : arrêt ou annulation, retour silencieux.
+- **Routes de l'admin** : thèmes d'un marchand (liste avec aperçus, création,
+  modification, suppression, envoi des logos Apple et Google). Un thème choisi ne se
+  modifie ni ne se supprime (409).
+- **Dashboard** : onglet « Ma carte » (Pro+, `data-min-plan="pro_plus"`), tout son
+  code dans **`public/dashboard/ma-carte.js`** (versionné `?v=1`). L'`index.html`
+  ne reçoit que le panneau, le bouton, deux libellés, une ligne dans `switchTab` et la
+  balise `<script>`. Si le fichier ne charge pas, l'onglet affiche « Onglet
+  momentanément indisponible » et les autres fonctionnent. Monolithe non refactoré.
+- **Admin** : section « Thèmes de carte » de la fiche marchand (Pro+).
+- **Filets** (font partie de la livraison) :
+  - **contrôle de syntaxe dans `npm test`** (`tests/syntaxe.js`) : compile sans les
+    exécuter les scripts en ligne du dashboard, de l'admin et de la caisse, et
+    chaque fichier JS du dashboard ;
+  - **test navigateur « tous les onglets »** (`tests/navigateur/onglets.js`) :
+    - chaque onglet s'ouvre sans erreur de page ni de console ;
+    - « Ma carte » : choix, activation, arrêt ;
+    - barre de 7 onglets à 375 px ;
+    - `ma-carte.js` remplacé par un fichier invalide : seul cet onglet le dit.
+  - filet section 26 : la fonction unique, les 6 points d'entrée, routes, dates,
+    bascule (lots, D2, registre, reprise au curseur, fin silencieuse).
+
+### Résultats
+
+- `npm test` : **335/335**. Avec le test navigateur « tous les onglets » :
+  **339/339**.
+- Contre-épreuve sur le code de production `70caa3c` (filet neuf) : **316/317**. Le
+  seul KO est « module services/themes.js présent » ; tout le reste passe sur
+  l'ancien code, y compris le contrôle de syntaxe.
+- Captures envoyées à Yass : `f17-1` à `f17-5`.
+
+### Hypothèses (ce qui ferait casser) et limites
+
+- Les dates sont des **jours UTC**. Ouverture au passage de 08:00 UTC du jour de
+  début, ou tout de suite si le début est aujourd'hui. Fin au passage de 08:00 UTC
+  du lendemain du jour de fin.
+- La notification iPhone n'apparaît que si le message diffère du dernier message de
+  la carte (iOS compare les valeurs). Réactiver le même thème ne renotifie pas les
+  cartes qui l'ont déjà reçu.
+- Google : `addMessage` est limité par Google à 3 par carte et par 24 h. Le texte du
+  thème est posé sur la classe : **sa place exacte sur Android est à vérifier au
+  rendu réel**.
+- Après la fin, le message d'ouverture reste au dos de la carte iPhone jusqu'au
+  prochain message (même comportement que les campagnes).
+- Une seule bascule à la fois par marchand, dans un seul processus (règle « une
+  seule instance », §15 duotricies).
+- Les cartes à image fixe (`images_tiers`, `image_strip_url`) gardent leur image :
+  le thème change leurs couleurs et leur logo, pas la bannière.
+- Les aperçus « Ma carte » génèrent les bannières du thème dans Storage dès le
+  premier affichage (environ 14 Ko par thème et par état affiché). Elles ne sont
+  purgées qu'à la fin d'un thème activé : les thèmes jamais activés gardent leurs
+  aperçus.
+- L'aperçu de bannière de l'admin (`strip-preview`) reste celui de la carte
+  standard : il sert à régler la carte standard.
+
+### Reste à faire
+
+- Exécuter 063 dans Supabase, puis pousser sur feu vert.
+- Rendu réel sur hamza-salon (comme f10) :
+  - préparer un thème dans l'admin, l'activer depuis « Ma carte » ;
+  - contrôler : iPhone (couleurs, case, bannière, notification), Android, arrêt
+    silencieux, registre `theme`.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
@@ -7256,6 +7381,25 @@ le dépôt ? Réponse prouvée par deux rejeux locaux et par le projet de test :
 Toute décision prise sans passer par le pilotage (Yass) se note ici : date, décision,
 raison, effet constaté. Une entrée vaut aveu, pas justification — la règle reste le
 contrat §7 (diagnostic, validation, puis code).
+
+**2026-10-14 — f17, choix d'exécution** (détail §15 septquinquagies) :
+- pendant un thème, les couleurs manuelles de la bannière (pastilles, barre, titre)
+  et le fond personnalisé de la bannière sont ignorés : la bannière reprend le
+  calcul automatique de contraste sur le fond du thème. Sinon, des couleurs choisies
+  pour le fond standard pourraient être illisibles ;
+- l'icône de la carte iPhone (notification) garde la couleur standard ;
+- le thème remplace aussi le logo Google (logo carré dédié, sinon le logo Apple du
+  thème) ; le logo de récompense garde la priorité, comme le doré ;
+- texte du thème sur Google : sur la classe (une écriture pour toutes les cartes) ;
+- dates : jours UTC, 3 mois au plus, début dans l'année ; un thème en cours doit
+  être arrêté avant d'en choisir un autre ; un thème programmé est remplacé ;
+- un thème choisi ne se modifie ni ne se supprime dans l'admin ;
+- bascule : iPhone puis Google (pas en parallèle), Google au rythme des campagnes
+  (50 cartes / 10 s) ; reprise au démarrage du serveur et au cron ;
+- les cartes Google « masquées » (non visibles, 059) ne sont pas mises à jour par la
+  bascule : elles le seront à leur prochain scan ;
+- test du filet « lecture des marchands impossible » : l'étape `themes` y figure
+  désormais parmi les étapes en erreur (elle lit aussi les marchands).
 
 **2026-10-14 — f10, choix d'exécution** (détail §15 quinquinquagies) :
 - horizon des créneaux : 60 jours ; mise à jour le 1er du mois à 02:00 UTC ;
