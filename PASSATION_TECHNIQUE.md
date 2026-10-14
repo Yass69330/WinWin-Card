@@ -6582,6 +6582,74 @@ l'onglet Notifications, les leur fait connaître, d'après leurs réglages réel
 - Google : `addMessage` empile les messages sur l'objet, sans jamais en retirer
   (`google-pass.js:499`).
 
+## 15 duoquinquagies. f15 : LE MARCHAND RÈGLE SES RELANCES (14/10, codé en local, rien poussé)
+
+### Décisions de Yass (14/10)
+
+- Colonnes « marchand » séparées, vides par défaut : la valeur du marchand s'il en a
+  mis une, sinon celle de l'admin. Un bouton « Revenir au réglage WinWin ».
+- Le marchand n'active ni ne désactive aucune relance (réponse b).
+- Réglages modifiables :
+  - délai d'inactivité, de 7 à 90 jours ;
+  - seuil du boost, de 1 à récompense − 1 ;
+  - message de la relance d'inactivité : obligatoire, 150 caractères maximum,
+    sans lien.
+- Textes du boost et de l'anniversaire fixes. Forfaits Pro et Pro+.
+- La vague unique quand le marchand baisse le délai est acceptée, sans rien à
+  l'écran.
+- La demande d'avis Google figure dans le bloc et dans le compteur, sans réglage.
+- f17 : on n'y touche pas (recadré côté pilotage).
+
+### Contrôle du cron du 14/10 (avant le push de `f746b0b`)
+
+- 31 relances near_reward, contre 1 à 13 les jours précédents.
+- Explication prouvée en base : elles viennent de 3 marchands nouvellement activés
+  par Yass (Nails By Ness 27, Bangkok Factory 2, Maybach 2), et aucun client n'a
+  été modifié pendant la migration 059.
+
+### Livré (commit local `36af671`)
+
+- **Migration 060** :
+  - colonnes `marchand_inactive_days`, `marchand_inactive_message` et
+    `marchand_near_reward_threshold` ;
+  - contrainte `marchands_reglages_smart_check` (bornes en base) ;
+  - fonction `smart_notifications_7j` : relances
+    (`workflow_executions`) + cartes ayant reçu une demande d'avis
+    (`notification_envois`, source `avis`, cartes distinctes), sur 7 jours, par
+    les index existants.
+- **Cron** (`src/workers/cron.js`) : valeur du marchand s'il en a une, sinon celle de
+  l'admin, pour le délai, le message et le seuil.
+- **Route** (`src/routes/merchants.js`) :
+  - `GET /me/smart-notifications` renvoie les valeurs utilisées, celles de l'admin,
+    l'avis et `personnalise` ;
+  - `PATCH /me/smart-notifications` règle, ou revient au réglage WinWin avec
+    `{ winwin: true }`.
+  - Sont refusés : une relance désactivée par l'admin, un boost que le seuil de
+    l'admin rend inerte (sinon le marchand l'activerait), et le forfait Basic.
+  - Lien détecté : `http(s)://`, `www.`, ou un nom de domaine courant.
+- **Dashboard** : bouton « Régler mes relances » dans le bloc. Le formulaire ne
+  montre que les relances actives. Erreurs lisibles. Une écriture par
+  enregistrement, aucune lecture régulière.
+- Les réglages du marchand ne touchent pas aux cartes : `marchands.updated_at`
+  n'est lu nulle part.
+
+### Preuves
+
+- `npm test` : 300/300. Section 24 : 13 contrôles, dont le cron qui applique le
+  réglage du marchand (10 jours, son message, seuil 4).
+- Test navigateur : 4/4, quatre captures vérifiées (dont le formulaire).
+- Contre-épreuve sur `f746b0b` : 290/300. Les 10 échecs sont tous dans la section
+  24.
+
+### Limites
+
+- Le message du marchand peut contenir `{prenom}` et `{nom}`, remplacés comme pour
+  le message de l'admin.
+- Si l'admin baisse ensuite la récompense sous le seuil du marchand, le boost n'est
+  plus envoyé et disparaît du bloc. Seul l'admin peut corriger.
+- L'admin ne voit pas encore les réglages du marchand dans son écran. À ajouter si
+  besoin.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
@@ -6798,6 +6866,12 @@ le dépôt ? Réponse prouvée par deux rejeux locaux et par le projet de test :
 Toute décision prise sans passer par le pilotage (Yass) se note ici : date, décision,
 raison, effet constaté. Une entrée vaut aveu, pas justification — la règle reste le
 contrat §7 (diagnostic, validation, puis code).
+
+**2026-10-14 — f15, choix d'exécution** (détail §15 duoquinquagies) :
+- un boost que le seuil de l'admin rend inerte ne peut pas être réglé par le
+  marchand (sinon il l'activerait) ;
+- « Revenir au réglage WinWin » efface les trois réglages ensemble ;
+- détection de lien : `http(s)://`, `www.`, ou un nom de domaine courant.
 
 **2026-10-14 — Bloc smart notifications, choix d'exécution** (détail §15 quinquadragies) :
 - bloc caché si aucune smart notification n'est active ou si la lecture échoue ;
