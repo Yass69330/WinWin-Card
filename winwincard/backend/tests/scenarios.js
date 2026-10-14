@@ -2231,6 +2231,18 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
        sqlOuNull(`SELECT has_function_privilege('anon', 'public.smart_notifications_7j(uuid)', 'EXECUTE')`)],
       ['1', 'refusé', 'f']);
 
+    // ── Fiche admin : voir et effacer les réglages du marchand (décision du 14/10) ──
+    await regler(SN, { inactivite_jours: 12, boost_seuil: 3 });
+    const fiche = (await api('GET', `/api/admin/marchands/${SN}`, jetonAdmin)).corps;
+    const sansAdmin = await api('POST', `/api/admin/workflows/${SN}/effacer-reglages-marchand`, jeton(SN));
+    const efface = await api('POST', `/api/admin/workflows/${SN}/effacer-reglages-marchand`, jetonAdmin);
+    const inconnu = await api('POST', `/api/admin/workflows/e2400000-0000-4000-8000-0000000000ff/effacer-reglages-marchand`, jetonAdmin);
+    verifier('admin : la fiche porte les réglages du marchand ; « Effacer » (admin seulement) les remet à vide, le réglage WinWin intact ; marchand inconnu 404',
+      [fiche.marchand_inactive_days, fiche.marchand_near_reward_threshold, sansAdmin.statut, efface.statut,
+       sqlOuNull(`SELECT coalesce(marchand_inactive_days::text, 'null') || '|' || coalesce(marchand_near_reward_threshold::text, 'null') || '|' || workflow_inactive_days FROM marchands WHERE id = '${SN}'`),
+       inconnu.statut],
+      [12, 3, 403, 200, 'null|null|30', 404]);
+
     // ── Le cron applique le réglage du marchand ──
     const path = require('path');
     const env = { ...process.env };

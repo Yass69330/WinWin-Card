@@ -87,6 +87,27 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur }) {
       simple.texte, 'Mes smart notifications\nEnvoyées automatiquement à vos clients :\nune relance après 30 jours sans visite\nun boost quand il ne leur manque plus que 1 point pour leur récompense\nCes 7 derniers jours : 2 smart notifications\nRégler mes relances');
     verifier('navigateur, tampons : « 2 tampons », relance d\'inactivité désactivée absente, « 0 smart notification »',
       tampons.texte, 'Mes smart notifications\nEnvoyées automatiquement à vos clients :\nun boost quand il ne leur manque plus que 2 tampons pour leur récompense\nun message le jour de leur anniversaire\nCes 7 derniers jours : 0 smart notification\nRégler mes relances');
+    // Fiche admin d'un marchand qui a fait ses réglages : bloc orange, puis « Effacer ».
+    const [idS] = sql(`SELECT id FROM marchands WHERE slug = 'filet-smart-simple'`).split('|');
+    sql(`UPDATE marchands SET marchand_inactive_days = 12, marchand_inactive_message = 'Reviens vite {prenom} !', marchand_near_reward_threshold = 3 WHERE id = '${idS}'`);
+    const ctxA = await navigateur.newContext({ serviceWorkers: 'block', viewport: { width: 520, height: 1400 } });
+    const jetonA = jwt.sign({ role: 'admin' }, secretJwt, { expiresIn: '1h' });
+    await ctxA.addInitScript(t => localStorage.setItem('ww_admin_token', t), jetonA);
+    const admin = await ctxA.newPage();
+    admin.on('dialog', d => d.accept().catch(() => {}));
+    await admin.goto(urlServeur + '/admin/');
+    await admin.waitForSelector(`.btn-edit[data-id="${idS}"]`);
+    await admin.click(`.btn-edit[data-id="${idS}"]`);
+    await admin.waitForSelector('#wf-reglages-marchand', { state: 'visible' });
+    const blocAdmin = (await admin.locator('#wf-reglages-marchand-liste').innerText()).trim();
+    const champAdmin = await admin.inputValue('#f-wf-inactive-days');
+    await admin.locator('#section-workflows').screenshot({ path: path.join(captures, 'smart-5-fiche-admin.png') });
+    await admin.click('#btn-effacer-reglages-marchand');
+    await admin.waitForSelector('#wf-reglages-marchand', { state: 'hidden' });
+    verifier('navigateur, fiche admin : réglages du marchand en orange (12 jours, message, boost 3) à côté du réglage WinWin (30) ; « Effacer » les retire',
+      [blocAdmin, champAdmin, sql(`SELECT coalesce(marchand_inactive_days::text, 'null') FROM marchands WHERE id = '${idS}'`)],
+      ['• Relance après 12 jours sans visite (réglage WinWin : 30 jours)\n• Message de relance : « Reviens vite {prenom} ! »\n• Boost à 3 de la récompense (réglage WinWin : 1)', '30', 'null']);
+    await ctxA.close();
     console.log(`captures : ${captures}`);
   } finally {
     await navigateur.close();

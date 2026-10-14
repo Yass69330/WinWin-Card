@@ -374,6 +374,13 @@
       <div class="form-section" id="section-workflows" style="display:none">
         <div class="form-section-title">Workflows automatiques <span style="color:var(--warning);font-size:10px">Pro / Pro+</span></div>
         <div class="field-hint" style="margin-bottom:8px">Envois push automatiques — déclenchés chaque nuit à 12h (heure du Golfe).</div>
+        <div class="field-hint" style="margin-bottom:8px">Ces champs sont le <b>réglage WinWin</b> (par défaut). Le marchand peut régler lui-même le délai, le message de relance et le seuil du boost depuis son dashboard : son réglage est alors celui qui est utilisé (signalé en orange ci-dessous).</div>
+        <div id="wf-reglages-marchand" style="display:none;background:rgba(245,158,11,.12);border:1px solid var(--warning);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px">
+          <div style="font-weight:600;color:var(--warning);margin-bottom:6px">Réglages faits par le marchand</div>
+          <div id="wf-reglages-marchand-liste" style="color:var(--text);line-height:1.6"></div>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-effacer-reglages-marchand" style="margin-top:8px">Effacer les réglages du marchand</button>
+          <span id="wf-reglages-marchand-etat" style="margin-left:8px;color:var(--muted)"></span>
+        </div>
 
         <div style="background:var(--surface2);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:12px">
           <!-- Inactifs -->
@@ -1046,6 +1053,32 @@ function openCreateSheet() {
   openSheet();
 }
 
+// Réglages faits par le marchand lui-même (f15, migration 060) : affichés en
+// orange, c'est eux qui partent ; l'admin peut seulement les effacer (décision
+// du 14/10 : voir et effacer). Lus dans la fiche déjà chargée, aucune requête de plus.
+function afficherReglagesMarchand(m) {
+  const bloc = document.getElementById('wf-reglages-marchand');
+  if (!bloc) return;
+  const lignes = [];
+  if (m.marchand_inactive_days != null) lignes.push(`Relance après <b>${m.marchand_inactive_days} jours</b> sans visite (réglage WinWin : ${m.workflow_inactive_days || 30} jours)`);
+  if (m.marchand_inactive_message != null) lignes.push(`Message de relance : « ${esc(m.marchand_inactive_message)} »`);
+  if (m.marchand_near_reward_threshold != null) lignes.push(`Boost à <b>${m.marchand_near_reward_threshold}</b> de la récompense (réglage WinWin : ${m.workflow_near_reward_threshold || 2})`);
+  document.getElementById('wf-reglages-marchand-etat').textContent = '';
+  if (!lignes.length) { bloc.style.display = 'none'; return; }
+  document.getElementById('wf-reglages-marchand-liste').innerHTML = lignes.map(l => `<div>• ${l}</div>`).join('');
+  bloc.style.display = '';
+}
+document.getElementById('btn-effacer-reglages-marchand').addEventListener('click', async () => {
+  if (!S.editId) return;
+  if (!confirm('Effacer les réglages faits par le marchand ? Ses relances repartiront sur le réglage WinWin.')) return;
+  const etat = document.getElementById('wf-reglages-marchand-etat');
+  try {
+    const res = await api(`/api/admin/workflows/${S.editId}/effacer-reglages-marchand`, { method: 'POST' });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Erreur');
+    document.getElementById('wf-reglages-marchand').style.display = 'none';
+  } catch (e) { etat.textContent = e.message; }
+});
+
 async function openEditSheet(id) {
   S.editId = id;
   resetForm();
@@ -1285,6 +1318,7 @@ function fillForm(m) {
     document.getElementById('f-wf-near-threshold').value      = m.workflow_near_reward_threshold || 2;
     document.getElementById('f-wf-birthday-enabled').checked  = !!m.workflow_birthday_enabled;
     v('f-wf-birthday-message', m.workflow_birthday_message);
+    afficherReglagesMarchand(m);
   }
   // Landing premium : case cochable en Pro et Pro+ (services/forfaits.js).
   // La case reflète TOUJOURS la base, même masquée : changer le forfait dans

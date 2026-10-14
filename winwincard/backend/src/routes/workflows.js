@@ -47,6 +47,22 @@ router.patch('/:marchandId', authAdmin, asyncHandler(async (req, res) => {
   res.json(data);
 }));
 
+// POST /api/admin/workflows/:marchandId/effacer-reglages-marchand — efface les
+// réglages que le marchand a faits lui-même (f15, migration 060) : ses relances
+// repartent sur le réglage WinWin (workflow_*). Même effet que son bouton
+// « Revenir au réglage WinWin ». L'admin voit ces réglages, il ne les modifie pas.
+router.post('/:marchandId/effacer-reglages-marchand', authAdmin, asyncHandler(async (req, res) => {
+  const { data, error } = await supabase
+    .from('marchands')
+    .update({ marchand_inactive_days: null, marchand_inactive_message: null, marchand_near_reward_threshold: null })
+    .eq('id', req.params.marchandId)
+    .select('id')
+    .maybeSingle();
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: 'Marchand introuvable' });
+  res.json({ ok: true });
+}));
+
 // POST /api/admin/workflows/trigger — déclencher manuellement les workflows
 // Body (optionnel) : { marchand_id, force }
 //   marchand_id : limiter à un seul marchand
