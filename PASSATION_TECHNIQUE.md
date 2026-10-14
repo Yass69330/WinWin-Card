@@ -6826,6 +6826,12 @@ Le rapport à Yass comporte les options et la recommandation.
     - constat de Yass : ce n'est pas une notification. La suggestion ne se balaie
       pas et reste affichée tant qu'on est sur place dans le créneau (« très
       collante »). Décision produit posée à Yass.
+  - **Décisions de Yass (14/10, après le test)** :
+    - pas de réduction du rayon ;
+    - le test est une réussite, mais il reste à refaire **en se déplaçant** :
+      Yass a dû ouvrir et refermer l'app, ce qui fausse un peu le rendu ;
+    - f10 peut être mis en place, **comme un workflow activable ou non par
+      marchand depuis l'admin**.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
