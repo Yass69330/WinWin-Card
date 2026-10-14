@@ -6676,8 +6676,38 @@ l'onglet Notifications, les leur fait connaître, d'après leurs réglages réel
     Contre-épreuve sur `45a72b2` : 300/301, le seul échec est le nouveau contrôle.
   - Pas de migration. Mise en production : un push.
   - Capture validée et feu vert de Yass. Poussé à **09:05 UTC** en avance rapide
-    sur `claude/keen-goldberg-MXslu` (`45a72b2` → `87c8a20`). Contrôles de Yass :
-    à compléter.
+    sur `claude/keen-goldberg-MXslu` (`45a72b2` → `87c8a20`). Contrôles de Yass
+    (14/10) : déploiement vert, contrôles bons.
+
+## 15 tresquinquagies. f10 NOTIFICATION GÉOLOCALISÉE : DIAGNOSTIC (14/10, rien codé)
+
+Décisions de Yass :
+- adresses et horaires saisis par Yass dans l'admin, sans restriction de forfait ;
+- texte = prénom + produit favori ; à défaut, le solde (comme le texte du boost) ;
+- active uniquement aux heures d'ouverture.
+
+État du code, prouvé par grep :
+- aucun champ `locations`, `relevantText` ou `relevantDates` dans
+  `src/services/apple-pass.js` ;
+- aucune colonne de coordonnées, d'horaires ou de produit favori. Seule existe
+  `marchands.adresse` (texte, migration 014).
+
+Ce que disent les documentations (non vérifié sur un vrai iPhone) :
+- **Apple** :
+  - `locations` : 10 au maximum par carte, chacune avec son propre
+    `relevantText`. C'est une suggestion passive sur l'écran verrouillé, pas une
+    notification sonore.
+  - `relevantDates` (iOS 18) : tableau de fenêtres de dates d'au plus un jour
+    chacune. Rien ne confirme que la carte de fidélité (storeCard) les respecte,
+    ni qu'elles se combinent avec les lieux.
+- **Google** : « Passes à proximité » (release notes d'octobre 2025) :
+  - `merchantLocations`, 10 par classe et 10 par objet ;
+  - Google choisit la distance, la durée et le texte ;
+  - aucun réglage d'horaires.
+
+La carte Apple est déjà régénérée à chaque mise à jour poussée, donc à chaque scan :
+`relevantText` peut contenir le solde à jour sans aucun envoi supplémentaire.
+Le rapport à Yass comporte les options et la recommandation.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
