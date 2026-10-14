@@ -6650,6 +6650,15 @@ l'onglet Notifications, les leur fait connaître, d'après leurs réglages réel
 - L'admin ne voit pas encore les réglages du marchand dans son écran. À ajouter si
   besoin.
 
+### En production : bloc smart notifications et f15 (14/10)
+
+- Migration 060 exécutée par Yass vers 08:40 UTC : 3 × true.
+- Feu vert de Yass à 08:43 UTC, après le passage du cron : la fenêtre 07:30–09:00
+  a été levée explicitement par Yass.
+- Poussé à **08:43:04 UTC** en avance rapide sur `claude/keen-goldberg-MXslu`
+  (`28ab331` → `45a72b2`) : le bloc (`f746b0b`) et f15 ensemble.
+- Contrôles de Yass : à compléter.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
