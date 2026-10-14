@@ -6709,6 +6709,57 @@ La carte Apple est déjà régénérée à chaque mise à jour poussée, donc à
 `relevantText` peut contenir le solde à jour sans aucun envoi supplémentaire.
 Le rapport à Yass comporte les options et la recommandation.
 
+## 15 quatuorquinquagies. f18 « RETOUCHES MES SMART NOTIFICATIONS » (14/10, codé en local, rien poussé)
+
+### Demande de Yass
+
+1. Message du boost modifiable par l'admin et par le marchand, comme le message
+   d'inactivité :
+   - 150 caractères maximum, sans lien ;
+   - mot réservé `{reste}` obligatoire, singulier et pluriel gérés ; prénom en
+     option ;
+   - le texte actuel devient le texte WinWin par défaut.
+2. Bloc plus léger :
+   - une phrase courte ;
+   - une ligne courte par smart notification ;
+   - compteur sur une ligne ;
+   - réglages derrière « Modifier » ;
+   - place prévue pour « À proximité » (f10).
+
+### Livré (commit local `4402c0c`)
+
+- **Migration 061** : `workflow_near_reward_message` (admin) et
+  `marchand_near_reward_message` (marchand). Contrainte
+  `marchands_message_boost_check` : 1 à 150 caractères et `{reste}` présent.
+- `src/services/smart-messages.js` : la seule définition, partagée par le cron, le
+  dashboard et l'admin.
+  - Lien interdit, 150 caractères, `{reste}` obligatoire.
+  - Texte WinWin du boost ; `reste(n)` → « 1 tampon » / « 2 points »
+    (en : point / stamp).
+- Cron : message du marchand, sinon celui de l'admin, sinon le texte WinWin.
+  `{reste}` et `{nom}` sont remplacés ; `{prenom}` l'est client par client par la
+  base.
+- Bloc du dashboard :
+  - « Envoyées automatiquement à vos clients. » ;
+  - « Relance · après 21 j », « Boost · à 2 tampons », « Anniversaire »,
+    « Avis Google » ;
+  - compteur et bouton « Modifier » ;
+  - le formulaire contient le délai, le message de relance, le seuil et le
+    message du boost.
+  - `proximite` est prévu dans la réponse (faux tant que f10 n'existe pas).
+- Admin :
+  - champ « Message du boost » dans la fiche, contrôlé par la route admin (400
+    lisible) ;
+  - le bloc orange affiche aussi le message du boost réglé par le marchand ;
+  - « Effacer » et « Revenir au réglage WinWin » effacent aussi ce message.
+
+### Preuves
+
+- `npm test` : 304/304.
+- Test navigateur : 5/5, captures vérifiées (bloc, formulaire ouvert, sans
+  premium, tampons, fiche admin).
+- Contre-épreuve sur `87c8a20` : 297/304. Les 7 échecs portent tous sur f18.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
@@ -6925,6 +6976,15 @@ le dépôt ? Réponse prouvée par deux rejeux locaux et par le projet de test :
 Toute décision prise sans passer par le pilotage (Yass) se note ici : date, décision,
 raison, effet constaté. Une entrée vaut aveu, pas justification — la règle reste le
 contrat §7 (diagnostic, validation, puis code).
+
+**2026-10-14 — f18, choix d'exécution** (détail §15 quatuorquinquagies) :
+- **texte WinWin du boost en tampons** : un programme en tampons reçoit « Plus que
+  2 tampons » (avant : « 2 points », même en tampons). Pour les programmes en
+  points, le texte est identique. En anglais, « Only 2 points more to unlock »
+  remplace « Only 2 more points to unlock ».
+- `{reste}` contient le nombre ET l'unité (« 2 tampons »), pour gérer le pluriel
+  sans autre mot réservé ;
+- le compteur des 7 jours garde le libellé validé (« N smart notifications »).
 
 **2026-10-14 — f15, choix d'exécution** (détail §15 duoquinquagies) :
 - un boost que le seuil de l'admin rend inerte ne peut pas être réglé par le
