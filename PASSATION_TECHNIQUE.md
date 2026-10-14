@@ -6760,6 +6760,13 @@ Le rapport à Yass comporte les options et la recommandation.
   premium, tampons, fiche admin). Le rapport est vérifié au singulier, à zéro et
   au pluriel.
 - Captures validées par Yass, avec une modification : le libellé du compteur.
+
+### En production (14/10)
+
+- Migration 061 exécutée par Yass : 2 × true.
+- Feu vert. Poussé à **10:35:28 UTC** en avance rapide sur `claude/keen-goldberg-MXslu`
+  (`87c8a20` → `a0e044b`).
+- Contrôles de Yass : à compléter.
 - Contre-épreuve sur `87c8a20` : 297/304. Les 7 échecs portent tous sur f18.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
