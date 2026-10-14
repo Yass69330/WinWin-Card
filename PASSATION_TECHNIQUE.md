@@ -6937,6 +6937,47 @@ Le rapport à Yass comporte les options et la recommandation.
 - La ligne « À proximité » n'apparaît qu'aux forfaits Pro et Pro+, comme tout le
   bloc ; f10 fonctionne pourtant pour tous les forfaits.
 
+## 15 sexquinquagies. f17 CARTES À THÈME : DIAGNOSTIC (14/10, rien codé)
+
+Demande du pilotage :
+- un onglet « Ma carte » en self-service, réservé à Pro+ ;
+- le marchand voit l'aperçu de la carte standard et de chaque thème préparé
+  pour lui ;
+- un thème = couleurs + logo préfabriqué + texte court sous le prénom ;
+- le marchand fixe des dates de début et de fin ;
+- notification à l'ouverture, retour silencieux à la fin ;
+- un seul thème à la fois ;
+- les nouveaux inscrits reçoivent le thème ;
+- ni rafale, ni effet sur la caisse ;
+- le thème s'applique aussi aux cartes Google.
+
+Constats prouvés dans le code :
+- La bannière (strip) est peinte sur `couleur_fond`
+  (`strip-generator.js:276`, `bgSvg`). Le cache des bannières est indexé par
+  (slug, `strip_config_version`, état) (`strip-cache.js:31`). Un thème qui change
+  le fond oblige donc à redessiner les bannières : la progression reste la même,
+  seul l'arrière-plan change.
+- Apple : la ligne sous le prénom (`auxiliaryFields`) est vide. La notification
+  existe déjà, par `notification_txt` et `changeMessage`, comme pour les
+  campagnes.
+- Google :
+  - le logo (`programLogo`) et le fond (`hexBackgroundColor`) sont portés par la
+    classe, une par marchand. Une mise à jour de la classe suffit donc, en un seul
+    appel ;
+  - mais l'objet surcharge le fond quand `couleur_fond_reward` est défini, ou en
+    état de récompense (`google-pass.js:292`). Ces cartes demandent une mise à
+    jour objet par objet ;
+  - la bannière Google (hero) est la même bannière peinte sur le fond ;
+  - l'admin réécrit la classe entière (`createOrUpdateLoyaltyClass`) : elle devra
+    tenir compte du thème en cours.
+- Le mécanisme d'envoi existe déjà : lots, débit partagé, cartes marquées
+  modifiées, registre (campagnes t37, `rafraichir` de f10).
+- Environnement de test `winwin-campagne-15` : il existe encore, supprimé au plus
+  tard le 31/10. Il n'a pas les clés Apple : on y teste la charge (pas de
+  rafale, caisse non ralentie), pas le rendu sur un iPhone.
+
+Rapport, recommandations et décisions demandées : envoyés au pilotage le 14/10.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
