@@ -6807,6 +6807,9 @@ Le rapport à Yass comporte les options et la recommandation.
   - Toute autre carte est inchangée (filet, section 25).
   - Retour arrière : supprimer la variable, puis un scan.
   - **À retirer au code définitif de f10.**
+  - Feu vert de Yass. Poussé à **11:26:32 UTC** en avance rapide sur
+    `claude/keen-goldberg-MXslu` (`a0e044b` → `4446e38`). Créneau proposé :
+    11:45–12:15 UTC. Résultat du test sur iPhone : à compléter.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
