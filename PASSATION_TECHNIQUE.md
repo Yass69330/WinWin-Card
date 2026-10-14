@@ -6486,6 +6486,15 @@ réseau qui envoie.
   l'appelle.
 - Un nouveau signal de carte devra allumer `visible` dans un déclencheur.
 
+### En production : migration 059 et code (14/10)
+
+- Yass a donné son accord sur les chiffres (point e) et validé la règle de la carte
+  supprimée : masquée seulement si le client n'est jamais venu.
+- Migration 059 exécutée par Yass : 5 × true, 230 clients masqués.
+- Feu vert. Poussé à **07:11:27 UTC** en avance rapide sur
+  `claude/keen-goldberg-MXslu` (`88899f1` → `28ab331`).
+- Contrôles de Yass : à compléter.
+
 ### Dette observée
 
 - Une fois sur quatre passages du filet, « fetch failed » sur le premier appel de
