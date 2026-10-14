@@ -6889,6 +6889,19 @@ Le rapport à Yass comporte les options et la recommandation.
 - Contre-épreuve sur `4446e38` : 304/305. Le seul échec est l'absence de
   `services/geo.js`.
 
+### Vérifications demandées par Yass avant la 062 (14/10)
+
+- **Droits** : la 062 ne crée ni table, ni fonction, ni vue (grep : aucun
+  `CREATE TABLE`, `CREATE FUNCTION` ou `GRANT`). Elle ajoute deux colonnes à
+  `marchands` et change la contrainte de `notification_envois`. Les droits de
+  `service_role` sur ces tables existantes couvrent les nouvelles colonnes : il
+  n'y a pas de piège 028/030 ici.
+- **Retour arrière réel** : l'ancien code `4446e38` a été joué sur une base qui
+  porte la 062 (62 fichiers rejoués, section 0 des droits comprise) : **306/306**.
+- **Point d'attention** : `4446e38` contient encore la carte de test provisoire.
+  En cas de retour arrière, la variable `CARTE_TEST_GEO` doit avoir été supprimée,
+  sinon la carte de Test Docker retrouverait l'adresse et le créneau du test.
+
 ### Hypothèses et limites
 
 - **Hypothèse** : iOS respecte `relevantDates` sur une carte de fidélité,
