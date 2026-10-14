@@ -7178,13 +7178,33 @@ de la livraison est validé tel quel.
   sa carte, avec le bon logo et la progression.
 - Le test navigateur vérifie que logo, bannière et QR sont chargés dans chaque
   aperçu. Les logos y sont servis par interception, faute de Storage dans le filet.
-- `npm test` + test navigateur : **341/341**.
-- Coût et limite :
-  - à la première ouverture de l'onglet, une bannière par carte affichée est
-    générée (0,1 à 0,3 s de calcul chacune, sur le même fil que la caisse), puis
-    servie par le cache ;
-  - fidélité : couleurs, logo, bannière et textes sont les vrais. La mise en page
-    imite Wallet sans en être une copie au pixel (polices, tailles).
+- Fidélité : couleurs, logo, bannière et textes sont les vrais. La mise en page
+  imite Wallet sans en être une copie au pixel (polices, tailles).
+
+### « La caisse prime » : aperçus préparés en admin (14/10, demande du pilotage)
+
+- Côté marchand, `GET /me/themes` **lit le cache seulement** (`strip-cache.lireCache` :
+  mémoire, puis Storage, jamais de génération). Une bannière absente du cache
+  s'affiche « Aperçu de la bannière en préparation par WinWin ». Le QR d'exemple est
+  calculé une fois par serveur, puis gardé en mémoire.
+- Le calcul se fait en admin (`themes.preparerApercus`, carte standard puis chaque
+  thème, l'un après l'autre, jamais en rafale) :
+  - à la création ou à la modification d'un thème ;
+  - à l'envoi d'un logo ;
+  - à l'enregistrement de la fiche d'un marchand Pro+ (la version de bannière, les
+    couleurs ou le logo ont pu changer) et à l'écriture des images par palier ;
+  - à l'ouverture des thèmes dans la fiche admin (calcul synchrone, la liste
+    affichée est donc prête).
+- À la fin d'un thème, la purge de ses bannières **garde sa bannière d'aperçu** : le
+  marchand la revoit sans recalcul.
+- Filet : un thème posé sans passer par l'admin n'est jamais calculé côté marchand
+  (ni à la 1re ni à la 2e ouverture) ; il l'est à l'ouverture de la fiche admin.
+- `npm test` + test navigateur : **342/342**. Contre-épreuve sur `70caa3c` : 316/317 (seul KO attendu : module f17 absent).
+- Limite (hors aperçu, inchangée, décision 1) : l'activation d'un thème fait
+  générer les bannières des vraies cartes, à la bascule et au retour des iPhone.
+  C'est en arrière-plan et une fois par état, pas sur une ouverture d'écran. On
+  pourrait aussi les précalculer en admin (tous les états), mais cela coûte
+  0,2 à 1,3 Mo de stockage par thème, même jamais activé.
 
 ### Reste à faire
 

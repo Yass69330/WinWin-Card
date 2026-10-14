@@ -90,24 +90,36 @@ function avecTheme(marchand, theme) {
 // cartes (même cache, même générateur, même progression d'exemple), le logo est
 // celui que la carte Apple affiche, les couleurs et le texte de la case sont
 // ceux du thème. La bannière part dans la réponse (data:) : l'aperçu ne dépend
-// pas de la lecture publique de Storage. Coût : une bannière par carte affichée,
-// générée une fois (≈ 0,1 à 0,3 s de calcul) puis servie par le cache.
-async function apercu(marchand) {
-  const m = appliquerTheme(marchand);
+// pas de la lecture publique de Storage.
+//
+// « La caisse prime » (décision du pilotage, 14/10) : les bannières d'aperçu se
+// CALCULENT en admin, quand Yass prépare les thèmes (generer: true). Côté
+// marchand, l'aperçu ne fait que LIRE le cache (LRU, puis Storage) : aucune
+// génération déclenchée par une action du marchand. Bannière absente du cache
+// → `banniere_en_preparation`, l'écran le dit.
+function exempleProgression(m) {
   const max = m.max_value || 10;
-  const points = m.type_programme === 'points';
-  const rempli = points ? Math.round(max * 0.4) : Math.min(3, max - 1);
+  return m.type_programme === 'points' ? Math.round(max * 0.4) : Math.min(3, max - 1);
+}
+const banniereGeneree = m => m.strip_mode === 'points_bar' || (m.strip_mode && m.type_programme !== 'points');
+
+async function apercu(marchand, { generer = false } = {}) {
+  const m = appliquerTheme(marchand);
+  const rempli = exempleProgression(m);
   let banniere = null;
-  const genere = m.strip_mode === 'points_bar' || (m.strip_mode && !points);
+  let enPreparation = false;
   // Même précédence que la carte Apple : image fixe, puis bannière générée.
   const tier = Array.isArray(m.images_tiers) ? m.images_tiers.find(t => rempli >= t.min && rempli <= t.max) : null;
   if (tier && tier.url) banniere = tier.url;
   else if (m.image_strip_url) banniere = m.image_strip_url;
-  else if (genere) {
-    const { getOrGenerate } = require('./strip-cache');
-    const buf = await getOrGenerate({ marchand: m, filledCount: rempli, variant: 'strip2x' })
-      .catch(e => { console.error('[theme] aperçu, bannière :', e.message); return null; });
+  else if (banniereGeneree(m)) {
+    const cache = require('./strip-cache');
+    const buf = generer
+      ? await cache.getOrGenerate({ marchand: m, filledCount: rempli, variant: 'strip2x' })
+        .catch(e => { console.error('[theme] aperçu, bannière :', e.message); return null; })
+      : await cache.lireCache({ marchand: m, filledCount: rempli, variant: 'strip2x' });
     if (buf) banniere = `data:image/png;base64,${buf.toString('base64')}`;
+    else enPreparation = true;
   }
   return {
     couleur_fond: m.couleur_fond || '#1a1a2e',
@@ -117,9 +129,40 @@ async function apercu(marchand) {
     texte_case: m._theme ? m._theme.texte_case : null,
     nom: m.pass_display_name || m.nom,
     banniere,
+    banniere_en_preparation: enPreparation,
     rempli,
-    max: m.display_max_value || max,
+    max: m.display_max_value || m.max_value || 10,
   };
+}
+
+// Chemin Storage de la bannière d'aperçu d'un thème : gardé à la purge de fin de
+// thème (le marchand peut le reprendre plus tard sans recalcul).
+function cheminApercu(marchand, theme) {
+  const m = avecTheme(marchand, theme);
+  if (!banniereGeneree(m)) return null;
+  return require('./strip-cache').storageKey(m, exempleProgression(m), 'strip2x');
+}
+
+// Préparation en admin : carte standard + chaque thème du marchand, l'un après
+// l'autre (jamais en rafale). Appelée à la création ou modification d'un thème,
+// à l'envoi d'un logo, à la modification de la fiche (la version de bannière
+// change) et à l'ouverture des thèmes dans la fiche admin. Ne lève jamais.
+async function preparerApercus(marchandId) {
+  try {
+    const supabase = require('./supabase');
+    const [{ data: m, error }, { data: liste, error: errT }] = await Promise.all([
+      supabase.from('marchands').select('*').eq('id', marchandId).single(),
+      supabase.from('themes_marchand').select('*').eq('marchand_id', marchandId).order('cree_le'),
+    ]);
+    if (error || errT || !m || !liste || !liste.length) return 0;
+    const standard = { ...m, theme_actif: null };
+    await apercu(standard, { generer: true });
+    for (const t of liste) await apercu(avecTheme(standard, t), { generer: true });
+    return liste.length + 1;
+  } catch (e) {
+    console.error(`[theme] préparation des aperçus, marchand ${marchandId} :`, e.message);
+    return 0;
+  }
 }
 
 // ── Contrôle d'un thème saisi par l'admin ─────────────────────────────────
@@ -302,7 +345,9 @@ async function executer(marchandId) {
   // Fin de bascule. Thème terminé : ses bannières sont purgées (par lots).
   if (!await avancer(supabase, marchandId, b, null)) return bilan;
   if (b.sens === 'fin' && b.theme_id) {
-    await require('./strip-cache').purgerTheme(m.slug, b.theme_id)
+    const { data: t } = await supabase.from('themes_marchand').select('*').eq('id', b.theme_id).maybeSingle();
+    const garder = t ? [cheminApercu({ ...m, theme_actif: null }, t)].filter(Boolean) : [];
+    await require('./strip-cache').purgerTheme(m.slug, b.theme_id, garder)
       .catch(e => console.error('[theme] purge des bannières :', e.message));
   }
   console.log(`[theme] bascule ${b.sens} marchand ${marchandId} : ${bilan.iphones} iPhone, ${bilan.google} Google, ${bilan.erreurs} erreur(s)`);
@@ -386,6 +431,6 @@ function _pourTests({ envoyeurs: e, config: c, attendre: a } = {}) {
 }
 
 module.exports = {
-  appliquerTheme, avecTheme, apercu, validerTheme, validerDates, aujourdhui,
+  appliquerTheme, avecTheme, apercu, preparerApercus, cheminApercu, validerTheme, validerDates, aujourdhui,
   lancer, ouvrir, fermer, passage, planifierReprise, _pourTests,
 };

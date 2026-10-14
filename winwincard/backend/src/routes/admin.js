@@ -388,6 +388,9 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
 
   const { createOrUpdateLoyaltyClass } = require('../services/google-pass');
   suivre(createOrUpdateLoyaltyClass(data).catch(e => console.error('[Google Wallet] classe:', e.message)));
+  // f17 : la fiche a pu changer la bannière (version, couleurs, logo) : aperçus
+  // « Ma carte » recalculés ici, en admin, jamais à l'ouverture par le marchand.
+  if (data && data.forfait === 'pro_plus') suivre(require('../services/themes').preparerApercus(data.id));
 
   // f10 : interrupteur ou lieux changés (activation, désactivation, adresses,
   // horaires) → les cartes iPhone du marchand sont mises à jour en arrière-plan.
@@ -847,6 +850,9 @@ async function ecrireTiers(marchandId, tiers) {
 
   const { createOrUpdateLoyaltyClass } = require('../services/google-pass');
   suivre(createOrUpdateLoyaltyClass(data).catch(e => console.error('[Google Wallet] classe:', e.message)));
+  // f17 : la fiche a pu changer la bannière (version, couleurs, logo) : aperçus
+  // « Ma carte » recalculés ici, en admin, jamais à l'ouverture par le marchand.
+  if (data && data.forfait === 'pro_plus') suivre(require('../services/themes').preparerApercus(data.id));
   return { data };
 }
 
@@ -957,7 +963,12 @@ router.get('/marchands/:id/themes', authAdmin, asyncHandler(async (req, res) => 
   ]);
   if (error || !m) return res.status(404).json({ error: 'Marchand introuvable' });
   if (errT) return res.status(500).json({ error: errT.message });
-  const apercus = await Promise.all(liste.map(t => themes.apercu(themes.avecTheme(m, t))));
+  // Préparation (calcul + cache) des aperçus ICI, en admin, l'un après l'autre :
+  // le marchand, lui, ne fait que les lire (« la caisse prime »).
+  const standard = { ...m, theme_actif: null };
+  await themes.apercu(standard, { generer: true });
+  const apercus = [];
+  for (const t of liste) apercus.push(await themes.apercu(themes.avecTheme(standard, t), { generer: true }));
   res.json({ themes: liste.map((t, i) => ({ ...t, apercu: apercus[i] })), actif: m.theme_actif || null, bascule: !!m.theme_bascule });
 }));
 
@@ -973,6 +984,7 @@ router.post('/marchands/:id/themes', authAdmin, asyncHandler(async (req, res) =>
     if (error.code === '23503') return res.status(404).json({ error: 'Marchand introuvable' });
     return res.status(500).json({ error: error.message });
   }
+  suivre(require('../services/themes').preparerApercus(req.params.id));   // aperçu « Ma carte » prêt
   res.status(201).json(data);
 }));
 
@@ -986,6 +998,7 @@ router.patch('/marchands/:id/themes/:themeId', authAdmin, asyncHandler(async (re
     .eq('id', req.params.themeId).eq('marchand_id', req.params.id).select(COLONNES_THEME).maybeSingle();
   if (error) return res.status(error.code === '23505' ? 409 : 500).json({ error: error.code === '23505' ? 'Un thème porte déjà ce nom' : error.message });
   if (!data) return res.status(404).json({ error: 'Thème introuvable' });
+  suivre(require('../services/themes').preparerApercus(req.params.id));   // aperçu « Ma carte » prêt
   res.json(data);
 }));
 
@@ -1022,6 +1035,7 @@ router.post('/marchands/:id/themes/:themeId/logo', authAdmin, (req, res, next) =
     .eq('id', req.params.themeId).eq('marchand_id', req.params.id).select(COLONNES_THEME).maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
   if (!data) return res.status(404).json({ error: 'Thème introuvable' });
+  suivre(require('../services/themes').preparerApercus(req.params.id));   // aperçu « Ma carte » prêt
   res.json(data);
 }));
 

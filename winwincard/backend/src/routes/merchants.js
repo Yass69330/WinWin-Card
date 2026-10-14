@@ -302,6 +302,14 @@ async function ficheCarte(marchandId) {
   return supabase.from('marchands').select(`${COLONNES_MARCHAND_CARTE}, theme_bascule`).eq('id', marchandId).single();
 }
 
+let _qr = null;
+async function qrExemple() {
+  if (!_qr) _qr = await require('qrcode').toDataURL('https://app.winwin-card.com', { margin: 1, width: 220 }).catch(() => null);
+  return _qr;
+}
+
+// GET /merchants/me/themes — LECTURE SEULE : les bannières d'aperçu viennent du
+// cache, préparées en admin (services/themes.js, « la caisse prime »).
 // GET /merchants/me/themes
 router.get('/me/themes', authMarchand, asyncHandler(async (req, res) => {
   const themes = require('../services/themes');
@@ -315,8 +323,9 @@ router.get('/me/themes', authMarchand, asyncHandler(async (req, res) => {
   const standard = { ...m, theme_actif: null };
   const [apercuStandard, ...apercus] = await Promise.all([
     themes.apercu(standard), ...liste.map(t => themes.apercu(themes.avecTheme(standard, t)))]);
-  // QR d'exemple (le vrai est propre à chaque client) : la carte entière, comme en Wallet.
-  const qr = await require('qrcode').toDataURL('https://app.winwin-card.com', { margin: 1, width: 220 }).catch(() => null);
+  // QR d'exemple (le vrai est propre à chaque client) : la carte entière, comme en
+  // Wallet. Calculé une fois par serveur, puis gardé en mémoire.
+  const qr = await qrExemple();
   res.json({
     eligible: true,
     aujourdhui: themes.aujourdhui(),

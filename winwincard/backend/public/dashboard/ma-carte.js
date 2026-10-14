@@ -18,6 +18,7 @@
       intro: 'Habillez votre carte pour une saison ou un événement. La progression et le solde de vos clients ne changent pas.',
       reserve: 'Les cartes à thème sont réservées au forfait Pro+.',
       standard: 'Carte standard',
+      prepa: 'Aperçu de la bannière en préparation par WinWin',
       aucun: 'Aucun thème n\'est encore préparé pour vous. Contactez WinWin pour en créer un.',
       choisir: 'Choisir ce thème',
       debut: 'Début', fin: 'Fin',
@@ -48,6 +49,7 @@
       intro: 'Dress up your card for a season or an event. Your customers\' progress and balance never change.',
       reserve: 'Themed cards are part of the Pro+ plan.',
       standard: 'Standard card',
+      prepa: 'Banner preview being prepared by WinWin',
       aucun: 'No theme has been prepared for you yet. Contact WinWin to create one.',
       choisir: 'Choose this theme',
       debut: 'Start', fin: 'End',
@@ -98,6 +100,7 @@
     #tab-carte .mc-logo { max-height: 42px; max-width: 48%; object-fit: contain; object-position: left center; }
     #tab-carte .mc-marchand { font-size: 15px; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
     #tab-carte .mc-banniere { display: block; width: 100%; aspect-ratio: 750 / 246; object-fit: cover; }
+    #tab-carte .mc-prepa { display: flex; align-items: center; justify-content: center; font-size: 12px; opacity: .7; background: rgba(0,0,0,.12); }
     #tab-carte .mc-champs { display: flex; justify-content: space-between; padding: 12px 16px 0; }
     #tab-carte .mc-champs small { display: block; font-size: 11px; font-weight: 600; letter-spacing: .8px; }
     #tab-carte .mc-champs b { display: block; font-size: 22px; font-weight: 400; margin-top: 1px; }
@@ -134,7 +137,8 @@
           ${a.logo_url ? `<img class="mc-logo" src="${esc(a.logo_url)}" alt="" onerror="this.style.visibility='hidden'">` : '<span></span>'}
           <span class="mc-marchand">${esc(a.nom || '')}</span>
         </div>
-        ${a.banniere ? `<img class="mc-banniere" src="${esc(a.banniere)}" alt="">` : ''}
+        ${a.banniere ? `<img class="mc-banniere" src="${esc(a.banniere)}" alt="">`
+          : a.banniere_en_preparation ? `<div class="mc-banniere mc-prepa">${esc(tx('prepa'))}</div>` : ''}
         <div class="mc-champs">
           <div><small style="color:${esc(a.couleur_label)}">CLIENT</small><b>Sarah</b></div>
           <div style="text-align:right"><small style="color:${esc(a.couleur_label)}">PROGRESS</small><b>${esc(a.rempli)} / ${esc(a.max)}</b></div>

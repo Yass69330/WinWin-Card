@@ -2537,6 +2537,9 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       const idT = cree.corps.id, idT2 = cree2.corps.id;
       const pro = await api('GET', '/api/merchants/me/themes', jeton(MPRO));
       const proPost = await api('POST', '/api/merchants/me/theme', jeton(MPRO), { theme_id: idT, debut: T.aujourdhui(), fin: T.aujourdhui() });
+      // « La caisse prime » : les aperçus se préparent en admin (ici, l'ouverture des
+      // thèmes dans la fiche admin) ; le marchand ne fait que lire le cache.
+      const adminListe = await api('GET', `/api/admin/marchands/${MT}/themes`, jetonAdmin);
       const liste = await api('GET', '/api/merchants/me/themes', tMT);
       verifier('« Ma carte » : réservé à Pro+ (Pro : non éligible, choix refusé 403) ; Pro+ : carte standard + chaque thème avec son aperçu',
         [pro.corps.eligible, proPost.statut, liste.corps.eligible, liste.corps.standard.couleur_fond, liste.corps.themes.map(x => `${x.nom}:${x.apercu.couleur_fond}:${x.apercu.texte_case}`).join(','), liste.corps.actif],
@@ -2547,6 +2550,18 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       verifier('aperçu = la vraie carte : la VRAIE bannière (générée, avec sa progression) peinte sur le fond de chaque carte ; logo réel (celui du thème, sinon le logo de base) ; progression « 3 / 9 » ; QR d\'exemple',
         [await Promise.all(cartes.map(fondBanniere)), cartes.map(a => a.logo_url), cartes.map(a => `${a.rempli} / ${a.max}`), /^data:image\/png/.test(liste.corps.qr || '')],
         [['#4a1a2a', '#0b3d2e', '#00732f'], ['https://logos.exemple/standard.png', theme.logo_url, 'https://logos.exemple/standard.png'], ['3 / 9', '3 / 9', '3 / 9'], true]);
+      // Thème posé sans passer par l'admin (donc jamais préparé) : le marchand ne
+      // le calcule pas, ni à la première ouverture ni à la seconde ; l'admin, si.
+      const idHiver = sql(`INSERT INTO themes_marchand (marchand_id, nom, couleur_fond, message_ouverture)
+                           VALUES ('${MT}', 'Hiver', '#1d3557', 'Bon hiver !') RETURNING id`);
+      const hiver = async () => (await api('GET', '/api/merchants/me/themes', tMT)).corps.themes.find(x => x.nom === 'Hiver').apercu;
+      const h1 = await hiver(), h2 = await hiver();
+      await api('GET', `/api/admin/marchands/${MT}/themes`, jetonAdmin);
+      const h3 = await hiver();
+      sql(`DELETE FROM themes_marchand WHERE id = '${idHiver}'`);
+      verifier('« la caisse prime » : côté marchand, lecture du cache SEULEMENT (thème non préparé : pas de bannière, « en préparation », toujours rien à la 2e ouverture) ; préparé à l\'ouverture de la fiche admin, puis servi au marchand',
+        [adminListe.statut, h1.banniere, h1.banniere_en_preparation, h2.banniere, await fondBanniere(h3), h3.banniere_en_preparation],
+        [200, null, true, null, '#1d3557', false]);
       const jour = T.aujourdhui(), demain = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
       const erreurs = [];
       for (const [d, f] of [['2026-13-01', jour], ['2020-01-01', jour], [jour, '2020-01-01'], [jour, '2099-01-01']]) {

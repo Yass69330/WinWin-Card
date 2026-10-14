@@ -154,8 +154,10 @@ async function listerFichiers(dossier, profondeur = 1) {
   return chemins;
 }
 
-async function purgerTheme(slug, themeId) {
-  const chemins = await listerFichiers(dossierTheme(slug, themeId));
+// `garder` : chemins à ne pas supprimer (la bannière d'aperçu « Ma carte » du
+// thème, préparée en admin : le marchand doit pouvoir la revoir sans calcul).
+async function purgerTheme(slug, themeId, garder = []) {
+  const chemins = (await listerFichiers(dossierTheme(slug, themeId))).filter(c => !garder.includes(c));
   let supprimes = 0;
   for (let i = 0; i < chemins.length; i += LOT_REMOVE) {
     const lot = chemins.slice(i, i + LOT_REMOVE);
@@ -251,6 +253,21 @@ async function getOrGenerate({ marchand, filledCount, variant }) {
   }
 }
 
+// ── Lecture SEULE (aperçu « Ma carte », f17) ───────────────────────────────
+// LRU puis Storage, JAMAIS de génération : une action du marchand ne déclenche
+// aucun calcul sur le fil de la caisse. Rend le Buffer, ou null si la bannière
+// n'a pas encore été préparée (en admin).
+async function lireCache({ marchand, filledCount, variant }) {
+  marchand = require('./themes').appliquerTheme(marchand);
+  if (!marchand.strip_mode) return null;
+  const key = storageKey(marchand, filledCount, variant);
+  const enMemoire = lruGet(key);
+  if (enMemoire) return enMemoire;
+  const lu = await fetchFromStorage(key).catch(() => null);
+  if (lu) lruSet(key, lu);
+  return lu;
+}
+
 // ── URL publique Storage d'un strip généré (pour Google Wallet hero) ──────
 // Retourne l'URL sans attendre la génération si le fichier existe déjà,
 // sinon déclenche la génération et retourne l'URL calculée.
@@ -283,7 +300,7 @@ async function _fetchCustomBg(marchand) {
 }
 
 module.exports = {
-  getOrGenerate, getPublicUrl, storageKey, publicUrl, purgerTheme,
+  getOrGenerate, getPublicUrl, lireCache, storageKey, publicUrl, purgerTheme,
   // Exposée pour les tests : la purge est le seul chemin qui parle à Storage
   // en écriture massive, elle doit être vérifiable sans réseau.
   __purgeOldVersionsForTest: purgeOldVersions,
