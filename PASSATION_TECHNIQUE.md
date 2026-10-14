@@ -6675,6 +6675,9 @@ l'onglet Notifications, les leur fait connaître, d'après leurs réglages réel
   - Preuves : `npm test` 301/301. Test navigateur avec capture de la fiche admin.
     Contre-épreuve sur `45a72b2` : 300/301, le seul échec est le nouveau contrôle.
   - Pas de migration. Mise en production : un push.
+  - Capture validée et feu vert de Yass. Poussé à **09:05 UTC** en avance rapide
+    sur `claude/keen-goldberg-MXslu` (`45a72b2` → `87c8a20`). Contrôles de Yass :
+    à compléter.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
