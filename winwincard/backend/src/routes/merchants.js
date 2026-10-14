@@ -71,34 +71,107 @@ function statsIndisponibles(res, route, error) {
   return res.set('Retry-After', '30').status(503).json({ error: 'database_unavailable' });
 }
 
-// GET /merchants/me/smart-notifications — le bloc « Mes smart notifications » de
-// l'onglet Notifications (14/10). Les réglages viennent de l'admin ; le marchand
-// ne les change pas, il les découvre. Mêmes règles que le cron
-// (src/workers/cron.js) : forfaits Pro et Pro+ ; anniversaire seulement avec la
-// landing premium ; boost seulement si le seuil laisse une zone (seuil < récompense).
-// Une requête du dashboard, à l'ouverture de l'onglet ; deux lectures courtes en
-// parallèle, le compteur par l'index (marchand_id, executed_at) (migration 055).
+// Bloc « Mes smart notifications » de l'onglet Notifications (14/10).
+// Les relances sont activées par l'admin ; le marchand les découvre ici et, depuis
+// f15 (migration 060), règle lui-même le délai d'inactivité, le message de cette
+// relance et le seuil du boost. Il n'active ni ne désactive rien, et ne change ni
+// le texte du boost ni celui de l'anniversaire. Valeur utilisée = la sienne s'il
+// en a mis une, sinon celle de l'admin (« réglage WinWin »).
+// Mêmes règles que le cron (src/workers/cron.js) : forfaits Pro et Pro+ ;
+// anniversaire seulement avec la landing premium ; boost seulement si le seuil
+// laisse une zone (seuil < récompense). La demande d'avis Google (services/avis.js)
+// figure aussi : active dès que le lien d'avis est rempli, sans réglage.
 const FORFAITS_SMART = ['pro', 'pro_plus'];
+const COLONNES_SMART = 'forfait, landing_premium, type_programme, max_value, lien_avis_google, langue, nom, '
+  + 'workflow_inactive_enabled, workflow_inactive_days, workflow_inactive_message, '
+  + 'workflow_near_reward_enabled, workflow_near_reward_threshold, workflow_birthday_enabled, '
+  + 'marchand_inactive_days, marchand_inactive_message, marchand_near_reward_threshold';
+
+function resumeSmart(m, envoyees7j) {
+  if (!FORFAITS_SMART.includes(m.forfait)) return { eligible: false };
+  const { notif } = require('../i18n/messages');
+  const { lienValide } = require('../services/avis');
+  const max = m.max_value || 10;
+  const seuilWinwin = m.workflow_near_reward_threshold || 2;
+  const seuil = m.marchand_near_reward_threshold || seuilWinwin;
+  // Texte par défaut affiché au marchand : le message de l'admin, sinon le texte
+  // standard ; « {prenom} » reste tel quel (remplacé à l'envoi).
+  const messageWinwin = m.workflow_inactive_message
+    || notif('inactive', m.langue, { prenom: '{prenom}', nom: m.nom });
+  return {
+    eligible: true,
+    inactivite: m.workflow_inactive_enabled ? {
+      jours: m.marchand_inactive_days || m.workflow_inactive_days || 30,
+      message: m.marchand_inactive_message || messageWinwin,
+      winwin: { jours: m.workflow_inactive_days || 30, message: messageWinwin },
+    } : null,
+    boost: m.workflow_near_reward_enabled && max - seuil > 0
+      ? { seuil, unite: m.type_programme === 'points' ? 'points' : 'tampons', max: max - 1, winwin: seuilWinwin } : null,
+    anniversaire: !!(m.workflow_birthday_enabled && m.landing_premium),
+    avis: !!lienValide(m.lien_avis_google),
+    personnalise: m.marchand_inactive_days != null || m.marchand_inactive_message != null || m.marchand_near_reward_threshold != null,
+    envoyees_7j: envoyees7j,
+  };
+}
+
+// GET /merchants/me/smart-notifications — une requête du dashboard, à l'ouverture
+// de l'onglet : la ligne du marchand et le compte des 7 jours (migration 060 ;
+// index existants), lus en parallèle.
 router.get('/me/smart-notifications', authMarchand, asyncHandler(async (req, res) => {
-  const depuis = new Date(Date.now() - 7 * 24 * 3600e3).toISOString();
-  const [{ data: m, error: errM }, { count, error: errC }] = await Promise.all([
-    supabase.from('marchands')
-      .select('forfait, landing_premium, type_programme, max_value, workflow_inactive_enabled, workflow_inactive_days, workflow_near_reward_enabled, workflow_near_reward_threshold, workflow_birthday_enabled')
-      .eq('id', req.marchandId).single(),
-    supabase.from('workflow_executions').select('id', { count: 'exact', head: true })
-      .eq('marchand_id', req.marchandId).gte('executed_at', depuis),
+  const [{ data: m, error: errM }, { data: n, error: errC }] = await Promise.all([
+    supabase.from('marchands').select(COLONNES_SMART).eq('id', req.marchandId).single(),
+    supabase.rpc('smart_notifications_7j', { p_marchand_id: req.marchandId }),
   ]);
   if (errM || errC) return statsIndisponibles(res, 'smart-notifications', errM || errC);
-  if (!FORFAITS_SMART.includes(m.forfait)) return res.json({ eligible: false });
-  const seuil = m.workflow_near_reward_threshold || 2;
-  res.json({
-    eligible: true,
-    inactivite:    m.workflow_inactive_enabled ? { jours: m.workflow_inactive_days || 30 } : null,
-    boost:         m.workflow_near_reward_enabled && (m.max_value || 10) - seuil > 0
-                     ? { seuil, unite: m.type_programme === 'points' ? 'points' : 'tampons' } : null,
-    anniversaire:  !!(m.workflow_birthday_enabled && m.landing_premium),
-    envoyees_7j:   count || 0,
-  });
+  res.json(resumeSmart(m, n || 0));
+}));
+
+// PATCH /merchants/me/smart-notifications — le marchand règle ses relances (f15).
+// Corps : { inactivite_jours?, inactivite_message?, boost_seuil? } ou { winwin: true }
+// (« revenir au réglage WinWin » : les trois réglages du marchand effacés).
+// Un réglage d'une relance que l'admin n'a pas activée est refusé.
+const LIEN = /(https?:\/\/|www\.|\b[a-z0-9-]+\.(com|fr|net|org|io|co|me|app|shop|link|ly|info|biz|be|ch|ae|uk|de|es|it)\b)/i;
+router.patch('/me/smart-notifications', authMarchand, asyncHandler(async (req, res) => {
+  const { data: m, error } = await supabase.from('marchands').select(COLONNES_SMART).eq('id', req.marchandId).single();
+  if (error) return statsIndisponibles(res, 'smart-notifications (réglage)', error);
+  if (!FORFAITS_SMART.includes(m.forfait)) return res.status(403).json({ error: 'plan_not_eligible' });
+
+  const corps = req.body || {};
+  const maj = {};
+  if (corps.winwin === true) {
+    Object.assign(maj, { marchand_inactive_days: null, marchand_inactive_message: null, marchand_near_reward_threshold: null });
+  } else {
+    if (corps.inactivite_jours !== undefined || corps.inactivite_message !== undefined) {
+      if (!m.workflow_inactive_enabled) return res.status(400).json({ error: 'relance_inactive_desactivee' });
+    }
+    if (corps.inactivite_jours !== undefined) {
+      const j = Number(corps.inactivite_jours);
+      if (!Number.isInteger(j) || j < 7 || j > 90) return res.status(400).json({ error: 'jours_hors_limites', min: 7, max: 90 });
+      maj.marchand_inactive_days = j;
+    }
+    if (corps.inactivite_message !== undefined) {
+      const t = typeof corps.inactivite_message === 'string' ? corps.inactivite_message.trim() : '';
+      if (!t) return res.status(400).json({ error: 'message_vide' });
+      if (t.length > 150) return res.status(400).json({ error: 'message_trop_long', max: 150 });
+      if (LIEN.test(t)) return res.status(400).json({ error: 'message_avec_lien' });
+      maj.marchand_inactive_message = t;
+    }
+    if (corps.boost_seuil !== undefined) {
+      // Boost absent du bloc (désactivé par l'admin, ou seuil admin qui ne laisse
+      // aucune zone) : le régler reviendrait à l'activer, ce que seul l'admin fait.
+      if (!resumeSmart(m, 0).boost) return res.status(400).json({ error: 'boost_desactive' });
+      const s = Number(corps.boost_seuil), max = (m.max_value || 10) - 1;
+      if (!Number.isInteger(s) || s < 1 || s > max) return res.status(400).json({ error: 'seuil_hors_limites', min: 1, max });
+      maj.marchand_near_reward_threshold = s;
+    }
+  }
+  if (Object.keys(maj).length === 0) return res.status(400).json({ error: 'aucun_reglage' });
+
+  const { data: apres, error: errMaj } = await supabase.from('marchands').update(maj)
+    .eq('id', req.marchandId).select(COLONNES_SMART).single();
+  if (errMaj) return statsIndisponibles(res, 'smart-notifications (écriture)', errMaj);
+  const { data: n } = await supabase.rpc('smart_notifications_7j', { p_marchand_id: req.marchandId });
+  res.json(resumeSmart(apres, n || 0));
 }));
 
 // GET /merchants/me/stats — l'Aperçu du dashboard, calculé en base (étape 26,

@@ -2147,17 +2147,20 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     if (!a059) console.log('(migration 059 absente : contre-épreuve)');
   }
 
-  titre('24. Bloc « Mes smart notifications » du dashboard (14/10)');
+  titre('24. Bloc « Mes smart notifications » ; le marchand règle ses relances (14/10, f15, migration 060)');
   {
-    // m(slug, nom, champs) : un marchand avec ses réglages de smart notifications.
+    const sqlOuNull = requete => { try { return sql(requete); } catch { return null; } };
+    // m(id, slug, nom, champs) : un marchand avec ses réglages de smart notifications.
     const m = (id, slug, nom, champs) => {
       const cols = Object.keys(champs), vals = Object.values(champs).map(v => typeof v === 'string' ? `'${v}'` : v);
       sql(`INSERT INTO marchands (id, nom, slug, langue, ${cols.join(', ')}) VALUES ('${id}', '${nom}', '${slug}', 'fr', ${vals.join(', ')})`);
       return id;
     };
     const tout = { workflow_inactive_enabled: true, workflow_near_reward_enabled: true, workflow_birthday_enabled: true };
+    const AVIS = 'https://g.page/r/filet-avis/review';
     const SP = m('e2400000-0000-4000-8000-000000000001', 'filet-smart-premium', 'Filet Smart Premium',
-      { ...tout, forfait: 'pro_plus', landing_premium: true, type_programme: 'points', max_value: 500, display_max_value: 500, workflow_inactive_days: 21, workflow_near_reward_threshold: 50 });
+      { ...tout, forfait: 'pro_plus', landing_premium: true, type_programme: 'points', max_value: 500, display_max_value: 500,
+        workflow_inactive_days: 21, workflow_near_reward_threshold: 50, lien_avis_google: AVIS });
     const SN = m('e2400000-0000-4000-8000-000000000002', 'filet-smart-simple', 'Filet Smart Simple',
       { ...tout, forfait: 'pro', landing_premium: false, type_programme: 'points', max_value: 500, display_max_value: 500, workflow_inactive_days: 30, workflow_near_reward_threshold: 1 });
     const ST = m('e2400000-0000-4000-8000-000000000003', 'filet-smart-tampons', 'Filet Smart Tampons',
@@ -2167,24 +2170,105 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     const SB = m('e2400000-0000-4000-8000-000000000005', 'filet-smart-basic', 'Filet Smart Basic',
       { ...tout, forfait: 'basic', landing_premium: true, type_programme: 'stamps', max_value: 10, display_max_value: 10 });
     // Relances de SP : 3 sur 7 jours glissants (aujourd'hui, 2 j, 6 j 23 h), 1 à 8 jours (hors fenêtre) ;
-    // 2 chez SN ; une autre enseigne n'entre jamais dans le compte.
+    // + 2 demandes d'avis (une carte sur deux appareils = 1, une autre = 1 ; une à 9 jours, hors fenêtre).
     const relance = (mid, il) => {
       const cid = sql(`INSERT INTO clients (marchand_id, prenom) VALUES ('${mid}', 'R') RETURNING id`);
       sql(`INSERT INTO workflow_executions (workflow_type, client_id, marchand_id, executed_at) VALUES ('inactive', '${cid}', '${mid}', now() - interval '${il}')`);
     };
     ['0 hours', '2 days', '6 days 23 hours', '8 days'].forEach(il => relance(SP, il));
     ['1 day', '3 days'].forEach(il => relance(SN, il));
+    const avis = (serial, il, plateforme = 'apple') => sqlOuNull(`INSERT INTO notification_envois (source, marchand_id, plateforme, serial_number, envoye_le, ok)
+      VALUES ('avis', '${SP}', '${plateforme}', '${serial}', now() - interval '${il}', true)`);
+    avis('carte-a', '1 hour'); avis('carte-a', '1 hour', 'google'); avis('carte-b', '3 days'); avis('carte-c', '9 days');
     const lire = async id => (await api('GET', '/api/merchants/me/smart-notifications', jeton(id))).corps;
     const [p, n, t, z, b] = [await lire(SP), await lire(SN), await lire(ST), await lire(SZ), await lire(SB)];
-    verifier('Pro+ avec landing premium (points) : relance après 21 jours, boost à 50 points, anniversaire ; 3 smart notifications sur 7 jours (pas celle d\'il y a 8 jours)',
-      JSON.stringify(p), JSON.stringify({ eligible: true, inactivite: { jours: 21 }, boost: { seuil: 50, unite: 'points' }, anniversaire: true, envoyees_7j: 3 }));
-    verifier('Pro sans landing premium : pas d\'anniversaire (même activé), boost à 1 point ; ses seules relances (2)',
-      [n.anniversaire, JSON.stringify(n.boost), n.envoyees_7j], [false, JSON.stringify({ seuil: 1, unite: 'points' }), 2]);
-    verifier('tampons, relance d\'inactivité désactivée : pas mentionnée ; boost en tampons ; anniversaire (premium)',
-      [t.inactivite, JSON.stringify(t.boost), t.anniversaire, t.envoyees_7j], [null, JSON.stringify({ seuil: 2, unite: 'tampons' }), true, 0]);
+    verifier('Pro+ avec landing premium (points) : relance après 21 jours, boost à 50 points, anniversaire, avis Google ; 5 smart notifications sur 7 jours (3 relances + 2 cartes avec demande d\'avis)',
+      [p.inactivite && p.inactivite.jours, JSON.stringify(p.boost), p.anniversaire, p.avis, p.envoyees_7j, p.personnalise],
+      [21, JSON.stringify({ seuil: 50, unite: 'points', max: 499, winwin: 50 }), true, true, 5, false]);
+    verifier('… message par défaut montré au marchand : le texte standard, « {prenom} » laissé tel quel',
+      p.inactivite && p.inactivite.message, 'Salut {prenom} ! Tu nous manques chez Filet Smart Premium. Reviens vite ! 🎯');
+    verifier('Pro sans landing premium : pas d\'anniversaire (même activé), pas d\'avis (pas de lien), boost à 1 point ; ses seules relances (2)',
+      [n.anniversaire, n.avis, n.boost && n.boost.seuil, n.envoyees_7j], [false, false, 1, 2]);
+    verifier('tampons, relance d\'inactivité désactivée : absente ; boost en tampons ; anniversaire (premium)',
+      [t.inactivite, t.boost && t.boost.unite, t.anniversaire, t.envoyees_7j], [null, 'tampons', true, 0]);
     verifier('seuil au moins égal à la récompense : le cron n\'envoie rien, le boost n\'est pas mentionné ; Basic : pas de bloc',
       [z.eligible, z.boost, z.inactivite, z.anniversaire, JSON.stringify(b)], [true, null, null, false, JSON.stringify({ eligible: false })]);
     verifier('sans jeton marchand : 401', (await api('GET', '/api/merchants/me/smart-notifications')).statut, 401);
+
+    // ── f15 : le marchand règle ──
+    const regler = (id, corps) => api('PATCH', '/api/merchants/me/smart-notifications', jeton(id), corps);
+    const ok = await regler(SP, { inactivite_jours: 10, inactivite_message: 'Coucou {prenom}, ta pizza t\'attend !', boost_seuil: 20 });
+    const colonnes = sqlOuNull(`SELECT marchand_inactive_days || '|' || marchand_inactive_message || '|' || marchand_near_reward_threshold || '|' || workflow_inactive_days || '|' || workflow_near_reward_threshold FROM marchands WHERE id = '${SP}'`);
+    verifier('réglage du marchand : enregistré à part, le réglage admin intact ; le bloc montre ses valeurs',
+      [ok.statut, colonnes, ok.corps.inactivite && ok.corps.inactivite.jours, ok.corps.boost && ok.corps.boost.seuil, ok.corps.personnalise,
+       ok.corps.inactivite && ok.corps.inactivite.winwin.jours],
+      [200, '10|Coucou {prenom}, ta pizza t\'attend !|20|21|50', 10, 20, true, 21]);
+    const refus = [];
+    for (const corps of [{ inactivite_jours: 6 }, { inactivite_jours: 91 }, { inactivite_jours: 7.5 }, { inactivite_message: '   ' },
+      { inactivite_message: 'x'.repeat(151) }, { inactivite_message: 'Venez sur www.promo.fr' }, { inactivite_message: 'Voir https://x.y' },
+      { inactivite_message: 'Notre site pizzamore.com' }, { boost_seuil: 0 }, { boost_seuil: 500 }, {}]) {
+      const r = await regler(SP, corps); refus.push(`${r.statut}:${r.corps.error}`);
+    }
+    verifier('garde-fous : 7 à 90 jours, entier ; message non vide, 150 caractères, sans lien ; seuil 1 à récompense − 1 ; corps vide',
+      refus, ['400:jours_hors_limites', '400:jours_hors_limites', '400:jours_hors_limites', '400:message_vide', '400:message_trop_long',
+        '400:message_avec_lien', '400:message_avec_lien', '400:message_avec_lien', '400:seuil_hors_limites', '400:seuil_hors_limites', '400:aucun_reglage']);
+    const bornes = [await regler(SP, { inactivite_jours: 7 }), await regler(SP, { inactivite_jours: 90 }), await regler(SP, { boost_seuil: 499 }),
+      await regler(SP, { inactivite_message: 'y'.repeat(150) })].map(r => r.statut);
+    verifier('… bornes acceptées : 7 et 90 jours, seuil 499 (récompense 500), 150 caractères', bornes, [200, 200, 200, 200]);
+    const desactivees = [await regler(ST, { inactivite_jours: 20 }), await regler(ST, { inactivite_message: 'Bonjour' }),
+      await regler(SZ, { boost_seuil: 1 }), await regler(SB, { boost_seuil: 2 })];
+    verifier('le marchand ne règle pas une relance que l\'admin n\'a pas activée (ni un boost que le seuil admin rend inerte) ; Basic refusé',
+      desactivees.map(r => `${r.statut}:${r.corps.error}`),
+      ['400:relance_inactive_desactivee', '400:relance_inactive_desactivee', '400:boost_desactive', '403:plan_not_eligible']);
+    const retour = await regler(SP, { winwin: true });
+    verifier('« revenir au réglage WinWin » : les trois réglages du marchand effacés, le bloc reprend ceux de l\'admin',
+      [retour.statut, sqlOuNull(`SELECT coalesce(marchand_inactive_days::text, 'null') || coalesce(marchand_inactive_message, 'null') || coalesce(marchand_near_reward_threshold::text, 'null') FROM marchands WHERE id = '${SP}'`),
+       retour.corps.inactivite && retour.corps.inactivite.jours, retour.corps.boost && retour.corps.boost.seuil, retour.corps.personnalise],
+      [200, 'nullnullnull', 21, 50, false]);
+    verifier('droits : colonnes bornées en base (même hors du serveur), compteur fermé à la clé publique',
+      [sqlOuNull(`SELECT 1 FROM pg_constraint WHERE conname = 'marchands_reglages_smart_check'`),
+       (() => { try { sql(`UPDATE marchands SET marchand_inactive_days = 3 WHERE id = '${SP}'`); return 'accepté'; } catch { return 'refusé'; } })(),
+       sqlOuNull(`SELECT has_function_privilege('anon', 'public.smart_notifications_7j(uuid)', 'EXECUTE')`)],
+      ['1', 'refusé', 'f']);
+
+    // ── Le cron applique le réglage du marchand ──
+    const path = require('path');
+    const env = { ...process.env };
+    Object.assign(process.env, { SUPABASE_URL: urlSupabase, SUPABASE_SERVICE_KEY: cleService });
+    const modules = ['services/supabase', 'services/notif-registre', 'services/debit', 'services/cron-passages', 'workers/cron']
+      .map(x => path.resolve(__dirname, `../src/${x}.js`));
+    modules.forEach(x => delete require.cache[x]);
+    const cronMod = require('../src/workers/cron');
+    cronMod.arreterPlanification();
+    if (cronMod._pourTests) cronMod._pourTests({ envoyeurs: { appleActif: () => true, googleActif: () => true, apple: async () => {}, google: async () => {} } });
+    const SC = m('e2400000-0000-4000-8000-000000000006', 'filet-smart-cron', 'Filet Smart Cron',
+      { ...tout, forfait: 'pro', type_programme: 'stamps', max_value: 10, display_max_value: 10, workflow_inactive_days: 30, workflow_near_reward_threshold: 2, actif: true });
+    const porteur = (prenom, solde, scanIl) => {
+      const id = crypto.randomUUID(), serial = crypto.randomUUID(), passId = crypto.randomUUID();
+      sql(`INSERT INTO clients (id, marchand_id, prenom, stored_value, pass_serial_number, updated_at) VALUES ('${id}', '${SC}', '${prenom}', ${solde}, '${serial}', now() - interval '20 days');
+           INSERT INTO passes (id, client_id, marchand_id, serial_number) VALUES ('${passId}', '${id}', '${SC}', '${serial}');
+           INSERT INTO device_tokens (pass_id, client_id, marchand_id, serial_number, device_id, push_token) VALUES ('${passId}', '${id}', '${SC}', '${serial}', 'app-${serial}', 'jeton-${serial}');
+           INSERT INTO scans (client_id, marchand_id, stored_value_avant, stored_value_apres, date_scan) VALUES ('${id}', '${SC}', 0, 1, now() - interval '${scanIl} days');`);
+      rendreVisibles(`id = '${id}'`);
+      return { id, serial };
+    };
+    const absent = porteur('Absent', 1, 12);      // 12 jours sans visite : pas relancé à 30 j, relancé à 10 j
+    const proche = porteur('Proche', 6, 1);       // 4 tampons manquants : hors zone à 2, dans la zone à 4
+    const relances = type => Number(sql(`SELECT count(*) FROM workflow_executions WHERE marchand_id = '${SC}' AND workflow_type = '${type}'`));
+    await cronMod.runInactiveWorkflow({ marchandId: SC }).catch(() => {});
+    await cronMod.runNearRewardWorkflow({ marchandId: SC }).catch(() => {});
+    const avantReglage = [relances('inactive'), relances('near_reward')];
+    await regler(SC, { inactivite_jours: 10, inactivite_message: 'On t\'attend chez {nom}, {prenom} !', boost_seuil: 4 });
+    sql(`DELETE FROM workflow_executions WHERE marchand_id = '${SC}'`);   // un autre jour
+    await cronMod.runInactiveWorkflow({ marchandId: SC }).catch(() => {});
+    sql(`DELETE FROM workflow_executions WHERE marchand_id = '${SC}' AND workflow_type = 'inactive'`);   // « une par jour » : le boost un autre jour
+    await cronMod.runNearRewardWorkflow({ marchandId: SC }).catch(() => {});
+    verifier('cron : réglage admin (30 j, seuil 2) → rien ; réglage du marchand (10 j, seuil 4) → relance d\'inactivité avec SON message, boost pour le client à 4 tampons',
+      [JSON.stringify(avantReglage), relances('near_reward'), messageCarte(absent.serial), messageCarte(proche.serial).startsWith('Salut Proche ! Plus que 4 point')],
+      ['[0,0]', 1, 'On t\'attend chez Filet Smart Cron, Absent !', true]);
+    modules.forEach(x => delete require.cache[x]);
+    for (const k of Object.keys(process.env)) if (!(k in env)) delete process.env[k];
+    Object.assign(process.env, env);
   }
 }
 

@@ -183,7 +183,7 @@ async function runInactiveWorkflow(opts = {}) {
 
   let query = supabase
     .from('marchands')
-    .select('id, nom, langue, workflow_inactive_days, workflow_inactive_message')
+    .select('id, nom, langue, workflow_inactive_days, workflow_inactive_message, marchand_inactive_days, marchand_inactive_message')
     .in('forfait', FORFAITS_WORKFLOWS)
     .eq('actif',   true);
 
@@ -192,10 +192,13 @@ async function runInactiveWorkflow(opts = {}) {
 
   const merchants = await lireMarchands(query);
   return parMarchand('inactive', merchants, merchant => {
-    const modele = merchant.workflow_inactive_message
-      ? remplacer(merchant.workflow_inactive_message, '{nom}', merchant.nom)
+    // Réglage du marchand s'il en a mis un (migration 060, f15), sinon celui de l'admin.
+    const message = merchant.marchand_inactive_message || merchant.workflow_inactive_message;
+    const modele = message
+      ? remplacer(message, '{nom}', merchant.nom)
       : notif('inactive', merchant.langue, { prenom: '{prenom}', nom: merchant.nom });
-    return relancerMarchand('inactive', merchant, { '*': modele }, { jours: merchant.workflow_inactive_days || 30 });
+    const jours = merchant.marchand_inactive_days || merchant.workflow_inactive_days || 30;
+    return relancerMarchand('inactive', merchant, { '*': modele }, { jours });
   });
 }
 
@@ -208,7 +211,7 @@ async function runNearRewardWorkflow(opts = {}) {
 
   let query = supabase
     .from('marchands')
-    .select('id, nom, langue, max_value, workflow_near_reward_threshold')
+    .select('id, nom, langue, max_value, workflow_near_reward_threshold, marchand_near_reward_threshold')
     .in('forfait', FORFAITS_WORKFLOWS)
     .eq('actif',   true);
 
@@ -217,7 +220,8 @@ async function runNearRewardWorkflow(opts = {}) {
 
   const merchants = await lireMarchands(query);
   return parMarchand('near_reward', merchants, merchant => {
-    const threshold = merchant.workflow_near_reward_threshold || 2;
+    // Réglage du marchand s'il en a mis un (migration 060, f15), sinon celui de l'admin.
+    const threshold = merchant.marchand_near_reward_threshold || merchant.workflow_near_reward_threshold || 2;
     const maxVal    = merchant.max_value || 10;
     const minPoints = maxVal - threshold;
     if (minPoints <= 0) return null;

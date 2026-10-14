@@ -28,7 +28,7 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur }) {
 
   const navigateur = await chromium.launch();
   try {
-    async function bloc(slug, forfait, fichier) {
+    async function bloc(slug, forfait, fichier, avecFormulaire = false) {
       const [id, nom] = sql(`SELECT id || '|' || nom FROM marchands WHERE slug = '${slug}'`).split('|');
       const contexte = await navigateur.newContext({ serviceWorkers: 'block', viewport: { width: 420, height: 1300 } });
       const jeton = jwt.sign({ role: 'marchand', marchand_id: id, tv: 1 }, secretJwt, { expiresIn: '1h' });
@@ -43,23 +43,50 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur }) {
       await page.waitForFunction(() => /recevr|Aucun client/.test(document.getElementById('notif-dest').textContent));
       await page.locator('#tab-notifs').screenshot({ path: path.join(captures, fichier) });
       const texte = (await page.locator('#smart-notifs').innerText()).trim().replace(/\n+/g, '\n');
+      let formulaire = null;
+      if (avecFormulaire) {
+        await page.click('#smart-regler');
+        await page.waitForSelector('#smart-form');
+        await page.fill('#smart-jours', '5');
+        await page.click('#smart-enregistrer');
+        await page.waitForFunction(() => /Choisissez/.test(document.getElementById('smart-info').textContent));
+        const erreur = (await page.textContent('#smart-info')).trim();
+        await page.fill('#smart-jours', '14');
+        await page.fill('#smart-message', 'Ça fait longtemps {prenom} ! Une part offerte cette semaine.');
+        await page.fill('#smart-seuil', '40');
+        await page.click('#smart-enregistrer');
+        await page.waitForFunction(() => /Enregistré/.test((document.getElementById('smart-info') || {}).textContent || ''));
+        await page.locator('#smart-notifs').screenshot({ path: path.join(captures, 'smart-4-reglage-ouvert.png') });
+        const apres = (await page.locator('#smart-notifs ul').innerText()).trim();
+        const winwinVisible = await page.locator('#smart-winwin').isVisible();
+        await page.click('#smart-winwin');
+        await page.waitForFunction(() => !document.getElementById('smart-winwin'));
+        const retour = (await page.locator('#smart-notifs ul').innerText()).trim();
+        formulaire = { erreur, apres, winwinVisible, retour };
+      }
       const ordre = await page.evaluate(() => {
         const h = document.getElementById('notif-history-list'), b = document.getElementById('smart-notifs');
         return !!(h.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
       });
       await contexte.close();
-      return { texte, ordre };
+      return { texte, ordre, formulaire };
     }
-    const premium = await bloc('filet-smart-premium', 'pro_plus', 'smart-1-premium-points.png');
+    const premium = await bloc('filet-smart-premium', 'pro_plus', 'smart-1-premium-points.png', true);
     const simple = await bloc('filet-smart-simple', 'pro', 'smart-2-sans-premium-points.png');
     const tampons = await bloc('filet-smart-tampons', 'pro', 'smart-3-tampons.png');
-    verifier('navigateur, landing premium (points) : les trois smart notifications et le compte des 7 jours, sous l\'historique',
+    verifier('navigateur, landing premium (points) : les quatre smart notifications (avis compris), le compte des 7 jours, le bouton de réglage, sous l\'historique',
       [premium.texte, premium.ordre],
-      ['Mes smart notifications\nEnvoyées automatiquement à vos clients :\nune relance après 21 jours sans visite\nun boost quand il ne leur manque plus que 50 points pour leur récompense\nun message le jour de leur anniversaire\nCes 7 derniers jours : 3 smart notifications', true]);
+      ['Mes smart notifications\nEnvoyées automatiquement à vos clients :\nune relance après 21 jours sans visite\nun boost quand il ne leur manque plus que 50 points pour leur récompense\nun message le jour de leur anniversaire\nune demande d\'avis Google 30 minutes après chaque récompense remise\nCes 7 derniers jours : 5 smart notifications\nRégler mes relances', true]);
+    verifier('navigateur, réglage : 5 jours refusé avec un message clair ; 14 jours et seuil 40 enregistrés, affichés ; « Revenir au réglage WinWin » remet 21 jours et 50 points',
+      [premium.formulaire.erreur, premium.formulaire.apres, premium.formulaire.winwinVisible, premium.formulaire.retour],
+      ['Choisissez entre 7 et 90 jours.',
+       'une relance après 14 jours sans visite\nun boost quand il ne leur manque plus que 40 points pour leur récompense\nun message le jour de leur anniversaire\nune demande d\'avis Google 30 minutes après chaque récompense remise',
+       true,
+       'une relance après 21 jours sans visite\nun boost quand il ne leur manque plus que 50 points pour leur récompense\nun message le jour de leur anniversaire\nune demande d\'avis Google 30 minutes après chaque récompense remise']);
     verifier('navigateur, sans landing premium : pas d\'anniversaire ; « 1 point » au singulier',
-      simple.texte, 'Mes smart notifications\nEnvoyées automatiquement à vos clients :\nune relance après 30 jours sans visite\nun boost quand il ne leur manque plus que 1 point pour leur récompense\nCes 7 derniers jours : 2 smart notifications');
+      simple.texte, 'Mes smart notifications\nEnvoyées automatiquement à vos clients :\nune relance après 30 jours sans visite\nun boost quand il ne leur manque plus que 1 point pour leur récompense\nCes 7 derniers jours : 2 smart notifications\nRégler mes relances');
     verifier('navigateur, tampons : « 2 tampons », relance d\'inactivité désactivée absente, « 0 smart notification »',
-      tampons.texte, 'Mes smart notifications\nEnvoyées automatiquement à vos clients :\nun boost quand il ne leur manque plus que 2 tampons pour leur récompense\nun message le jour de leur anniversaire\nCes 7 derniers jours : 0 smart notification');
+      tampons.texte, 'Mes smart notifications\nEnvoyées automatiquement à vos clients :\nun boost quand il ne leur manque plus que 2 tampons pour leur récompense\nun message le jour de leur anniversaire\nCes 7 derniers jours : 0 smart notification\nRégler mes relances');
     console.log(`captures : ${captures}`);
   } finally {
     await navigateur.close();
