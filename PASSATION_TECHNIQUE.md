@@ -6657,7 +6657,13 @@ l'onglet Notifications, les leur fait connaître, d'après leurs réglages réel
   a été levée explicitement par Yass.
 - Poussé à **08:43:04 UTC** en avance rapide sur `claude/keen-goldberg-MXslu`
   (`28ab331` → `45a72b2`) : le bloc (`f746b0b`) et f15 ensemble.
-- Contrôles de Yass : à compléter.
+- Contrôles de Yass (14/10) : déploiement vert, contrôles bons.
+- Constat de Yass : la fiche marchand de l'admin affiche toujours le réglage WinWin.
+  - Cause : le formulaire ne lit que `workflow_*` (`public/admin/index.html:1280`).
+    Les colonnes `marchand_*` n'y figurent pas.
+  - Risque : l'admin croit régler un marchand alors que c'est la valeur du marchand
+    qui part.
+  - Correctif proposé à Yass, rien codé.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
