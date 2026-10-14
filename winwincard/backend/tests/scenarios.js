@@ -2311,8 +2311,11 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
   {
     const sqlOuNull = requete => { try { return sql(requete); } catch { return null; } };
     const path = require('path');
-    const geo = require('../src/services/geo');
+    let geo = null;
+    try { geo = require('../src/services/geo'); } catch { /* absent avant f10 */ }
     const lieu = (nom, lat, lng, horaires) => ({ nom, lat, lng, horaires });
+    if (!geo) verifier('f10 : module services/geo.js présent', false, true);
+    else {
 
     // ── Contrôle des lieux ──
     const erreurs = [
@@ -2396,6 +2399,7 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     modules.forEach(x => delete require.cache[x]);
     for (const k of Object.keys(process.env)) if (!(k in env)) delete process.env[k];
     Object.assign(process.env, env);
+    }
   }
 }
 
