@@ -6997,6 +6997,49 @@ Constats prouvés dans le code :
 
 Rapport, recommandations et décisions demandées : envoyés au pilotage le 14/10.
 
+**Réponses du pilotage (14/10)** :
+- feu vert sur le diagnostic ;
+- fond de la bannière : redessinée sur le fond du thème, mise en cache (option a) ;
+- le doré de la récompense garde la priorité pendant un thème ;
+- la notification d'ouverture ne compte pas dans le quota, et son texte est préparé
+  par nous avec le thème ;
+- pas de test de charge dédié : la bascule réutilise le débit t37. Validation par
+  le filet et par le rendu réel sur un marchand de test. Tenue combinée revue au
+  réaudit t41.
+
+**Coût et risques, mesurés avant le code (14/10)** :
+- Une bannière générée (3 variantes) pèse **14 Ko** mesurés pour un thème simple,
+  et environ 60 Ko au plus avec des pastilles chargées. Un thème complet :
+  - en tampons (seuil 10) : 11 états ;
+  - en points : 21 paliers ;
+  - soit 0,2 à 1,3 Mo de bannières, plus les logos (moins de 0,5 Mo), plus la
+    configuration (environ 1 Ko).
+- Tout cela vit dans Supabase Storage (bucket `passes`), pas sur le disque de la
+  base. Les bannières d'un thème terminé sont purgées par la même méthode que
+  `strip-cache.js` (purge par lots, sans rafale).
+- Endroits qui fabriquent une carte et devront lire le thème :
+  - `apple-pass.js` : `generateApplePass` et `buildPassJson`, appelés par
+    `apple-wallet.js` (mises à jour iPhone) et `passes.js` (téléchargement) ;
+  - `strip-cache.js` : `getOrGenerate` et `getPublicUrl` (Apple et la bannière
+    Google) ;
+  - `google-pass.js` : `buildLoyaltyClass` (appelée par
+    `createOrUpdateLoyaltyClass`, 5 appels dans `admin.js`, et par
+    `generateGoogleWalletUrl`), `buildLoyaltyObject` (inscription,
+    `clients.js:93` et `google-wallet.js`) et `updateLoyaltyObjectPoints`
+    (scan, ajustement) ;
+  - aperçu de bannière (`admin.js:448`) et le futur aperçu « Ma carte ».
+  - Ils lisent la fiche marchand par environ 7 `select` distincts : une seule
+    colonne `theme_actif` (instantané du thème en cours) à ajouter à chacun, et
+    un test du filet par point d'entrée.
+- Dashboard : `public/dashboard/index.html`, 155 Ko et 2 790 lignes, un seul
+  `<script>` en ligne, 7 onglets. Une erreur de syntaxe n'importe où casse tout le
+  dashboard.
+  - Le service worker sert les fichiers JS « cache d'abord » (`sw.js`) : un fichier
+    séparé doit être versionné.
+  - Aujourd'hui, `npm test` ne charge pas le JavaScript du dashboard. Les tests
+    navigateur (hors `npm test`) couvrent l'Aperçu, le Réseau, les Clients, la
+    fiche client, les Notifications et la caisse, mais pas l'onglet Scans.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
