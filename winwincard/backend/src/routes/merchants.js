@@ -85,7 +85,8 @@ const FORFAITS_SMART = ['pro', 'pro_plus'];
 const COLONNES_SMART = 'forfait, landing_premium, type_programme, max_value, lien_avis_google, langue, nom, '
   + 'workflow_inactive_enabled, workflow_inactive_days, workflow_inactive_message, '
   + 'workflow_near_reward_enabled, workflow_near_reward_threshold, workflow_birthday_enabled, '
-  + 'marchand_inactive_days, marchand_inactive_message, marchand_near_reward_threshold';
+  + 'marchand_inactive_days, marchand_inactive_message, marchand_near_reward_threshold, '
+  + 'workflow_near_reward_message, marchand_near_reward_message';
 
 function resumeSmart(m, envoyees7j) {
   if (!FORFAITS_SMART.includes(m.forfait)) return { eligible: false };
@@ -98,6 +99,8 @@ function resumeSmart(m, envoyees7j) {
   // standard ; « {prenom} » reste tel quel (remplacé à l'envoi).
   const messageWinwin = m.workflow_inactive_message
     || notif('inactive', m.langue, { prenom: '{prenom}', nom: m.nom });
+  const messageBoostWinwin = m.workflow_near_reward_message
+    || require('../services/smart-messages').modeleBoostWinwin(m.langue);
   return {
     eligible: true,
     inactivite: m.workflow_inactive_enabled ? {
@@ -105,11 +108,20 @@ function resumeSmart(m, envoyees7j) {
       message: m.marchand_inactive_message || messageWinwin,
       winwin: { jours: m.workflow_inactive_days || 30, message: messageWinwin },
     } : null,
-    boost: m.workflow_near_reward_enabled && max - seuil > 0
-      ? { seuil, unite: m.type_programme === 'points' ? 'points' : 'tampons', max: max - 1, winwin: seuilWinwin } : null,
+    boost: m.workflow_near_reward_enabled && max - seuil > 0 ? {
+      seuil, unite: m.type_programme === 'points' ? 'points' : 'tampons', max: max - 1, winwin: seuilWinwin,
+      // Message (f18) : celui du marchand, sinon celui de l'admin, sinon le texte
+      // WinWin ; {reste}, {prenom} et {nom} laissés tels quels pour l'édition.
+      message: m.marchand_near_reward_message || messageBoostWinwin,
+      message_winwin: messageBoostWinwin,
+    } : null,
     anniversaire: !!(m.workflow_birthday_enabled && m.landing_premium),
     avis: !!lienValide(m.lien_avis_google),
-    personnalise: m.marchand_inactive_days != null || m.marchand_inactive_message != null || m.marchand_near_reward_threshold != null,
+    personnalise: m.marchand_inactive_days != null || m.marchand_inactive_message != null
+      || m.marchand_near_reward_threshold != null || m.marchand_near_reward_message != null,
+    // Place réservée à la notification « À proximité » (f10) : mentionnée et
+    // comptée comme l'avis Google quand elle existera.
+    proximite: false,
     envoyees_7j: envoyees7j,
   };
 }
@@ -127,10 +139,10 @@ router.get('/me/smart-notifications', authMarchand, asyncHandler(async (req, res
 }));
 
 // PATCH /merchants/me/smart-notifications — le marchand règle ses relances (f15).
-// Corps : { inactivite_jours?, inactivite_message?, boost_seuil? } ou { winwin: true }
-// (« revenir au réglage WinWin » : les trois réglages du marchand effacés).
+// Corps : { inactivite_jours?, inactivite_message?, boost_seuil?, boost_message? } ou { winwin: true }
+// (« revenir au réglage WinWin » : tous les réglages du marchand effacés).
 // Un réglage d'une relance que l'admin n'a pas activée est refusé.
-const LIEN = /(https?:\/\/|www\.|\b[a-z0-9-]+\.(com|fr|net|org|io|co|me|app|shop|link|ly|info|biz|be|ch|ae|uk|de|es|it)\b)/i;
+const { validerMessage } = require('../services/smart-messages');   // lien interdit, 150 caractères, {reste}
 router.patch('/me/smart-notifications', authMarchand, asyncHandler(async (req, res) => {
   const { data: m, error } = await supabase.from('marchands').select(COLONNES_SMART).eq('id', req.marchandId).single();
   if (error) return statsIndisponibles(res, 'smart-notifications (réglage)', error);
@@ -139,7 +151,8 @@ router.patch('/me/smart-notifications', authMarchand, asyncHandler(async (req, r
   const corps = req.body || {};
   const maj = {};
   if (corps.winwin === true) {
-    Object.assign(maj, { marchand_inactive_days: null, marchand_inactive_message: null, marchand_near_reward_threshold: null });
+    Object.assign(maj, { marchand_inactive_days: null, marchand_inactive_message: null, marchand_near_reward_threshold: null,
+      marchand_near_reward_message: null });
   } else {
     if (corps.inactivite_jours !== undefined || corps.inactivite_message !== undefined) {
       if (!m.workflow_inactive_enabled) return res.status(400).json({ error: 'relance_inactive_desactivee' });
@@ -150,16 +163,21 @@ router.patch('/me/smart-notifications', authMarchand, asyncHandler(async (req, r
       maj.marchand_inactive_days = j;
     }
     if (corps.inactivite_message !== undefined) {
-      const t = typeof corps.inactivite_message === 'string' ? corps.inactivite_message.trim() : '';
-      if (!t) return res.status(400).json({ error: 'message_vide' });
-      if (t.length > 150) return res.status(400).json({ error: 'message_trop_long', max: 150 });
-      if (LIEN.test(t)) return res.status(400).json({ error: 'message_avec_lien' });
-      maj.marchand_inactive_message = t;
+      const v = validerMessage(corps.inactivite_message);
+      if (v.erreur) return res.status(400).json({ error: v.erreur, max: 150 });
+      maj.marchand_inactive_message = v.texte;
     }
-    if (corps.boost_seuil !== undefined) {
+    if (corps.boost_seuil !== undefined || corps.boost_message !== undefined) {
       // Boost absent du bloc (désactivé par l'admin, ou seuil admin qui ne laisse
       // aucune zone) : le régler reviendrait à l'activer, ce que seul l'admin fait.
       if (!resumeSmart(m, 0).boost) return res.status(400).json({ error: 'boost_desactive' });
+    }
+    if (corps.boost_message !== undefined) {
+      const v = validerMessage(corps.boost_message, { reserve: '{reste}' });
+      if (v.erreur) return res.status(400).json({ error: v.erreur, max: 150 });
+      maj.marchand_near_reward_message = v.texte;
+    }
+    if (corps.boost_seuil !== undefined) {
       const s = Number(corps.boost_seuil), max = (m.max_value || 10) - 1;
       if (!Number.isInteger(s) || s < 1 || s > max) return res.status(400).json({ error: 'seuil_hors_limites', min: 1, max });
       maj.marchand_near_reward_threshold = s;

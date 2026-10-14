@@ -254,7 +254,7 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
     'landing_premium',
     'telephone', 'adresse',
     'referral_enabled', 'referral_bonus_points',
-    'how_it_works', 'workflow_inactive_message',
+    'how_it_works', 'workflow_inactive_message', 'workflow_near_reward_message',
     'couleur_fond_reward',
     'couleur_pastille_fond', 'couleur_pastille_contour', 'couleur_pastille_icone',
     'couleur_barre_principale', 'couleur_barre_secondaire',
@@ -272,6 +272,20 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
   const updates = {};
   for (const field of ALLOWED) {
     if (req.body[field] !== undefined) updates[field] = req.body[field];
+  }
+
+  // Message du boost (f18, migration 061) : vide = texte WinWin standard ; sinon
+  // 150 caractères, sans lien, {reste} obligatoire (services/smart-messages.js).
+  if (updates.workflow_near_reward_message !== undefined) {
+    const brut = updates.workflow_near_reward_message;
+    if (brut == null || String(brut).trim() === '') updates.workflow_near_reward_message = null;
+    else {
+      const v = require('../services/smart-messages').validerMessage(brut, { reserve: '{reste}' });
+      if (v.erreur) return res.status(400).json({ error: `Message du boost : ${({
+        message_trop_long: '150 caractères maximum', message_avec_lien: 'pas de lien',
+        message_sans_reste: 'le mot {reste} est obligatoire' })[v.erreur] || v.erreur}` });
+      updates.workflow_near_reward_message = v.texte;
+    }
   }
 
   // Seuils de fréquence : entiers cohérents. Le formulaire admin envoie toujours

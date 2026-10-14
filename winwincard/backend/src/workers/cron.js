@@ -211,7 +211,7 @@ async function runNearRewardWorkflow(opts = {}) {
 
   let query = supabase
     .from('marchands')
-    .select('id, nom, langue, max_value, workflow_near_reward_threshold, marchand_near_reward_threshold')
+    .select('id, nom, langue, max_value, type_programme, workflow_near_reward_threshold, marchand_near_reward_threshold, workflow_near_reward_message, marchand_near_reward_message')
     .in('forfait', FORFAITS_WORKFLOWS)
     .eq('actif',   true);
 
@@ -225,10 +225,16 @@ async function runNearRewardWorkflow(opts = {}) {
     const maxVal    = merchant.max_value || 10;
     const minPoints = maxVal - threshold;
     if (minPoints <= 0) return null;
-    // Un texte par nombre de points restants (le pluriel en dépend).
+    // Un texte par nombre restant (le pluriel en dépend). Message du marchand,
+    // sinon celui de l'admin, sinon le texte WinWin (f18, migration 061) ;
+    // {reste} → « 2 points » / « 1 tampon » selon le programme.
+    const { modeleBoostWinwin, texteBoost } = require('../services/smart-messages');
+    const modele = merchant.marchand_near_reward_message || merchant.workflow_near_reward_message
+      || modeleBoostWinwin(merchant.langue);
+    const unite = merchant.type_programme === 'points' ? 'points' : 'tampons';
     const modeles = {};
     for (let restant = 1; restant <= threshold; restant++) {
-      modeles[restant] = notif('nearReward', merchant.langue, { prenom: '{prenom}', remaining: restant, nom: merchant.nom });
+      modeles[restant] = texteBoost(modele, restant, unite, merchant.langue, merchant.nom);
     }
     modeles['*'] = modeles[threshold];
     return relancerMarchand('near_reward', merchant, modeles, { min: minPoints, max: maxVal });

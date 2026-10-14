@@ -55,17 +55,22 @@
     .field input:focus, .field textarea:focus { border-color: var(--accent); }
     .field select { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; color: var(--text); font-size: 16px; padding: 13px 15px; outline: none; font-family: inherit; width: 100%; }
     .notif-dest { font-size: 12px; color: var(--muted); margin-top: 6px; min-height: 16px; }
-    .smart-notifs { margin-top: 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
-    .smart-notifs h3 { font-size: 15px; margin: 0 0 8px; }
-    .smart-notifs p { font-size: 13px; color: var(--muted); margin: 0 0 6px; }
-    .smart-notifs ul { margin: 0 0 10px; padding-left: 18px; font-size: 14px; line-height: 1.5; }
-    .smart-notifs .smart-7j { font-size: 13px; font-weight: 600; margin: 0; color: var(--text); }
-    .smart-regler { margin-top: 12px; }
-    .smart-form { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+    .smart-notifs { margin-top: 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+    .smart-notifs h3 { font-size: 15px; margin: 0 0 4px; }
+    .smart-notifs .smart-intro { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+    .smart-liste { list-style: none; margin: 0 0 12px; padding: 0; }
+    .smart-liste li { display: flex; align-items: baseline; gap: 6px; padding: 9px 0; border-top: 1px solid var(--border); font-size: 14px; }
+    .smart-liste li:first-child { border-top: none; }
+    .smart-liste .nom { font-weight: 600; }
+    .smart-liste .val { color: var(--muted); }
+    .smart-pied { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .smart-notifs .smart-7j { font-size: 13px; color: var(--muted); margin: 0; white-space: nowrap; }
+    .smart-form { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
     .smart-form .ligne { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
     .smart-form input[type=number] { width: 76px; background: var(--bg); border: 1px solid var(--border); border-radius: 9px; color: var(--text); font-size: 16px; padding: 8px 10px; font-family: inherit; }
-    .smart-form textarea { width: 100%; box-sizing: border-box; min-height: 70px; background: var(--bg); border: 1px solid var(--border); border-radius: 9px; color: var(--text); font-size: 16px; padding: 10px 12px; font-family: inherit; resize: vertical; }
+    .smart-form textarea { width: 100%; box-sizing: border-box; min-height: 64px; background: var(--bg); border: 1px solid var(--border); border-radius: 9px; color: var(--text); font-size: 16px; padding: 10px 12px; font-family: inherit; resize: vertical; }
     .smart-form .aide { font-size: 12px; color: var(--muted); }
+    .smart-form .titre { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
     .smart-form .boutons { display: flex; gap: 8px; flex-wrap: wrap; }
     /* Case « rester connecté ». Hors de .field volontairement : `.field input`
        met -webkit-appearance:none, ce qui rend une case cochée visuellement
@@ -832,19 +837,20 @@ const I18N = {
     errLoadHistory:'Error loading history', noNotifsSent:'No notifications sent yet',
     received:({envoyes,total})=>`${envoyes}/${total} received`, noDevicesShort:'No devices',
     campagneEnCours:'Campaign being sent.', etatEnCours:'Sending', etatEnvoyee:'Sent',
-    smartTitre:'My smart notifications', smartIntro:'Sent automatically to your customers:',
-    smartInactivite:({n})=>`a reminder after ${n} day${n === 1 ? '' : 's'} without a visit`,
-    smartBoost:({n, unite})=>`a boost when they are only ${n} ${unite === 'points' ? (n === 1 ? 'point' : 'points') : (n === 1 ? 'stamp' : 'stamps')} away from their reward`,
-    smartAnniv:'a message on their birthday',
+    smartTitre:'My smart notifications', smartIntro:'Sent automatically to your customers.',
+    smartRelance:'Reminder', smartRelanceVal:({n})=>`after ${n} d`,
+    smartBoostNom:'Boost', smartBoostVal:({n, unite})=>`at ${n} ${unite === 'points' ? 'point' : 'stamp'}${n > 1 ? 's' : ''}`,
+    smartAnniv:'Birthday', smartAvis:'Google review', smartProximite:'Nearby',
     smart7j:({n})=>`Last 7 days: ${n} smart notification${n === 1 ? '' : 's'}`,
-    smartAvis:'a Google review request 30 minutes after each reward handed out',
-    smartRegler:'Adjust my reminders', smartFermer:'Close',
+    smartModifier:'Edit', smartFermer:'Close',
     smartJoursAvant:'Reminder after', smartJoursApres:'days without a visit (7 to 90)',
-    smartMessage:'Reminder message', smartMessageAide:'150 characters max, no link. « {prenom} » is replaced by the customer\'s first name.',
-    smartSeuilAvant:'Boost when', smartSeuilApres:({unite, max})=>`${unite === 'points' ? 'points' : 'stamps'} or fewer are missing (1 to ${max})`,
+    smartMessage:'Reminder message', smartMessageAide:'150 characters max, no link. « {prenom} » = the customer\'s first name.',
+    smartSeuilAvant:'Boost at', smartSeuilApres:({unite, max})=>`${unite === 'points' ? 'points' : 'stamps'} from the reward (1 to ${max})`,
+    smartMessageBoost:'Boost message', smartMessageBoostAide:'« {reste} » is required: it becomes « 2 points » or « 1 stamp ». 150 characters max, no link.',
     smartEnregistrer:'Save', smartWinwin:'Back to WinWin settings', smartEnregistre:'Saved.',
     smartErr:{ jours_hors_limites:'Choose between 7 and 90 days.', message_vide:'The message cannot be empty.',
       message_trop_long:'150 characters maximum.', message_avec_lien:'Links are not allowed in the message.',
+      message_sans_reste:'The word {reste} is required: it is replaced by the number left.',
       seuil_hors_limites:'Threshold out of range.', aucun_reglage:'Nothing to save.' },
     smartErrGen:'Could not save. Please try again.',
     segmentLabel:'Recipients', segTous:'All customers', segInactifs:({n})=>`Inactive for ${n} days`,
@@ -964,19 +970,20 @@ const I18N = {
     errLoadHistory:"Erreur de chargement de l'historique", noNotifsSent:'Aucune notification envoyée pour le moment',
     received:({envoyes,total})=>`${envoyes}/${total} reçues`, noDevicesShort:'Aucun appareil',
     campagneEnCours:"Campagne en cours d'envoi.", etatEnCours:"En cours d'envoi", etatEnvoyee:'Envoyée',
-    smartTitre:'Mes smart notifications', smartIntro:'Envoyées automatiquement à vos clients :',
-    smartInactivite:({n})=>`une relance après ${n} jour${n > 1 ? 's' : ''} sans visite`,
-    smartBoost:({n, unite})=>`un boost quand il ne leur manque plus que ${n} ${unite === 'points' ? 'point' : 'tampon'}${n > 1 ? 's' : ''} pour leur récompense`,
-    smartAnniv:'un message le jour de leur anniversaire',
+    smartTitre:'Mes smart notifications', smartIntro:'Envoyées automatiquement à vos clients.',
+    smartRelance:'Relance', smartRelanceVal:({n})=>`après ${n} j`,
+    smartBoostNom:'Boost', smartBoostVal:({n, unite})=>`à ${n} ${unite === 'points' ? 'point' : 'tampon'}${n > 1 ? 's' : ''}`,
+    smartAnniv:'Anniversaire', smartAvis:'Avis Google', smartProximite:'À proximité',
     smart7j:({n})=>`Ces 7 derniers jours : ${n} smart notification${n > 1 ? 's' : ''}`,
-    smartAvis:'une demande d\'avis Google 30 minutes après chaque récompense remise',
-    smartRegler:'Régler mes relances', smartFermer:'Fermer',
+    smartModifier:'Modifier', smartFermer:'Fermer',
     smartJoursAvant:'Relance après', smartJoursApres:'jours sans visite (7 à 90)',
-    smartMessage:'Message de la relance', smartMessageAide:'150 caractères maximum, sans lien. « {prenom} » est remplacé par le prénom du client.',
-    smartSeuilAvant:'Boost quand il manque', smartSeuilApres:({unite, max})=>`${unite === 'points' ? 'points' : 'tampons'} ou moins (1 à ${max})`,
+    smartMessage:'Message de la relance', smartMessageAide:'150 caractères maximum, sans lien. « {prenom} » = prénom du client.',
+    smartSeuilAvant:'Boost à', smartSeuilApres:({unite, max})=>`${unite === 'points' ? 'points' : 'tampons'} de la récompense (1 à ${max})`,
+    smartMessageBoost:'Message du boost', smartMessageBoostAide:'« {reste} » obligatoire : il devient « 2 points » ou « 1 tampon ». 150 caractères maximum, sans lien.',
     smartEnregistrer:'Enregistrer', smartWinwin:'Revenir au réglage WinWin', smartEnregistre:'Enregistré.',
     smartErr:{ jours_hors_limites:'Choisissez entre 7 et 90 jours.', message_vide:'Le message ne peut pas être vide.',
       message_trop_long:'150 caractères maximum.', message_avec_lien:'Les liens ne sont pas autorisés dans le message.',
+      message_sans_reste:'Le mot {reste} est obligatoire : il est remplacé par le nombre restant.',
       seuil_hors_limites:'Seuil hors limites.', aucun_reglage:'Rien à enregistrer.' },
     smartErrGen:'Enregistrement impossible. Réessayez.',
     segmentLabel:'Destinataires', segTous:'Tous les clients', segInactifs:({n})=>`Inactifs depuis ${n} jours`,
@@ -2337,41 +2344,48 @@ function rendreSmartNotifs(info) {
   const el = document.getElementById('smart-notifs');
   const d = _smart;
   if (!el || !d || !d.eligible) { if (el) el.style.display = 'none'; return; }
+  // Une ligne courte par smart notification active (f18). « À proximité » (f10)
+  // prendra sa place ici quand elle existera.
   const lignes = [];
-  if (d.inactivite) lignes.push(t('smartInactivite', { n: d.inactivite.jours }));
-  if (d.boost)      lignes.push(t('smartBoost', { n: d.boost.seuil, unite: d.boost.unite }));
-  if (d.anniversaire) lignes.push(t('smartAnniv'));
-  if (d.avis)       lignes.push(t('smartAvis'));
+  if (d.inactivite)   lignes.push([t('smartRelance'), t('smartRelanceVal', { n: d.inactivite.jours })]);
+  if (d.boost)        lignes.push([t('smartBoostNom'), t('smartBoostVal', { n: d.boost.seuil, unite: d.boost.unite })]);
+  if (d.anniversaire) lignes.push([t('smartAnniv'), '']);
+  if (d.avis)         lignes.push([t('smartAvis'), '']);
+  if (d.proximite)    lignes.push([t('smartProximite'), '']);
   if (!lignes.length) { el.style.display = 'none'; return; }
   const reglable = d.inactivite || d.boost;
   let form = '';
   if (reglable && _smartOuvert) {
     form = `<div class="smart-form" id="smart-form">
       ${d.inactivite ? `<div class="ligne">${esc(t('smartJoursAvant'))} <input type="number" id="smart-jours" min="7" max="90" value="${d.inactivite.jours}"> ${esc(t('smartJoursApres'))}</div>
-      <div><div class="aide" style="margin-bottom:4px;font-weight:600">${esc(t('smartMessage'))}</div>
+      <div><div class="titre">${esc(t('smartMessage'))}</div>
         <textarea id="smart-message" maxlength="150">${esc(d.inactivite.message)}</textarea>
         <div class="aide">${esc(t('smartMessageAide'))}</div></div>` : ''}
-      ${d.boost ? `<div class="ligne">${esc(t('smartSeuilAvant'))} <input type="number" id="smart-seuil" min="1" max="${d.boost.max}" value="${d.boost.seuil}"> ${esc(t('smartSeuilApres', { unite: d.boost.unite, max: d.boost.max }))}</div>` : ''}
-      <div class="boutons">
+      ${d.boost ? `<div class="ligne">${esc(t('smartSeuilAvant'))} <input type="number" id="smart-seuil" min="1" max="${d.boost.max}" value="${d.boost.seuil}"> ${esc(t('smartSeuilApres', { unite: d.boost.unite, max: d.boost.max }))}</div>
+      <div><div class="titre">${esc(t('smartMessageBoost'))}</div>
+        <textarea id="smart-message-boost" maxlength="150">${esc(d.boost.message)}</textarea>
+        <div class="aide">${esc(t('smartMessageBoostAide'))}</div></div>` : ''}
+      <div class="boutons" style="display:flex;gap:8px;flex-wrap:wrap">
         <button type="button" class="btn btn-primary btn-sm" id="smart-enregistrer">${esc(t('smartEnregistrer'))}</button>
         ${d.personnalise ? `<button type="button" class="btn btn-ghost btn-sm" id="smart-winwin">${esc(t('smartWinwin'))}</button>` : ''}
       </div>
       <div class="aide" id="smart-info">${info ? esc(info) : ''}</div>
     </div>`;
   }
-  el.innerHTML = `<h3>${esc(t('smartTitre'))}</h3><p>${esc(t('smartIntro'))}</p>
-    <ul>${lignes.map(l => `<li>${esc(l)}</li>`).join('')}</ul>
-    <p class="smart-7j">${esc(t('smart7j', { n: d.envoyees_7j }))}</p>
-    ${reglable ? `<button type="button" class="btn btn-outline btn-sm smart-regler" id="smart-regler">${esc(t(_smartOuvert ? 'smartFermer' : 'smartRegler'))}</button>` : ''}
+  el.innerHTML = `<h3>${esc(t('smartTitre'))}</h3><p class="smart-intro">${esc(t('smartIntro'))}</p>
+    <ul class="smart-liste">${lignes.map(([nom, val]) => `<li><span class="nom">${esc(nom)}</span>${val ? ` <span class="val">· ${esc(val)}</span>` : ''}</li>`).join('')}</ul>
+    <div class="smart-pied"><p class="smart-7j">${esc(t('smart7j', { n: d.envoyees_7j }))}</p>
+      ${reglable ? `<button type="button" class="btn btn-outline btn-sm" id="smart-regler">${esc(t(_smartOuvert ? 'smartFermer' : 'smartModifier'))}</button>` : ''}</div>
     ${form}`;
   el.style.display = '';
   const b = id => document.getElementById(id);
   if (b('smart-regler')) b('smart-regler').onclick = () => { _smartOuvert = !_smartOuvert; rendreSmartNotifs(); };
   if (b('smart-enregistrer')) b('smart-enregistrer').onclick = () => {
     const corps = {};
-    if (b('smart-jours'))   corps.inactivite_jours = Number(b('smart-jours').value);
-    if (b('smart-message')) corps.inactivite_message = b('smart-message').value;
-    if (b('smart-seuil'))   corps.boost_seuil = Number(b('smart-seuil').value);
+    if (b('smart-jours'))         corps.inactivite_jours = Number(b('smart-jours').value);
+    if (b('smart-message'))       corps.inactivite_message = b('smart-message').value;
+    if (b('smart-seuil'))         corps.boost_seuil = Number(b('smart-seuil').value);
+    if (b('smart-message-boost')) corps.boost_message = b('smart-message-boost').value;
     enregistrerSmart(corps);
   };
   if (b('smart-winwin')) b('smart-winwin').onclick = () => enregistrerSmart({ winwin: true });

@@ -419,6 +419,13 @@
                 style="width:52px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:6px 10px;outline:none">
               <span style="font-size:13px;color:var(--muted)">points de la récompense</span>
             </div>
+            <div style="padding-left:28px;margin-top:8px">
+              <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Message du boost (optionnel)</label>
+              <textarea id="f-wf-near-message" rows="2" maxlength="150"
+                style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;resize:vertical;box-sizing:border-box"
+                placeholder="Salut {prenom} ! Plus que {reste} pour débloquer ta récompense chez {nom}. Passe nous voir ! 🎁"></textarea>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px"><code>{reste}</code> obligatoire (« 2 points », « 1 tampon »…) ; <code>{prenom}</code> et <code>{nom}</code> en option. 150 caractères, sans lien. Vide = message standard.</div>
+            </div>
           </div>
 
           <div style="height:1px;background:var(--border)"></div>
@@ -1063,6 +1070,7 @@ function afficherReglagesMarchand(m) {
   if (m.marchand_inactive_days != null) lignes.push(`Relance après <b>${m.marchand_inactive_days} jours</b> sans visite (réglage WinWin : ${m.workflow_inactive_days || 30} jours)`);
   if (m.marchand_inactive_message != null) lignes.push(`Message de relance : « ${esc(m.marchand_inactive_message)} »`);
   if (m.marchand_near_reward_threshold != null) lignes.push(`Boost à <b>${m.marchand_near_reward_threshold}</b> de la récompense (réglage WinWin : ${m.workflow_near_reward_threshold || 2})`);
+  if (m.marchand_near_reward_message != null) lignes.push(`Message du boost : « ${esc(m.marchand_near_reward_message)} »`);
   document.getElementById('wf-reglages-marchand-etat').textContent = '';
   if (!lignes.length) { bloc.style.display = 'none'; return; }
   document.getElementById('wf-reglages-marchand-liste').innerHTML = lignes.map(l => `<div>• ${l}</div>`).join('');
@@ -1201,7 +1209,7 @@ document.getElementById('sheet-backdrop').addEventListener('click', e => {
 // FORM : REMPLIR / VIDER
 // ════════════════════════════════════
 function resetForm() {
-  ['f-nom','f-pass-name','f-slug','f-email','f-telephone','f-adresse','f-avis-google','f-pwd','f-new-pwd','f-quota-override','f-logo','f-logo-reward','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-how-it-works','f-tiers','f-wf-inactive-message','f-wf-birthday-message'].forEach(id => {
+  ['f-nom','f-pass-name','f-slug','f-email','f-telephone','f-adresse','f-avis-google','f-pwd','f-new-pwd','f-quota-override','f-logo','f-logo-reward','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-how-it-works','f-tiers','f-wf-inactive-message','f-wf-near-message','f-wf-birthday-message'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   document.getElementById('f-type-programme').value = 'stamps';
@@ -1316,6 +1324,7 @@ function fillForm(m) {
     v('f-wf-inactive-message', m.workflow_inactive_message);
     document.getElementById('f-wf-near-enabled').checked      = !!m.workflow_near_reward_enabled;
     document.getElementById('f-wf-near-threshold').value      = m.workflow_near_reward_threshold || 2;
+    v('f-wf-near-message', m.workflow_near_reward_message);
     document.getElementById('f-wf-birthday-enabled').checked  = !!m.workflow_birthday_enabled;
     v('f-wf-birthday-message', m.workflow_birthday_message);
     afficherReglagesMarchand(m);
@@ -1566,6 +1575,7 @@ function collectForm() {
     body.workflow_inactive_message      = document.getElementById('f-wf-inactive-message').value.trim() || null;
     body.workflow_near_reward_enabled   = document.getElementById('f-wf-near-enabled').checked;
     body.workflow_near_reward_threshold = parseInt(document.getElementById('f-wf-near-threshold').value) || 2;
+    body.workflow_near_reward_message   = document.getElementById('f-wf-near-message').value.trim() || null;
     body.workflow_birthday_enabled      = document.getElementById('f-wf-birthday-enabled').checked;
     body.workflow_birthday_message      = document.getElementById('f-wf-birthday-message').value.trim() || null;
   }

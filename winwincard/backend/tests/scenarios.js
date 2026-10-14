@@ -1383,8 +1383,9 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     const carteDe = p => messageCarte(sql(`SELECT pass_serial_number FROM clients WHERE marchand_id = '${MC2}' AND prenom = '${p}'`));
     verifier('proches de la récompense : les 6 dans la zone, textes au singulier et au pluriel',
       [relances(MC2), relancesDe(MC2, 'Loin'), carteDe('Neuf1'), carteDe('Huit1')],
-      [6, 0, 'Salut Neuf1 ! Plus que 1 point pour débloquer ta récompense chez Filet Relance C. Passe nous voir ! 🎁',
-       'Salut Huit1 ! Plus que 2 points pour débloquer ta récompense chez Filet Relance C. Passe nous voir ! 🎁']);
+      // Programme en tampons : « tampon(s) » depuis f18 (avant : « point(s) » même en tampons).
+      [6, 0, 'Salut Neuf1 ! Plus que 1 tampon pour débloquer ta récompense chez Filet Relance C. Passe nous voir ! 🎁',
+       'Salut Huit1 ! Plus que 2 tampons pour débloquer ta récompense chez Filet Relance C. Passe nous voir ! 🎁']);
     decaler(MC2, 2);
     await proches();
     const sansMouvement = relances(MC2);
@@ -2184,7 +2185,9 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     const [p, n, t, z, b] = [await lire(SP), await lire(SN), await lire(ST), await lire(SZ), await lire(SB)];
     verifier('Pro+ avec landing premium (points) : relance après 21 jours, boost à 50 points, anniversaire, avis Google ; 5 smart notifications sur 7 jours (3 relances + 2 cartes avec demande d\'avis)',
       [p.inactivite && p.inactivite.jours, JSON.stringify(p.boost), p.anniversaire, p.avis, p.envoyees_7j, p.personnalise],
-      [21, JSON.stringify({ seuil: 50, unite: 'points', max: 499, winwin: 50 }), true, true, 5, false]);
+      [21, JSON.stringify({ seuil: 50, unite: 'points', max: 499, winwin: 50,
+        message: 'Salut {prenom} ! Plus que {reste} pour débloquer ta récompense chez {nom}. Passe nous voir ! 🎁',
+        message_winwin: 'Salut {prenom} ! Plus que {reste} pour débloquer ta récompense chez {nom}. Passe nous voir ! 🎁' }), true, true, 5, false]);
     verifier('… message par défaut montré au marchand : le texte standard, « {prenom} » laissé tel quel',
       p.inactivite && p.inactivite.message, 'Salut {prenom} ! Tu nous manques chez Filet Smart Premium. Reviens vite ! 🎯');
     verifier('Pro sans landing premium : pas d\'anniversaire (même activé), pas d\'avis (pas de lien), boost à 1 point ; ses seules relances (2)',
@@ -2232,16 +2235,36 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       ['1', 'refusé', 'f']);
 
     // ── Fiche admin : voir et effacer les réglages du marchand (décision du 14/10) ──
-    await regler(SN, { inactivite_jours: 12, boost_seuil: 3 });
+    await regler(SN, { inactivite_jours: 12, boost_seuil: 3, boost_message: 'Encore {reste} !' });
     const fiche = (await api('GET', `/api/admin/marchands/${SN}`, jetonAdmin)).corps;
     const sansAdmin = await api('POST', `/api/admin/workflows/${SN}/effacer-reglages-marchand`, jeton(SN));
     const efface = await api('POST', `/api/admin/workflows/${SN}/effacer-reglages-marchand`, jetonAdmin);
     const inconnu = await api('POST', `/api/admin/workflows/e2400000-0000-4000-8000-0000000000ff/effacer-reglages-marchand`, jetonAdmin);
     verifier('admin : la fiche porte les réglages du marchand ; « Effacer » (admin seulement) les remet à vide, le réglage WinWin intact ; marchand inconnu 404',
       [fiche.marchand_inactive_days, fiche.marchand_near_reward_threshold, sansAdmin.statut, efface.statut,
-       sqlOuNull(`SELECT coalesce(marchand_inactive_days::text, 'null') || '|' || coalesce(marchand_near_reward_threshold::text, 'null') || '|' || workflow_inactive_days FROM marchands WHERE id = '${SN}'`),
+       sqlOuNull(`SELECT coalesce(marchand_inactive_days::text, 'null') || '|' || coalesce(marchand_near_reward_threshold::text, 'null') || '|' || coalesce(marchand_near_reward_message, 'null') || '|' || workflow_inactive_days FROM marchands WHERE id = '${SN}'`),
        inconnu.statut],
-      [12, 3, 403, 200, 'null|null|30', 404]);
+      [12, 3, 403, 200, 'null|null|null|30', 404]);
+
+    // ── f18 : message du boost modifiable (marchand et admin), {reste} obligatoire ──
+    const msgRefus = [];
+    for (const boost_message of ['Plus que quelques points !', 'Voir www.promo.fr {reste}', '   ', 'z'.repeat(145) + ' {reste}']) {
+      const r = await regler(SP, { boost_message }); msgRefus.push(`${r.statut}:${r.corps.error}`);
+    }
+    verifier('message du boost : {reste} obligatoire, sans lien, non vide, 150 caractères',
+      msgRefus, ['400:message_sans_reste', '400:message_avec_lien', '400:message_vide', '400:message_trop_long']);
+    const msgOk = await regler(SP, { boost_message: '{prenom}, encore {reste} et c\'est cadeau !' });
+    const msgRetour = await regler(SP, { winwin: true });
+    verifier('… accepté et montré ; « revenir au réglage WinWin » efface aussi le message du boost ; boost désactivé : refusé',
+      [msgOk.statut, msgOk.corps.boost && msgOk.corps.boost.message, msgOk.corps.personnalise,
+       sqlOuNull(`SELECT coalesce(marchand_near_reward_message, 'null') FROM marchands WHERE id = '${SP}'`), msgRetour.corps.personnalise,
+       (await regler(SZ, { boost_message: 'Encore {reste}' })).corps.error],
+      [200, '{prenom}, encore {reste} et c\'est cadeau !', true, 'null', false, 'boost_desactive']);
+    const adminMsg = async message => (await api('PATCH', `/api/admin/marchands/${SN}`, jetonAdmin, { workflow_near_reward_message: message }));
+    const adm = [await adminMsg('Sans le mot'), await adminMsg('Plus que {reste} chez {nom}'), await adminMsg('')];
+    verifier('admin : message du boost WinWin contrôlé ({reste} obligatoire) ; vide = texte standard',
+      [adm[0].statut, adm[1].statut, adm[2].statut, sqlOuNull(`SELECT coalesce(workflow_near_reward_message, 'null') FROM marchands WHERE id = '${SN}'`)],
+      [400, 200, 200, 'null']);
 
     // ── Le cron applique le réglage du marchand ──
     const path = require('path');
@@ -2270,14 +2293,15 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     await cronMod.runInactiveWorkflow({ marchandId: SC }).catch(() => {});
     await cronMod.runNearRewardWorkflow({ marchandId: SC }).catch(() => {});
     const avantReglage = [relances('inactive'), relances('near_reward')];
-    await regler(SC, { inactivite_jours: 10, inactivite_message: 'On t\'attend chez {nom}, {prenom} !', boost_seuil: 4 });
+    await regler(SC, { inactivite_jours: 10, inactivite_message: 'On t\'attend chez {nom}, {prenom} !', boost_seuil: 4,
+      boost_message: '{prenom}, plus que {reste} chez {nom} !' });
     sql(`DELETE FROM workflow_executions WHERE marchand_id = '${SC}'`);   // un autre jour
     await cronMod.runInactiveWorkflow({ marchandId: SC }).catch(() => {});
     sql(`DELETE FROM workflow_executions WHERE marchand_id = '${SC}' AND workflow_type = 'inactive'`);   // « une par jour » : le boost un autre jour
     await cronMod.runNearRewardWorkflow({ marchandId: SC }).catch(() => {});
-    verifier('cron : réglage admin (30 j, seuil 2) → rien ; réglage du marchand (10 j, seuil 4) → relance d\'inactivité avec SON message, boost pour le client à 4 tampons',
-      [JSON.stringify(avantReglage), relances('near_reward'), messageCarte(absent.serial), messageCarte(proche.serial).startsWith('Salut Proche ! Plus que 4 point')],
-      ['[0,0]', 1, 'On t\'attend chez Filet Smart Cron, Absent !', true]);
+    verifier('cron : réglage admin (30 j, seuil 2) → rien ; réglage du marchand (10 j, seuil 4) → relance d\'inactivité avec SON message, boost à 4 tampons avec SON message ({reste} au pluriel)',
+      [JSON.stringify(avantReglage), relances('near_reward'), messageCarte(absent.serial), messageCarte(proche.serial)],
+      ['[0,0]', 1, 'On t\'attend chez Filet Smart Cron, Absent !', 'Proche, plus que 4 tampons chez Filet Smart Cron !']);
     modules.forEach(x => delete require.cache[x]);
     for (const k of Object.keys(process.env)) if (!(k in env)) delete process.env[k];
     Object.assign(process.env, env);

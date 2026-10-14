@@ -10,6 +10,7 @@ const WORKFLOW_FIELDS = [
   'workflow_inactive_message',
   'workflow_near_reward_enabled',
   'workflow_near_reward_threshold',
+  'workflow_near_reward_message',
   'workflow_birthday_enabled',
   'workflow_birthday_message',
 ];
@@ -54,7 +55,8 @@ router.patch('/:marchandId', authAdmin, asyncHandler(async (req, res) => {
 router.post('/:marchandId/effacer-reglages-marchand', authAdmin, asyncHandler(async (req, res) => {
   const { data, error } = await supabase
     .from('marchands')
-    .update({ marchand_inactive_days: null, marchand_inactive_message: null, marchand_near_reward_threshold: null })
+    .update({ marchand_inactive_days: null, marchand_inactive_message: null, marchand_near_reward_threshold: null,
+              marchand_near_reward_message: null })
     .eq('id', req.params.marchandId)
     .select('id')
     .maybeSingle();
