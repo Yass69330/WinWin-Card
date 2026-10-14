@@ -55,6 +55,11 @@
     .field input:focus, .field textarea:focus { border-color: var(--accent); }
     .field select { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; color: var(--text); font-size: 16px; padding: 13px 15px; outline: none; font-family: inherit; width: 100%; }
     .notif-dest { font-size: 12px; color: var(--muted); margin-top: 6px; min-height: 16px; }
+    .smart-notifs { margin-top: 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+    .smart-notifs h3 { font-size: 15px; margin: 0 0 8px; }
+    .smart-notifs p { font-size: 13px; color: var(--muted); margin: 0 0 6px; }
+    .smart-notifs ul { margin: 0 0 10px; padding-left: 18px; font-size: 14px; line-height: 1.5; }
+    .smart-notifs .smart-7j { font-size: 13px; font-weight: 600; margin: 0; color: var(--text); }
     /* Case « rester connecté ». Hors de .field volontairement : `.field input`
        met -webkit-appearance:none, ce qui rend une case cochée visuellement
        identique à une case vide. */
@@ -538,6 +543,8 @@
         <h2 style="font-size:15px;color:var(--muted)" data-i18n="historyTitle">History</h2>
       </div>
       <div id="notif-history-list"></div>
+
+      <div id="smart-notifs" class="smart-notifs" style="display:none"></div>
     </div>
 
   </div><!-- /dash-content -->
@@ -818,6 +825,11 @@ const I18N = {
     errLoadHistory:'Error loading history', noNotifsSent:'No notifications sent yet',
     received:({envoyes,total})=>`${envoyes}/${total} received`, noDevicesShort:'No devices',
     campagneEnCours:'Campaign being sent.', etatEnCours:'Sending', etatEnvoyee:'Sent',
+    smartTitre:'My smart notifications', smartIntro:'Sent automatically to your customers:',
+    smartInactivite:({n})=>`a reminder after ${n} day${n === 1 ? '' : 's'} without a visit`,
+    smartBoost:({n, unite})=>`a boost when they are only ${n} ${unite === 'points' ? (n === 1 ? 'point' : 'points') : (n === 1 ? 'stamp' : 'stamps')} away from their reward`,
+    smartAnniv:'a message on their birthday',
+    smart7j:({n})=>`Last 7 days: ${n} smart notification${n === 1 ? '' : 's'}`,
     segmentLabel:'Recipients', segTous:'All customers', segInactifs:({n})=>`Inactive for ${n} days`,
     segFideles:'Most loyal customers', segBoutique:({nom})=>`Customers of ${nom}`,
     destCount:({n})=>`${n} customer${n === 1 ? '' : 's'} will receive this message`, destLoading:'Counting recipients…',
@@ -935,6 +947,11 @@ const I18N = {
     errLoadHistory:"Erreur de chargement de l'historique", noNotifsSent:'Aucune notification envoyée pour le moment',
     received:({envoyes,total})=>`${envoyes}/${total} reçues`, noDevicesShort:'Aucun appareil',
     campagneEnCours:"Campagne en cours d'envoi.", etatEnCours:"En cours d'envoi", etatEnvoyee:'Envoyée',
+    smartTitre:'Mes smart notifications', smartIntro:'Envoyées automatiquement à vos clients :',
+    smartInactivite:({n})=>`une relance après ${n} jour${n > 1 ? 's' : ''} sans visite`,
+    smartBoost:({n, unite})=>`un boost quand il ne leur manque plus que ${n} ${unite === 'points' ? 'point' : 'tampon'}${n > 1 ? 's' : ''} pour leur récompense`,
+    smartAnniv:'un message le jour de leur anniversaire',
+    smart7j:({n})=>`Ces 7 derniers jours : ${n} smart notification${n > 1 ? 's' : ''}`,
     segmentLabel:'Destinataires', segTous:'Tous les clients', segInactifs:({n})=>`Inactifs depuis ${n} jours`,
     segFideles:'Les plus fidèles', segBoutique:({nom})=>`Clients de ${nom}`,
     destCount:({n})=>`${n} client${n > 1 ? 's' : ''} recevr${n > 1 ? 'ont' : 'a'} ce message`, destLoading:'Comptage des destinataires…',
@@ -1159,7 +1176,7 @@ function switchTab(tab) {
   if (tab === 'clients')  loadClients();
   if (tab === 'scans')    loadScans();
   if (tab === 'scanner')  startScannerTab();
-  if (tab === 'notifs')   { loadNotifHistory(); remplirSegments(); }
+  if (tab === 'notifs')   { loadNotifHistory(); remplirSegments(); chargerSmartNotifs(); }
 }
 
 // ════════════════════════════════════════════════
@@ -2271,6 +2288,28 @@ async function compterDestinataires() {
   } catch { if (n === _comptage) el.textContent = t('destError'); }
 }
 document.getElementById('notif-segment').addEventListener('change', compterDestinataires);
+
+// Bloc « Mes smart notifications » (14/10) : une lecture à l'ouverture de
+// l'onglet. Rien n'est affiché si le forfait n'y a pas droit, si aucune n'est
+// active, ou si la lecture échoue (le bloc n'est qu'informatif).
+async function chargerSmartNotifs() {
+  const el = document.getElementById('smart-notifs');
+  if (!el) return;
+  try {
+    const res = await api('/api/merchants/me/smart-notifications');
+    if (!res.ok) throw new Error();
+    const d = await res.json();
+    const lignes = [];
+    if (d.eligible && d.inactivite) lignes.push(t('smartInactivite', { n: d.inactivite.jours }));
+    if (d.eligible && d.boost)      lignes.push(t('smartBoost', { n: d.boost.seuil, unite: d.boost.unite }));
+    if (d.eligible && d.anniversaire) lignes.push(t('smartAnniv'));
+    if (!lignes.length) { el.style.display = 'none'; return; }
+    el.innerHTML = `<h3>${esc(t('smartTitre'))}</h3><p>${esc(t('smartIntro'))}</p>
+      <ul>${lignes.map(l => `<li>${esc(l)}</li>`).join('')}</ul>
+      <p class="smart-7j">${esc(t('smart7j', { n: d.envoyees_7j }))}</p>`;
+    el.style.display = '';
+  } catch { el.style.display = 'none'; }
+}
 
 async function loadNotifHistory(force = false) {
   if (!force && S.notifLogs) { renderNotifHistory(); return; }

@@ -71,6 +71,36 @@ function statsIndisponibles(res, route, error) {
   return res.set('Retry-After', '30').status(503).json({ error: 'database_unavailable' });
 }
 
+// GET /merchants/me/smart-notifications — le bloc « Mes smart notifications » de
+// l'onglet Notifications (14/10). Les réglages viennent de l'admin ; le marchand
+// ne les change pas, il les découvre. Mêmes règles que le cron
+// (src/workers/cron.js) : forfaits Pro et Pro+ ; anniversaire seulement avec la
+// landing premium ; boost seulement si le seuil laisse une zone (seuil < récompense).
+// Une requête du dashboard, à l'ouverture de l'onglet ; deux lectures courtes en
+// parallèle, le compteur par l'index (marchand_id, executed_at) (migration 055).
+const FORFAITS_SMART = ['pro', 'pro_plus'];
+router.get('/me/smart-notifications', authMarchand, asyncHandler(async (req, res) => {
+  const depuis = new Date(Date.now() - 7 * 24 * 3600e3).toISOString();
+  const [{ data: m, error: errM }, { count, error: errC }] = await Promise.all([
+    supabase.from('marchands')
+      .select('forfait, landing_premium, type_programme, max_value, workflow_inactive_enabled, workflow_inactive_days, workflow_near_reward_enabled, workflow_near_reward_threshold, workflow_birthday_enabled')
+      .eq('id', req.marchandId).single(),
+    supabase.from('workflow_executions').select('id', { count: 'exact', head: true })
+      .eq('marchand_id', req.marchandId).gte('executed_at', depuis),
+  ]);
+  if (errM || errC) return statsIndisponibles(res, 'smart-notifications', errM || errC);
+  if (!FORFAITS_SMART.includes(m.forfait)) return res.json({ eligible: false });
+  const seuil = m.workflow_near_reward_threshold || 2;
+  res.json({
+    eligible: true,
+    inactivite:    m.workflow_inactive_enabled ? { jours: m.workflow_inactive_days || 30 } : null,
+    boost:         m.workflow_near_reward_enabled && (m.max_value || 10) - seuil > 0
+                     ? { seuil, unite: m.type_programme === 'points' ? 'points' : 'tampons' } : null,
+    anniversaire:  !!(m.workflow_birthday_enabled && m.landing_premium),
+    envoyees_7j:   count || 0,
+  });
+}));
+
 // GET /merchants/me/stats — l'Aperçu du dashboard, calculé en base (étape 26,
 // migration 056) : le même pour une mono-boutique et pour un réseau, sans rien
 // par boutique. Une seule lecture, sans plafond de lignes.

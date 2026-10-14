@@ -2146,6 +2146,46 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       ['f', 't']);
     if (!a059) console.log('(migration 059 absente : contre-épreuve)');
   }
+
+  titre('24. Bloc « Mes smart notifications » du dashboard (14/10)');
+  {
+    // m(slug, nom, champs) : un marchand avec ses réglages de smart notifications.
+    const m = (id, slug, nom, champs) => {
+      const cols = Object.keys(champs), vals = Object.values(champs).map(v => typeof v === 'string' ? `'${v}'` : v);
+      sql(`INSERT INTO marchands (id, nom, slug, langue, ${cols.join(', ')}) VALUES ('${id}', '${nom}', '${slug}', 'fr', ${vals.join(', ')})`);
+      return id;
+    };
+    const tout = { workflow_inactive_enabled: true, workflow_near_reward_enabled: true, workflow_birthday_enabled: true };
+    const SP = m('e2400000-0000-4000-8000-000000000001', 'filet-smart-premium', 'Filet Smart Premium',
+      { ...tout, forfait: 'pro_plus', landing_premium: true, type_programme: 'points', max_value: 500, display_max_value: 500, workflow_inactive_days: 21, workflow_near_reward_threshold: 50 });
+    const SN = m('e2400000-0000-4000-8000-000000000002', 'filet-smart-simple', 'Filet Smart Simple',
+      { ...tout, forfait: 'pro', landing_premium: false, type_programme: 'points', max_value: 500, display_max_value: 500, workflow_inactive_days: 30, workflow_near_reward_threshold: 1 });
+    const ST = m('e2400000-0000-4000-8000-000000000003', 'filet-smart-tampons', 'Filet Smart Tampons',
+      { ...tout, workflow_inactive_enabled: false, forfait: 'pro', landing_premium: true, type_programme: 'stamps', max_value: 10, display_max_value: 10, workflow_near_reward_threshold: 2 });
+    const SZ = m('e2400000-0000-4000-8000-000000000004', 'filet-smart-zero', 'Filet Smart Zero',
+      { workflow_inactive_enabled: false, workflow_near_reward_enabled: true, workflow_birthday_enabled: false, forfait: 'pro', type_programme: 'stamps', max_value: 3, display_max_value: 3, workflow_near_reward_threshold: 5 });
+    const SB = m('e2400000-0000-4000-8000-000000000005', 'filet-smart-basic', 'Filet Smart Basic',
+      { ...tout, forfait: 'basic', landing_premium: true, type_programme: 'stamps', max_value: 10, display_max_value: 10 });
+    // Relances de SP : 3 sur 7 jours glissants (aujourd'hui, 2 j, 6 j 23 h), 1 à 8 jours (hors fenêtre) ;
+    // 2 chez SN ; une autre enseigne n'entre jamais dans le compte.
+    const relance = (mid, il) => {
+      const cid = sql(`INSERT INTO clients (marchand_id, prenom) VALUES ('${mid}', 'R') RETURNING id`);
+      sql(`INSERT INTO workflow_executions (workflow_type, client_id, marchand_id, executed_at) VALUES ('inactive', '${cid}', '${mid}', now() - interval '${il}')`);
+    };
+    ['0 hours', '2 days', '6 days 23 hours', '8 days'].forEach(il => relance(SP, il));
+    ['1 day', '3 days'].forEach(il => relance(SN, il));
+    const lire = async id => (await api('GET', '/api/merchants/me/smart-notifications', jeton(id))).corps;
+    const [p, n, t, z, b] = [await lire(SP), await lire(SN), await lire(ST), await lire(SZ), await lire(SB)];
+    verifier('Pro+ avec landing premium (points) : relance après 21 jours, boost à 50 points, anniversaire ; 3 smart notifications sur 7 jours (pas celle d\'il y a 8 jours)',
+      JSON.stringify(p), JSON.stringify({ eligible: true, inactivite: { jours: 21 }, boost: { seuil: 50, unite: 'points' }, anniversaire: true, envoyees_7j: 3 }));
+    verifier('Pro sans landing premium : pas d\'anniversaire (même activé), boost à 1 point ; ses seules relances (2)',
+      [n.anniversaire, JSON.stringify(n.boost), n.envoyees_7j], [false, JSON.stringify({ seuil: 1, unite: 'points' }), 2]);
+    verifier('tampons, relance d\'inactivité désactivée : pas mentionnée ; boost en tampons ; anniversaire (premium)',
+      [t.inactivite, JSON.stringify(t.boost), t.anniversaire, t.envoyees_7j], [null, JSON.stringify({ seuil: 2, unite: 'tampons' }), true, 0]);
+    verifier('seuil au moins égal à la récompense : le cron n\'envoie rien, le boost n\'est pas mentionné ; Basic : pas de bloc',
+      [z.eligible, z.boost, z.inactivite, z.anniversaire, JSON.stringify(b)], [true, null, null, false, JSON.stringify({ eligible: false })]);
+    verifier('sans jeton marchand : 401', (await api('GET', '/api/merchants/me/smart-notifications')).statut, 401);
+  }
 }
 
 module.exports = { FIXTURES, jouer, M, B };
