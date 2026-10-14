@@ -6493,7 +6493,11 @@ réseau qui envoie.
 - Migration 059 exécutée par Yass : 5 × true, 230 clients masqués.
 - Feu vert. Poussé à **07:11:27 UTC** en avance rapide sur
   `claude/keen-goldberg-MXslu` (`88899f1` → `28ab331`).
-- Contrôles de Yass : à compléter.
+- Contrôles de Yass (14/10) : déploiement vert, `/health` ok, Pizz'Amore affiche 366
+  clients.
+- Restent ouverts : l'export, le menu des segments, la campagne ciblée de test chez
+  hamza-salon, et l'absence de vague near_reward au cron du 14/10 (requête sur
+  `workflow_executions` du jour).
 
 ### Dette observée
 
@@ -6502,6 +6506,47 @@ réseau qui envoie.
   - Hypothèse non prouvée : une connexion gardée ouverte, que le serveur ferme
     pendant que le client la réutilise.
   - Sans effet en production.
+
+## 15 quinquadragies. BLOC « MES SMART NOTIFICATIONS » : CODÉ EN LOCAL (14/10, rien poussé)
+
+Demande du pilotage (14/10). Les marchands ne savent pas que les smart notifications
+existent : Yass les règle depuis l'admin. Un bloc, sous l'historique des campagnes de
+l'onglet Notifications, les leur fait connaître, d'après leurs réglages réels.
+
+### Livré (commit local `4fa2413`)
+
+- `GET /api/merchants/me/smart-notifications` (`src/routes/merchants.js`) :
+  - deux lectures courtes en parallèle : les réglages du marchand, et le nombre de
+    `workflow_executions` des 7 derniers jours (glissants) ;
+  - le compte passe par l'index `(marchand_id, executed_at)`, qui existe depuis 055 :
+    aucun index, aucune migration ;
+  - mêmes règles que le cron :
+    - forfaits Pro et Pro+ (sinon `eligible: false`) ;
+    - anniversaire seulement avec la landing premium ;
+    - boost seulement si seuil < récompense ;
+    - une smart notification désactivée est absente ;
+  - unité « points » ou « tampons » selon le programme.
+- Dashboard : bloc `#smart-notifs`, chargé à l'ouverture de l'onglet, avec une seule
+  requête et rien de régulier.
+  - Textes de Yass : « boost », jamais « reçu ».
+  - Singulier ou pluriel pour les jours, les points ou tampons et les notifications.
+  - Version anglaise ajoutée.
+- Rien ne change pour la caisse.
+
+### Preuves
+
+- `npm test` : 292/292, dont la section 24 (5 contrôles).
+- Test navigateur `tests/navigateur/smart_notifications_ecran.js` : 3/3, trois
+  captures vérifiées : landing premium en points, sans landing premium, tampons.
+- Contre-épreuve sur `28ab331` : 287/292. Les 5 échecs sont tous dans la section 24
+  (route absente).
+
+### Choix hors pilotage
+
+- Bloc caché si aucune smart notification n'est active, ou si la lecture échoue :
+  il est seulement informatif, donc pas de message d'erreur.
+- Compte des 7 jours = lignes de `workflow_executions`, soit une par client et par
+  relance réservée, même si l'envoi a échoué ensuite.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
@@ -6719,6 +6764,11 @@ le dépôt ? Réponse prouvée par deux rejeux locaux et par le projet de test :
 Toute décision prise sans passer par le pilotage (Yass) se note ici : date, décision,
 raison, effet constaté. Une entrée vaut aveu, pas justification — la règle reste le
 contrat §7 (diagnostic, validation, puis code).
+
+**2026-10-14 — Bloc smart notifications, choix d'exécution** (détail §15 quinquadragies) :
+- bloc caché si aucune smart notification n'est active ou si la lecture échoue ;
+- deux lectures en parallèle dans une seule requête du dashboard, plutôt qu'une
+  fonction SQL (pas de migration).
 
 **2026-10-13 — Vrais clients et segments, choix d'exécution** (détail §15 quatuorquadragies) :
 - `trg_clients_updated_at` est réécrit pour ignorer les changements de `visible`
