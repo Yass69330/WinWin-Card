@@ -6929,7 +6929,14 @@ Le rapport à Yass comporte les options et la recommandation.
     Mais iOS décide seul du moment, de la durée et de la carte affichée (une sur
     deux). C'est une suggestion « au mieux », pas une notification garantie. À
     présenter ainsi aux marchands.
-  - contrôle « hors créneau » (après 21:00 à Dubaï) : non rapporté.
+  - contrôle « hors créneau » : la suggestion n'est plus là, rien après le créneau.
+    Bon.
+  - Question de Yass : le créneau rend-il la fonction moins efficace ? Personne
+    ne sait (Apple ne documente pas ce cas).
+  - Test proposé, sans code : `00:00-24:00` tous les jours chez hamza-salon,
+    2 ou 3 passages, en notant le délai et la durée. Si le comportement est le
+    même, c'est iOS ; sinon, comparer avec une carte sans créneau (petite
+    modification du code).
 - Leçon : la saisie en UTC prête à confusion. À surveiller (aide de saisie
   possible : afficher l'heure de Dubaï correspondante).
 
