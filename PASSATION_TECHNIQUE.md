@@ -6766,8 +6766,32 @@ Le rapport à Yass comporte les options et la recommandation.
 - Migration 061 exécutée par Yass : 2 × true.
 - Feu vert. Poussé à **10:35:28 UTC** en avance rapide sur `claude/keen-goldberg-MXslu`
   (`87c8a20` → `a0e044b`).
-- Contrôles de Yass : à compléter.
+- Contrôles de Yass (14/10) : déploiement vert, contrôles f18 bons.
 - Contre-épreuve sur `87c8a20` : 297/304. Les 7 échecs portent tous sur f18.
+
+### Décisions de Yass pour la suite de f10 (14/10)
+
+- **iPhone ET Android.** La décision « iPhone uniquement » est **annulée** par
+  Yass le même jour, au vu des chiffres : environ 670 cartes Google actives, et 10
+  à 300 appels Google par jour chez les marchands actifs.
+- **Android** :
+  - `merchantLocations` posé sur la classe du marchand, une classe par marchand
+    (`classId` dans `google-pass.js:50`) ;
+  - adresses ajoutées à l'ouverture et retirées à la fermeture : 2 appels par
+    jour et par marchand ;
+  - texte choisi par Google ;
+  - mêmes appels Google que le reste, jamais en rafale.
+  - Condition posée par Yass : on arrête si le risque de surcharge ou de
+    scalabilité est réel (évaluation dans le rapport du 14/10).
+- **iPhone** : inchangé. `locations` et `relevantText` (prénom + produit favori,
+  sinon solde, façon boost), et `relevantDates` si le test iPhone le valide.
+- Produit favori : saisi uniquement par le client sur la landing, plus tard avec
+  f06. Sinon, et pour toutes les cartes existantes, le message de repli.
+- Horaires par boutique, saisis par Yass en admin.
+- Ligne « À proximité » dans « Mes smart notifications » : mentionnée, sans
+  compteur.
+- Prochaine étape : la carte de test iPhone seule (feu vert de Yass), puis un test
+  Android équivalent.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
