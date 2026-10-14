@@ -6548,6 +6548,40 @@ l'onglet Notifications, les leur fait connaître, d'après leurs réglages réel
 - Compte des 7 jours = lignes de `workflow_executions`, soit une par client et par
   relance réservée, même si l'envoi a échoué ensuite.
 
+## 15 unquinquagies. f15 ET f17 (BLOC NOTIFICATIONS, SUITE) : DIAGNOSTIC (14/10, rien codé)
+
+### f15 : le marchand règle ses relances
+
+- Aujourd'hui, les réglages sont des colonnes de `marchands` (`workflow_*`), et
+  seul l'admin les modifie (`PATCH /api/admin/workflows/:id`, `src/routes/workflows.js`).
+- **Coût** : une écriture par enregistrement. Le cron lit `marchands` une fois par
+  jour, à 08:00 UTC. Des réglages changés souvent ne coûtent donc aucune requête
+  régulière, et ils prennent effet au passage suivant.
+- **Anti-spam déjà en place, et indépendant des réglages** :
+  - une relance par jour et par client, tous types confondus ;
+  - une relance par absence (inactivité) ;
+  - une par palier (boost : `updated_at`) ;
+  - une par an (anniversaire).
+
+  Changer le texte ne renvoie rien. Baisser le délai d'inactivité (30 → 7 jours)
+  produit une grosse première vague, puis plus rien.
+- **Google, 3 notifications par carte et par 24 h** : les surfaces qui notifient
+  sont le scan (à chaque scan), l'ajustement, l'avis, le cron et la campagne. Une
+  relance n'ajoute au plus qu'une notification par jour : f15 n'augmente pas le
+  risque.
+- **Défaut admin conservé** : colonnes marchand séparées, nulles par défaut ; valeur
+  effective = marchand, sinon admin. Le marchand peut « revenir au réglage WinWin ».
+
+### f17 : cases du pass
+
+- Apple : seul le champ du dos `notification_txt` a un `changeMessage`. Les zones
+  `primaryFields` et `auxiliaryFields` sont vides
+  (`src/services/apple-pass.js:346, 360`).
+- iOS ne notifie que si la valeur change : un message identique au précédent est
+  silencieux.
+- Google : `addMessage` empile les messages sur l'objet, sans jamais en retirer
+  (`google-pass.js:499`).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
