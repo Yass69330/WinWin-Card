@@ -17,6 +17,148 @@
 > document ne sont plus exacts : voir la synthèse §11.2. Les décisions de l'audit sont
 > consignées dans la synthèse §12, et non ici.
 
+
+---
+
+## 0. DÉMARRAGE DE SESSION : ÉTAT AU 15/10/2026 (à lire en premier)
+
+Cette section suffit pour démarrer. Le détail de chaque point est dans la section
+indiquée.
+
+### 0.1 Ordre des chantiers : la carte, seule source (décidé le 15/10)
+
+- **La carte des chantiers du pilotage est la seule source de l'ordre.** Chaque
+  chantier vivant est une carte `t*` ou `f*`.
+- **Les « étapes N » sont abandonnées.** Elles restent dans ce document comme
+  historique, avec leurs numéros, mais ne disent plus rien de l'ordre.
+- **Les dates et échéances vont sur une carte dédiée** du pilotage, et non dans
+  ce document.
+- **La session propose, le pilotage décide.** Tout ce que la session juge urgent
+  ou à réordonner, vu depuis le code, remonte au pilotage. La carte enregistre
+  l'ordre validé. Ce document garde la trace technique : livré, preuves,
+  hypothèses, dette.
+- Les règles de session sont dans `CLAUDE.md`, à la racine du dépôt. Elles priment.
+
+### 0.2 Production
+
+- Branche déployée : `claude/keen-goldberg-MXslu`, sur Railway, déployée à chaque
+  push. Dernier push : **`495ed40`** (15/10, 08:39 UTC).
+  - Pousser en avance rapide seulement, sur feu vert de Yass.
+  - La migration est exécutée dans Supabase AVANT le push du code qui en dépend.
+- Branche de travail des sessions : jamais poussée (consigne de Yass). Le crochet
+  d'arrêt qui demande de la pousser est ignoré.
+- Dernière migration exécutée en production : **063** (15/10, 6 × true).
+- Tests : `npm test` (filet `tests/lancer.js`, base jetable, PostgREST, vrai
+  serveur, sections 0 à 26) avec contrôle de syntaxe des écrans. Dernier total :
+  **340/340**. Tests navigateur hors `npm test` : `tests/navigateur/*.js`, avec
+  Playwright. Détail au §15 septquinquagies.
+- Commande :
+  `PATH=~/.cache/winwin-filet/node-v24.21.0-linux-x64/bin:$PATH npm test`
+  depuis `winwincard/backend`. Node doit être 24.21.0.
+- Contre-épreuve : le filet rejoué sur le commit de production (git worktree +
+  lien vers `node_modules`). Elle est exigée à chaque livraison.
+
+### 0.3 Chantiers clos ou en production
+
+- **f18** (message du boost, bloc allégé) : en production le 14/10 (`a0e044b`),
+  contrôles bons. **Clos.** Détail au §15 quatuorquinquagies.
+- **f15** (le marchand règle ses relances) : en production. **Clos.**
+- **f10** (« À proximité » sur iPhone) : en production le 14/10 (`70caa3c`).
+  - Activé chez hamza-salon seulement, pour les tests de Yass.
+  - Test du créneau `00:00-24:00` sur 2 appareils : résultat non noté ici.
+  - Ouverture aux vrais marchands et volet Android : décisions à prendre.
+  - Détail au §15 quinquinquagies.
+- **f17** (cartes à thème) : en production **dormant** le 15/10 (`495ed40`,
+  migration 063).
+  - L'interrupteur admin `themes_actifs` est à false partout et aucun thème n'est
+    préparé. Mécanisme testé par Yass : il fonctionne.
+  - Mise en service réelle plus tard : thèmes et logos préparés en admin,
+    ouverture par marchand, puis rendu réel sur hamza-salon (iPhone, Android,
+    arrêt silencieux, registre `theme`).
+  - Détail au §15 septquinquagies.
+- **t37** (campagnes par lots, débit partagé de 30 iPhone par 10 s) : en
+  production. **Clos.** C'est ce même débit qui protège la caisse pendant les
+  envois de f10 et f17.
+
+### 0.4 En attente : décisions et mesures
+
+1. **Clé d'idempotence obligatoire : critère atteint (15/10).**
+   - La requête D donne 100 % des scans avec clé chaque jour depuis le 05/10
+     (11 jours). Dernier scan sans clé : le 04/10.
+   - Le pilotage ouvre un **petit chantier à part, diagnostic d'abord, rien codé
+     avant validation**. Deux questions :
+     - que reçoit une demande sans clé (un rejet propre en 400 ?) ;
+     - une caisse peut-elle tourner encore sur un vieil écran en cache (service
+       worker du scanner), sans clé ?
+   - Requête D : §15 duovicies.
+2. **Gain Google (règle D2, depuis le 13/10) : mesure à refaire vers le 20/10.**
+   - Premier relevé, le 15/10 :
+     - en brut, scan 1238 → 246 et inactive 821 → 100 ;
+     - mais « avant » couvre 7 jours et « après » 2,5 jours. Par jour, environ
+       410 → 220 envois Google, soit moitié moins. Signal clair et attendu.
+   - **Vers le 20/10** : relancer, **normalisé pour 100 scans**, et noter ici le
+     chiffre final. Requête (lignes `google` de `notification_envois`, 7 jours
+     avant et après le 13/10) :
+     ```sql
+     WITH e AS (SELECT CASE WHEN envoye_le < '2026-10-13' THEN 'avant' ELSE 'apres' END AS p, count(*) AS envois
+                  FROM notification_envois WHERE plateforme = 'google'
+                   AND envoye_le >= '2026-10-06' AND envoye_le < '2026-10-20' GROUP BY 1),
+          s AS (SELECT CASE WHEN date_scan < '2026-10-13' THEN 'avant' ELSE 'apres' END AS p, count(*) AS scans
+                  FROM scans WHERE annule_le IS NULL
+                   AND date_scan >= '2026-10-06' AND date_scan < '2026-10-20' GROUP BY 1)
+     SELECT e.p, e.envois, s.scans, round(100.0 * e.envois / NULLIF(s.scans, 0), 1) AS envois_google_pour_100_scans
+       FROM e JOIN s USING (p) ORDER BY 1 DESC;
+     ```
+3. **Environnement de test `winwin-campagne-15` : décision (b), le 15/10.**
+   - Il est supprimé **au 31/10**, sans nouvelle série de charge.
+   - t41 se fera par revue de code, inventaire du dashboard et test « tous les
+     onglets » (`tests/navigateur/onglets.js`). Le débit partagé de t37 protège
+     déjà la caisse, et f10 et f17 passent par lui.
+   - Son coût n'a jamais été relevé ici.
+4. **Phase 2 du filet** (GitHub Actions + « Wait for CI » dans Railway) : à lancer
+   quand le pilotage le place.
+   - Une seule fausse alerte connue : la limite de temps de la section 17,
+     corrigée le 14/10 (1,5 s → 4 s). Depuis, toutes les exécutions sont vertes.
+   - Diagnostic d'abord : PostgreSQL et PostgREST dans GitHub Actions, puis le
+     réglage dans Railway par Yass.
+5. **UptimeRobot** : les conditions d'usage commercial de l'offre gratuite n'ont
+   pas été vérifiées (§15 novies). C'est à Yass.
+
+### 0.5 À remonter au pilotage : urgences et ordre, vu depuis le code (15/10)
+
+Ce sont des propositions de la session. L'ordre validé est celui de la carte.
+
+- **Échéances datées** (pour la carte des dates) :
+  - **20/10** : mesure finale du gain Google ;
+  - **31/10** : suppression de l'environnement de test ;
+  - **avant le 01/12** : `railway.toml` cesse d'être lu (§16). Il faut recopier
+    les 5 réglages dans le tableau de bord Railway, ou migrer. Sinon, le contrôle
+    de déploiement `/health/db` disparaît en silence ;
+  - **fin 2026** : Supabase supprime la clé historique (audit 99 §6, n° 1). C'est
+    **déjà traité** : bascule de clé le 29/09, clés historiques désactivées le
+    01/10 (§15 septies). À marquer clos sur la carte des dates ;
+  - **printemps 2027** : quatre échéances, dont l'adhésion Apple (audit 99 §6).
+- **Dette de sécurité à placer** (§16) :
+  - **désinscription d'un appareil Apple sans contrôle du jeton** : n'importe qui
+    connaissant un identifiant d'appareil et un numéro de série peut couper les
+    mises à jour d'une carte ;
+  - **quota manuel de notifications non validé** côté serveur.
+- **Dette de justesse silencieuse** (§16) :
+  - `/me/stats` est tronqué à 1 000 lignes : un mono-site actif voit ses
+    statistiques sous-estimées, sans erreur ;
+  - la liste des clients du dashboard est plafonnée à 1 000.
+- **Petit et utile** :
+  - la clé d'idempotence obligatoire (point 0.4, n° 1) ;
+  - la phase 2 du filet (point 0.4, n° 4).
+
+### 0.6 Où lire quoi
+
+- Dernier chantier livré : f17, au §15 septquinquagies.
+- Décisions prises sans le pilotage : §17. Dette : §16.
+- Requêtes utiles : `winwincard/backend/database/requetes/` et les blocs SQL des
+  sections 15.
+- Audit de fond (état de santé, échéances) : `docs/audit/99-synthese.md`.
+
 ---
 
 ## 1. ÉTAT ACTUEL DU CODE
@@ -40,10 +182,9 @@ commerçant scanne le QR du pass du client → le solde avance → à un seuil, 
   de staging.
 - **Front** : 4 pages HTML/JS **vanilla** (aucun framework, aucun build), servies en
   statique par Express.
-- **Tests** : **il n'y a AUCUNE suite de tests automatisés.** La validation se fait par
-  `node --check` (syntaxe), par des scripts de logique rejoués en isolation, et par des
-  tests manuels sur vrais iPhone/Android. Ne présumez jamais qu'un test attrapera votre
-  régression : rien ne l'attrapera.
+- **Tests** : *(texte d'origine périmé, corrigé le 15/10)* le filet `npm test`
+  existe depuis l'étape 10 (voir §0.2), complété par des tests navigateur et par des
+  tests manuels sur vrais iPhone et Android.
 
 ### Fichiers structurants
 
