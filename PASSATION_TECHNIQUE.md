@@ -128,17 +128,26 @@ indiquée.
 
 Ce sont des propositions de la session. L'ordre validé est celui de la carte.
 
-- **Échéances datées** (pour la carte des dates) :
+- **Échéances datées** (carte des dates ; 20/10 et 31/10 validées par le pilotage
+  le 15/10) :
   - **20/10** : mesure finale du gain Google ;
   - **31/10** : suppression de l'environnement de test ;
-  - **avant le 01/12** : `railway.toml` cesse d'être lu (§16). Il faut recopier
-    les 5 réglages dans le tableau de bord Railway, ou migrer. Sinon, le contrôle
-    de déploiement `/health/db` disparaît en silence ;
-  - **fin 2026** : Supabase supprime la clé historique (audit 99 §6, n° 1). C'est
-    **déjà traité** : bascule de clé le 29/09, clés historiques désactivées le
-    01/10 (§15 septies). À marquer clos sur la carte des dates ;
   - **printemps 2027** : quatre échéances, dont l'adhésion Apple (audit 99 §6).
-- **Dette de sécurité à placer** (§16) :
+- **Échéances closes (confirmé le 15/10, à ne pas rouvrir)** :
+  - **`railway.toml` (01/12)** : **clos le 04/10**, étape 8, push 2b (`5630092`).
+    - Le fichier est supprimé du dépôt (vérifié par git le 15/10 : absent).
+    - Yass a vérifié dans le tableau de bord le 04/10 :
+      - « Using detected Dockerfile! » : le Dockerfile remplace Nixpacks et fixe
+        Node ;
+      - « Custom Start Command » vide ;
+      - Healthcheck Path `/health/db`, délai de 30 s ;
+      - Restart Policy On Failure, 3 essais ;
+      - déploiement vert (§15 terdecies, « Push 2b FAIT le 04/10 »).
+    - Le 01/12 ne change donc plus rien.
+  - **Clé historique Supabase (fin 2026)** : **close**. Bascule de clé le 29/09,
+    clés historiques désactivées le 01/10 (§15 septies).
+- **Dette de sécurité** (§16), **rangée par le pilotage le 15/10** dans le chantier
+  sécurité (reste de t17) et dans le contrôle de sécurité (gate) de f17 :
   - **désinscription d'un appareil Apple sans contrôle du jeton** : n'importe qui
     connaissant un identifiant d'appareil et un numéro de série peut couper les
     mises à jour d'une carte ;
@@ -147,6 +156,9 @@ Ce sont des propositions de la session. L'ordre validé est celui de la carte.
   - `/me/stats` est tronqué à 1 000 lignes : un mono-site actif voit ses
     statistiques sous-estimées, sans erreur ;
   - la liste des clients du dashboard est plafonnée à 1 000.
+- **Ordre** : la section 0 est la vue de l'ordre (résumé tenu aligné par le
+  pilotage), sans copie de la carte dans le dépôt (décision du 15/10). Quand un
+  chantier a besoin de sa fiche complète, le pilotage colle l'extrait au démarrage.
 - **Petit et utile** :
   - la clé d'idempotence obligatoire (point 0.4, n° 1) ;
   - la phase 2 du filet (point 0.4, n° 4).
@@ -7508,8 +7520,10 @@ token marchand mono-site toujours non révocable).
   l'inscription et au téléchargement. N'importe qui connaissant un identifiant d'appareil
   et un numéro de série peut couper les mises à jour poussées d'une carte. Question posée
   dans le dossier du point 10.
-- **`railway.toml` cesse d'être lu le 2026-12-01 — ÉCHÉANCE ABSENTE DE L'AUDIT
-  (découverte le 2026-09-29).** Documentation Railway (`railwayapp/docs`,
+- ~~**`railway.toml` cesse d'être lu le 2026-12-01**~~ **CLOS le 04/10** (étape 8,
+  push 2b, `5630092` ; les réglages ont été reposés dans le tableau de bord et vérifiés
+  par Yass ; confirmé le 15/10). Texte d'origine :
+  **ÉCHÉANCE ABSENTE DE L'AUDIT (découverte le 2026-09-29).** Documentation Railway (`railwayapp/docs`,
   `infrastructure-as-code.md:41`) : « Existing Config as Code files stop being read on
   2026-12-01 (hard cutoff) ». Jusque-là le fichier l'emporte sur le tableau de bord ;
   ensuite, ce sont les réglages du tableau de bord qui s'appliquent pour les **cinq**
