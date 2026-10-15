@@ -7246,9 +7246,28 @@ tard.
 - Tests : `npm test` **340/340** ; avec le test navigateur **345/345**.
   Contre-épreuve sur `70caa3c` : **316/317** (seul KO attendu : module f17 absent).
 
+### En production (15/10)
+
+- Avant de lancer la 063, Yass a vérifié en production la contrainte
+  `notification_envois_source_check` (les 10 sources de la 062) et l'absence de
+  source hors liste.
+- Migration 063 exécutée par Yass : 6 × true (dont `dormant_ok`).
+- Feu vert. Poussé en avance rapide sur `claude/keen-goldberg-MXslu`
+  (`70caa3c` → ce commit), le 15/10 vers 08:40 UTC. Aucun créneau n'était imposé
+  (CLAUDE.md).
+- Fonction dormante : `themes_actifs` est à false partout, et aucun thème n'est
+  préparé.
+
 ### Reste à faire
 
-- Exécuter 063 dans Supabase, puis pousser (feu vert du pilotage donné le 14/10).
+- Contrôles de Yass après déploiement :
+  - l'onglet « Ma carte » est absent du dashboard d'un Pro+ ;
+  - les autres onglets fonctionnent ;
+  - la section « Thèmes de carte » de la fiche admin d'un Pro+ apparaît, case
+    décochée.
+- Mise en service réelle, plus tard : thèmes, logos, ouverture par marchand, puis
+  rendu réel sur hamza-salon (iPhone, Android, arrêt silencieux, registre
+  `theme`).
 - Rendu réel sur hamza-salon (comme f10) :
   - préparer un thème dans l'admin, l'activer depuis « Ma carte » ;
   - contrôler : iPhone (couleurs, case, bannière, notification), Android, arrêt
