@@ -50,7 +50,7 @@ indiquée.
 - Dernière migration exécutée en production : **063** (15/10, 6 × true).
 - Tests : `npm test` (filet `tests/lancer.js`, base jetable, PostgREST, vrai
   serveur, sections 0 à 26) avec contrôle de syntaxe des écrans. Dernier total :
-  **340/340**. Tests navigateur hors `npm test` : `tests/navigateur/*.js`, avec
+  **340/340** en production, 341/341 avec t43 (local). Tests navigateur hors `npm test` : `tests/navigateur/*.js`, avec
   Playwright. Détail au §15 septquinquagies.
 - Commande :
   `PATH=~/.cache/winwin-filet/node-v24.21.0-linux-x64/bin:$PATH npm test`
@@ -82,15 +82,14 @@ indiquée.
 
 ### 0.4 En attente : décisions et mesures
 
-1. **Clé d'idempotence obligatoire : critère atteint (15/10).**
-   - La requête D donne 100 % des scans avec clé chaque jour depuis le 05/10
-     (11 jours). Dernier scan sans clé : le 04/10.
-   - Le pilotage ouvre un **petit chantier à part, diagnostic d'abord, rien codé
-     avant validation**. Deux questions :
-     - que reçoit une demande sans clé (un rejet propre en 400 ?) ;
-     - une caisse peut-elle tourner encore sur un vieil écran en cache (service
-       worker du scanner), sans clé ?
-   - Requête D : §15 duovicies.
+1. **t43, clé d'idempotence obligatoire : codé et validé, PAS poussé (17/10).**
+   - Commit local `2ed79b6`, détail au §15 octoquinquagies.
+   - **Conditions de push (pilotage, impératives)** :
+     - (a) la requête D globale (§15 duovicies) est à 100 % **le jour même** ;
+     - (b) WAM apparaît à jour (scan avec clé) dans
+       `database/requetes/cle_wam_t43.sql`, après le passage de Yass chez WAM
+       le 19/10 (écran rechargé puis scan de test).
+   - Tant que WAM n'est pas confirmé, on ne pousse pas.
 2. **Gain Google (règle D2, depuis le 13/10) : mesure à refaire vers le 20/10.**
    - Premier relevé, le 15/10 :
      - en brut, scan 1238 → 246 et inactive 821 → 100 ;
@@ -7426,6 +7425,36 @@ tard.
   - contrôler : iPhone (couleurs, case, bannière, notification), Android, arrêt
     silencieux, registre `theme`.
 
+## 15 octoquinquagies. t43 : CLÉ D'IDEMPOTENCE OBLIGATOIRE (17/10, commit local `2ed79b6`, NON POUSSÉ)
+
+**Livré (en local)** :
+- `scan.js` : sans clé (absente, `null` ou vide), réponse `400 { error: 'cle_idempotence
+  required' }` avant toute lecture en base, et une ligne `[scan] ALERTE cle_idempotence
+  manquante : marchand …, boutique …, rôle …` (`console.warn`). Aucune requête de plus en caisse.
+- Pas de migration. La branche « sans clé » de `crediter_scan` (051) reste en place, inutilisée.
+- Tests : les outils de test envoient une clé neuve à chaque scan ; le scénario « TRANSITION
+  sans clé » (2 crédits) devient « sans clé ou clé vide → 400, rien crédité, aucune ligne,
+  une alerte par refus au journal ». `lancer.js` passe le journal du serveur principal aux
+  scénarios (`journalServeur`).
+- Filet : 341/341 ; contre-épreuve sur la production 340/340.
+
+**Diagnostic** : les deux écrans (scanner `index.html:1204`, dashboard `index.html:1905`)
+envoient une clé à chaque scan, et personne d'autre n'appelle `POST /api/scan`. Le service
+worker sert le HTML par le réseau d'abord, et le serveur l'envoie en `no-cache`. Restent
+deux risques : une page jamais rechargée depuis le 04/10 (session jusqu'à 365 jours) ou un
+repli hors ligne sur un vieux cache. La requête D les verrait.
+**WAM** (premier client) a peut-être un écran ancien : d'où la condition (b), en 0.4.
+
+**Retour arrière** : `git revert 2ed79b6` (code et tests ensemble), ou redéployer
+dans Railway le déploiement précédent. En une ligne dans le code : remettre le test
+`if (cle_idempotence !== undefined && …)` autour de la vérification d'UUID.
+
+**Hypothèse** (ce qui le ferait casser) : un appelant hors du dépôt, sans clé. Il n'en
+existe aucun aujourd'hui. La future API (étape 28) devra envoyer une clé.
+
+**Contrôle après le push** : journaux Railway, chercher `ALERTE cle_idempotence` (aucune
+ligne attendue), puis un scan réel en 200.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
@@ -7639,11 +7668,29 @@ le dépôt ? Réponse prouvée par deux rejeux locaux et par le projet de test :
   examinée. Hors production, il fait lire le résultat à l'envers. À renommer en
   « base examinée » (`generer.sh`, puis régénérer) ; petit, non fait.
 
+- **Filet instable (découvert le 17/10, t43)** : le scénario f17 « la caisse prime »
+  (section 26) échoue environ 1 fois sur 3 à 4, **aussi sur le commit de production**
+  (339/340). Cause probable : la préparation d'aperçus lancée en arrière-plan par la
+  création admin des thèmes (`admin.js:994`, `suivre(preparerApercus)`) relit la liste
+  après l'insertion du thème « Hiver » du test et le prépare. Rien en production. **À
+  corriger avant la phase 2 du filet** (sinon fausse alerte en CI).
+- **Tests navigateur cassés sur la production (17/10)** : `fiche_annulation.js`
+  s'interrompt en 13b (`Cannot read properties of undefined (reading 'id')`) et
+  `cle_ecrans.js` s'arrête sur une attente de 30 s (« scanner (tampons) »). Mêmes erreurs
+  sur le commit de production, donc antérieures à t43. `caisse_erreurs.js` passe. Non
+  examinés plus loin.
+
 ## 17. DÉCISIONS HORS PILOTAGE
 
 Toute décision prise sans passer par le pilotage (Yass) se note ici : date, décision,
 raison, effet constaté. Une entrée vaut aveu, pas justification — la règle reste le
 contrat §7 (diagnostic, validation, puis code).
+
+**2026-10-17 — t43, choix d'exécution** :
+- une clé vide (`''`) ou `null` est traitée comme absente : 400 et alerte ;
+- l'alerte du journal donne le marchand, la boutique et le rôle, sans la carte ;
+- la requête WAM trouve WAM par son nom (`ILIKE '%wam%'`) : l'identifiant n'est
+  pas dans le dépôt.
 
 **2026-10-14 — f17, suite (précalcul, interrupteur)** :
 - mode points : précalcul limité à 0 et aux soldes détenus au moment de la
