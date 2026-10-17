@@ -300,13 +300,15 @@ if (require.main === module) (async () => {
   const nb = preparerBase(scenarios.FIXTURES);
   console.log(`base rejouée depuis le dépôt : ${nb} fichiers (schema.sql, migrations, rgpd_effacement.sql) + données du filet`);
   const urlSupabase = await demarrerPostgrest();
-  const urlServeur = (await demarrerServeur(urlSupabase)).url;
+  const serveur = await demarrerServeur(urlSupabase);
+  const urlServeur = serveur.url;
 
   const ctx = {
     sql: psqlSocket,
     sqlEnFond: psqlEnFond,
     verifier,
     urlServeur,
+    journalServeur: serveur.journal,
     secretJwt: SECRET_JWT,
     urlSupabase,
     cleService: jwt.sign({ role: 'service_role' }, SECRET_PGRST),

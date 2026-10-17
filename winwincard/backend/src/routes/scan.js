@@ -8,12 +8,14 @@ const { authScanner, authMarchand } = require('../middleware/auth');
 const { notif } = require('../i18n/messages');
 
 // Clé d'idempotence (étape 11) : un identifiant par scan voulu, fourni par
-// l'écran. FACULTATIVE pendant la transition (un écran ouvert depuis avant 11b
-// n'en envoie pas) ; présente, elle doit être un UUID.
+// l'écran. OBLIGATOIRE depuis t43 (100 % des scans avec clé depuis le 05/10) :
+// sans clé, 400 et une ligne d'alerte (une caisse sur un vieil écran se voit
+// dans les journaux avant que le commerçant appelle). Retour arrière : remettre
+// `if (cle_idempotence !== undefined ...)` autour du bloc, comme avant t43.
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 // POST /scan — scan d'un pass en caisse
-// Corps : { serial_number, points?, cle_idempotence? }
+// Corps : { serial_number, points?, cle_idempotence }
 //   ⚠️ Le champ `serial_number` du body n'est PAS forcément un serial : c'est
 //   une ENTRÉE à résoudre — soit un UUID complet (caméra), soit un code de
 //   secours 6 caractères (saisie manuelle). D'où le nom local `serial_input`.
@@ -25,12 +27,13 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   if (!serial_input) {
     return res.status(400).json({ error: 'serial_number required' });
   }
-  let cle = null;
-  if (cle_idempotence !== undefined && cle_idempotence !== null && cle_idempotence !== '') {
-    cle = String(cle_idempotence).trim().toLowerCase();
-    if (!RE_UUID.test(cle)) {
-      return res.status(400).json({ error: 'cle_idempotence must be a UUID' });
-    }
+  if (cle_idempotence === undefined || cle_idempotence === null || cle_idempotence === '') {
+    console.warn(`[scan] ALERTE cle_idempotence manquante : marchand ${req.marchandId}, boutique ${req.pointDeVenteId || '-'}, rôle ${req.scannerRole}`);
+    return res.status(400).json({ error: 'cle_idempotence required' });
+  }
+  const cle = String(cle_idempotence).trim().toLowerCase();
+  if (!RE_UUID.test(cle)) {
+    return res.status(400).json({ error: 'cle_idempotence must be a UUID' });
   }
 
   // ── Multi-boutiques (3c) : attribution + coupure + durcissement ────────────

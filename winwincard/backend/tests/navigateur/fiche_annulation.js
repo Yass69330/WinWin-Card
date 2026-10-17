@@ -74,7 +74,7 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     const tT = jetonM(M.tampons);
 
     const c = client(M.tampons);
-    for (let i = 0; i < 3; i++) await api('POST', '/api/scan', tT, { serial_number: c.serial });
+    for (let i = 0; i < 3; i++) await api('POST', '/api/scan', tT, { serial_number: c.serial, cle_idempotence: crypto.randomUUID() });
     const [s3, s2] = lignesActives(c.id);
     await fiche(e, c.id);
     verifier('fiche ouverte : une seule requête (comme avant), « Annuler » sur le dernier passage seulement',
@@ -95,7 +95,7 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
       await e.page.evaluate(() => document.querySelector('#cs-scans-list .cs-scan-row .cs-scan-date').textContent.includes('annulé')), true);
 
     const d = client(M.tampons);
-    await api('POST', '/api/scan', tT, { serial_number: d.serial });
+    await api('POST', '/api/scan', tT, { serial_number: d.serial, cle_idempotence: crypto.randomUUID() });
     sql(`UPDATE clients SET stored_value = 5 WHERE id = '${d.id}'`);   // ajustement d'avant l'étape 13b (sans trace)
     await fiche(e, d.id);
     e.dialogues.length = 0;
@@ -106,7 +106,7 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
 
     const r = await ouvrir(M.reseau, 'filet-reseau');
     const cr = client(M.reseau);
-    await api('POST', '/api/scan', jetonB(M.reseau, B.b1), { serial_number: cr.serial });
+    await api('POST', '/api/scan', jetonB(M.reseau, B.b1), { serial_number: cr.serial, cle_idempotence: crypto.randomUUID() });
     await fiche(r, cr.id);
     await annulerDansFiche(r, cr.id);
     verifier('réseau : le gérant annule depuis sa fiche le passage fait dans une boutique', [solde(cr.id), lignesActives(cr.id).length], [0, 0]);
@@ -116,7 +116,7 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     titre('Navigateur : ajustements dans la fiche (étape 13b)');
     const e2 = await ouvrir(M.tampons, 'filet-tampons');
     const g = client(M.tampons, 1);
-    await api('POST', '/api/scan', tT, { serial_number: g.serial });       // 1 → 2
+    await api('POST', '/api/scan', tT, { serial_number: g.serial, cle_idempotence: crypto.randomUUID() });       // 1 → 2
     await fiche(e2, g.id);
     await ajusterDansFiche(e2, 9);
     const ajId = sql(`SELECT id FROM ajustements WHERE client_id = '${g.id}'`);
@@ -139,7 +139,7 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     await fiche(e2, h.id).catch(() => {});
     await e2.page.evaluate(id => openClientSheet(id), h.id);
     await e2.page.waitForFunction(id => S.clientData && S.clientData.client.id === id, h.id);
-    await api('POST', '/api/scan', tT, { serial_number: h.serial });       // un scan passe : 2 → 3
+    await api('POST', '/api/scan', tT, { serial_number: h.serial, cle_idempotence: crypto.randomUUID() });       // un scan passe : 2 → 3
     await ajusterDansFiche(e2, 5);
     verifier('un scan passe pendant que la fiche est ouverte : ajustement refusé, message clair, le scan est gardé',
       [await erreurAjustement(e2), solde(h.id), journal(h.id)],

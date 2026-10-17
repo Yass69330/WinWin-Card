@@ -44,7 +44,7 @@ INSERT INTO points_de_vente (id, marchand_id, nom, actif, deleted_at, scanner_lo
  ('${B.archivee}', '${M.reseau}', 'Archivée',   true,  now(), 'filet-archivee');
 `;
 
-async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur, demarrerPostgrest, urlSupabase, cleService, urlServeur }) {
+async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur, demarrerPostgrest, urlSupabase, cleService, urlServeur, journalServeur }) {
   // ── Outils ────────────────────────────────────────────────────────────────
   const jeton = (marchandId, pointDeVenteId) => jwt.sign(pointDeVenteId
     ? { role: 'scanner', marchand_id: marchandId, point_de_vente_id: pointDeVenteId, tv: 1 }
@@ -61,7 +61,8 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
   const solde = id => Number(sql(`SELECT stored_value FROM clients WHERE id = '${id}'`));
   const lignes = id => Number(sql(`SELECT count(*) FROM scans WHERE client_id = '${id}'`));
   const derniereLigne = id => sql(`SELECT id FROM scans WHERE client_id = '${id}' AND annule_le IS NULL ORDER BY date_scan DESC, id DESC LIMIT 1`);
-  const scan = (jt, serial, points) => api('POST', '/api/scan', jt, points === undefined ? { serial_number: serial } : { serial_number: serial, points });
+  // Clé neuve à chaque appel : la clé est obligatoire depuis t43.
+  const scan = (jt, serial, points) => scanCle(jt, serial, crypto.randomUUID(), points);
   const scanCle = (jt, serial, cle, points) => api('POST', '/api/scan', jt,
     points === undefined ? { serial_number: serial, cle_idempotence: cle } : { serial_number: serial, points, cle_idempotence: cle });
   const annuler = (jt, scanId) => api('POST', `/api/scan/${scanId}/annuler`, jt);
@@ -171,9 +172,16 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     verifier('10 envois simultanés de la même clé : un seul crédit, une ligne', [solde(e.id), lignes(e.id)], [40, 1]);
     verifier('… tous répondent 200, un seul « premier passage »', [rafale.every(r => r.statut === 200), rafale.filter(r => r.corps.deja_enregistre === false).length], [true, 1]);
 
+    // t43 : la clé est obligatoire. Avant, un scan sans clé passait (et un
+    // renvoi recréditait) ; maintenant 400, rien d'écrit, une ligne d'alerte.
     const f = client(M.tampons);
-    await scan(tT, f.serial); await scan(tT, f.serial);
-    verifier('TRANSITION — sans clé (écran d\'avant 11b) : deux crédits, acceptés jusqu\'à la clé obligatoire', [solde(f.id), lignes(f.id)], [2, 2]);
+    const alertes = () => (journalServeur().match(/\[scan\] ALERTE cle_idempotence manquante/g) || []).length;
+    const avant = alertes();
+    const sansCle = await api('POST', '/api/scan', tT, { serial_number: f.serial });
+    const cleVide = await api('POST', '/api/scan', tT, { serial_number: f.serial, cle_idempotence: '' });
+    verifier('sans clé (ou clé vide) : 400 cle_idempotence required, rien crédité, aucune ligne',
+      [sansCle.statut, sansCle.corps.error, cleVide.statut, solde(f.id), lignes(f.id)], [400, 'cle_idempotence required', 400, 0, 0]);
+    verifier('… une ligne d\'alerte au journal du serveur par refus', await attendre(() => alertes() === avant + 2), true);
 
     const g = client(M.tampons), h = client(M.tampons);
     const k3 = crypto.randomUUID();
@@ -538,7 +546,7 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     // et crédit jamais fait.
     const s = await demarrerServeur('serveur-arret');
     const appel = (jt, corps) => fetch(s.url + '/api/scan', { method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jt}` }, body: JSON.stringify(corps) })
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jt}` }, body: JSON.stringify({ cle_idempotence: crypto.randomUUID(), ...corps }) })
       .then(async r => ({ statut: r.status, corps: await r.json().catch(() => null) }),
             e => ({ statut: `coupé (${(e.cause && e.cause.code) || e.message})`, corps: null }));
     const nouvelleConnexion = () => new Promise(r => {
@@ -702,7 +710,7 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       return { statut: r.status, corps: c, ms: Date.now() - t0 };
     };
     const regler = (motif, delaiMs, panne = false) => Object.assign(regle, { motif, delaiMs, panne, vues: 0 });
-    const scan14 = (jt, serial, corps = {}) => appel('POST', '/api/scan', jt, { serial_number: serial, ...corps });
+    const scan14 = (jt, serial, corps = {}) => appel('POST', '/api/scan', jt, { serial_number: serial, cle_idempotence: crypto.randomUUID(), ...corps });
     const dans = (ms, min, max) => ms >= min && ms <= max;
 
     // Préchauffe : le cache marchand (auth) est rempli, la lecture lente vise le scan seul.
@@ -1238,7 +1246,7 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     const listePanne = await appel('GET', cheminListe);
     const desinscrPanne = await appel('DELETE', cheminInscr, authApple);
     regle.panne = /^\/rest\/v1\/rpc\/crediter_scan/;
-    const scanPanne = await appel('POST', '/api/scan', `Bearer ${tT}`, { serial_number: client(M.tampons).serial });
+    const scanPanne = await appel('POST', '/api/scan', `Bearer ${tT}`, { serial_number: client(M.tampons).serial, cle_idempotence: crypto.randomUUID() });
     regle.panne = null;
     verifier('base en panne : carte 503 (avant 404), inscription 503 (avant 404 puis 500), liste 503 (avant 204), désinscription 503 (avant 500), toutes avec Retry-After',
       [cartePanne.statut, inscrPanne.statut, inscrPanne2.statut, listePanne.statut, desinscrPanne.statut,
@@ -1251,7 +1259,7 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     Object.assign(regle, { motif: /^\/rest\/v1\/passes/, delaiMs: 1000, enVol: 0, maxEnVol: 0 });
     const iphones = Array.from({ length: 30 }, () => appel('GET', cheminCarte, authApple));
     await attendreMs(300);
-    const scanPendant = await appel('POST', '/api/scan', `Bearer ${tT}`, { serial_number: client(M.tampons).serial });
+    const scanPendant = await appel('POST', '/api/scan', `Bearer ${tT}`, { serial_number: client(M.tampons).serial, cle_idempotence: crypto.randomUUID() });
     const retours = await Promise.all(iphones);
     Object.assign(regle, { motif: null, delaiMs: 0 });
     verifier('file des iPhone : 30 retours en même temps, au plus 5 requêtes de carte à la fois vers la base',
@@ -1905,7 +1913,7 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     const scanner = async s => {
       vues.length = 0;
       const r = await fetch(`${s22.url}/api/scan`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tG}` },
-        body: JSON.stringify({ serial_number: s }) });
+        body: JSON.stringify({ serial_number: s, cle_idempotence: crypto.randomUUID() }) });
       return r.status;
     };
     const statutIph = await scanner(IPH.serial);
