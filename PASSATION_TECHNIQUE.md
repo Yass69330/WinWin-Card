@@ -42,7 +42,7 @@ indiquée.
 ### 0.2 Production
 
 - Branche déployée : `claude/keen-goldberg-MXslu`, sur Railway, déployée à chaque
-  push. Dernier push : **`cfe7d42`** (18/10, découpage du dashboard, onglet Réseau `4a73f06`).
+  push. Dernier push : **`fab6011`** (18/10, 20:12 UTC, découpage du dashboard, onglet Réseau `4a73f06`).
   - Pousser en avance rapide seulement, sur feu vert de Yass.
   - La migration est exécutée dans Supabase AVANT le push du code qui en dépend.
 - Branche de travail des sessions : jamais poussée (consigne de Yass). Le crochet
