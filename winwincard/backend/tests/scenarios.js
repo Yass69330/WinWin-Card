@@ -2572,13 +2572,22 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
         [['#4a1a2a', '#0b3d2e', '#00732f'], ['https://logos.exemple/standard.png', theme.logo_url, 'https://logos.exemple/standard.png'], ['3 / 9', '3 / 9', '3 / 9'], true]);
       // Thème posé sans passer par l'admin (donc jamais préparé) : le marchand ne
       // le calcule pas, ni à la première ouverture ni à la seconde ; l'admin, si.
+      // Sur un marchand à part (MH), que l'admin n'a jamais touché : sur MT, la
+      // préparation lancée en arrière-plan par les créations de thèmes ci-dessus
+      // pouvait encore tourner, relire la liste et préparer « Hiver » (test
+      // instable ≈ 1 fois sur 3, corrigé le 18/10).
+      const MH = 'e3600000-0000-4000-8000-0000000000b4';
+      sql(`INSERT INTO marchands (id, nom, slug, langue, forfait, type_programme, max_value, display_max_value, couleur_fond, couleur_texte,
+                                  couleur_label, strip_mode, stamp_icon, logo_url, themes_actifs)
+           VALUES ('${MH}', 'Filet Thème Hiver', 'filet-theme-hiver', 'fr', 'pro_plus', 'stamps', 9, 9, '#4a1a2a', '#ffffff', '#e8b4a0', 'stamps', 'coffee', 'https://logos.exemple/standard.png', true)`);
       const idHiver = sql(`INSERT INTO themes_marchand (marchand_id, nom, couleur_fond, message_ouverture)
-                           VALUES ('${MT}', 'Hiver', '#1d3557', 'Bon hiver !') RETURNING id`);
-      const hiver = async () => (await api('GET', '/api/merchants/me/themes', tMT)).corps.themes.find(x => x.nom === 'Hiver').apercu;
+                           VALUES ('${MH}', 'Hiver', '#1d3557', 'Bon hiver !') RETURNING id`);
+      const tMH = jeton(MH);
+      const hiver = async () => (await api('GET', '/api/merchants/me/themes', tMH)).corps.themes.find(x => x.nom === 'Hiver').apercu;
       const h1 = await hiver(), h2 = await hiver();
-      await api('GET', `/api/admin/marchands/${MT}/themes`, jetonAdmin);
+      await api('GET', `/api/admin/marchands/${MH}/themes`, jetonAdmin);
       const h3 = await hiver();
-      sql(`DELETE FROM themes_marchand WHERE id = '${idHiver}'`);
+      sql(`DELETE FROM themes_marchand WHERE id = '${idHiver}'; DELETE FROM marchands WHERE id = '${MH}'`);
       verifier('« la caisse prime » : côté marchand, lecture du cache SEULEMENT (thème non préparé : pas de bannière, « en préparation », toujours rien à la 2e ouverture) ; préparé à l\'ouverture de la fiche admin, puis servi au marchand',
         [adminListe.statut, h1.banniere, h1.banniere_en_preparation, h2.banniere, await fondBanniere(h3), h3.banniere_en_preparation],
         [200, null, true, null, '#1d3557', false]);

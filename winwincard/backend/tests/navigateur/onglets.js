@@ -21,7 +21,7 @@ const jwt = require('jsonwebtoken');
 // Bruit attendu d'un navigateur sans caméra ni réseau extérieur : pas une erreur du dashboard.
 const BRUIT = /Requested device not found|NotFoundError|NotAllowedError|getUserMedia|net::ERR_|Failed to load resource/;
 
-module.exports = async function ({ sql, verifier, secretJwt, urlServeur }) {
+module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) {
   let chromium;
   try { ({ chromium } = require('playwright')); }
   catch { throw new Error('Playwright introuvable : lancer avec NODE_PATH=$(npm root -g)'); }
@@ -33,6 +33,12 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur }) {
   // Une boutique pour que l'onglet Réseau s'affiche aussi.
   sql(`INSERT INTO points_de_vente (marchand_id, nom, actif, scanner_login) VALUES ('${id}', 'Boutique Thème', true, 'filet-theme-b1') ON CONFLICT DO NOTHING`);
   const jeton = jwt.sign({ role: 'marchand', marchand_id: id, tv: 1 }, secretJwt, { expiresIn: '1h' });
+  // « La caisse prime » : les bannières des aperçus se préparent en admin, comme en
+  // production. Ce module a son propre serveur (tests/lancer.js) : son cache
+  // mémoire est vide, et le banc n'a pas de stockage. L'ouverture de la fiche
+  // admin les prépare sur CE serveur.
+  const prep = await api('GET', `/api/admin/marchands/${id}/themes`, jwt.sign({ role: 'admin' }, secretJwt, { expiresIn: '1h' }));
+  if (prep.statut !== 200) throw new Error(`préparation des aperçus en admin : ${prep.statut}`);
 
   const sharp = require('sharp');
   const logo = svg => sharp(Buffer.from(svg)).png().toBuffer();

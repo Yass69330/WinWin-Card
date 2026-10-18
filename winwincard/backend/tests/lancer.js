@@ -301,31 +301,38 @@ if (require.main === module) (async () => {
   console.log(`base rejouée depuis le dépôt : ${nb} fichiers (schema.sql, migrations, rgpd_effacement.sql) + données du filet`);
   const urlSupabase = await demarrerPostgrest();
   const serveur = await demarrerServeur(urlSupabase);
-  const urlServeur = serveur.url;
 
-  const ctx = {
+  // Ce que voit un module de tests, pour un serveur donné.
+  const contexte = srv => ({
     sql: psqlSocket,
     sqlEnFond: psqlEnFond,
     verifier,
-    urlServeur,
-    journalServeur: serveur.journal,
+    urlServeur: srv.url,
+    journalServeur: srv.journal,
     secretJwt: SECRET_JWT,
     urlSupabase,
     cleService: jwt.sign({ role: 'service_role' }, SECRET_PGRST),
     demarrerServeur: (nom, url = urlSupabase, env = {}) => demarrerServeur(url, nom, env),
     demarrerPostgrest: options => demarrerPostgrest(options),
     async api(methode, chemin, jeton, corps) {
-      const r = await fetch(urlServeur + chemin, { method: methode,
+      const r = await fetch(srv.url + chemin, { method: methode,
         headers: { 'Content-Type': 'application/json', ...(jeton ? { Authorization: `Bearer ${jeton}` } : {}) },
         body: corps === undefined ? undefined : JSON.stringify(corps) });
       const t = await r.text();
       let c; try { c = JSON.parse(t); } catch { c = t; }
       return { statut: r.status, corps: c, retry: r.headers.get('retry-after') };
     },
-  };
-  await scenarios.jouer(ctx);
+  });
+  await scenarios.jouer(contexte(serveur));
+  // Chaque module en plus (tests navigateur) a son propre serveur neuf, sur la
+  // même base : le limiteur global (300 requêtes par 15 min et par adresse,
+  // src/index.js) repart de zéro. Avant (18/10), les scénarios l'avaient déjà
+  // épuisé et les tests navigateur recevaient des 429 (fiche_annulation 13b,
+  // cle_ecrans).
   for (const module of (process.env.FILET_EN_PLUS || '').split(',').filter(Boolean)) {
-    await require(path.resolve(module))(ctx);
+    const srv = await demarrerServeur(urlSupabase, `serveur-${path.basename(module, '.js')}`);
+    try { await require(path.resolve(module))(contexte(srv)); }
+    finally { srv.processus.kill('SIGTERM'); await srv.sortie; }
   }
 
   const ok = resultats.filter(Boolean).length;
