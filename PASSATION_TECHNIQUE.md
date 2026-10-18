@@ -7630,6 +7630,11 @@ bluemoon. **Résultat du 18/10** :
   À vérifier : deux bascules le même jour (un changement de thème = fin du thème en
   cours + ouverture du nouveau, chacune pousse tous les appareils). Requête par vague
   prête, à lancer pour shop-by-ness.
+- **Vagues du 16/10 (shop-by-ness)** : **une seule bascule** (08:09:14 → 08:09:42), 98 envois
+  Apple pour 98 couples appareil + carte (**1 par couple**) sur 49 cartes, plus 4 Google. Pas
+  de double bascule. Mais 98 inscriptions pour 49 cartes ce jour-là, contre ≈ 70 pour 52
+  aujourd'hui : une trentaine ont disparu depuis. Requête « disparus » prête : statut des 98
+  le 16/10, présence aujourd'hui, dernier statut depuis.
 - **Dette latente, inchangée** : le code ne retire jamais un jeton déclaré mort (410).
   Rien à corriger aujourd'hui (0 mort), mais à traiter avec l'étape 23 de la synthèse
   (« jetons morts »).
