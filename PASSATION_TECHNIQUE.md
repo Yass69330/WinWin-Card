@@ -7910,7 +7910,18 @@ le dépôt ? Réponse prouvée par deux rejeux locaux et par le projet de test :
   examinée. Hors production, il fait lire le résultat à l'envers. À renommer en
   « base examinée » (`generer.sh`, puis régénérer) ; petit, non fait.
 
-- **Filet instable (découvert le 17/10, t43)** : le scénario f17 « la caisse prime »
+- **Filet instable et tests navigateur cassés : RÉPARÉS le 18/10** (préalable du découpage du
+  dashboard). Causes réelles :
+  - **les deux tests navigateur** recevaient des **429** : les scénarios épuisaient le limiteur
+    global (300 / 15 min / adresse) avant eux. Désormais, chaque module `FILET_EN_PLUS` a son
+    propre serveur neuf (`tests/lancer.js`). `onglets.js` prépare ses aperçus en admin sur ce
+    serveur ;
+  - **le test f17 « la caisse prime »** tourne sur un marchand à part (aucune préparation en
+    arrière-plan en cours).
+  - Preuve : 8 passages de suite à 342/342 ; suite navigateur complète **421/421** (8 modules).
+  - Lancement de la suite complète, depuis `winwincard/backend` :
+    `NODE_PATH=/opt/node22/lib/node_modules FILET_EN_PLUS=$(ls tests/navigateur/*.js | tr '\n' ',' | sed 's/,$//') npm test`
+- **(historique) Filet instable (découvert le 17/10, t43)** : le scénario f17 « la caisse prime »
   (section 26) échoue environ 1 fois sur 3 à 4, **aussi sur le commit de production**
   (339/340). Cause probable : la préparation d'aperçus lancée en arrière-plan par la
   création admin des thèmes (`admin.js:994`, `suivre(preparerApercus)`) relit la liste
