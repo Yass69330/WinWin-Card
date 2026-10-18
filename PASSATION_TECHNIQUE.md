@@ -42,15 +42,15 @@ indiquée.
 ### 0.2 Production
 
 - Branche déployée : `claude/keen-goldberg-MXslu`, sur Railway, déployée à chaque
-  push. Dernier push : **`54a7768`** (18/10, 09:24 UTC, t43).
+  push. Dernier push : **`c523bb3`** (18/10, 16:12 UTC, campagnes ciblées).
   - Pousser en avance rapide seulement, sur feu vert de Yass.
   - La migration est exécutée dans Supabase AVANT le push du code qui en dépend.
 - Branche de travail des sessions : jamais poussée (consigne de Yass). Le crochet
   d'arrêt qui demande de la pousser est ignoré.
-- Dernière migration exécutée en production : **063** (15/10, 6 × true).
+- Dernière migration exécutée en production : **065** (18/10 : 064 index avant le push, 065 après ; 3 × true chacune).
 - Tests : `npm test` (filet `tests/lancer.js`, base jetable, PostgREST, vrai
   serveur, sections 0 à 26) avec contrôle de syntaxe des écrans. Dernier total :
-  **340/340** en production, 341/341 avec t43 (local). Tests navigateur hors `npm test` : `tests/navigateur/*.js`, avec
+  **342/342** (production, 18/10). Tests navigateur hors `npm test` : `tests/navigateur/*.js`, avec
   Playwright. Détail au §15 septquinquagies.
 - Commande :
   `PATH=~/.cache/winwin-filet/node-v24.21.0-linux-x64/bin:$PATH npm test`
@@ -77,6 +77,9 @@ indiquée.
     arrêt silencieux, registre `theme`).
   - Détail au §15 septquinquagies.
 - **t43** (clé d'idempotence obligatoire) : en production le 18/10. **Clos.**
+- **Campagnes ciblées** (index des segments + inactifs 60 j seulement) : en production le
+  18/10 (`665f57a`, migrations 064 et 065). Contrôle de Yass : déploiement vert, scan passé,
+  menu à 60 j, comptage sans erreur. **Clos.** Détail au §15 novoquinquagies.
 - **t37** (campagnes par lots, débit partagé de 30 iPhone par 10 s) : en
   production. **Clos.** C'est ce même débit qui protège la caisse pendant les
   envois de f10 et f17.
@@ -7517,7 +7520,7 @@ passent pas l'échelle.
 et la liste des clients est paginée avec un total exact (étape 21 ; 48 839 mesurés). Les deux
 points « dette de justesse silencieuse » de §0.5 sont donc soldés.
 
-**Lot préparé le 18/10 (commit local, NON POUSSÉ, en attente de la question des jetons)** :
+**Lot EN PRODUCTION le 18/10** (`665f57a`, poussé dans `54a7768..c523bb3` à 16:12 UTC ; 064 exécutée avant, 065 après, 3 × true chacune ; contrôle de Yass bon) :
 - migrations 064 (index, avant ou après le push) et 065 (`segment_valide` à 60 j
   seulement, **APRÈS** le push) ;
 - menu du dashboard : Tous / Inactifs 60 j / Fidèles / boutiques ;
