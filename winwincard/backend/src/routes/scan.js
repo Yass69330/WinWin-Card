@@ -405,9 +405,13 @@ async function creditReferrerIfApplicable(filleulClientId, marchandId, bonusPoin
 // donc le dashboard (mono-site + owner) reste inchangé.
 router.get('/', authScanner, asyncHandler(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 100, 200);
+  // ?lieu=1 (onglet Scans du dashboard) : + la boutique de chaque scan (null pour
+  // un mono-site), dans la même requête. Sans ce paramètre (la caisse), réponse
+  // inchangée.
+  const lieu = req.query.lieu === '1' ? ', point_de_vente_id, points_de_vente(nom)' : '';
   let query = supabase
     .from('scans')
-    .select('id, date_scan, stored_value_avant, stored_value_apres, annule_le, clients(id, prenom)')
+    .select(`id, date_scan, stored_value_avant, stored_value_apres, annule_le, clients(id, prenom)${lieu}`)
     .eq('marchand_id', req.marchandId);
   // Token boutique → historique scopé à SA boutique. Token marchand → tout le
   // marchand (comportement actuel, mono-site et dashboard).

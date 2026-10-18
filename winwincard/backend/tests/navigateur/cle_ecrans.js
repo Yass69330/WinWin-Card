@@ -186,7 +186,7 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     // le scan fait ensuite depuis l'onglet Scanner doit faire relire l'historique
     // (Scans.oublier, scans.js, t42).
     await db.page.waitForSelector('#stats-grid .stat-card');
-    await Promise.all([db.page.waitForResponse(r => r.url().endsWith('/api/scan') && r.request().method() === 'GET'),
+    await Promise.all([db.page.waitForResponse(r => r.url().includes('/api/scan?lieu=1') && r.request().method() === 'GET'),
       db.page.click('.nav-btn[data-tab="scans"]')]);
     await db.page.click('.nav-btn[data-tab="scanner"]');
     const k = client(M.tampons);
@@ -198,7 +198,7 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     verifier('dashboard : connexion perdue → panneau, « Réessayer » : même clé, rien recrédité, « Déjà enregistré »',
       [panneauDashboard, etat(k.id), db.cles.at(-1) === db.cles[0], await db.page.locator('#sc-deja').textContent()], [true, '1|1', true, DEJA_FR]);
     const lectures = [];
-    db.page.on('request', r => { if (r.url().endsWith('/api/scan') && r.method() === 'GET') lectures.push(r.url()); });
+    db.page.on('request', r => { if (r.url().includes('/api/scan?lieu=1') && r.method() === 'GET') lectures.push(r.url()); });
     await db.page.click('.nav-btn[data-tab="scans"]');
     await db.page.waitForSelector('#scans-list .scan-entry');
     const tete = await db.page.$eval('#scans-list .scan-entry', e => [e.querySelector('.scan-name').textContent.trim(), e.querySelector('.scan-pts').textContent.trim()]);

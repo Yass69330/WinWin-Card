@@ -168,6 +168,80 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     await ep.page.waitForTimeout(600);
     verifier('… « Oui » : 900 accepté et tracé (plus de plafond au seuil en points)', [solde(q.id), journal(q.id)], [900, '100→900']);
     await ep.page.context().close();
+
+    // ── Onglet Scans : lieu et annulation (18/10, scans.js) ──────────────────
+    titre('Navigateur : onglet Scans, lieu de chaque scan et « Annuler »');
+    const lignesScans = ecran => ecran.page.$$eval('#scans-list .scan-entry', els => els.map(e => ({
+      nom: e.querySelector('.scan-name').textContent.trim(),
+      temps: e.querySelector('.scan-time').textContent.trim(),
+      bouton: !!e.querySelector('.scan-undo'),
+      id: e.querySelector('.scan-undo') ? e.querySelector('.scan-undo').dataset.id : null,
+    })));
+    const ouvrirScans = async ecran => {
+      await Promise.all([ecran.page.waitForResponse(r => r.url().includes('/api/scan?lieu=1') && r.request().method() === 'GET'),
+        ecran.page.click('.nav-btn[data-tab="scans"]')]);
+      await ecran.page.waitForSelector('#scans-list .scan-entry');
+    };
+    const annulerDansScans = async (ecran, scanId) => {
+      await Promise.all([ecran.page.waitForResponse(r => r.url().includes('/api/scan?lieu=1') && r.request().method() === 'GET'),
+        ecran.page.click(`#scans-list .scan-undo[data-id="${scanId}"]`)]);
+      await ecran.page.waitForSelector('#scans-list .scan-entry');
+    };
+
+    // Réseau : la boutique s'affiche ; la caisse (sans ?lieu=1) reçoit la même réponse qu'avant.
+    const sr = client(M.reseau);
+    await api('POST', '/api/scan', jetonB(M.reseau, B.b1), { serial_number: sr.serial, cle_idempotence: crypto.randomUUID() });
+    const caisse = await api('GET', '/api/scan?limit=1', jetonB(M.reseau, B.b1));
+    const er = await ouvrir(M.reseau, 'filet-reseau');
+    await ouvrirScans(er);
+    const teteR = (await lignesScans(er))[0];
+    verifier('Scans (réseau) : la boutique du scan s\'affiche après l\'heure ; la caisse, sans ?lieu=1, ne reçoit ni lieu ni boutique (réponse inchangée)',
+      [/· Boutique 1$/.test(teteR.temps), Object.keys(caisse.corps[0]).sort().join(',')],
+      [true, 'annule_le,clients,date_scan,id,stored_value_apres,stored_value_avant']);
+    await er.page.context().close();
+
+    // Mono-boutique : pas de lieu ; « Annuler » seulement sur le dernier scan de chaque client.
+    const sm = client(M.tampons);
+    await api('POST', '/api/scan', tT, { serial_number: sm.serial, cle_idempotence: crypto.randomUUID() });   // 0 → 1
+    await api('POST', '/api/scan', tT, { serial_number: sm.serial, cle_idempotence: crypto.randomUUID() });   // 1 → 2
+    const dernierSm = lignesActives(sm.id)[0];
+    const em = await ouvrir(M.tampons, 'filet-tampons');
+    await ouvrirScans(em);
+    const lm = (await lignesScans(em)).slice(0, 2);
+    verifier('Scans (mono-boutique) : pas de lieu ; « Annuler » sur le dernier scan du client seulement (pas sur le précédent)',
+      [lm.map(l => / · /.test(l.temps)), lm.map(l => l.bouton), lm[0].id], [[false, false], [true, false], dernierSm]);
+
+    // « Annuler » → confirmation de la fiche, solde 2 → 1, le scan barré « annulé », le bouton passe au précédent.
+    em.dialogues.length = 0; em.accepter = true;
+    await annulerDansScans(em, dernierSm);
+    const apres = (await lignesScans(em)).slice(0, 2);
+    verifier('Scans : « Annuler » → même confirmation que la fiche, solde 2 → 1, scan annulé barré, « Annuler » passe au scan d\'avant',
+      [em.dialogues[0], solde(sm.id), /annulé$/.test(apres[0].temps), apres[0].bouton, apres[1].bouton],
+      ['Annuler ce passage ? Le solde revient à 1.', 1, true, false, true]);
+
+    // « Non » à la confirmation : rien ne bouge.
+    em.dialogues.length = 0; em.accepter = false;
+    await em.page.click(`#scans-list .scan-undo[data-id="${lignesActives(sm.id)[0]}"]`);
+    await em.page.waitForTimeout(400);
+    verifier('Scans : « Annuler » puis « Non » : rien ne bouge', [em.dialogues.length, solde(sm.id), lignesActives(sm.id).length], [1, 1, 1]);
+    em.accepter = true;
+
+    // Solde changé depuis le passage : refus de la base, même message que la fiche, rien d'écrit.
+    sql(`UPDATE clients SET stored_value = 7 WHERE id = '${sm.id}'`);
+    em.dialogues.length = 0;
+    await annulerDansScans(em, lignesActives(sm.id)[0]);
+    verifier('Scans : solde changé depuis le passage → « le solde a changé », rien ne bouge',
+      [em.dialogues[1], solde(sm.id), lignesActives(sm.id).length], ['Annulation impossible : le solde a changé depuis ce passage (ajustement).', 7, 1]);
+
+    // Double annulation : le passage annulé ailleurs entre-temps (bouton encore affiché) → « Déjà annulé. ».
+    sql(`UPDATE clients SET stored_value = 1 WHERE id = '${sm.id}'`);
+    const restant = lignesActives(sm.id)[0];
+    await api('POST', `/api/scan/${restant}/annuler`, tT);
+    em.dialogues.length = 0;
+    await annulerDansScans(em, restant);
+    verifier('Scans : passage déjà annulé ailleurs (bouton périmé) → « Déjà annulé. », aucune seconde annulation',
+      [em.dialogues[1], solde(sm.id), lignesActives(sm.id).length], ['Déjà annulé.', 0, 0]);
+    await em.page.context().close();
   } finally {
     await nav.close();
   }
