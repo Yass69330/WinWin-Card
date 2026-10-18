@@ -7517,6 +7517,14 @@ passent pas l'échelle.
 et la liste des clients est paginée avec un total exact (étape 21 ; 48 839 mesurés). Les deux
 points « dette de justesse silencieuse » de §0.5 sont donc soldés.
 
+**Lot préparé le 18/10 (commit local, NON POUSSÉ, en attente de la question des jetons)** :
+- migrations 064 (index, avant ou après le push) et 065 (`segment_valide` à 60 j
+  seulement, **APRÈS** le push) ;
+- menu du dashboard : Tous / Inactifs 60 j / Fidèles / boutiques ;
+- filet 342/342 (deux fois), `segments_ecran.js` vert.
+- Décision de Yass (18/10) : inactifs 60 j seulement. Le code proposait 15, 30 et 60
+  jours (pas 30 et 90) : 15 et 30 sont retirés.
+
 ### Volet 2 — f17 à l'échelle
 
 - **Débit partagé** : il ne couvre que les pushes Apple (`debit.js`). La voie Google d'une
@@ -7589,6 +7597,21 @@ points « dette de justesse silencieuse » de §0.5 sont donc soldés.
     - La vague du 15/10 (08:48–08:56, 7 envois pour 2 couples) regroupe plusieurs
       activations et arrêts du test du mécanisme en 8 minutes : ce n'est pas un doublon.
     - Pour shop-by-ness, il reste à départager (a) et (b) avec la requête ci-dessus.
+
+**Jetons Apple par carte (question du pilotage, 18/10)** : shop-by-ness donne 98 envois
+pour 49 cartes et 98 jetons. Lecture du code :
+- **toutes les surfaces** (scan via `lireCanaux`, relances `reserver_relances`, campagnes,
+  thèmes, géoloc, avis) envoient à **toutes** les lignes `device_tokens` d'une carte ;
+- **aucune colonne** ne distingue un jeton actif d'un jeton périmé ;
+- **aucun traitement des 410** (`Unregistered`) : le code ne retire jamais un jeton mort.
+  Seul le `DELETE` d'Apple (carte retirée de l'appareil) supprime une ligne ;
+- l'unicité `(device_id, serial_number)` fait qu'une réinscription du même appareil met
+  la ligne à jour. Un nouveau `device_id` (restauration, nouveau téléphone, montre) crée
+  en revanche une ligne de plus, qui reste pour toujours.
+
+Requête de diagnostic prête : statut du dernier envoi de chaque jeton
+(`md5(push_token)` = `token_hash`) sur 60 jours, pour shop-by-ness, boucherie et
+bluemoon. Résultat à noter ici.
 
 ### Volet 3 — Code mort (refait sur le code du 18/10)
 
