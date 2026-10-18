@@ -42,7 +42,7 @@ indiquée.
 ### 0.2 Production
 
 - Branche déployée : `claude/keen-goldberg-MXslu`, sur Railway, déployée à chaque
-  push. Dernier push : **`c523bb3`** (18/10, 16:12 UTC, campagnes ciblées).
+  push. Dernier push : **`cfe7d42`** (18/10, découpage du dashboard, onglet Notifications).
   - Pousser en avance rapide seulement, sur feu vert de Yass.
   - La migration est exécutée dans Supabase AVANT le push du code qui en dépend.
 - Branche de travail des sessions : jamais poussée (consigne de Yass). Le crochet
@@ -50,7 +50,7 @@ indiquée.
 - Dernière migration exécutée en production : **065** (18/10 : 064 index avant le push, 065 après ; 3 × true chacune).
 - Tests : `npm test` (filet `tests/lancer.js`, base jetable, PostgREST, vrai
   serveur, sections 0 à 26) avec contrôle de syntaxe des écrans. Dernier total :
-  **342/342** (production, 18/10). Tests navigateur hors `npm test` : `tests/navigateur/*.js`, avec
+  **342/342** filet seul, **424/424** avec les 8 tests navigateur (18/10). Tests navigateur hors `npm test` : `tests/navigateur/*.js`, avec
   Playwright. Détail au §15 septquinquagies.
 - Commande :
   `PATH=~/.cache/winwin-filet/node-v24.21.0-linux-x64/bin:$PATH npm test`
@@ -7696,6 +7696,35 @@ documentée), fonctions SQL sans appel.
    `admin.js` et `strip-generator.js` (aucun gain marchand). À revoir après le dashboard.
 - Pourquoi pas tout d'un coup : 2 800 lignes d'un bloc, impossible à relire ou à annuler
   proprement ; le pas à pas garde chaque push petit et réversible.
+
+## 15 tricies sexagies. t42 DÉCOUPAGE DU DASHBOARD — ONGLET 1/6 : NOTIFICATIONS (18/10, `cfe7d42`)
+
+**Modèle validé par le pilotage (vaut pour les 5 onglets suivants : Réseau, Scans, Clients,
+Aperçu, Scanner en dernier ; ni la caisse ni l'admin) :**
+- un fichier par onglet dans `public/dashboard/`, sur le modèle de `ma-carte.js` : HTML,
+  style (préfixé `#tab-xxx`), textes FR/EN et logique ; une seule entrée globale
+  (`window.Notifs`) ; n'écrit que dans son `#tab-xxx` ;
+- le cœur (`index.html`) garde `api`, `esc`, `t`, `_lang`, `timeAgo`, `S`, la navigation, les
+  forfaits, le style de base et les clés de texte partagées entre onglets (ex. `historyTitle`,
+  aussi utilisée par Scans) ;
+- **`?v=N` obligatoire** sur la balise, à changer à chaque modification du fichier : le
+  service worker du dashboard sert les JS depuis son cache ;
+- chargement en fin de page (pas à la première ouverture : à reconsidérer après les 6) ;
+- `setLang` émet `ww-langue` : un onglet déjà construit refait ses textes (la langue n'est
+  connue qu'au retour de `/me`, chargé par l'Aperçu) ;
+- fichier en panne → seul l'onglet affiche « indisponible » (test dans `onglets.js`) ;
+- un onglet par push ; contrôle à l'œil de Yass avant le suivant.
+
+**Notifications** : `notifs.js` (≈ 460 lignes) ; `index.html` −304 lignes. Mêmes requêtes aux
+mêmes moments (historique, comptage des destinataires, smart notifications). Correction du
+plan : la clé `message` ne servait qu'à cet onglet, elle est partie avec lui.
+- Tests : 424/424 (filet + 8 tests navigateur), dont trois nouveaux : syntaxe de
+  `notifs.js`, langue changée après ouverture (textes refaits, saisie gardée, aucune
+  requête), `notifs.js` cassé. Contre-épreuve sur la production : 342/342.
+- Retour arrière : `git revert cfe7d42`.
+- Code mort repéré au passage, laissé tel quel : clés `noDevices`, `appleLine`,
+  `googleLine`, `noDevicesShort` (et `received`) du dictionnaire, restes de l'affichage des
+  campagnes d'avant t37.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
