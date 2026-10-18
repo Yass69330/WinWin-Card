@@ -7582,6 +7582,13 @@ points « dette de justesse silencieuse » de §0.5 sont donc soldés.
     ```
     Lecture : appareils ≈ 98 → (a) ; appareils bien inférieurs à 98 → (b) ; appareils ≈ 49
     et deux vagues dans le temps → (c).
+  - **Test du 18/10 (hamza-salon, 2 clients, changement de thème à 12:46 UTC)** : 2 envois
+    Apple, 2 couples appareil + carte, **1 envoi par couple**. Une activation normale n'est
+    **pas doublée** : la cause (c) n'est pas reproduite. Elle reste possible seulement si un
+    redéploiement tombe pendant une bascule (non testé).
+    - La vague du 15/10 (08:48–08:56, 7 envois pour 2 couples) regroupe plusieurs
+      activations et arrêts du test du mécanisme en 8 minutes : ce n'est pas un doublon.
+    - Pour shop-by-ness, il reste à départager (a) et (b) avec la requête ci-dessus.
 
 ### Volet 3 — Code mort (refait sur le code du 18/10)
 
