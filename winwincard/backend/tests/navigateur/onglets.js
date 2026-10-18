@@ -190,6 +190,17 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
        rc.erreurs.length, /Unexpected|SyntaxError|expected/i.test(rc.erreurs[0] || '')],
       [true, 'Onglet momentanément indisponible. Rechargez la page.', 1, true]);
     await rc.contexte.close();
+
+    // 2 quater. scans.js cassé (t42) : seul « Scans » le dit.
+    const scc = await ouvrir({ casser: 'scans.js' });
+    const casseS = await toutOuvrir(scc.page);
+    await scc.page.click('.nav-btn[data-tab="scans"]');
+    const texteScans = (await scc.page.textContent('#tab-scans')).trim();
+    verifier('navigateur, « Scans » cassé (fichier invalide) : les autres onglets s\'ouvrent ; « Scans » affiche « indisponible » ; seule erreur : celle du fichier cassé',
+      [Object.entries(casseS.etat).filter(([o]) => o !== 'scans').every(([, v]) => v), texteScans,
+       scc.erreurs.length, /Unexpected|SyntaxError|expected/i.test(scc.erreurs[0] || '')],
+      [true, 'Onglet momentanément indisponible. Rechargez la page.', 1, true]);
+    await scc.contexte.close();
     console.log(`captures : ${captures}`);
   } finally {
     await navigateur.close();

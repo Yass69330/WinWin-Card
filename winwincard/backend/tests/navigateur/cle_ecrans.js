@@ -182,6 +182,13 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     titre('Navigateur : onglet scanner du dashboard');
     const db = await ouvrir('/dashboard/', { ww_dash_token: jeton(M.tampons), ww_dash_id: M.tampons, ww_dash_nom: 'Filet Tampons', ww_dash_slug: 'filet-tampons', ww_dash_lang: 'fr' });
     await db.page.waitForFunction(() => typeof submitScanDashboard === 'function' && S.token);
+    // Onglet Scans ouvert une première fois (historique lu et gardé en mémoire) :
+    // le scan fait ensuite depuis l'onglet Scanner doit faire relire l'historique
+    // (Scans.oublier, scans.js, t42).
+    await db.page.waitForSelector('#stats-grid .stat-card');
+    await Promise.all([db.page.waitForResponse(r => r.url().endsWith('/api/scan') && r.request().method() === 'GET'),
+      db.page.click('.nav-btn[data-tab="scans"]')]);
+    await db.page.click('.nav-btn[data-tab="scanner"]');
     const k = client(M.tampons);
     couper(db, 'perdre', 2);
     await db.page.evaluate(s => submitScanDashboard(s), k.serial);
@@ -190,6 +197,13 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     await db.page.waitForFunction(() => document.getElementById('sc-deja').style.display === 'block');
     verifier('dashboard : connexion perdue → panneau, « Réessayer » : même clé, rien recrédité, « Déjà enregistré »',
       [panneauDashboard, etat(k.id), db.cles.at(-1) === db.cles[0], await db.page.locator('#sc-deja').textContent()], [true, '1|1', true, DEJA_FR]);
+    const lectures = [];
+    db.page.on('request', r => { if (r.url().endsWith('/api/scan') && r.method() === 'GET') lectures.push(r.url()); });
+    await db.page.click('.nav-btn[data-tab="scans"]');
+    await db.page.waitForSelector('#scans-list .scan-entry');
+    const tete = await db.page.$eval('#scans-list .scan-entry', e => [e.querySelector('.scan-name').textContent.trim(), e.querySelector('.scan-pts').textContent.trim()]);
+    verifier('dashboard : après un scan depuis l\'onglet Scanner, l\'onglet Scans relit son historique (une lecture) et montre ce scan en tête',
+      [lectures.length, tete], [1, ['Ecran', '0 → 1']]);
     await db.page.context().close();
   } finally {
     await navigateur.close();

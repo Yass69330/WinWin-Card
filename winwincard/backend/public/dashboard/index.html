@@ -162,13 +162,6 @@
     .skeleton-card { height: 70px; border-radius: var(--radius); margin-bottom: 8px; }
 
     /* ═══════════════ HISTORIQUE SCANS ═══════════════ */
-    .scan-entry { background: var(--surface); border-radius: var(--radius); padding: 12px 14px; display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
-    .scan-avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; flex-shrink: 0; color: #fff; }
-    .scan-info { flex: 1; min-width: 0; }
-    .scan-name { font-size: 14px; font-weight: 600; }
-    .scan-time { font-size: 11px; color: var(--muted); }
-    .scan-delta { flex-shrink: 0; text-align: right; }
-    .scan-pts { font-size: 14px; font-weight: 700; }
 
     .tab-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
     .tab-header h2 { font-size: 17px; font-weight: 700; }
@@ -428,14 +421,8 @@
       <div id="clients-list"></div>
     </div>
 
-    <!-- ── Historique scans ── -->
-    <div id="tab-scans" class="tab-panel">
-      <div class="tab-header">
-        <h2 data-i18n="historyTitle">History</h2>
-        <button class="btn-refresh" id="btn-refresh-scans" title="Refresh" data-i18n-title="refresh">↺</button>
-      </div>
-      <div id="scans-list"></div>
-    </div>
+    <!-- ── Historique scans : tout le code dans scans.js (t42, découpage) ── -->
+    <div id="tab-scans" class="tab-panel"></div>
 
     <!-- ── Scanner ── -->
     <div id="tab-scanner" class="tab-panel">
@@ -679,7 +666,7 @@ const S = {
   token: null, marchandId: null, marchandNom: null, marchandSlug: null, maxValue: 10, displayMax: 10,
   forfait: null, coordonnees: null, typeProgramme: 'stamps',
   tab: 'overview',
-  clients: null, scans: null, stats: null, qr: null,
+  clients: null, stats: null, qr: null,
   deleteTargetId: null, deleteTargetNom: null,
   clientId: null, clientData: null,
 };
@@ -734,9 +721,7 @@ const I18N = {
     noResults:'No results', noClients:'No clients', tryAnotherName:'Try another name',
     clientsWillAppear:'Clients will appear here after sign-up',
     exportFailed:'Export failed', exportError:({msg})=>'Export error: '+msg,
-    historyTitle:'History', noScans:'No scans',
-    scansWillAppear:'Scan history will appear here after the first transactions',
-    rewardBadge:'🎉 Reward', resetBadge:'↩️ Reset',
+    historyTitle:'History',
     scanHint:"Point at the client's pass QR code", manualEntry:'Manual entry', points:'Points',
     rewardUnlocked:'Reward unlocked!',
     seuilTitre:({prenom})=>`Thanks for your loyalty ${prenom}`,
@@ -838,9 +823,7 @@ const I18N = {
     noResults:'Aucun résultat', noClients:'Aucun client', tryAnotherName:'Essayez un autre nom',
     clientsWillAppear:'Les clients apparaîtront ici après leur inscription',
     exportFailed:"Échec de l'export", exportError:({msg})=>'Erreur export : '+msg,
-    historyTitle:'Historique', noScans:'Aucun scan',
-    scansWillAppear:"L'historique des scans apparaîtra ici après les premières transactions",
-    rewardBadge:'🎉 Récompense', resetBadge:'↩️ Remise à zéro',
+    historyTitle:'Historique',
     scanHint:'Visez le QR code du pass du client', manualEntry:'Saisie manuelle', points:'Points',
     rewardUnlocked:'Récompense débloquée !',
     seuilTitre:({prenom})=>`Merci pour ta fidélité, ${prenom}`,
@@ -1083,7 +1066,8 @@ function showErr(el, msg) { el.textContent = msg; el.style.display = 'block'; }
 document.getElementById('btn-logout').addEventListener('click', () => {
   if (!confirm(t('signOutConfirm'))) return;
   clearSession();
-  S.clients = null; S.scans = null; S.stats = null; S.qr = null;
+  S.clients = null; S.stats = null; S.qr = null;
+  if (window.Scans) window.Scans.oublier();
   if (window.Notifs) window.Notifs.oublier();
   if (window.Reseau) window.Reseau.oublier();   // jamais les chiffres d'un réseau au compte suivant
   S.clientsQ = ''; document.getElementById('search-clients').value = '';
@@ -1109,9 +1093,12 @@ function switchTab(tab) {
     else document.getElementById('tab-reseau').innerHTML = `<div class="alert alert-info">${esc(_lang === 'fr' ? 'Onglet momentanément indisponible. Rechargez la page.' : 'Tab temporarily unavailable. Reload the page.')}</div>`;
   }
   if (tab === 'clients')  loadClients();
-  if (tab === 'scans')    loadScans();
+  if (tab === 'scans') {
+    if (window.Scans) window.Scans.charger();
+    else document.getElementById('tab-scans').innerHTML = `<div class="alert alert-info">${esc(_lang === 'fr' ? 'Onglet momentanément indisponible. Rechargez la page.' : 'Tab temporarily unavailable. Reload the page.')}</div>`;
+  }
   if (tab === 'scanner')  startScannerTab();
-  // « Réseau » (reseau.js), « Notifications » (notifs.js) et « Ma carte » (ma-carte.js) vivent dans leur
+  // « Réseau » (reseau.js), « Scans » (scans.js), « Notifications » (notifs.js) et « Ma carte » (ma-carte.js) vivent dans leur
   // fichier : s'il ne charge pas, seul cet onglet l'affiche, les autres continuent.
   if (tab === 'notifs') {
     if (window.Notifs) window.Notifs.charger();
@@ -1404,50 +1391,6 @@ document.getElementById('btn-export-csv').addEventListener('click', async () => 
     btn.disabled = false; btn.textContent = t('csvBtn');
   }
 });
-
-// ════════════════════════════════════════════════
-// TAB: HISTORIQUE SCANS
-// ════════════════════════════════════════════════
-async function loadScans(force = false) {
-  if (!force && S.scans) { renderScans(); return; }
-  document.getElementById('scans-list').innerHTML = Array(5).fill('<div class="skeleton skeleton-card"></div>').join('');
-  try {
-    const res = await api('/api/scan');
-    const data = await res.json();
-    S.scans = Array.isArray(data) ? data : [];
-    renderScans();
-  } catch (e) {
-    document.getElementById('scans-list').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
-  }
-}
-
-function renderScans() {
-  const el = document.getElementById('scans-list');
-  if (!Array.isArray(S.scans) || S.scans.length === 0) {
-    el.innerHTML = `<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">${t('noScans')}</div><div class="empty-sub">${t('scansWillAppear')}</div></div>`;
-    return;
-  }
-  el.innerHTML = S.scans.map(s => {
-    const prenom = s.clients?.prenom || '?';
-    const avant  = s.stored_value_avant;
-    const apres  = s.stored_value_apres;
-    const reward = apres >= S.maxValue;
-    const reset  = apres === 0 && avant > 0;
-    const delta  = reward
-      ? `<div class="scan-pts" style="color:var(--warning)">${t('rewardBadge')}</div><div style="font-size:11px;color:var(--muted)">${avant} → ${apres}</div>`
-      : reset
-        ? `<div class="scan-pts" style="color:var(--accent)">${t('resetBadge')}</div><div style="font-size:11px;color:var(--muted)">${avant} → 0</div>`
-        : `<div class="scan-pts">${avant} → ${apres}</div>`;
-    const annule = !!s.annule_le;
-    return `<div class="scan-entry"${annule ? ' style="opacity:.5"' : ''}>
-      <div class="scan-avatar" style="background:${colorFrom(prenom)}">${prenom.charAt(0).toUpperCase()}</div>
-      <div class="scan-info"><div class="scan-name"${annule ? ' style="text-decoration:line-through"' : ''}>${esc(prenom)}</div><div class="scan-time">${timeAgo(s.date_scan)}${annule ? ' · ' + t('scanAnnule') : ''}</div></div>
-      <div class="scan-delta">${delta}</div>
-    </div>`;
-  }).join('');
-}
-
-document.getElementById('btn-refresh-scans').addEventListener('click', () => { S.scans = null; loadScans(true); });
 
 // ════════════════════════════════════════════════
 // TAB: SCANNER
@@ -1781,7 +1724,7 @@ async function submitScanDashboard(serial, points) {
   // Réponse claire (succès ou refus) : la clé a servi.
   oublierCle();
   SC.scanning = false;
-  S.scans = null; // invalidate scan history cache
+  if (window.Scans) window.Scans.oublier();   // historique de l'onglet Scans à relire
 
   const code = data.error;
   if (res.status === 401 || (res.status === 403 && (code === 'session_revoked' || code === 'Accès refusé'))) {
@@ -2221,7 +2164,7 @@ document.getElementById('cs-scans-list').addEventListener('click', async e => {
   } catch (err) {
     alert(err.message);
   }
-  S.scans = null;   // historique de l'onglet Scans à relire
+  if (window.Scans) window.Scans.oublier();   // historique de l'onglet Scans à relire
   if (S.clientId === id) openClientSheet(id);
 });
 
@@ -2426,6 +2369,7 @@ if (restoreSession()) showDashboard();
      du fichier (le service worker sert les JS depuis son cache). -->
 <script src="/dashboard/notifs.js?v=1"></script>
 <script src="/dashboard/reseau.js?v=1"></script>
+<script src="/dashboard/scans.js?v=1"></script>
 <script src="/dashboard/ma-carte.js?v=1"></script>
 </body>
 </html>
