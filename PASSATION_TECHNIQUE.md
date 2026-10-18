@@ -42,7 +42,7 @@ indiquée.
 ### 0.2 Production
 
 - Branche déployée : `claude/keen-goldberg-MXslu`, sur Railway, déployée à chaque
-  push. Dernier push : **`bf65066`** (18/10, découpage du dashboard, onglet Scans).
+  push. Dernier push : **`abcede9`** (18/10, onglet Scans : lieu et annulation).
   - Pousser en avance rapide seulement, sur feu vert de Yass.
   - La migration est exécutée dans Supabase AVANT le push du code qui en dépend.
 - Branche de travail des sessions : jamais poussée (consigne de Yass). Le crochet
@@ -50,7 +50,7 @@ indiquée.
 - Dernière migration exécutée en production : **065** (18/10 : 064 index avant le push, 065 après ; 3 × true chacune).
 - Tests : `npm test` (filet `tests/lancer.js`, base jetable, PostgREST, vrai
   serveur, sections 0 à 26) avec contrôle de syntaxe des écrans. Dernier total :
-  **342/342** filet seul, **431/431** avec les 8 tests navigateur (18/10). Tests navigateur hors `npm test` : `tests/navigateur/*.js`, avec
+  **342/342** filet seul, **437/437** avec les 8 tests navigateur (18/10). Tests navigateur hors `npm test` : `tests/navigateur/*.js`, avec
   Playwright. Détail au §15 septquinquagies.
 - Commande :
   `PATH=~/.cache/winwin-filet/node-v24.21.0-linux-x64/bin:$PATH npm test`
@@ -7750,6 +7750,17 @@ plan : la clé `message` ne servait qu'à cet onglet, elle est partie avec lui.
 - Tests : 431/431 (relecture après un scan depuis l'onglet Scanner, `scans.js` cassé).
   Filet de la production : 344/344.
 - Retour arrière : `git revert bf65066`.
+- **Contrôle de Yass (18/10)** : onglet Scans validé à l'œil. (Réseau : le pilotage a enchaîné sur
+  Scans après le contrôle, sans signaler de problème.)
+- **Lieu et annulation depuis l'onglet Scans** (18/10, `abcede9`, chantier à part) :
+  - `GET /api/scan?lieu=1` (dashboard seulement) ajoute `point_de_vente_id, points_de_vente(nom)`
+    dans la même requête ; **la caisse lit sans ce paramètre : réponse inchangée** (testé) ;
+  - « Annuler » réutilise l'annulation de la fiche client : même route, confirmation et refus ;
+    bouton sur le dernier scan actif de chaque client ; garde-fous en base inchangés
+    (`annuler_scan`, 052 : déjà annulé, plus le dernier mouvement, solde changé, verrou) ;
+  - limite connue, inchangée : la date d'annulation est gardée (`annule_le`), pas son auteur
+    (il faudrait une colonne, donc une migration ; non demandé) ;
+  - tests 437/437 ; retour arrière : `git revert abcede9`.
 - **Découpage en pause après cet onglet** (décision du pilotage) : Clients, Aperçu, puis Scanner
   la semaine suivante. Ensuite (chantier à part) : lieu de chaque scan et annulation depuis
   l'onglet Scans, en réutilisant l'annulation de la fiche client.
