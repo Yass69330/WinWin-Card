@@ -7722,6 +7722,9 @@ plan : la clé `message` ne servait qu'à cet onglet, elle est partie avec lui.
   `notifs.js`, langue changée après ouverture (textes refaits, saisie gardée, aucune
   requête), `notifs.js` cassé. Contre-épreuve sur la production : 342/342.
 - Retour arrière : `git revert cfe7d42`.
+- **Contrôle de Yass (18/10)** : déploiement vert, 6 points vérifiés à l'œil (onglet, menu à 60 j
+  et comptage, compteur de caractères, historique, smart notifs « Modifier » / « Fermer »,
+  saisie gardée et tout en français). **Onglet 1/6 validé.**
 - Code mort repéré au passage, laissé tel quel : clés `noDevices`, `appleLine`,
   `googleLine`, `noDevicesShort` (et `received`) du dictionnaire, restes de l'affichage des
   campagnes d'avant t37.
