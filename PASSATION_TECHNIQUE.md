@@ -42,7 +42,7 @@ indiquée.
 ### 0.2 Production
 
 - Branche déployée : `claude/keen-goldberg-MXslu`, sur Railway, déployée à chaque
-  push. Dernier push : **`cfe7d42`** (18/10, découpage du dashboard, onglet Notifications).
+  push. Dernier push : **`cfe7d42`** (18/10, découpage du dashboard, onglet Réseau `4a73f06`).
   - Pousser en avance rapide seulement, sur feu vert de Yass.
   - La migration est exécutée dans Supabase AVANT le push du code qui en dépend.
 - Branche de travail des sessions : jamais poussée (consigne de Yass). Le crochet
@@ -50,7 +50,7 @@ indiquée.
 - Dernière migration exécutée en production : **065** (18/10 : 064 index avant le push, 065 après ; 3 × true chacune).
 - Tests : `npm test` (filet `tests/lancer.js`, base jetable, PostgREST, vrai
   serveur, sections 0 à 26) avec contrôle de syntaxe des écrans. Dernier total :
-  **342/342** filet seul, **424/424** avec les 8 tests navigateur (18/10). Tests navigateur hors `npm test` : `tests/navigateur/*.js`, avec
+  **342/342** filet seul, **428/428** avec les 8 tests navigateur (18/10). Tests navigateur hors `npm test` : `tests/navigateur/*.js`, avec
   Playwright. Détail au §15 septquinquagies.
 - Commande :
   `PATH=~/.cache/winwin-filet/node-v24.21.0-linux-x64/bin:$PATH npm test`
@@ -7728,6 +7728,18 @@ plan : la clé `message` ne servait qu'à cet onglet, elle est partie avec lui.
 - Code mort repéré au passage, laissé tel quel : clés `noDevices`, `appleLine`,
   `googleLine`, `noDevicesShort` (et `received`) du dictionnaire, restes de l'affichage des
   campagnes d'avant t37.
+
+**Onglet 2/6 : Réseau** (18/10, `4a73f06`) : `reseau.js` (`window.Reseau`) ; `index.html` −90 lignes.
+- Restent au cœur, partagés avec l'Aperçu : `statsBlocHtml` / `statsPanneHtml` (mêmes cartes,
+  vérifié par `apercu_ecrans.js`) et leurs clés `rsDistribTitle`, `rsLessThan`, `rsMoreThan`,
+  `rsVisitsCaption`, `rsDistEmpty` ; la gestion des boutiques (`renderPdv`, `renamePdv`,
+  `toggleActif`), affichée dans l'Aperçu, qui partira avec lui (5/6).
+- **Fuite corrigée (décision du pilotage)** : la déconnexion n'oubliait pas `S.reseau`. Sans
+  recharger la page, le compte réseau suivant voyait les chiffres du précédent. `Reseau.oublier()`
+  à la déconnexion ; test dédié, qui échoue sur l'ancien dashboard.
+- Tests : 428/428 (déconnexion puis autre réseau, tri par colonne, `reseau.js` cassé).
+- Retour arrière : `git revert 4a73f06`.
+- Code mort repéré : clés `rsPorteurs`, `rsActifs30`, `rsNouveaux`, `rsRetour`, `rsLoadError`.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
