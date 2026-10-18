@@ -2106,34 +2106,38 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       const r = await api('GET', '/api/notifications/destinataires' + (seg ? '?segment=' + encodeURIComponent(JSON.stringify(seg)) : ''), tS);
       return r.statut === 200 ? r.corps.destinataires : r.statut;
     };
-    const comptes = [await compter(null), await compter({ type: 'inactifs', jours: 15 }), await compter({ type: 'inactifs', jours: 30 }),
-      await compter({ type: 'inactifs', jours: 60 }), await compter({ type: 'fideles' }),
+    const comptes = [await compter(null), await compter({ type: 'inactifs', jours: 60 }), await compter({ type: 'fideles' }),
       await compter({ type: 'boutique', boutique: BS1 }), await compter({ type: 'boutique', boutique: BS2 })];
-    // Tous : 10 joignables (le fantôme masqué). Inactifs 15 : Inactif40, Inactif20, Vieux (Relance exclu : relancé
-    // aujourd'hui). 30 : Inactif40, Vieux. 60 : Vieux. Fidèles (> 2 jours sur 30) : Fidele. Rive gauche (90 j) :
-    // Inactif40, Actif5 (pas Vieux, 100 j). Rive droite : Inactif20, Fidele.
-    verifier('compteur de destinataires : tous 10 ; inactifs 15/30/60 j : 3/2/1 (jamais venus exclus, relancé du jour exclu) ; fidèles 1 ; boutiques 2 et 2',
-      comptes, [10, 3, 2, 1, 1, 2, 2]);
-    const refus = [await compter({ type: 'inactifs', jours: 20 }), await compter({ type: 'boutique', boutique: BAUTRE }),
+    // Tous : 10 joignables (le fantôme masqué). Inactifs 60 : Vieux (jamais venus exclus). Fidèles (> 2 jours
+    // sur 30) : Fidele. Rive gauche (90 j) : Inactif40, Actif5 (pas Vieux, 100 j). Rive droite : Inactif20, Fidele.
+    verifier('compteur de destinataires : tous 10 ; inactifs 60 j : 1 ; fidèles 1 ; boutiques 2 et 2',
+      comptes, [10, 1, 1, 2, 2]);
+    const refus = [await compter({ type: 'inactifs', jours: 15 }), await compter({ type: 'inactifs', jours: 30 }),
+      await compter({ type: 'inactifs', jours: 20 }), await compter({ type: 'boutique', boutique: BAUTRE }),
       await compter({ type: 'nimporte' }), (await api('GET', '/api/notifications/destinataires?segment=%7Bpas-du-json', tS)).statut];
-    verifier('segment refusé (400) : 20 jours, boutique d\'un autre marchand, type inconnu, JSON illisible', refus, [400, 400, 400, 400]);
+    verifier('segment refusé (400) : inactifs 15 et 30 j (retirés, migration 065), 20 jours, boutique d\'un autre marchand, type inconnu, JSON illisible',
+      refus, [400, 400, 400, 400, 400, 400]);
+    // Migration 064 : les deux index des segments, l'ancien index des scans retiré (même nombre d'index).
+    verifier('index des segments (064) : scans (client, date) et relances (client, date) présents, idx_scans_client retiré',
+      sql(`SELECT (to_regclass('idx_scans_client_date') IS NOT NULL) || ',' || (to_regclass('idx_wf_exec_client_date') IS NOT NULL) || ',' || (to_regclass('idx_scans_client') IS NULL)`),
+      'true,true,true');
 
     // ── Segments : la campagne envoie exactement au segment ──
     const lotsDe = id => ({
       apple: (sqlOuNull(`SELECT string_agg(serial_number, ',') FROM campagne_lot_apple('${id}', NULL, 1000)`) || '').split(',').filter(Boolean),
       google: (sqlOuNull(`SELECT string_agg(serial_number, ',') FROM campagne_lot_google('${id}', NULL, 1000)`) || '').split(',').filter(Boolean),
     });
-    const envoi = await api('POST', '/api/notifications', tS, { message: 'Revenez !', segment: { type: 'inactifs', jours: 15 } });
+    const envoi = await api('POST', '/api/notifications', tS, { message: 'Revenez !', segment: { type: 'inactifs', jours: 60 } });
     const idC = envoi.corps && envoi.corps.campagne_id;
     const lotsC = idC ? lotsDe(idC) : { apple: [], google: [] };
-    verifier('campagne « inactifs 15 j » : 202, voie Apple = Inactif40 + Vieux, voie Google = Inactif20 (même définition que le compteur)',
+    verifier('campagne « inactifs 60 j » : 202, voie Apple = Vieux, voie Google vide (même définition que le compteur)',
       [envoi.statut, lotsC.apple.sort().join(','), lotsC.google.join(',')],
-      [202, [C.inact40.serial, C.vieux.serial].sort().join(','), C.inact20.serial]);
+      [202, C.vieux.serial, '']);
     if (idC) await attendre(() => sqlOuNull(`SELECT statut FROM campagnes WHERE id = '${idC}'`) === 'terminee', 15000);
     const hist = await api('GET', '/api/notifications', tS);
     const ligneHist = ((hist.corps && hist.corps.logs) || []).find(l => l.message === 'Revenez !');
     verifier('… historique : la campagne porte son segment ; elle compte dans le quota comme une autre',
-      [ligneHist && JSON.stringify(ligneHist.segment), hist.corps.quota && hist.corps.quota.used], [JSON.stringify({ type: 'inactifs', jours: 15 }), 1]);
+      [ligneHist && JSON.stringify(ligneHist.segment), hist.corps.quota && hist.corps.quota.used], [JSON.stringify({ type: 'inactifs', jours: 60 }), 1]);
     const lB = JSON.parse(sqlOuNull(`SELECT lancer_campagne('${MS}', 'Boutique', 5, date_trunc('month', now()), '{"type":"boutique","boutique":"${BS2}"}')`) || '{}');
     const segB = lB.campagne_id ? sqlOuNull(`SELECT segment FROM campagnes WHERE id = '${lB.campagne_id}'`) : null;
     const lotsB = lB.campagne_id ? lotsDe(lB.campagne_id) : { apple: [], google: [] };

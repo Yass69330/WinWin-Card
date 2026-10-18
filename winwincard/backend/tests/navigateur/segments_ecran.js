@@ -5,7 +5,7 @@
 //
 // Joué APRÈS les scénarios : il réutilise le marchand de la section 23
 // (« Filet Segments », un réseau de deux boutiques, 10 vrais clients).
-//   - le menu propose Tous, Inactifs 15/30/60 j, Les plus fidèles, et une ligne
+//   - le menu propose Tous, Inactifs 60 j (migration 065), Les plus fidèles, et une ligne
 //     par boutique ;
 //   - le nombre de destinataires suit le choix (mêmes chiffres que l'API) ;
 //   - l'historique affiche le segment de la campagne.
@@ -46,18 +46,18 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur }) {
       await page.waitForFunction(() => !/Comptage/.test(document.getElementById('notif-dest').textContent));
       return (await page.textContent('#notif-dest')).trim();
     };
-    const inactifs15 = await choisir('Inactifs depuis 15 jours');
+    const inactifs60 = await choisir('Inactifs depuis 60 jours');
     const fideles = await choisir('Les plus fidèles');
     const gauche = await choisir('Clients de Rive gauche');
     await page.locator('#tab-notifs').screenshot({ path: path.join(captures, 'segments-notifications.png') });
     const historique = (await page.locator('#notif-history-list').innerText());
-    verifier('navigateur : menu des segments (Tous, inactifs 15/30/60 j, fidèles, une ligne par boutique)',
-      options, ['Tous les clients', 'Inactifs depuis 15 jours', 'Inactifs depuis 30 jours', 'Inactifs depuis 60 jours',
+    verifier('navigateur : menu des segments (Tous, inactifs 60 j, fidèles, une ligne par boutique)',
+      options, ['Tous les clients', 'Inactifs depuis 60 jours',
         'Les plus fidèles', 'Clients de Rive droite', 'Clients de Rive gauche']);
-    verifier('navigateur : le nombre de destinataires suit le choix (10, 3, 1, 2)',
-      [tous, inactifs15, fideles, gauche],
-      ['10 clients recevront ce message', '3 clients recevront ce message', '1 client recevra ce message', '2 clients recevront ce message']);
-    verifier('navigateur : l\'historique affiche le segment de la campagne', /Inactifs depuis 15 jours/.test(historique), true);
+    verifier('navigateur : le nombre de destinataires suit le choix (10, 1, 1, 2)',
+      [tous, inactifs60, fideles, gauche],
+      ['10 clients recevront ce message', '1 client recevra ce message', '1 client recevra ce message', '2 clients recevront ce message']);
+    verifier('navigateur : l\'historique affiche le segment de la campagne', /Inactifs depuis 60 jours/.test(historique), true);
     await contexte.close();
     console.log(`captures : ${captures}`);
   } finally {

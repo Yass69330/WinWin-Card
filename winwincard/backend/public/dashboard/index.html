@@ -2298,7 +2298,8 @@ document.getElementById('notif-form').addEventListener('submit', async () => {
   }
 });
 
-// Segments (migration 059) : un seul à la fois. « Clients d'une boutique » pour
+// Segments (migration 059) : un seul à la fois. Inactifs : 60 jours seulement
+// (migration 065 ; en dessous, les relances automatiques s'en chargent). « Clients d'une boutique » pour
 // les réseaux seulement (S.pdv non vide). Le nombre de destinataires est lu à la
 // demande, à chaque choix — jamais en boucle.
 function libelleSegment(seg) {
@@ -2312,7 +2313,7 @@ function remplirSegments() {
   const sel = document.getElementById('notif-segment');
   if (!sel) return;
   const avant = sel.value;
-  const options = [null, { type: 'inactifs', jours: 15 }, { type: 'inactifs', jours: 30 }, { type: 'inactifs', jours: 60 }, { type: 'fideles' }]
+  const options = [null, { type: 'inactifs', jours: 60 }, { type: 'fideles' }]
     .concat((Array.isArray(S.pdv) ? S.pdv : []).map(b => ({ type: 'boutique', boutique: b.id, nom: b.nom })));
   sel.innerHTML = options.map(o => `<option value="${esc(o ? JSON.stringify(o) : '')}">${esc(libelleSegment(o))}</option>`).join('');
   if ([...sel.options].some(o => o.value === avant)) sel.value = avant;
