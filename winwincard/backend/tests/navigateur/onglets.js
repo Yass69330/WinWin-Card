@@ -179,6 +179,17 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
        n.erreurs.length, /Unexpected|SyntaxError|expected/i.test(n.erreurs[0] || '')],
       [true, 'Onglet momentanément indisponible. Rechargez la page.', true, 1, true]);
     await n.contexte.close();
+
+    // 2 ter. reseau.js cassé (t42) : seul « Réseau » le dit.
+    const rc = await ouvrir({ casser: 'reseau.js' });
+    const casseR = await toutOuvrir(rc.page);
+    await rc.page.click('.nav-btn[data-tab="reseau"]');
+    const texteReseau = (await rc.page.textContent('#tab-reseau')).trim();
+    verifier('navigateur, « Réseau » cassé (fichier invalide) : les autres onglets s\'ouvrent ; « Réseau » affiche « indisponible » ; seule erreur : celle du fichier cassé',
+      [Object.entries(casseR.etat).filter(([o]) => o !== 'reseau').every(([, v]) => v), texteReseau,
+       rc.erreurs.length, /Unexpected|SyntaxError|expected/i.test(rc.erreurs[0] || '')],
+      [true, 'Onglet momentanément indisponible. Rechargez la page.', 1, true]);
+    await rc.contexte.close();
     console.log(`captures : ${captures}`);
   } finally {
     await navigateur.close();

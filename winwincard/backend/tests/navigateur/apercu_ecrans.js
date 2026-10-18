@@ -76,6 +76,37 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur }) {
     verifier('réseau : l\'Aperçu et l\'onglet Réseau affichent exactement les mêmes cartes ; le tableau par boutique reste dans l\'onglet Réseau',
       [JSON.stringify(cApercu) === JSON.stringify(cReseau), cApercu.length, await reseau.locator('#tab-reseau table.rs-table').count()],
       [true, 6, 1]);
+
+    const nomsTableau = page => page.$$eval('#tab-reseau table.rs-table tbody tr td:first-child', tds => tds.map(td => td.textContent.trim()));
+
+    // Déconnexion puis connexion d'un AUTRE réseau, sans recharger la page : l'onglet
+    // Réseau montre le nouveau réseau, jamais les chiffres du précédent (défaut
+    // corrigé au découpage, 18/10 : avant, la mémoire du réseau survivait).
+    const nomsA = await nomsTableau(reseau);
+    reseau.removeAllListeners('dialog');
+    reseau.on('dialog', d => d.accept().catch(() => {}));
+    await reseau.click('#btn-logout');
+    await reseau.waitForSelector('#screen-login.active');
+    const [idB, nomB] = marchand('filet-reseau');
+    const jetonB = jwt.sign({ role: 'marchand', marchand_id: idB, tv: 1 }, secretJwt, { expiresIn: '1h' });
+    await reseau.evaluate(d => { saveSession(d); showDashboard(); }, { token: jetonB, marchand_id: idB, nom: nomB, slug: 'filet-reseau' });
+    await reseau.waitForSelector('#nav-reseau', { state: 'visible' });
+    await reseau.click('#nav-reseau');
+    await reseau.waitForSelector('#tab-reseau table.rs-table');
+    const nomsB = await nomsTableau(reseau);
+    const boutiquesB = sql(`SELECT string_agg(nom, '|') FROM points_de_vente WHERE marchand_id = '${idB}'`).split('|');
+    verifier('déconnexion puis autre réseau (même page) : l\'onglet Réseau montre les boutiques du nouveau compte, aucune de l\'ancien',
+      [nomsB.some(n => boutiquesB.some(b => n.startsWith(b))), nomsB.some(n => nomsA.includes(n))], [true, false]);
+
+    // Tri du tableau (reseau.js, t42), sur ce réseau à plusieurs boutiques : un clic
+    // sur « Boutique » trie A → Z, un second Z → A.
+    await reseau.click('#tab-reseau th[data-sort="nom"]');
+    const az = await nomsTableau(reseau);
+    await reseau.click('#tab-reseau th[data-sort="nom"]');
+    const za = await nomsTableau(reseau);
+    const triAZ = [...az].sort((x, y) => x.toLowerCase() < y.toLowerCase() ? -1 : x.toLowerCase() > y.toLowerCase() ? 1 : 0);
+    verifier('réseau : clic sur « Boutique » → tri A → Z, second clic → Z → A',
+      [az.length > 1, JSON.stringify(az) === JSON.stringify(triAZ), JSON.stringify(za) === JSON.stringify([...triAZ].reverse())], [true, true, true]);
     await reseau.context().close();
 
     titre('Navigateur : statistiques en panne');
