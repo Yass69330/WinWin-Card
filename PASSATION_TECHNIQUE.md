@@ -7632,9 +7632,15 @@ bluemoon. **Résultat du 18/10** :
   prête, à lancer pour shop-by-ness.
 - **Vagues du 16/10 (shop-by-ness)** : **une seule bascule** (08:09:14 → 08:09:42), 98 envois
   Apple pour 98 couples appareil + carte (**1 par couple**) sur 49 cartes, plus 4 Google. Pas
-  de double bascule. Mais 98 inscriptions pour 49 cartes ce jour-là, contre ≈ 70 pour 52
-  aujourd'hui : une trentaine ont disparu depuis. Requête « disparus » prête : statut des 98
-  le 16/10, présence aujourd'hui, dernier statut depuis.
+  de double bascule.
+  - Requête « disparus » (18/10) : **les 98 inscriptions sont toujours là, toutes en 200** le
+    16/10 et depuis. Aucun jeton mort, aucune inscription disparue. Mon estimation d'≈ 70
+    inscriptions aujourd'hui était fausse : la colonne « 3 et plus » cachait le total.
+  - Explication : 39 cartes × 1 + 9 × 2 = 57 ; les 4 cartes « 3 et plus » portent donc ≈ 41
+    inscriptions (≈ 10 appareils chacune, sans doute des cartes de démonstration ou de
+    l'équipe). La moyenne « 2 par carte » est un artefact de ces 4 cartes.
+  - **Clos : pas de bug d'envoi, pas de rafale cachée.** Chaque envoi va à un appareil
+    vivant qui porte la carte.
 - **Dette latente, inchangée** : le code ne retire jamais un jeton déclaré mort (410).
   Rien à corriger aujourd'hui (0 mort), mais à traiter avec l'étape 23 de la synthèse
   (« jetons morts »).
