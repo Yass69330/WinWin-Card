@@ -7611,7 +7611,28 @@ pour 49 cartes et 98 jetons. Lecture du code :
 
 Requête de diagnostic prête : statut du dernier envoi de chaque jeton
 (`md5(push_token)` = `token_hash`) sur 60 jours, pour shop-by-ness, boucherie et
-bluemoon. Résultat à noter ici.
+bluemoon. **Résultat du 18/10** :
+
+| marchand | cartes iPhone | 1 inscr. | 2 inscr. | 3+ | multi toutes vivantes | multi avec jeton mort | inscr. mortes |
+|---|---|---|---|---|---|---|---|
+| bluemoon-boston | 32 | 21 | 8 | 3 | 11 | 0 | 0 |
+| boucherie-republique | 188 | 145 | 32 | 11 | 43 | 0 | 0 |
+| shop-by-ness | 52 | 39 | 9 | 4 | 13 | 0 | 0 |
+
+- **Aucun jeton mort** (aucun 410 sur 60 jours) : l'hypothèse « envoi vers des jetons
+  morts » est écartée pour ces marchands.
+- 75 à 80 % des cartes ont une seule inscription ; les autres ont des appareils que
+  Apple accepte (200) : environ 1 sur 4 inscrit en même temps (montre), les autres plus
+  tard (nouveau téléphone, iPad).
+- Limite : Apple peut accepter un temps le jeton d'un appareil qui ne sert plus.
+- **Le chiffre du 16/10 n'est pas expliqué par les jetons.** Avec ≈ 1,35 inscription par
+  carte, une bascule chez shop-by-ness ferait ≈ 70 envois Apple, pas 98 pour 49 cartes.
+  À vérifier : deux bascules le même jour (un changement de thème = fin du thème en
+  cours + ouverture du nouveau, chacune pousse tous les appareils). Requête par vague
+  prête, à lancer pour shop-by-ness.
+- **Dette latente, inchangée** : le code ne retire jamais un jeton déclaré mort (410).
+  Rien à corriger aujourd'hui (0 mort), mais à traiter avec l'étape 23 de la synthèse
+  (« jetons morts »).
 
 ### Volet 3 — Code mort (refait sur le code du 18/10)
 
