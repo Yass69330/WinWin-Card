@@ -42,7 +42,7 @@ indiquée.
 ### 0.2 Production
 
 - Branche déployée : `claude/keen-goldberg-MXslu`, sur Railway, déployée à chaque
-  push. Dernier push : **`fab6011`** (18/10, 20:12 UTC, découpage du dashboard, onglet Réseau `4a73f06`).
+  push. Dernier push : **`bf65066`** (18/10, découpage du dashboard, onglet Scans).
   - Pousser en avance rapide seulement, sur feu vert de Yass.
   - La migration est exécutée dans Supabase AVANT le push du code qui en dépend.
 - Branche de travail des sessions : jamais poussée (consigne de Yass). Le crochet
@@ -50,7 +50,7 @@ indiquée.
 - Dernière migration exécutée en production : **065** (18/10 : 064 index avant le push, 065 après ; 3 × true chacune).
 - Tests : `npm test` (filet `tests/lancer.js`, base jetable, PostgREST, vrai
   serveur, sections 0 à 26) avec contrôle de syntaxe des écrans. Dernier total :
-  **342/342** filet seul, **428/428** avec les 8 tests navigateur (18/10). Tests navigateur hors `npm test` : `tests/navigateur/*.js`, avec
+  **342/342** filet seul, **431/431** avec les 8 tests navigateur (18/10). Tests navigateur hors `npm test` : `tests/navigateur/*.js`, avec
   Playwright. Détail au §15 septquinquagies.
 - Commande :
   `PATH=~/.cache/winwin-filet/node-v24.21.0-linux-x64/bin:$PATH npm test`
@@ -7740,6 +7740,19 @@ plan : la clé `message` ne servait qu'à cet onglet, elle est partie avec lui.
 - Tests : 428/428 (déconnexion puis autre réseau, tri par colonne, `reseau.js` cassé).
 - Retour arrière : `git revert 4a73f06`.
 - Code mort repéré : clés `rsPorteurs`, `rsActifs30`, `rsNouveaux`, `rsRetour`, `rsLoadError`.
+
+**Onglet 3/6 : Scans** (18/10, `bf65066`) : `scans.js` (`window.Scans`) ; `index.html` −55 lignes.
+- Restent au cœur : `timeAgo`, `colorFrom` (aussi Clients et fiche client), `S.maxValue`, les clés
+  `historyTitle` (aussi Notifs), `scanAnnule` (aussi fiche client), `refresh`.
+- Les trois relectures (scan depuis l'onglet Scanner, annulation ou ajustement dans la fiche
+  client, déconnexion) appellent `Scans.oublier()` au lieu de `S.scans = null` : même
+  comportement.
+- Tests : 431/431 (relecture après un scan depuis l'onglet Scanner, `scans.js` cassé).
+  Filet de la production : 344/344.
+- Retour arrière : `git revert bf65066`.
+- **Découpage en pause après cet onglet** (décision du pilotage) : Clients, Aperçu, puis Scanner
+  la semaine suivante. Ensuite (chantier à part) : lieu de chaque scan et annulation depuis
+  l'onglet Scans, en réutilisant l'annulation de la fiche client.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
