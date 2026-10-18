@@ -149,10 +149,17 @@ Ce sont des propositions de la session. L'ordre validé est celui de la carte.
     connaissant un identifiant d'appareil et un numéro de série peut couper les
     mises à jour d'une carte ;
   - **quota manuel de notifications non validé** côté serveur.
-- **Dette de justesse silencieuse** (§16) :
-  - `/me/stats` est tronqué à 1 000 lignes : un mono-site actif voit ses
-    statistiques sous-estimées, sans erreur ;
-  - la liste des clients du dashboard est plafonnée à 1 000.
+- **Dette de justesse silencieuse** : **soldée** (vérifié le 18/10, §15 novoquinquagies) :
+  `/me/stats` passe par `apercu_stats` (étape 26), la liste des clients est paginée
+  (étape 21).
+- **Proposition (t42, 18/10)** : les campagnes ciblées cassent vers 8 000 porteurs
+  (fidèles) et 15 000 (inactifs). Deux index corrigent (testés sur base jetable). Pas urgent
+  aujourd'hui, à faire avant un marchand de cette taille. §15 novoquinquagies.
+- **Proposition (t42, 18/10)** : avant toute ouverture réelle de f17 :
+  - plafonner la voie Google des bascules (aujourd'hui sans débit global) ;
+  - limiter les réouvertures (message hors quota, sans limite) ;
+  - éclaircir le double envoi (requête prête) ;
+  - donner un propriétaire atomique aux bascules.
 - **Ordre** : la section 0 est la vue de l'ordre (résumé tenu aligné par le
   pilotage), sans copie de la carte dans le dépôt (décision du 15/10). Quand un
   chantier a besoin de sa fiche complète, le pilotage colle l'extrait au démarrage.
@@ -7452,6 +7459,178 @@ existe aucun aujourd'hui. La future API (étape 28) devra envoyer une clé.
 
 **Contrôle après le push** : journaux Railway, chercher `ALERTE cle_idempotence` (aucune
 ligne attendue), puis un scan réel en 200.
+
+## 15 novoquinquagies. t42 SANTÉ DU CODE — PHASE 1 : DIAGNOSTIC (18/10, rien codé)
+
+Banc : base locale au palier 50 000 (données de l'étape 15 : 100 000 porteurs dont le
+marchand « plafond » à 50 000, 135 000 scans sur 90 j pour lui, 800 000 lignes de registre),
+vrai serveur, PostgREST plafonné à 1 000 lignes, **100 ms ajoutées par appel à la base**
+(trajet Amsterdam–Paris + passerelle, §15 decies). Script : non versionné (bloc de session).
+
+### Volet 1 — Dashboard, onglet par onglet (palier 50 000)
+
+| Onglet | À l'ouverture | Par action | Temps mesuré | Poids réponse |
+|---|---|---|---|---|
+| Aperçu | 4 en parallèle : `/me/stats` (rpc `apercu_stats`), `/me/qrcode`, `/me`, `/me/points-de-vente` ; gardé en mémoire ensuite | « Réessayer » : les 4 | stats 297 ms (plafond), 178 ms (réseau 20 000) ; autres 110–134 ms | 5 Ko |
+| Réseau | 1 : `/me/group-stats` | renommer / couper une boutique : 1 | 666 ms (réseau 15 boutiques), **1 271 ms** (plafond) | 3 Ko |
+| Clients | 1 page de 100 (`count exact`) | recherche (300 ms d'attente) : 1 ; page suivante : 1 ; fiche : 1 (4 lectures) ; prénom, solde, annulation, effacement : 1 chacun ; export : 1 lecture par 1 000 | page 155–177 ms, recherche 162–241 ms, fiche 213 ms, **export complet 6,3 s** (49 pages) | 19 Ko la page ; export 1,4 Mo |
+| Scans | 1 : `/api/scan` (100 à 200 derniers) | rafraîchir : 1 | 109 ms | 23 Ko |
+| Scanner | aucune (caméra) | 1 scan : 1 (+ renouvellement de session au besoin) | 331 ms (comme la caisse) | — |
+| Notifs | 3 : historique, `/me/smart-notifications`, comptage `/destinataires` | changer de segment : 1 comptage ; envoyer : 1 | historique 108 ms, smart 119 ms, comptage « tous » **1,7 s**, **comptage ciblé : 503 après 5 s** (voir plus bas) | < 1 Ko |
+| Ma carte | 1 : `/me/themes` (lecture du cache des bannières) | choisir / arrêter : 1 | 225 ms (3 thèmes) | 3 Ko + bannières |
+
+Poids de page (dashboard) :
+- `index.html` : 157 Ko brut, 40 Ko compressé (CSS 24 Ko, script en ligne 113 Ko) ;
+- `ma-carte.js` : 15 Ko brut, 5 Ko compressé ;
+- jsQR (CDN), chargé dans `<head>` sans `defer`, donc **bloquant à chaque ouverture**,
+  même sans aller sur l'onglet Scanner ;
+- **aucune compression côté Express** (pas de middleware) : à vérifier si Railway compresse
+  (non vérifiable depuis le conteneur).
+- Le HTML est en `no-cache` ; `ma-carte.js` est revalidé (304) à chaque chargement.
+
+**Constat majeur (à remonter)** : les segments ciblés (inactifs 15/30/60 j, fidèles) ne
+passent pas l'échelle.
+- Coût direct en base (`compter_segment`) :
+
+  | Taille du marchand | tous | inactifs | fidèles |
+  |---|---|---|---|
+  | 50 000 porteurs | 1,7 s | ≈ 40 s | 182 s |
+  | 20 000 porteurs (réseau) | — | 6,8 s | 29,6 s |
+  | 357 porteurs | — | 20 ms | 23 ms |
+- Les lots d'envoi passent par la même fonction. Un lot « fidèles » (fidèles rares) prend
+  118 s au palier 50 000.
+- Deux causes, toutes deux par client :
+  1. « pas relancé aujourd'hui » relit toutes les relances du jour du marchand (filtre sur
+     `idx_wf_exec_marchand_date`) ;
+  2. le plan générique de « fidèles » croise `idx_scans_client` avec `idx_scans_marchand_date`
+     et relit les 45 000 scans du mois du marchand.
+- Le coût croît comme le carré de la taille. Seuil de casse (503 à 5 s) : **≈ 8 000
+  porteurs pour « fidèles »**, **≈ 15 000 pour « inactifs »**. Aucun marchand actuel n'en
+  approche.
+- **Correctif testé sur la base jetable** : deux index, `workflow_executions (client_id,
+  executed_at)` et `scans (client_id, date_scan)`.
+  - Résultat au palier 50 000 : tous les segments en ≈ 1,7–2 s, lot « fidèles » 2,2 s.
+  - Coût : une entrée d'index de plus à chaque scan (négligeable, à mesurer au filet).
+  - Migration à faire en `CREATE INDEX CONCURRENTLY`. **Proposition, rien fait.**
+
+**Dette de §0.5 périmée** : `/me/stats` n'est plus tronqué (rpc `apercu_stats`, étape 26),
+et la liste des clients est paginée avec un total exact (étape 21 ; 48 839 mesurés). Les deux
+points « dette de justesse silencieuse » de §0.5 sont donc soldés.
+
+### Volet 2 — f17 à l'échelle
+
+- **Débit partagé** : il ne couvre que les pushes Apple (`debit.js`). La voie Google d'une
+  bascule a son propre rythme, 50 cartes par 10 s et 5 appels à la fois, **par marchand**.
+  - Les ouvertures sont datées : le passage du cron ouvre tous les thèmes du jour d'un coup
+    (`passage()` lance chaque bascule sans attendre la précédente).
+  - Avec N marchands le même jour (fête nationale, Ramadan) : **N × 5 appels Google
+    simultanés**, sans plafond global. **C'est la rafale qu'on s'interdit**, côté Google
+    (quota de l'API Wallet non mesuré) et côté sorties réseau du serveur.
+  - Côté Apple, pas de rafale. Mais une ouverture chez tous les marchands du banc (81 000
+    inscriptions) occupe la file **7,5 h** à 30 par 10 s. Pendant ce temps, les campagnes et
+    relances du cron attendent derrière, dans l'ordre d'arrivée.
+- **Bascules répétées (activer / arrêter / réactiver)** :
+  - aucune limite. Chaque ouverture renvoie le message à toutes les cartes, **hors quota**
+    (décision 3) ;
+  - un marchand peut donc notifier tous ses clients sans limite, gratuitement ;
+  - chaque arrêt rebascule aussi toutes les cartes (en silence) ;
+  - une demande pendant une bascule la remplace, et le curseur repart de zéro.
+- **Modes points et tampons** :
+  - tampons : 11 états par thème ;
+  - points : une bannière par solde exact jusqu'à 5 000, soit jusqu'à ≈ 500 états par thème
+    au seuil 500 (500 soldes distincts mesurés sur le réseau du banc) ;
+  - rendu : 34 ms (tampons), 54 ms (points), 3 formats, sur le pool de 4 fils de `sharp`
+    partagé avec le reste du serveur ;
+  - préparation d'un thème en points : ≈ 27 s de rendu, 1 500 dépôts dans Storage,
+    ≈ 37 Mo ;
+  - les soldes absents de la préparation (lecture limitée à 1 000 clients) sont dessinés
+    pendant la bascule, jusqu'à 5 à la fois par marchand, sur le serveur de la caisse ;
+  - le cache mémoire des bannières (`MAX_LRU = 120`, commun à tous les marchands) sera vite
+    saturé. Au-delà, chaque bannière est relue dans Storage (+ ≈ 100 ms par carte Apple
+    servie).
+- **ma-carte.js, interrupteur OFF puis ON** :
+  - chargé dans les deux cas (balise en fin de page) : 5 Ko compressés, une revalidation ;
+  - interrupteur OFF : l'onglet est caché, `/me/themes` n'est jamais appelé ;
+  - interrupteur ON : 1 requête à l'ouverture de l'onglet seulement (225 ms) ;
+  - **aucun effet sur les autres onglets ; aucun sur la caisse** (le scanner ne charge pas
+    ce fichier). Côté serveur, seul effet en OFF : `appliquerTheme` (en mémoire) et 1
+    lecture par jour au cron.
+- **Double envoi shop-by-ness (98 envois Apple pour ≈ 49 cartes, 16/10)** : aucun doublon
+  possible pour un même appareil et une même carte (unique `(device_id, serial_number)`).
+  Trois causes possibles, à départager par la requête ci-dessous :
+  - (a) **deux appareils par carte** (iPhone + Apple Watch, ou ancien téléphone resté
+    inscrit) : envois légitimes ;
+  - (b) **un même appareil porte plusieurs cartes du marchand** (cartes de test) : le
+    jeton de push est le même pour toutes les cartes d'un appareil, et un seul push suffit
+    (l'iPhone redemande alors toutes ses cartes modifiées). Correctif : un push par jeton
+    distinct dans un lot ;
+  - (c) **bascule exécutée deux fois en parallèle** : contrairement aux campagnes
+    (`reprendre_campagnes`, prise atomique), une bascule n'a pas de propriétaire en base.
+    Pendant un redéploiement, l'ancien serveur la finit (`arret.suivre`) pendant que le
+    nouveau la reprend au bout de 60 s (`planifierReprise`). Les deux envoient les mêmes
+    lots.
+  - **Sur le débit** : dans les trois cas, les pushes passent par le débit partagé. Il n'y a
+    donc pas de rafale côté Apple : seulement une durée doublée et des allers-retours
+    d'iPhone en plus (304 pour la plupart).
+  - Requête (lecture seule, Supabase) :
+    ```sql
+    SELECT count(*) AS envois, count(DISTINCT serial_number) AS cartes, count(DISTINCT token_hash) AS appareils,
+           min(envoye_le) AS debut, max(envoye_le) AS fin
+      FROM notification_envois e JOIN marchands m ON m.id = e.marchand_id
+     WHERE m.slug ILIKE '%shop%' AND e.source = 'theme' AND e.plateforme = 'apple'
+       AND e.envoye_le >= '2026-10-16' AND e.envoye_le < '2026-10-17';
+    ```
+    Lecture : appareils ≈ 98 → (a) ; appareils bien inférieurs à 98 → (b) ; appareils ≈ 49
+    et deux vagues dans le temps → (c).
+
+### Volet 3 — Code mort (refait sur le code du 18/10)
+
+Méthode : exports sans appelant, fonctions jamais appelées (src, écrans), routes sans
+appelant dans les écrans ni chez un appelant externe connu (Apple, Google, cron, console
+documentée), fonctions SQL sans appel.
+
+| Candidat | Lignes | Preuve | Condition |
+|---|---|---|---|
+| `apns.sendPushNotification` | 11 | défini + exporté, 0 appel | aucune |
+| `apple-pass.selectStripImageUrl` | 7 | 0 appel | aucune |
+| `marchand-cache.viderTout` | 3 | défini + exporté, 0 appel | aucune |
+| scanner `hide`, `timeAgo` ; landing `lighten`, `showSkeleton` | ≈ 18 | 0 appel dans leur page | aucune |
+| `GET /api/clients/admin/all` | 15 | aucun écran, aucune doc | aucune |
+| `GET /api/admin/google-wallet/diagnostic` + `getClassInfo` | 46 | aucun écran | Yass ne s'en sert pas en console |
+| `GET /api/admin/debug/pass/:serial` | 42 | aucun écran, aucune doc | idem |
+| `/api/google-wallet/pass/:serial` (+ montage) | 46 | aucun appelant (audit 04 §7.4 n° 4) | journaux Railway sans appel ; pas de P3 |
+| `public/admin/preview.html` | 388 | aucun lien | Yass ne l'utilise pas |
+| SQL `cartes_google_campagne` | ≈ 35 | « gardée pour l'ancien code » (059), plus appelée | migration `DROP` |
+
+- **Total prouvable : ≈ 55 lignes sans condition, ≈ 560 avec conditions**, loin des
+  ≈ 1 800 de l'audit. L'essentiel de ce chiffre était des « shrink » (refontes), pas des
+  suppressions.
+- Gardés : routes Apple `/v1/*`, `/api/passes/*` (lien des cartes),
+  `/debug/certs`, re-synchronisation des classes et `workflows/trigger` (outils de console
+  documentés), diagnostic caméra.
+- Effort : ≈ 1 h pour le lot sans condition (filet + contre-épreuve) ; le lot conditionnel
+  attend 3 réponses de Yass et un relevé des journaux.
+- **Avis : pas un chantier à part.** Le lot sans condition peut entrer dans le découpage du
+  dashboard, s'il touche les mêmes fichiers. Sinon on garde la liste.
+
+### Recommandation : découpage par étapes, dashboard d'abord
+
+1. **Préalables** (sinon le filet ne protège pas le découpage) : réparer les deux tests
+   navigateur cassés (`fiche_annulation` 13b, `cle_ecrans`) et le test instable f17 (§16).
+2. **Méthode** : le modèle de `ma-carte.js`.
+   - Un fichier par onglet, en script simple (sans outil de construction), versionné
+     (`?v=`), chargé à la première ouverture de l'onglet.
+   - Le cœur reste dans `index.html` : état `S`, `api()`, `t()`, `esc()`, connexion,
+     forfaits.
+   - **Un onglet par push**, réversible seul, avec le filet + `onglets.js` à chaque fois.
+3. **Ordre** : Notifs, Réseau, Scans, Clients (et fiche), Aperçu. **Scanner en dernier**,
+   avec un module de clé d'idempotence commun au scanner et au dashboard (la règle est
+   aujourd'hui recopiée dans les deux).
+   - Au passage : jsQR chargé seulement par l'onglet Scanner, et compression des réponses.
+4. **Hors périmètre pour l'instant** : la page scanner (règle n° 1, elle marche),
+   `admin.js` et `strip-generator.js` (aucun gain marchand). À revoir après le dashboard.
+- Pourquoi pas tout d'un coup : 2 800 lignes d'un bloc, impossible à relire ou à annuler
+  proprement ; le pas à pas garde chaque push petit et réversible.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
