@@ -83,7 +83,7 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur }) {
         const ctx = await navigateur.newContext({ serviceWorkers: 'block' });
         const p = await ctx.newPage();
         await p.goto(urlServeur + '/dashboard/');
-        const r = await p.evaluate(() => { setLang('fr'); return [0, 1, 2].map(n => t('smart7j', { n })); });
+        const r = await p.evaluate(() => { setLang('fr'); return [0, 1, 2].map(n => Notifs.tx('smart7j', { n })); });
         await ctx.close();
         return r;
       })(),

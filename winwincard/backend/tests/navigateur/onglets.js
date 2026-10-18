@@ -53,7 +53,8 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
       { ww_dash_token: jeton, ww_dash_id: id, ww_dash_nom: nom, ww_dash_slug: slug, ww_dash_lang: 'fr', ww_dash_forfait: 'pro_plus', ww_dash_themes: '1' });
     // Logos préfabriqués : servis ici comme le ferait Storage (le filet n'a pas de Storage).
     await contexte.route('https://logos.exemple/**', r => r.fulfill({ contentType: 'image/png', body: logos[r.request().url().split('/').pop()] || logos['standard.png'] }));
-    if (casser) await contexte.route('**/dashboard/ma-carte.js*', r => r.fulfill({ contentType: 'application/javascript', body: 'window.MaCarte = { charger( ;' }));
+    // casser : nom du fichier d'onglet remplacé par un fichier invalide.
+    if (casser) await contexte.route(`**/dashboard/${casser}*`, r => r.fulfill({ contentType: 'application/javascript', body: 'window.Onglet = { charger( ;' }));
     const page = await contexte.newPage();
     const erreurs = [];
     page.on('pageerror', e => erreurs.push(`page : ${e.message}`));
@@ -119,6 +120,25 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
        sql(`SELECT theme_actif IS NULL FROM marchands WHERE id = '${id}'`), a.erreurs],
       [['Carte standard', 'Ramadan', 'Fête nationale'], ['rgb(74, 26, 42)', 'rgb(11, 61, 46)', 'rgb(0, 115, 47)'], ['Ramadan Kareem'],
        'À l\'ouverture, vos clients reçoivent : « Ramadan Kareem ! Votre carte se met aux couleurs du mois. »', true, 0, 'en_cours', 't', []]);
+
+    // 4. Notifications (notifs.js, t42) : la langue change après la construction
+    // de l'onglet (cas d'un clic sur Notifs avant le retour de /me) → textes
+    // refaits, message tapé gardé, aucune requête de plus.
+    await p.click('.nav-btn[data-tab="notifs"]');
+    await p.waitForSelector('#tab-notifs #notif-msg');
+    await p.fill('#notif-msg', 'Bonjour');
+    const titreNotifs = () => p.textContent('#tab-notifs .tab-header h2');
+    const avantLangue = await titreNotifs();
+    const requetes = [];
+    const compter = r => { if (r.url().includes('/api/')) requetes.push(r.url()); };
+    p.on('request', compter);
+    await p.evaluate(() => setLang('en'));
+    const apresLangue = [await titreNotifs(), await p.inputValue('#notif-msg'), await p.textContent('#btn-send-notif')];
+    await p.evaluate(() => setLang('fr'));
+    p.off('request', compter);
+    verifier('navigateur, Notifications (notifs.js) : langue changée après l\'ouverture → textes refaits (FR → EN → FR), message tapé gardé, aucune requête',
+      [avantLangue, apresLangue, await titreNotifs(), requetes, a.erreurs],
+      ['Notifications push', ['Push notifications', 'Bonjour', 'Send notification'], 'Notifications push', [], []]);
     await a.contexte.close();
 
     // Largeur de téléphone : la barre d'onglets tient (7 onglets).
@@ -132,7 +152,7 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     await tel.contexte.close();
 
     // 2. ma-carte.js cassé : seul « Ma carte » le dit.
-    const c = await ouvrir({ casser: true });
+    const c = await ouvrir({ casser: 'ma-carte.js' });
     const casse = await toutOuvrir(c.page);
     await c.page.click('.nav-btn[data-tab="carte"]');
     const texteCarte = (await c.page.textContent('#tab-carte')).trim();
@@ -145,6 +165,20 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
        c.erreurs.length, /Unexpected|SyntaxError|expected/i.test(c.erreurs[0] || '')],
       [true, 'Onglet momentanément indisponible. Rechargez la page.', true, 1, true]);
     await c.contexte.close();
+
+    // 2 bis. notifs.js cassé (t42) : seul « Notifications » le dit.
+    const n = await ouvrir({ casser: 'notifs.js' });
+    const casseN = await toutOuvrir(n.page);
+    await n.page.click('.nav-btn[data-tab="notifs"]');
+    const texteNotifs = (await n.page.textContent('#tab-notifs')).trim();
+    await n.page.click('.nav-btn[data-tab="clients"]');
+    await n.page.waitForTimeout(600);
+    const clientsOkN = await n.page.evaluate(() => document.getElementById('tab-clients').classList.contains('active'));
+    verifier('navigateur, « Notifications » cassé (fichier invalide) : les autres onglets s\'ouvrent ; « Notifications » affiche « indisponible » ; seule erreur : celle du fichier cassé',
+      [Object.entries(casseN.etat).filter(([o]) => o !== 'notifs').every(([, v]) => v), texteNotifs, clientsOkN,
+       n.erreurs.length, /Unexpected|SyntaxError|expected/i.test(n.erreurs[0] || '')],
+      [true, 'Onglet momentanément indisponible. Rechargez la page.', true, 1, true]);
+    await n.contexte.close();
     console.log(`captures : ${captures}`);
   } finally {
     await navigateur.close();

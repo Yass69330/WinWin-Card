@@ -54,24 +54,6 @@
     }
     .field input:focus, .field textarea:focus { border-color: var(--accent); }
     .field select { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; color: var(--text); font-size: 16px; padding: 13px 15px; outline: none; font-family: inherit; width: 100%; }
-    .notif-dest { font-size: 12px; color: var(--muted); margin-top: 6px; min-height: 16px; }
-    .smart-notifs { margin-top: 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
-    .smart-notifs h3 { font-size: 15px; margin: 0 0 4px; }
-    .smart-notifs .smart-intro { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
-    .smart-liste { list-style: none; margin: 0 0 12px; padding: 0; }
-    .smart-liste li { display: flex; align-items: baseline; gap: 6px; padding: 9px 0; border-top: 1px solid var(--border); font-size: 14px; }
-    .smart-liste li:first-child { border-top: none; }
-    .smart-liste .nom { font-weight: 600; }
-    .smart-liste .val { color: var(--muted); }
-    .smart-pied { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
-    .smart-notifs .smart-7j { font-size: 12px; color: var(--muted); margin: 0; }
-    .smart-form { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
-    .smart-form .ligne { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
-    .smart-form input[type=number] { width: 76px; background: var(--bg); border: 1px solid var(--border); border-radius: 9px; color: var(--text); font-size: 16px; padding: 8px 10px; font-family: inherit; }
-    .smart-form textarea { width: 100%; box-sizing: border-box; min-height: 64px; background: var(--bg); border: 1px solid var(--border); border-radius: 9px; color: var(--text); font-size: 16px; padding: 10px 12px; font-family: inherit; resize: vertical; }
-    .smart-form .aide { font-size: 12px; color: var(--muted); }
-    .smart-form .titre { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
-    .smart-form .boutons { display: flex; gap: 8px; flex-wrap: wrap; }
     /* Case « rester connecté ». Hors de .field volontairement : `.field input`
        met -webkit-appearance:none, ce qui rend une case cochée visuellement
        identique à une case vide. */
@@ -120,9 +102,6 @@
     .forfait-badge[data-plan="basic"]    { background: rgba(148,163,184,.2); color: var(--muted); }
     .forfait-badge[data-plan="pro"]      { background: var(--accent-dim); color: #a5b4fc; }
     .forfait-badge[data-plan="pro_plus"] { background: rgba(251,191,36,.15); color: #fbbf24; }
-    .notif-quota-bar { font-size: 13px; color: var(--muted); margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
-    .notif-quota-bar.warning { color: var(--warning); }
-    .notif-quota-bar.overlimit { color: var(--error); }
     .btn-icon { background: none; border: none; cursor: pointer; color: var(--muted); padding: 6px; border-radius: 8px; font-size: 18px; -webkit-tap-highlight-color: transparent; }
     .btn-icon:active { background: var(--surface2); }
 
@@ -306,12 +285,8 @@
     .sc-result-error  { background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.2); border-radius: 10px; padding: 14px; color: var(--error); font-size: 14px; }
 
     /* ═══════════════ NOTIFICATIONS ═══════════════ */
-    .notif-form { display: flex; flex-direction: column; gap: 14px; }
     .send-result { margin-top: 4px; }
 
-    .notif-log-entry { background: var(--surface); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 5px; }
-    .notif-log-msg  { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .notif-log-meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
 
     /* ═══════════════ EMPTY STATES ═══════════════ */
     .empty { text-align: center; padding: 40px 20px; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 8px; }
@@ -527,37 +502,8 @@
     </div>
 
     <!-- ── Notifications ── -->
-    <div id="tab-notifs" class="tab-panel">
-      <div class="tab-header"><h2 data-i18n="pushNotifs">Push notifications</h2></div>
-      <div class="alert alert-info" style="margin-bottom:16px" data-i18n="notifInfo">
-        📱 Sent via Apple &amp; Google Wallet to registered devices.
-      </div>
-      <div class="notif-quota-bar" id="notif-quota" style="display:none">
-        <span id="notif-quota-text"></span>
-      </div>
-      <form class="notif-form" id="notif-form" onsubmit="return false">
-        <div class="field">
-          <label for="notif-msg" data-i18n="message">Message</label>
-          <textarea id="notif-msg" maxlength="500" placeholder="E.g.: Come enjoy 20% off all menu items this weekend!" data-i18n-ph="notifPlaceholder"></textarea>
-          <div class="char-count" id="cc-msg">0 / 500</div>
-        </div>
-        <div class="field">
-          <label for="notif-segment" data-i18n="segmentLabel">Recipients</label>
-          <select id="notif-segment"></select>
-          <div class="notif-dest" id="notif-dest"></div>
-        </div>
-        <button type="submit" class="btn btn-primary" id="btn-send-notif" data-i18n="sendNotif">Send notification</button>
-        <div id="notif-result" class="send-result"></div>
-      </form>
-
-      <div class="divider" style="margin-top:8px"></div>
-      <div class="tab-header" style="margin-bottom:10px">
-        <h2 style="font-size:15px;color:var(--muted)" data-i18n="historyTitle">History</h2>
-      </div>
-      <div id="notif-history-list"></div>
-
-      <div id="smart-notifs" class="smart-notifs" style="display:none"></div>
-    </div>
+    <!-- ── Notifications : tout le code dans notifs.js (t42, découpage) ── -->
+    <div id="tab-notifs" class="tab-panel"></div>
 
     <!-- ── Ma carte (f17, Pro+) : tout le code dans ma-carte.js ── -->
     <div id="tab-carte" class="tab-panel"></div>
@@ -738,7 +684,7 @@ const S = {
   token: null, marchandId: null, marchandNom: null, marchandSlug: null, maxValue: 10, displayMax: 10,
   forfait: null, coordonnees: null, typeProgramme: 'stamps',
   tab: 'overview',
-  clients: null, scans: null, stats: null, qr: null, notifLogs: null,
+  clients: null, scans: null, stats: null, qr: null,
   deleteTargetId: null, deleteTargetNom: null,
   clientId: null, clientData: null,
 };
@@ -832,37 +778,10 @@ const I18N = {
     codeInvalide:'Invalid code — scan the QR or type the 6-character backup code',
     cameraError:({msg})=>'Cannot access camera: '+msg, cameraErrorName:'Camera error',
     unknownError:'Unknown error', errorName:'Error',
-    pushNotifs:'Push notifications',
-    notifInfo:'📱 Sent via Apple & Google Wallet to registered devices.',
-    message:'Message', notifPlaceholder:'E.g.: Come enjoy 20% off all menu items this weekend!',
-    sendNotif:'Send notification', msgRequired:'Message is required', sending:'Sending…',
-    sendError:'Send error', noDevices:'No registered devices.',
+    noDevices:'No registered devices.',
     appleLine:({sent,total,failed})=>`🍎 Apple Wallet: ${sent}/${total} sent${failed?` · ${failed} failed`:''}`,
     googleLine:({updated,total,failed})=>`🤖 Google Wallet: ${updated}/${total} updated${failed?` · ${failed} failed`:''}`,
-    quotaText:({used,limit})=>`${used} / ${limit} notifications this month`,
-    errLoadHistory:'Error loading history', noNotifsSent:'No notifications sent yet',
     received:({envoyes,total})=>`${envoyes}/${total} received`, noDevicesShort:'No devices',
-    campagneEnCours:'Campaign being sent.', etatEnCours:'Sending', etatEnvoyee:'Sent',
-    smartTitre:'My smart notifications', smartIntro:'Sent automatically to your customers.',
-    smartRelance:'Reminder', smartRelanceVal:({n})=>`after ${n} d`,
-    smartBoostNom:'Boost', smartBoostVal:({n, unite})=>`at ${n} ${unite === 'points' ? 'point' : 'stamp'}${n > 1 ? 's' : ''}`,
-    smartAnniv:'Birthday', smartAvis:'Google review', smartProximite:'Nearby',
-    smart7j:({n})=>`Last 7 days report: ${n} smart notification${n === 1 ? '' : 's'} sent`,
-    smartModifier:'Edit', smartFermer:'Close',
-    smartJoursAvant:'Reminder after', smartJoursApres:'days without a visit (7 to 90)',
-    smartMessage:'Reminder message', smartMessageAide:'150 characters max, no link. « {prenom} » = the customer\'s first name.',
-    smartSeuilAvant:'Boost at', smartSeuilApres:({unite, max})=>`${unite === 'points' ? 'points' : 'stamps'} from the reward (1 to ${max})`,
-    smartMessageBoost:'Boost message', smartMessageBoostAide:'« {reste} » is required: it becomes « 2 points » or « 1 stamp ». 150 characters max, no link.',
-    smartEnregistrer:'Save', smartWinwin:'Back to WinWin settings', smartEnregistre:'Saved.',
-    smartErr:{ jours_hors_limites:'Choose between 7 and 90 days.', message_vide:'The message cannot be empty.',
-      message_trop_long:'150 characters maximum.', message_avec_lien:'Links are not allowed in the message.',
-      message_sans_reste:'The word {reste} is required: it is replaced by the number left.',
-      seuil_hors_limites:'Threshold out of range.', aucun_reglage:'Nothing to save.' },
-    smartErrGen:'Could not save. Please try again.',
-    segmentLabel:'Recipients', segTous:'All customers', segInactifs:({n})=>`Inactive for ${n} days`,
-    segFideles:'Most loyal customers', segBoutique:({nom})=>`Customers of ${nom}`,
-    destCount:({n})=>`${n} customer${n === 1 ? '' : 's'} will receive this message`, destLoading:'Counting recipients…',
-    destError:'Recipients could not be counted.', destNone:'No customer in this selection: nothing would be sent.',
     deleteClientTitle:'Delete this client?',
     deleteBody:({nom})=>`Delete <strong>${nom}</strong>? This action is <strong>irreversible</strong> — the pass will become invalid.`,
     deletePermanently:'Delete permanently', cancel:'Cancel',
@@ -965,37 +884,10 @@ const I18N = {
     codeInvalide:'Code invalide — scannez le QR ou tapez les 6 caractères du code de secours',
     cameraError:({msg})=>"Impossible d'accéder à la caméra : "+msg, cameraErrorName:'Erreur caméra',
     unknownError:'Erreur inconnue', errorName:'Erreur',
-    pushNotifs:'Notifications push',
-    notifInfo:'📱 Envoyées via Apple & Google Wallet aux appareils enregistrés.',
-    message:'Message', notifPlaceholder:'Ex. : Profitez de -20% sur toute la carte ce week-end !',
-    sendNotif:'Envoyer la notification', msgRequired:'Le message est requis', sending:'Envoi…',
-    sendError:"Erreur d'envoi", noDevices:'Aucun appareil enregistré.',
+    noDevices:'Aucun appareil enregistré.',
     appleLine:({sent,total,failed})=>`🍎 Apple Wallet : ${sent}/${total} envoyées${failed?` · ${failed} échec${failed>1?'s':''}`:''}`,
     googleLine:({updated,total,failed})=>`🤖 Google Wallet : ${updated}/${total} mises à jour${failed?` · ${failed} échec${failed>1?'s':''}`:''}`,
-    quotaText:({used,limit})=>`${used} / ${limit} notifications ce mois-ci`,
-    errLoadHistory:"Erreur de chargement de l'historique", noNotifsSent:'Aucune notification envoyée pour le moment',
     received:({envoyes,total})=>`${envoyes}/${total} reçues`, noDevicesShort:'Aucun appareil',
-    campagneEnCours:"Campagne en cours d'envoi.", etatEnCours:"En cours d'envoi", etatEnvoyee:'Envoyée',
-    smartTitre:'Mes smart notifications', smartIntro:'Envoyées automatiquement à vos clients.',
-    smartRelance:'Relance', smartRelanceVal:({n})=>`après ${n} j`,
-    smartBoostNom:'Boost', smartBoostVal:({n, unite})=>`à ${n} ${unite === 'points' ? 'point' : 'tampon'}${n > 1 ? 's' : ''}`,
-    smartAnniv:'Anniversaire', smartAvis:'Avis Google', smartProximite:'À proximité',
-    smart7j:({n})=>`Rapport des 7 derniers jours : ${n} smart notification${n > 1 ? 's' : ''} envoyée${n > 1 ? 's' : ''}`,
-    smartModifier:'Modifier', smartFermer:'Fermer',
-    smartJoursAvant:'Relance après', smartJoursApres:'jours sans visite (7 à 90)',
-    smartMessage:'Message de la relance', smartMessageAide:'150 caractères maximum, sans lien. « {prenom} » = prénom du client.',
-    smartSeuilAvant:'Boost à', smartSeuilApres:({unite, max})=>`${unite === 'points' ? 'points' : 'tampons'} de la récompense (1 à ${max})`,
-    smartMessageBoost:'Message du boost', smartMessageBoostAide:'« {reste} » obligatoire : il devient « 2 points » ou « 1 tampon ». 150 caractères maximum, sans lien.',
-    smartEnregistrer:'Enregistrer', smartWinwin:'Revenir au réglage WinWin', smartEnregistre:'Enregistré.',
-    smartErr:{ jours_hors_limites:'Choisissez entre 7 et 90 jours.', message_vide:'Le message ne peut pas être vide.',
-      message_trop_long:'150 caractères maximum.', message_avec_lien:'Les liens ne sont pas autorisés dans le message.',
-      message_sans_reste:'Le mot {reste} est obligatoire : il est remplacé par le nombre restant.',
-      seuil_hors_limites:'Seuil hors limites.', aucun_reglage:'Rien à enregistrer.' },
-    smartErrGen:'Enregistrement impossible. Réessayez.',
-    segmentLabel:'Destinataires', segTous:'Tous les clients', segInactifs:({n})=>`Inactifs depuis ${n} jours`,
-    segFideles:'Les plus fidèles', segBoutique:({nom})=>`Clients de ${nom}`,
-    destCount:({n})=>`${n} client${n > 1 ? 's' : ''} recevr${n > 1 ? 'ont' : 'a'} ce message`, destLoading:'Comptage des destinataires…',
-    destError:'Impossible de compter les destinataires.', destNone:'Aucun client dans cette sélection : rien ne serait envoyé.',
     deleteClientTitle:'Supprimer ce client ?',
     deleteBody:({nom})=>`Supprimer <strong>${nom}</strong> ? Cette action est <strong>irréversible</strong> — le pass deviendra invalide.`,
     deletePermanently:'Supprimer définitivement', cancel:'Annuler',
@@ -1057,6 +949,9 @@ function setLang(l) {
   document.title = t('pageTitle');
   try { localStorage.setItem('ww_dash_lang', _lang); } catch {}
   applyI18n();
+  // Les onglets à part (notifs.js…) construisent leurs textes eux-mêmes : ils
+  // les refont à ce signal si la langue a changé depuis.
+  document.dispatchEvent(new Event('ww-langue'));
 }
 
 const dateLocale = () => (_lang === 'fr' ? 'fr-FR' : 'en-GB');
@@ -1197,7 +1092,8 @@ function showErr(el, msg) { el.textContent = msg; el.style.display = 'block'; }
 document.getElementById('btn-logout').addEventListener('click', () => {
   if (!confirm(t('signOutConfirm'))) return;
   clearSession();
-  S.clients = null; S.scans = null; S.stats = null; S.qr = null; S.notifLogs = null;
+  S.clients = null; S.scans = null; S.stats = null; S.qr = null;
+  if (window.Notifs) window.Notifs.oublier();
   S.clientsQ = ''; document.getElementById('search-clients').value = '';
   showLogin();
 });
@@ -1220,9 +1116,12 @@ function switchTab(tab) {
   if (tab === 'clients')  loadClients();
   if (tab === 'scans')    loadScans();
   if (tab === 'scanner')  startScannerTab();
-  if (tab === 'notifs')   { loadNotifHistory(); remplirSegments(); chargerSmartNotifs(); }
-  // « Ma carte » (f17) vit dans ma-carte.js : s'il ne charge pas, seul cet onglet
-  // l'affiche, les autres continuent de fonctionner.
+  // « Notifications » (notifs.js) et « Ma carte » (ma-carte.js) vivent dans leur
+  // fichier : s'il ne charge pas, seul cet onglet l'affiche, les autres continuent.
+  if (tab === 'notifs') {
+    if (window.Notifs) window.Notifs.charger();
+    else document.getElementById('tab-notifs').innerHTML = `<div class="alert alert-info">${esc(_lang === 'fr' ? 'Onglet momentanément indisponible. Rechargez la page.' : 'Tab temporarily unavailable. Reload the page.')}</div>`;
+  }
   if (tab === 'carte') {
     if (window.MaCarte) window.MaCarte.charger();
     else document.getElementById('tab-carte').innerHTML = `<div class="alert alert-info">${esc(_lang === 'fr' ? 'Onglet momentanément indisponible. Rechargez la page.' : 'Tab temporarily unavailable. Reload the page.')}</div>`;
@@ -2261,211 +2160,6 @@ document.getElementById('sc-points-input').addEventListener('keydown', e => {
 });
 
 // ════════════════════════════════════════════════
-// TAB: NOTIFICATIONS
-// ════════════════════════════════════════════════
-document.getElementById('notif-msg').addEventListener('input', function() {
-  const n = this.value.length;
-  const cc = document.getElementById('cc-msg');
-  cc.textContent = `${n} / 500`;
-  cc.classList.toggle('over', n >= 500);
-});
-
-document.getElementById('notif-form').addEventListener('submit', async () => {
-  const msg    = document.getElementById('notif-msg').value.trim();
-  const result = document.getElementById('notif-result');
-  const btn    = document.getElementById('btn-send-notif');
-  result.innerHTML = '';
-  if (!msg) { result.innerHTML = `<div class="alert alert-error">${t('msgRequired')}</div>`; return; }
-  btn.disabled = true; btn.innerHTML = `<span class="spinner"></span> ${t('sending')}`;
-  try {
-    const res  = await api('/api/notifications', { method: 'POST', body: JSON.stringify({ message: msg, segment: segmentChoisi() }) });
-    const data = await res.json();
-    if (!res.ok) {
-      result.innerHTML = `<div class="alert alert-error">${data.error || t('sendError')}</div>`;
-      S.notifLogs = null; setTimeout(() => loadNotifHistory(true), 400);
-      return;
-    }
-    // Étape t37 : le serveur répond tout de suite, l'envoi part par lots.
-    result.innerHTML = `<div class="alert alert-success">${t('campagneEnCours')}</div>`;
-    document.getElementById('notif-msg').value = '';
-    document.getElementById('cc-msg').textContent = '0 / 500';
-    S.notifLogs = null;
-    setTimeout(() => loadNotifHistory(true), 600);
-  } catch (e) {
-    result.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
-  } finally {
-    btn.disabled = false; btn.textContent = t('sendNotif');
-  }
-});
-
-// Segments (migration 059) : un seul à la fois. Inactifs : 60 jours seulement
-// (migration 065 ; en dessous, les relances automatiques s'en chargent). « Clients d'une boutique » pour
-// les réseaux seulement (S.pdv non vide). Le nombre de destinataires est lu à la
-// demande, à chaque choix — jamais en boucle.
-function libelleSegment(seg) {
-  if (!seg) return t('segTous');
-  if (seg.type === 'inactifs') return t('segInactifs', { n: seg.jours });
-  if (seg.type === 'fideles')  return t('segFideles');
-  if (seg.type === 'boutique') return t('segBoutique', { nom: seg.nom || '' });
-  return '';
-}
-function remplirSegments() {
-  const sel = document.getElementById('notif-segment');
-  if (!sel) return;
-  const avant = sel.value;
-  const options = [null, { type: 'inactifs', jours: 60 }, { type: 'fideles' }]
-    .concat((Array.isArray(S.pdv) ? S.pdv : []).map(b => ({ type: 'boutique', boutique: b.id, nom: b.nom })));
-  sel.innerHTML = options.map(o => `<option value="${esc(o ? JSON.stringify(o) : '')}">${esc(libelleSegment(o))}</option>`).join('');
-  if ([...sel.options].some(o => o.value === avant)) sel.value = avant;
-  compterDestinataires();
-}
-function segmentChoisi() {
-  const v = (document.getElementById('notif-segment') || {}).value;
-  if (!v) return null;
-  const o = JSON.parse(v);
-  return o.type === 'boutique' ? { type: 'boutique', boutique: o.boutique } : o;
-}
-let _comptage = 0;
-async function compterDestinataires() {
-  const el = document.getElementById('notif-dest');
-  if (!el) return;
-  const n = ++_comptage;
-  el.textContent = t('destLoading');
-  try {
-    const seg = segmentChoisi();
-    const res = await api('/api/notifications/destinataires' + (seg ? '?segment=' + encodeURIComponent(JSON.stringify(seg)) : ''));
-    const d = await res.json();
-    if (n !== _comptage) return;   // un autre choix entre-temps
-    if (!res.ok) throw new Error();
-    el.textContent = d.destinataires === 0 ? t('destNone') : t('destCount', { n: d.destinataires });
-  } catch { if (n === _comptage) el.textContent = t('destError'); }
-}
-document.getElementById('notif-segment').addEventListener('change', compterDestinataires);
-
-// Bloc « Mes smart notifications » (14/10) : une lecture à l'ouverture de
-// l'onglet. Rien n'est affiché si le forfait n'y a pas droit, si aucune n'est
-// active, ou si la lecture échoue (le bloc n'est qu'informatif).
-// f15 : « Régler mes relances » ouvre un petit formulaire (délai d'inactivité,
-// message, seuil du boost) — seulement pour les relances activées par l'admin.
-// Une écriture par enregistrement ; aucune lecture régulière.
-let _smart = null, _smartOuvert = false;
-async function chargerSmartNotifs() {
-  const el = document.getElementById('smart-notifs');
-  if (!el) return;
-  try {
-    const res = await api('/api/merchants/me/smart-notifications');
-    if (!res.ok) throw new Error();
-    _smart = await res.json();
-    rendreSmartNotifs();
-  } catch { el.style.display = 'none'; }
-}
-function rendreSmartNotifs(info) {
-  const el = document.getElementById('smart-notifs');
-  const d = _smart;
-  if (!el || !d || !d.eligible) { if (el) el.style.display = 'none'; return; }
-  // Une ligne courte par smart notification active (f18). « À proximité » (f10)
-  // prendra sa place ici quand elle existera.
-  const lignes = [];
-  if (d.inactivite)   lignes.push([t('smartRelance'), t('smartRelanceVal', { n: d.inactivite.jours })]);
-  if (d.boost)        lignes.push([t('smartBoostNom'), t('smartBoostVal', { n: d.boost.seuil, unite: d.boost.unite })]);
-  if (d.anniversaire) lignes.push([t('smartAnniv'), '']);
-  if (d.avis)         lignes.push([t('smartAvis'), '']);
-  if (d.proximite)    lignes.push([t('smartProximite'), '']);
-  if (!lignes.length) { el.style.display = 'none'; return; }
-  const reglable = d.inactivite || d.boost;
-  let form = '';
-  if (reglable && _smartOuvert) {
-    form = `<div class="smart-form" id="smart-form">
-      ${d.inactivite ? `<div class="ligne">${esc(t('smartJoursAvant'))} <input type="number" id="smart-jours" min="7" max="90" value="${d.inactivite.jours}"> ${esc(t('smartJoursApres'))}</div>
-      <div><div class="titre">${esc(t('smartMessage'))}</div>
-        <textarea id="smart-message" maxlength="150">${esc(d.inactivite.message)}</textarea>
-        <div class="aide">${esc(t('smartMessageAide'))}</div></div>` : ''}
-      ${d.boost ? `<div class="ligne">${esc(t('smartSeuilAvant'))} <input type="number" id="smart-seuil" min="1" max="${d.boost.max}" value="${d.boost.seuil}"> ${esc(t('smartSeuilApres', { unite: d.boost.unite, max: d.boost.max }))}</div>
-      <div><div class="titre">${esc(t('smartMessageBoost'))}</div>
-        <textarea id="smart-message-boost" maxlength="150">${esc(d.boost.message)}</textarea>
-        <div class="aide">${esc(t('smartMessageBoostAide'))}</div></div>` : ''}
-      <div class="boutons" style="display:flex;gap:8px;flex-wrap:wrap">
-        <button type="button" class="btn btn-primary btn-sm" id="smart-enregistrer">${esc(t('smartEnregistrer'))}</button>
-        ${d.personnalise ? `<button type="button" class="btn btn-ghost btn-sm" id="smart-winwin">${esc(t('smartWinwin'))}</button>` : ''}
-      </div>
-      <div class="aide" id="smart-info">${info ? esc(info) : ''}</div>
-    </div>`;
-  }
-  el.innerHTML = `<h3>${esc(t('smartTitre'))}</h3><p class="smart-intro">${esc(t('smartIntro'))}</p>
-    <ul class="smart-liste">${lignes.map(([nom, val]) => `<li><span class="nom">${esc(nom)}</span>${val ? ` <span class="val">· ${esc(val)}</span>` : ''}</li>`).join('')}</ul>
-    <div class="smart-pied"><p class="smart-7j">${esc(t('smart7j', { n: d.envoyees_7j }))}</p>
-      ${reglable ? `<button type="button" class="btn btn-outline btn-sm" id="smart-regler">${esc(t(_smartOuvert ? 'smartFermer' : 'smartModifier'))}</button>` : ''}</div>
-    ${form}`;
-  el.style.display = '';
-  const b = id => document.getElementById(id);
-  if (b('smart-regler')) b('smart-regler').onclick = () => { _smartOuvert = !_smartOuvert; rendreSmartNotifs(); };
-  if (b('smart-enregistrer')) b('smart-enregistrer').onclick = () => {
-    const corps = {};
-    if (b('smart-jours'))         corps.inactivite_jours = Number(b('smart-jours').value);
-    if (b('smart-message'))       corps.inactivite_message = b('smart-message').value;
-    if (b('smart-seuil'))         corps.boost_seuil = Number(b('smart-seuil').value);
-    if (b('smart-message-boost')) corps.boost_message = b('smart-message-boost').value;
-    enregistrerSmart(corps);
-  };
-  if (b('smart-winwin')) b('smart-winwin').onclick = () => enregistrerSmart({ winwin: true });
-}
-async function enregistrerSmart(corps) {
-  const info = document.getElementById('smart-info');
-  try {
-    const res = await api('/api/merchants/me/smart-notifications', { method: 'PATCH', body: JSON.stringify(corps) });
-    const d = await res.json().catch(() => ({}));
-    if (!res.ok) { if (info) info.textContent = (t('smartErr') || {})[d.error] || t('smartErrGen'); return; }
-    _smart = d;
-    rendreSmartNotifs(t('smartEnregistre'));
-  } catch { if (info) info.textContent = t('smartErrGen'); }
-}
-
-async function loadNotifHistory(force = false) {
-  if (!force && S.notifLogs) { renderNotifHistory(); return; }
-  const el = document.getElementById('notif-history-list');
-  el.innerHTML = Array(3).fill('<div class="skeleton skeleton-card" style="height:56px"></div>').join('');
-  try {
-    const res  = await api('/api/notifications');
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || t('errLoadHistory'));
-    // Response: { logs: [...], quota: { used, limit, forfait } }
-    S.notifLogs = Array.isArray(data.logs) ? data.logs : (Array.isArray(data) ? data : []);
-
-    const quotaEl   = document.getElementById('notif-quota');
-    const quotaText = document.getElementById('notif-quota-text');
-    const quota     = data.quota;
-    if (quota && quotaEl && quotaText) {
-      const pct = quota.limit > 0 ? quota.used / quota.limit : 0;
-      quotaText.textContent   = t('quotaText', { used: quota.used, limit: quota.limit });
-      quotaEl.style.display   = '';
-      quotaEl.className = 'notif-quota-bar' + (pct >= 1 ? ' overlimit' : pct >= 0.8 ? ' warning' : '');
-    }
-  } catch (e) {
-    S.notifLogs = [];
-    el.innerHTML = `<div class="alert alert-error" style="font-size:12px">${e.message}</div>`;
-    return;
-  }
-  renderNotifHistory();
-}
-
-function renderNotifHistory() {
-  const el = document.getElementById('notif-history-list');
-  if (!S.notifLogs || S.notifLogs.length === 0) {
-    el.innerHTML = `<div class="empty" style="padding:20px 0"><div class="empty-icon">📭</div><div class="empty-sub">${t('noNotifsSent')}</div></div>`;
-    return;
-  }
-  el.innerHTML = S.notifLogs.map(n => {
-    // Étape t37 : plus de chiffre, l'état seulement.
-    const dest = n.etat === 'en_cours' ? t('etatEnCours') : t('etatEnvoyee');
-    const cible = n.segment ? ' · ' + esc(libelleSegment(n.segment)) : '';
-    return `<div class="notif-log-entry">
-      <div class="notif-log-msg">${esc(n.message)}</div>
-      <div class="notif-log-meta"><span>${timeAgo(n.created_at)}${cible}</span><span>${dest}</span></div>
-    </div>`;
-  }).join('');
-}
-
-// ════════════════════════════════════════════════
 // FICHE CLIENT
 // ════════════════════════════════════════════════
 function openClientSheet(id) {
@@ -2805,7 +2499,9 @@ applyI18n();
 
 if (restoreSession()) showDashboard();
 </script>
-<!-- f17 : onglet « Ma carte », fichier à part (versionné : ?v=). -->
+<!-- Onglets à part (t42 ; f17) : versionnés par ?v=, à changer à chaque modification
+     du fichier (le service worker sert les JS depuis son cache). -->
+<script src="/dashboard/notifs.js?v=1"></script>
 <script src="/dashboard/ma-carte.js?v=1"></script>
 </body>
 </html>
