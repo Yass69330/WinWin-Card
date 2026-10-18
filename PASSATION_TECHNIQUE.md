@@ -89,7 +89,9 @@ indiquée.
      - (b) WAM apparaît à jour (scan avec clé) dans
        `database/requetes/cle_wam_t43.sql`, après le passage de Yass chez WAM
        le 19/10 (écran rechargé puis scan de test).
-   - Tant que WAM n'est pas confirmé, on ne pousse pas.
+   - **(b) remplie le 18/10** : Wam N Fade, 51 scans sur 14 jours, 0 sans clé ;
+     dernier scan le 18/10 à 08:31 UTC, avec clé ; dernier sans clé le 02/10 (avant
+     11b). Plus besoin d'attendre le passage du 19/10. Reste (a), puis le feu vert.
 2. **Gain Google (règle D2, depuis le 13/10) : mesure à refaire vers le 20/10.**
    - Premier relevé, le 15/10 :
      - en brut, scan 1238 → 246 et inactive 821 → 100 ;
