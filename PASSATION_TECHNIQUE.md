@@ -42,7 +42,7 @@ indiquée.
 ### 0.2 Production
 
 - Branche déployée : `claude/keen-goldberg-MXslu`, sur Railway, déployée à chaque
-  push. Dernier push : **`495ed40`** (15/10, 08:39 UTC).
+  push. Dernier push : **`54a7768`** (18/10, 09:24 UTC, t43).
   - Pousser en avance rapide seulement, sur feu vert de Yass.
   - La migration est exécutée dans Supabase AVANT le push du code qui en dépend.
 - Branche de travail des sessions : jamais poussée (consigne de Yass). Le crochet
@@ -76,22 +76,18 @@ indiquée.
     ouverture par marchand, puis rendu réel sur hamza-salon (iPhone, Android,
     arrêt silencieux, registre `theme`).
   - Détail au §15 septquinquagies.
+- **t43** (clé d'idempotence obligatoire) : en production le 18/10. **Clos.**
 - **t37** (campagnes par lots, débit partagé de 30 iPhone par 10 s) : en
   production. **Clos.** C'est ce même débit qui protège la caisse pendant les
   envois de f10 et f17.
 
 ### 0.4 En attente : décisions et mesures
 
-1. **t43, clé d'idempotence obligatoire : codé et validé, PAS poussé (17/10).**
-   - Commit local `2ed79b6`, détail au §15 octoquinquagies.
-   - **Conditions de push (pilotage, impératives)** :
-     - (a) la requête D globale (§15 duovicies) est à 100 % **le jour même** ;
-     - (b) WAM apparaît à jour (scan avec clé) dans
-       `database/requetes/cle_wam_t43.sql`, après le passage de Yass chez WAM
-       le 19/10 (écran rechargé puis scan de test).
-   - **(b) remplie le 18/10** : Wam N Fade, 51 scans sur 14 jours, 0 sans clé ;
-     dernier scan le 18/10 à 08:31 UTC, avec clé ; dernier sans clé le 02/10 (avant
-     11b). Plus besoin d'attendre le passage du 19/10. Reste (a), puis le feu vert.
+1. **t43, clé d'idempotence obligatoire : en production le 18/10, CLOS.**
+   - Poussé `195c1e5..54a7768` à 09:24 UTC, après requête D à 100 % et WAM à jour
+     (51 scans sur 14 jours, 0 sans clé).
+   - Contrôle de Yass : déploiement vert, aucune ligne `ALERTE cle_idempotence`,
+     scan réel passé. Détail au §15 octoquinquagies.
 2. **Gain Google (règle D2, depuis le 13/10) : mesure à refaire vers le 20/10.**
    - Premier relevé, le 15/10 :
      - en brut, scan 1238 → 246 et inactive 821 → 100 ;
@@ -7427,7 +7423,7 @@ tard.
   - contrôler : iPhone (couleurs, case, bannière, notification), Android, arrêt
     silencieux, registre `theme`.
 
-## 15 octoquinquagies. t43 : CLÉ D'IDEMPOTENCE OBLIGATOIRE (17/10, commit local `2ed79b6`, NON POUSSÉ)
+## 15 octoquinquagies. t43 : CLÉ D'IDEMPOTENCE OBLIGATOIRE (code `2ed79b6`, EN PRODUCTION le 18/10, clos)
 
 **Livré (en local)** :
 - `scan.js` : sans clé (absente, `null` ou vide), réponse `400 { error: 'cle_idempotence
