@@ -42,7 +42,7 @@ indiquée.
 ### 0.2 Production
 
 - Branche déployée : `claude/keen-goldberg-MXslu`, sur Railway, déployée à chaque
-  push. Dernier push : **`abcede9`** (18/10, onglet Scans : lieu et annulation).
+  push. Dernier push : **`34073a2`** (19/10, t17 : désinscription Apple contrôlée, quota manuel borné).
   - Pousser en avance rapide seulement, sur feu vert de Yass.
   - La migration est exécutée dans Supabase AVANT le push du code qui en dépend.
 - Branche de travail des sessions : jamais poussée (consigne de Yass). Le crochet
@@ -7822,6 +7822,31 @@ rattrapage se fait surtout au fil des ventes.
 **Décisions hors pilotage** (à valider) : borne du quota à 1 000 ; Backblaze B2 (UE) et GitHub
 Actions pour t23 ; verrou 30 jours, rétention 90 jours ; un numéro = une carte par marchand ;
 pas de fusion automatique de cartes.
+
+## 15 tritriginta sexagies. t17 : DÉSINSCRIPTION APPLE CONTRÔLÉE, QUOTA MANUEL BORNÉ (19/10, `34073a2`, poussé)
+
+**Validé par le pilotage** (19/10) : plan du Lot 1 et les 4 choix (borne 1 000 ; Backblaze +
+GitHub ; 30 j / 90 j ; un numéro = une carte sans fusion). Récupération de carte ouverte à
+tous les forfaits. Requête préalable : 0 quota hors bornes, 0 solde négatif, 11 numéros sans
+doublon.
+
+**Livré (code)** :
+- `src/routes/apple-wallet.js` : `DELETE /v1/devices/…/registrations/…` vérifie le jeton de la
+  carte (`verifyAppleToken`), 401 sinon, rien d'effacé. La panne de base reste 503.
+- `src/routes/admin.js` : `notification_quota_override` = `null` / vide (forfait) ou entier de 0
+  à 1 000, sinon 400 « Quota notifs : entier de 0 à 1000 ». Un nombre en texte (« 5 ») est
+  refusé : l'écran admin envoie un nombre (`quotaManuel`). Écran admin : `max="1000"`.
+- Filet : 4 contrôles (`tests/scenarios.js`, §10 et §17). 349/349. **Contre-épreuve** : les
+  mêmes tests sur le code en production → 347/349, les 2 nouveaux échouent (prod : quota
+  [200,200,500,500,200,500], désinscription sans jeton 200). Suite complète (navigateur
+  compris) : 441/441.
+
+**Hypothèse** : Apple envoie l'en-tête `ApplePass` à la désinscription. Sinon : désinscription
+refusée, jeton gardé, un envoi perdu (dette 410 connue). À surveiller : `DELETE /v1/devices`
+en 401 dans les journaux Railway les jours suivants.
+
+**Correction** : le `CHECK` solde ≥ 0 du contrat API existe déjà (migration 051) ; doc A.5-4
+corrigé, plus de migration à prévoir pour ce point.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 

@@ -108,9 +108,12 @@ Réponses : 200 `{ "ok": true, "solde": 115 }` ; 404 vente inconnue ; 409 `deja_
 3. **Récompense atteinte en caisse (99 §B1).** Un humain est présent à la caisse : la réponse
    dit `recompense: true`, et leur caisse affiche « récompense à remettre ». Reste à définir
    ce que fait leur caissier (remise immédiate ou au prochain passage), comme au comptoir.
-4. **Solde jamais négatif : ACTÉ.** Contrainte en base (`CHECK stored_value >= 0`,
-   **migration**), posée **avant** d'ouvrir le second écrivain. Préalable : une requête qui
-   prouve qu'aucun solde n'est négatif aujourd'hui (sinon la contrainte ne se pose pas).
+4. **Solde jamais négatif : ACTÉ — déjà en place.** Correction du 19/10 : la contrainte
+   existe depuis la **migration 051** (`clients_stored_value_non_negatif`,
+   `CHECK (stored_value >= 0)`) ; l'audit 02 §6 la précédait, ce brouillon l'a reprise à tort.
+   Le filet le vérifie (« un solde négatif est refusé par la base »). Reste une requête qui
+   prouve sa présence en production (aucune migration à prévoir) ; 0 solde négatif relevé le
+   19/10.
 5. **Canal du crédit : ACTÉ.** Colonne `canal` sur les scans (`comptoir` / `caisse`),
    `comptoir` par défaut pour tout l'existant, posée **avec** l'API (**migration**).
 
