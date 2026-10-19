@@ -7791,6 +7791,38 @@ de vente, fleuristes, Dubaï, caisse maison). **t42 en pause** (3 onglets sur 6 
   avant l'ouverture, Point in Time (P5) à décider.
 - **Aucun code** avant validation du contrat et réponses du technicien.
 
+## 15 duotriginta sexagies. API CAISSES — DÉCISIONS, LOT 1 (PLAN) ET ADDENDUM f04 (19/10, rien codé)
+
+**Décisions du pilotage (19/10)**, reportées dans `docs/api/01-api-caisses-cadrage.md` A.5 :
+conversion montant → points par **règle propre au marchand** + **plafond par vente très élevé**
+(garde-fou anti-saisie absurde) ; **pas de remboursement tardif** (annulation du dernier
+mouvement seulement, **f05 tombe**) ; **`CHECK` solde ≥ 0** en base ; **colonne `canal`**
+(`comptoir` / `caisse`). Deux questions ajoutées au technicien (B15 téléphone joint à la vente,
+B16 export) et B9 complétée (refus d'annulation sans boucle).
+
+**Lot 1, plan de code** (doc §C, à valider avant code) : t17 a, contrôle du jeton à la
+désinscription Apple (une ligne, 401 sinon) ; t17 b, quota manuel entier de 0 à 1 000 (400
+sinon, admin seul, écran admin aligné) ; t23, copie nocturne chiffrée (`pg_dump` + AES-256)
+vers Backblaze B2 UE avec verrou 30 jours et clé en écriture seule, lancée par une tâche
+planifiée GitHub Actions (hors du serveur), restaurée à blanc à chaque nuit pour contrôle.
+Hypothèses et limites écrites au doc (P5 reporté, fichiers du stockage non copiés, branche par
+défaut du dépôt = branche du site).
+- Requête préalable, lecture seule : `database/requetes/prealables_lot1_api.sql` (quotas hors
+  bornes, droit `BYPASSRLS` du rôle courant, soldes négatifs, téléphones déjà en base).
+
+**Addendum f04** (doc §D) : aujourd'hui **aucune récupération** de carte hors du navigateur
+d'origine (stockage local de la page d'inscription) ; changement de téléphone = nouvelle carte à
+0. Proposition : `telephone_normalise` + index unique par marchand, source et date ; trois
+chemins d'attache (joint à l'appel de vente de l'API, bouton « + numéro » au comptoir hors du
+scan, import de paires) ; récupération au comptoir par numéro → prénom + solde vérifiés par le
+caissier → QR de réinstallation à usage limité de la **même** carte. Code SMS / e-mail noté en
+amélioration, pas en barrage. Limite : aucune clé commune entre leurs fiches et nos cartes, le
+rattrapage se fait surtout au fil des ventes.
+
+**Décisions hors pilotage** (à valider) : borne du quota à 1 000 ; Backblaze B2 (UE) et GitHub
+Actions pour t23 ; verrou 30 jours, rétention 90 jours ; un numéro = une carte par marchand ;
+pas de fusion automatique de cartes.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
