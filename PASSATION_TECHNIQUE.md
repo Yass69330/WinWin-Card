@@ -170,6 +170,12 @@ Ce sont des propositions de la session. L'ordre validé est celui de la carte.
   - la clé d'idempotence obligatoire (point 0.4, n° 1) ;
   - la phase 2 du filet (point 0.4, n° 4).
 
+### 0.5 bis Cap du 19/10 : API caisses (Black Tulip)
+
+- t42 en pause après 3 onglets (Notifs, Réseau, Scans) ; Clients, Aperçu, Scanner plus tard.
+- Cadrage de l'API caisses : `docs/api/01-api-caisses-cadrage.md` (§15 untriginta sexagies).
+  Rien codé avant validation du contrat et réponses de leur technicien.
+
 ### 0.6 Où lire quoi
 
 - Dernier chantier livré : f17, au §15 septquinquagies.
@@ -7764,6 +7770,26 @@ plan : la clé `message` ne servait qu'à cet onglet, elle est partie avec lui.
 - **Découpage en pause après cet onglet** (décision du pilotage) : Clients, Aperçu, puis Scanner
   la semaine suivante. Ensuite (chantier à part) : lieu de chaque scan et annulation depuis
   l'onglet Scans, en réutilisant l'annulation de la fiche client.
+
+## 15 untriginta sexagies. API CAISSES — CADRAGE (19/10, rien codé)
+
+**Nouveau cap (pilotage, 19/10)** : API caisses pour un premier client, **Black Tulip** (35 points
+de vente, fleuristes, Dubaï, caisse maison). **t42 en pause** (3 onglets sur 6 découpés).
+- Livrables dans **`docs/api/01-api-caisses-cadrage.md`** : A, brouillon du contrat (clé d'API
+  par marchand, `POST /api/v1/ventes`, annulation par référence, idempotence par clé t43
+  dérivée de la référence) ; B, 14 questions fermées pour leur technicien ; C, prérequis t17 et
+  t23 (diagnostic).
+- **Points durs à trancher** (pilotage) : conversion montant → points et plafond (99 §B2) ;
+  **remboursement tardif** (`annuler_scan` n'annule que le dernier mouvement : il faudrait un
+  mouvement inverse tracé, garde-fou d'argent qui change) ; récompense atteinte en caisse ;
+  `CHECK` solde ≥ 0 ; colonne de canal. Plusieurs **migrations** (clés d'API, règle de
+  conversion, canal, référence externe, `CHECK`).
+- Briques : f02 et f03 couvertes, f05 en partie (dernier mouvement), f04 non nécessaire en
+  variante 1.
+- Prérequis : désinscription Apple à protéger (`verifyAppleToken`, petit, sans migration) ;
+  quota manuel à valider (admin) ; t23 : copie des sauvegardes hors du compte Supabase (P4)
+  avant l'ouverture, Point in Time (P5) à décider.
+- **Aucun code** avant validation du contrat et réponses du technicien.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
