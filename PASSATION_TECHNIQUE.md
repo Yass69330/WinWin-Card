@@ -7848,6 +7848,55 @@ en 401 dans les journaux Railway les jours suivants.
 **Correction** : le `CHECK` solde ≥ 0 du contrat API existe déjà (migration 051) ; doc A.5-4
 corrigé, plus de migration à prévoir pour ce point.
 
+## 15 quattuortriginta sexagies. t23 : COPIE CHIFFRÉE DES SAUVEGARDES HORS DE SUPABASE (19/10, en cours)
+
+**Validé** (pilotage, 19/10) : Backblaze B2 (UE) + tâche planifiée GitHub, verrou 30 jours,
+rétention 90 jours. Point in Time (P5) reporté, décision sur le volume réel.
+
+**Livré (fichier)** : `.github/workflows/sauvegarde-nocturne.yml`, sur la **branche par défaut**
+du dépôt (`claude/winwin-card-landing-ohS22`, celle du site : GitHub n'exécute les tâches
+planifiées que là). Copie de référence ici : `docs/exploitation/sauvegarde-nocturne.yml`
+(les deux doivent rester identiques). Chaque nuit à 23:17 UTC : `pg_dump` 17 du schéma public
+(droits compris) → chiffré AES-256 (gpg, phrase secrète) → déchiffré et restauré à blanc dans
+une base jetable, contrôle « marchands, clients, passes, scans non vides » → envoi Backblaze
+(`put-object` avec MD5). Journal public : seulement les étapes, « ok », le nombre d'erreurs
+tolérées à la restauration à blanc. Échec → ticket GitHub « Sauvegarde nocturne échouée ».
+
+**Essai local** (Postgres 16, base rejouée des migrations, faux Backblaze) : rôle sans
+`BYPASSRLS` → l'export échoue (« query would be affected by row-level security policy ») ;
+avec → ok. Copie illisible sans la phrase (aucun prénom en clair), mauvaise phrase refusée,
+restauration complète d'une copie : données, contrainte `clients_stored_value_non_negatif` et
+droits `service_role` revenus (le défaut 06 §6.4 ne joue pas avec ces copies). Échecs testés,
+rien envoyé : secret manquant, mot de passe faux, table centrale vide.
+
+**Rôle de lecture** (exécuté par Yass dans Supabase, mot de passe jamais dans le dépôt) :
+```sql
+CREATE ROLE sauvegarde LOGIN BYPASSRLS PASSWORD '<mot de passe>';
+GRANT USAGE ON SCHEMA public TO sauvegarde;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO sauvegarde;
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO sauvegarde;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO sauvegarde;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON SEQUENCES TO sauvegarde;
+```
+
+**Restaurer une copie** (procédure) :
+1. Backblaze → compartiment → télécharger la copie voulue (`winwin-AAAAMMJJ-HHMM.dump.gpg`).
+2. Déchiffrer : `gpg --decrypt --output base.dump winwin-….dump.gpg` (phrase secrète demandée).
+3. Projet Supabase neuf (ou base vide avec le schéma `extensions`, `uuid-ossp` et `pgcrypto`
+   dedans) : `pg_restore --dbname "<adresse>" base.dump` (pg_restore 17). Une erreur « schema
+   public already exists » est normale.
+4. Vérifier : nombre de clients, de scans, dernier `date_scan`. Puis pointer Railway sur la base.
+Ce qu'une copie ne ramène pas : fichiers du stockage Supabase, réglages Railway / Supabase /
+Google (06 §6.3) ; tout ce qui est écrit après 23:17 UTC la veille.
+
+**Hypothèses** : `postgres` de Supabase peut créer un rôle `BYPASSRLS` (vérifié au geste de
+Yass) ; le « Session pooler » accepte un rôle autre que `postgres` (utilisateur
+`sauvegarde.<ref du projet>`) ; toutes les tables du schéma public appartiennent à `postgres`
+(sinon le `GRANT` le dit) ; le dépôt reste actif (GitHub suspend une tâche planifiée après 60
+jours sans activité) ; les tickets sont ouverts sur le dépôt (alerte).
+**Limite** : une tâche qui ne se lance plus ne crée pas de ticket. Contrôle à prévoir : un
+regard mensuel sur Backblaze (dernière copie datée de la veille).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
