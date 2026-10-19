@@ -74,8 +74,13 @@ router.post('/v1/devices/:deviceId/registrations/:passTypeId/:serialNumber', asy
 
 // DELETE /v1/devices/:deviceId/registrations/:passTypeId/:serialNumber
 // Apple envoie ce DELETE quand le client supprime son pass
+// Jeton de la carte vérifié, comme à l'inscription (t17, 19/10) : avant, qui
+// connaissait l'identifiant d'appareil et le numéro de série coupait les mises à
+// jour d'une carte. Apple envoie le même en-tête « ApplePass » aux deux routes.
 router.delete('/v1/devices/:deviceId/registrations/:passTypeId/:serialNumber', asyncHandler(async (req, res) => {
   const { deviceId, serialNumber } = req.params;
+
+  if (!verifyAppleToken(req, serialNumber)) return res.status(401).send();
 
   const { error } = await supabase
     .from('device_tokens')

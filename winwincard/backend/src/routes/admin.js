@@ -291,6 +291,16 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
     }
   }
 
+  // Quota manuel de notifications (t17, 19/10) : vide ou null → quota du forfait ;
+  // sinon entier de 0 à 1 000 (Pro+ = 20). Avant : texte → 500 de la base,
+  // négatif → plus aucun envoi possible, énorme → aucune limite.
+  if (updates.notification_quota_override !== undefined) {
+    const q = updates.notification_quota_override;
+    if (q === null || q === '') updates.notification_quota_override = null;
+    else if (Number.isInteger(q) && q >= 0 && q <= 1000) updates.notification_quota_override = q;
+    else return res.status(400).json({ error: 'Quota notifs : entier de 0 à 1000' });
+  }
+
   // Notification « À proximité » (f10) : lieux contrôlés (services/geo.js).
   if (updates.geo_lieux !== undefined) {
     const v = require('../services/geo').validerLieux(updates.geo_lieux || []);

@@ -504,6 +504,19 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     verifier('un seuil à 0 est refusé par la base', [refuseParLaBase(`UPDATE marchands SET max_value = 0 WHERE id = '${M.tampons}'`), Number(sql(`SELECT max_value FROM marchands WHERE id = '${M.tampons}'`))], [true, 10]);
     const adm = await api('PATCH', `/api/admin/marchands/${M.tampons}`, jetonAdmin, { max_value: -5 });
     verifier('seuil négatif saisi dans l\'admin : refusé, seuil inchangé', [adm.statut >= 400, Number(sql(`SELECT max_value FROM marchands WHERE id = '${M.tampons}'`))], [true, 10]);
+    // t17 (19/10) : quota manuel de notifications, entier de 0 à 1 000, null = forfait.
+    const quota = async v => (await api('PATCH', `/api/admin/marchands/${M.tampons}`, jetonAdmin, { notification_quota_override: v })).statut;
+    const quotaBase = () => sql(`SELECT coalesce(notification_quota_override::text, 'null') FROM marchands WHERE id = '${M.tampons}'`);
+    const acceptes = [];
+    for (const v of [7, 0, 1000, null]) acceptes.push([await quota(v), quotaBase()]);
+    verifier('quota manuel : 7, 0, 1 000 et null (forfait) acceptés et écrits',
+      acceptes, [[200, '7'], [200, '0'], [200, '1000'], [200, 'null']]);
+    await quota(12);
+    const refuses = [];
+    for (const v of [-1, 1001, 2.5, 'abc', '5', true]) refuses.push(await quota(v));
+    verifier('quota manuel : -1, 1 001, 2,5, « abc », « 5 », true → 400, valeur en base inchangée',
+      [refuses, quotaBase()], [[400, 400, 400, 400, 400, 400], '12']);
+    await quota(null);
     verifier('fonction crediter_scan, carte d\'un autre marchand : refus « client_introuvable », rien écrit',
       [sql(`SELECT crediter_scan('${c.id}', '${M.points}', NULL, 500, 10, 'points', NULL, 'r', 'g', 'p') ->> 'reason'`), solde(c.id), lignes(c.id)], ['client_introuvable', 3, 0]);
   }
@@ -1233,6 +1246,16 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     const inconnu = crypto.randomUUID();
     const authInconnu = 'ApplePass ' + crypto.createHmac('sha256', secretJwt).update(inconnu).digest('hex').slice(0, 32);
     verifier('… carte inconnue, base saine : toujours 404', (await appel('GET', `/v1/passes/pass.com.winwincard.loyalty/${inconnu}`, authInconnu)).statut, 404);
+    // t17 (19/10) : la désinscription vérifie le jeton de la carte, comme l'inscription.
+    const inscrit = async () => (await appel('GET', cheminListe)).statut;   // 200 inscrit, 204 plus rien
+    const sansJeton = await appel('DELETE', cheminInscr);
+    const autreJeton = await appel('DELETE', cheminInscr, authInconnu);
+    verifier('désinscription sans jeton ou avec le jeton d\'une autre carte : 401, l\'iPhone reste inscrit',
+      [sansJeton.statut, autreJeton.statut, await inscrit()], [401, 401, 200]);
+    const bonJeton = await appel('DELETE', cheminInscr, authApple);
+    verifier('désinscription avec le jeton de la carte : 200, l\'iPhone n\'est plus inscrit',
+      [bonJeton.statut, await inscrit()], [200, 204]);
+    await appel('POST', cheminInscr, authApple, { pushToken: 'jeton-t37' });
     Object.assign(regle, { motif: /^\/rest\/v1\/device_tokens/, delaiMs: 8000 });
     const listeLente = await appel('GET', cheminListe);
     Object.assign(regle, { motif: null, delaiMs: 0 });
