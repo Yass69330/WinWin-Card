@@ -2725,6 +2725,163 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     }
     }
   }
+
+  // ── f04. Numéro de téléphone et récupération au comptoir (migration 066) ────
+  titre('f04. Numéro attaché à la carte, récupération au comptoir (20/10)');
+  {
+    // Serveur neuf (limiteurs à zéro), recherches limitées à 6 pour tester le 429.
+    const s4 = await demarrerServeur('f04', urlSupabase, { COMPTOIR_RECHERCHES_MAX: '6' });
+    const ap = async (methode, chemin, jt, corps) => {
+      const r = await fetch(s4.url + chemin, { method: methode,
+        headers: { 'Content-Type': 'application/json', ...(jt ? { Authorization: `Bearer ${jt}` } : {}) },
+        body: corps === undefined ? undefined : JSON.stringify(corps) });
+      const t = await r.text(); let c; try { c = JSON.parse(t); } catch { c = t; }
+      return { statut: r.status, corps: c, type: r.headers.get('content-type') || '' };
+    };
+    const attacher = (jt, serial, telephone, confirme) => ap('POST', `/api/comptoir/cartes/${serial}/telephone`, jt,
+      confirme === undefined ? { telephone } : { telephone, confirme });
+    const fiche = id => sql(`SELECT coalesce(telephone, '-') || '|' || coalesce(telephone_normalise, '-') || '|' || coalesce(telephone_source, '-')
+      || '|' || (telephone_lie_le IS NOT NULL) FROM clients WHERE id = '${id}'`);
+    const sha = x => crypto.createHash('sha256').update(x).digest('hex');
+
+    // Format : une seule règle, en base.
+    const cas = [['050 123 4567', '+971501234567'], ['0501234567', '+971501234567'], ['+971 50 123 4567', '+971501234567'],
+      ['00971501234567', '+971501234567'], ['971501234567', '+971501234567'], ['501234567', '+971501234567'],
+      ['+971 050-123-4567', '+971501234567'], ['04 123 4567', '+97141234567'], ['(050) 123.4567', '+971501234567'],
+      ['+33 6 12 34 56 78', '+33612345678'], ['12345', null], ['abc', null], ['', null], ['+0501234567', null]];
+    verifier('normaliser_telephone : Émirats par défaut (05…, 5…, 971…, 00971…, +971 0…, fixe 04…), étranger avec +, le reste → null',
+      cas.map(([b]) => sql(`SELECT coalesce(normaliser_telephone('${b}'), 'null')`)), cas.map(([, n]) => n || 'null'));
+
+    // Attache en deux temps : aperçu (rien d'écrit), puis confirmation.
+    const c = client(M.tampons), c2 = client(M.tampons), cAutre = client(M.points);
+    const apercu = await attacher(tT, c.serial, '050 123 4567');
+    verifier('attache, 1er temps (sans confirmation) : aperçu du numéro normalisé et du prénom, RIEN écrit',
+      [apercu.statut, apercu.corps.apercu, apercu.corps.telephone, apercu.corps.prenom, fiche(c.id)],
+      [200, true, '+971501234567', 'Filet', '-|-|-|false']);
+    const ok = await attacher(tT, c.serial, '050 123 4567', true);
+    verifier('attache confirmée : numéro écrit, origine « comptoir », date, consentement tracé (source comptoir)',
+      [ok.statut, ok.corps.telephone, fiche(c.id),
+       sql(`SELECT type || '|' || valeur || '|' || source FROM consentements WHERE client_id = '${c.id}'`)],
+      [200, '+971501234567', '+971501234567|+971501234567|comptoir|true', 'telephone|true|comptoir']);
+    const encore = await attacher(tT, c.serial, '+971501234567', true);
+    verifier('même numéro, autre écriture : « déjà celui de cette carte », aucun second consentement',
+      [encore.statut, encore.corps.inchange, Number(sql(`SELECT count(*) FROM consentements WHERE client_id = '${c.id}'`))], [200, true, 1]);
+    const autreNum = await attacher(tT, c.serial, '0509876543', true);
+    verifier('carte qui a déjà un numéro : refus 409 « deja_un_numero » (fin …4567), aucun écrasement depuis la caisse',
+      [autreNum.statut, autreNum.corps.error, autreNum.corps.fin, fiche(c.id).split('|')[1]], [409, 'deja_un_numero', '4567', '+971501234567']);
+    const pris = await attacher(tT, c2.serial, '00971 50 123 4567');
+    verifier('numéro déjà lié à une autre carte du marchand : refus dès l\'aperçu, prénom de l\'autre carte, rien écrit',
+      [pris.statut, pris.corps.error, pris.corps.prenom_autre, fiche(c2.id)], [409, 'numero_pris', 'Filet', '-|-|-|false']);
+    verifier('la base refuse elle-même un doublon (index unique), même écrit hors des routes',
+      refuseParLaBase(`UPDATE clients SET telephone = '0501234567' WHERE id = '${c2.id}'`), true);
+    const refus = [await attacher(tT, cAutre.serial, '0505555555', true), await attacher(tT, c2.serial, '12345', true),
+      await ap('POST', `/api/comptoir/cartes/${c2.serial}/telephone`, tT, {}), await attacher(null, c2.serial, '0505555555', true)];
+    verifier('refus : carte d\'un autre marchand 404, numéro invalide 400, numéro absent 400, sans jeton 401 ; rien écrit',
+      [refus.map(r => r.statut), refus[0].corps.error, refus[1].corps.error, fiche(c2.id), fiche(cAutre.id)],
+      [[404, 400, 400, 401], 'carte_introuvable', 'numero_invalide', '-|-|-|false', '-|-|-|false']);
+    verifier('même numéro chez un AUTRE marchand : accepté (un numéro = une carte PAR marchand)',
+      (await attacher(tP, cAutre.serial, '0501234567', true)).statut, 200);
+
+    // Le scan rend le numéro de série résolu (code de secours compris), rien d'autre ne change.
+    const parCode = await scan(tT, c2.serial.slice(-6));
+    verifier('scan au code de secours (6 caractères) : la réponse porte le numéro de série résolu (« + numéro »)',
+      [parCode.statut, parCode.corps.serial_number], [200, c2.serial]);
+
+    // Inscription sur la landing avec un numéro déjà lié : réussit, carte sans numéro.
+    sql(`UPDATE marchands SET landing_premium = true WHERE id = '${M.tampons}'`);
+    const ins = await ap('POST', '/api/clients', null, { prenom: 'Nouveau', marchand_slug: 'filet-tampons', telephone: '050 123 4567' });
+    const ins2 = await ap('POST', '/api/clients', null, { prenom: 'Autre', marchand_slug: 'filet-tampons', telephone: '0502223333' });
+    sql(`UPDATE marchands SET landing_premium = false WHERE id = '${M.tampons}'`);
+    verifier('inscription avec un numéro déjà lié : 201, nouvelle carte SANS numéro (l\'ancienne garde le sien), aucun consentement téléphone',
+      [ins.statut, fiche(ins.corps.client_id), Number(sql(`SELECT count(*) FROM consentements WHERE client_id = '${ins.corps.client_id}' AND type = 'telephone'`)), fiche(c.id).split('|')[1]],
+      [201, '-|-|-|false', 0, '+971501234567']);
+    verifier('inscription avec un numéro libre : numéro gardé, origine « inscription »',
+      [ins2.statut, fiche(ins2.corps.client_id)], [201, '0502223333|+971502223333|inscription|true']);
+
+    // Recherche par numéro.
+    const trouve = await ap('POST', '/api/comptoir/recherche', tT, { telephone: '+971 50 123 4567' });
+    const rien = await ap('POST', '/api/comptoir/recherche', tT, { telephone: '0509999999' });
+    const invalide = await ap('POST', '/api/comptoir/recherche', tT, { telephone: 'abc' });
+    const ailleurs = await ap('POST', '/api/comptoir/recherche', tR, { telephone: '0501234567' });
+    verifier('recherche : prénom et solde de la carte ; inconnu 404 ; invalide 400 ; le numéro d\'un autre marchand reste invisible (404)',
+      [trouve.statut, trouve.corps, rien.statut, invalide.statut, ailleurs.statut],
+      [200, { client_id: c.id, prenom: 'Filet', solde: 0 }, 404, 400, 404]);
+    const suite = [];
+    for (let i = 0; i < 4; i++) suite.push((await ap('POST', '/api/comptoir/recherche', tT, { telephone: '0509999999' })).statut);
+    verifier('recherche limitée par boutique (6 ici, 30 en production) : la 7e reçoit 429 ; une autre boutique n\'est pas touchée',
+      [suite, (await ap('POST', '/api/comptoir/recherche', tB1, { telephone: '0509999999' })).statut], [[404, 404, 404, 429], 404]);
+
+    // Récupération : QR de 10 minutes, tracé, jeton jamais stocké en clair.
+    const rec = await ap('POST', '/api/comptoir/recuperations', tT, { client_id: c.id });
+    const jetonR = String(rec.corps.url || '').split('/r/')[1] || '';
+    const ligne = sql(`SELECT role || '|' || coalesce(point_de_vente_id::text, '-') || '|' || (jeton_hash = '${sha(jetonR)}')
+      || '|' || (extract(epoch FROM expire_le - cree_le)::int) || '|' || ouvertures FROM recuperations_carte WHERE client_id = '${c.id}'`);
+    verifier('QR de récupération : 201, lien /r/<jeton 32 hex>, image QR, trace (rôle, boutique, empreinte du jeton, 600 s, 0 ouverture)',
+      [rec.statut, /^[0-9a-f]{32}$/.test(jetonR), String(rec.corps.qrcode).startsWith('data:image/png'), ligne],
+      [201, true, true, 'marchand|-|true|600|0']);
+    verifier('le jeton n\'est nulle part en clair en base',
+      sql(`SELECT count(*) FROM recuperations_carte WHERE jeton_hash = '${jetonR}' OR id::text = '${jetonR}'`), '0');
+    const cR = client(M.reseau);
+    const recB = await ap('POST', '/api/comptoir/recuperations', tB1, { client_id: cR.id });
+    verifier('… depuis une boutique : trace du rôle « scanner » et de la boutique',
+      [recB.statut, sql(`SELECT role || '|' || point_de_vente_id FROM recuperations_carte WHERE client_id = '${cR.id}'`)], [201, `scanner|${B.b1}`]);
+    const recAutre = await ap('POST', '/api/comptoir/recuperations', tT, { client_id: cAutre.id });
+    verifier('QR pour le client d\'un autre marchand : 404, rien créé',
+      [recAutre.statut, sql(`SELECT count(*) FROM recuperations_carte WHERE client_id = '${cAutre.id}'`)], [404, '0']);
+
+    const ouvre1 = await ap('GET', `/api/recuperation/${jetonR}`);
+    const ouvre2 = await ap('GET', `/api/recuperation/${jetonR}`);
+    const page = await ap('GET', `/r/${jetonR}`);
+    verifier('le client ouvre le QR : même carte (lien Apple de son numéro de série), prénom, commerce ; chaque ouverture comptée ; page HTML servie',
+      [ouvre1.statut, ouvre1.corps.prenom, ouvre1.corps.marchand, String(ouvre1.corps.apple_pass_url).endsWith(`/api/passes/${c.serial}/apple`),
+       ouvre1.corps.google_wallet_url, ouvre2.statut, sql(`SELECT ouvertures || '|' || (ouvert_le IS NOT NULL) FROM recuperations_carte WHERE client_id = '${c.id}'`),
+       page.statut, page.type.includes('text/html')],
+      [200, 'Filet', 'Filet Tampons', true, null, 200, '2|true', 200, true]);
+    sql(`UPDATE recuperations_carte SET expire_le = now() - interval '1 second' WHERE client_id = '${c.id}'`);
+    const expire = await ap('GET', `/api/recuperation/${jetonR}`);
+    verifier('QR expiré (10 minutes) : 410, ouverture non comptée ; jeton inconnu ou mal formé : 404',
+      [expire.statut, sql(`SELECT ouvertures FROM recuperations_carte WHERE client_id = '${c.id}'`),
+       (await ap('GET', `/api/recuperation/${crypto.randomBytes(16).toString('hex')}`)).statut, (await ap('GET', '/api/recuperation/x')).statut],
+      [410, '2', 404, 404]);
+
+    // Effacement RGPD : numéro et récupérations partent, le numéro redevient libre.
+    sql(`SELECT effacer_client('${c.id}', '${M.tampons}')`);
+    verifier('effacement RGPD : numéro, origine et date effacés, récupérations supprimées ; le numéro peut être attaché à une autre carte',
+      [fiche(c.id), sql(`SELECT count(*) FROM recuperations_carte WHERE client_id = '${c.id}'`), (await attacher(tT, c2.serial, '0501234567', true)).statut],
+      ['-|-|-|false', '0', 200]);
+    s4.processus.kill();
+
+    // Migration 066 sur une base qui a déjà des numéros : garde-fou, puis rattrapage.
+    const banc = require('./lancer');
+    const path = require('path'), fs = require('fs');
+    const dossier = path.join(__dirname, '..', 'database');
+    const base = 'winwin_f04_garde';
+    banc.psqlSocket(`DROP DATABASE IF EXISTS ${base}`, 'postgres');
+    banc.psqlSocket(`CREATE DATABASE ${base}`, 'postgres');
+    banc.psqlSocket(`ALTER DATABASE ${base} SET search_path = "$user", public, extensions`, 'postgres');
+    banc.psqlSocket('CREATE SCHEMA extensions; CREATE EXTENSION "uuid-ossp" SCHEMA extensions; CREATE EXTENSION pgcrypto SCHEMA extensions;', base);
+    const avant066 = fs.readdirSync(dossier).filter(f => /^migration_\d+.*\.sql$/.test(f) && f < 'migration_066').sort();
+    for (const f of ['schema.sql', ...avant066, 'rgpd_effacement.sql']) {
+      if (f === 'rgpd_effacement.sql') continue;   // il cite la table de 066 : rejoué après
+      banc.psqlSocket(fs.readFileSync(path.join(dossier, f), 'utf8'), base);
+    }
+    const g = (q) => banc.psqlSocket(q, base);
+    g(`INSERT INTO marchands (id, nom, slug, forfait, type_programme, max_value) VALUES ('${M.tampons}', 'G', 'g', 'pro', 'stamps', 10);
+       INSERT INTO clients (marchand_id, prenom, pass_serial_number, telephone) VALUES
+         ('${M.tampons}', 'A', 'g-1', '0501112222'), ('${M.tampons}', 'B', 'g-2', '+971 50 111 2222'), ('${M.tampons}', 'C', 'g-3', 'pas un numéro');`);
+    const m066 = fs.readFileSync(path.join(dossier, 'migration_066_telephone_carte.sql'), 'utf8');
+    let erreur = '';
+    try { g(m066); } catch (e) { erreur = e.message; }
+    verifier('migration 066, deux numéros égaux UNE FOIS normalisés (0501112222 et +971 50 111 2222) : arrêt, rien changé',
+      [/1 numéro\(s\) en double/.test(erreur), g(`SELECT count(*) FROM information_schema.columns WHERE table_name = 'clients' AND column_name LIKE 'telephone_%'`)],
+      [true, '0']);
+    g(`UPDATE clients SET telephone = '0503334444' WHERE pass_serial_number = 'g-2'`);
+    g(m066); g(m066);   // rejouable
+    verifier('… doublon réglé : migration passée (rejouée deux fois), numéros existants marqués « inscription » à leur date de création, numéro illisible gardé brut sans forme normalisée',
+      g(`SELECT string_agg(pass_serial_number || ':' || coalesce(telephone_normalise, '-') || ':' || coalesce(telephone_source, '-') || ':' || coalesce((telephone_lie_le = created_at)::text, '-'), ' ' ORDER BY pass_serial_number) FROM clients`),
+      'g-1:+971501112222:inscription:true g-2:+971503334444:inscription:true g-3:-:-:-');
+    banc.psqlSocket(`DROP DATABASE IF EXISTS ${base}`, 'postgres');
+  }
 }
 
 module.exports = { FIXTURES, jouer, M, B };

@@ -139,6 +139,10 @@ app.use('/api/notifications', notificationsRoutes);
 // Le POST est public (limiteur dédié dans le routeur), le GET est authAdmin.
 app.use('/api/diag', diagRoutes);
 
+// Zone « intégration » (f04, 20/10) : comptoir, récupération de carte ; plus
+// tard l'API des caisses. Délimitée dans src/integration/ (docs/api/README.md).
+app.use(require('./integration'));
+
 app.use('/api/admin/login', limiterAdminLogin);
 app.use('/api/admin/workflows', workflowsRoutes);
 app.use('/api/admin', adminRoutes);

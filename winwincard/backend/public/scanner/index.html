@@ -406,6 +406,21 @@
     #incident-principal { font-size: 18px; padding: 20px; }
     #confirm-scan-btn { font-size: 18px; padding: 20px; }
 
+    /* Numéro de téléphone et récupération de carte (f04, 20/10) : même feuille. */
+    .modal-ww {
+      display: none;
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,.7);
+      align-items: flex-end;
+    }
+    .modal-ww.open { display: flex; }
+    .modal-ww input[type=tel] { font-size: 22px; text-align: center; letter-spacing: .03em; }
+    .tel-erreur { color: var(--error); font-size: 13px; display: none; }
+    .tel-question { font-size: 18px; font-weight: 700; line-height: 1.4; }
+    #retrouver-qr img { width: 100%; max-width: 320px; align-self: center; background: #fff; border-radius: 12px; }
+    #retrouver-minuteur { font-size: 28px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+    .result-tel { font-size: 13px; color: var(--muted); text-align: center; display: none; }
+
     .modal-sheet {
       background: var(--surface);
       border-radius: 24px 24px 0 0;
@@ -489,6 +504,7 @@
       <div class="scan-footer">
         <button class="btn-manual" id="btn-open-history" data-i18n="history">History</button>
         <button class="btn-manual" id="btn-open-manual" data-i18n="manualEntry">Manual entry</button>
+        <button class="btn-manual" id="btn-open-retrouver" data-i18n="retrouverBouton">Find a card</button>
       </div>
     </div>
   </div>
@@ -545,8 +561,12 @@
         <div id="result-candidates-label" style="font-size:14px;color:var(--muted);text-align:center"></div>
       </div>
 
+      <!-- Numéro attaché à cette carte (f04) : retour du geste « + numéro » -->
+      <div class="result-tel" id="result-tel"></div>
+
       <div class="result-actions">
         <button class="btn btn-primary" id="btn-rescan" data-i18n="nextScan">Next scan</button>
+        <button class="btn btn-ghost"   id="btn-tel-ajouter" data-i18n="telAjouter" style="display:none">+ Phone number</button>
         <button class="btn btn-ghost"   id="btn-manual-after" data-i18n="manualEntry">Manual entry</button>
       </div>
     </div>
@@ -611,6 +631,58 @@
     <div class="modal-sub" id="incident-texte"></div>
     <button class="btn btn-primary" id="incident-principal"></button>
     <button class="btn btn-ghost"   id="incident-secondaire"></button>
+  </div>
+</div>
+
+<!-- ═══════════════════ NUMÉRO DE TÉLÉPHONE (f04) ═══════════════════
+     Deux temps : le caissier tape le numéro → « Attacher le … à la carte de … ? »
+     → seul « Oui, attacher » écrit. Un numéro faux bloquerait la récupération du
+     vrai client (pas d'écrasement depuis la caisse) : la confirmation tue la typo. -->
+<div id="modal-tel" class="modal-ww">
+  <div class="modal-sheet">
+    <div id="tel-saisie" style="display:flex;flex-direction:column;gap:16px">
+      <div class="modal-title" data-i18n="telTitre">Add a phone number</div>
+      <div class="modal-sub" data-i18n="telSous">The client's number, to find their card if they change phone.</div>
+      <input id="tel-input" type="tel" inputmode="tel" autocomplete="off" data-i18n-ph="telExemple" placeholder="05X XXX XXXX">
+      <div class="tel-erreur" id="tel-erreur"></div>
+      <button class="btn btn-primary" id="tel-continuer" data-i18n="continuer">Continue</button>
+      <button class="btn btn-ghost"   id="tel-annuler" data-i18n="cancel">Cancel</button>
+    </div>
+    <div id="tel-confirmation" style="display:none;flex-direction:column;gap:16px">
+      <div class="tel-question" id="tel-question"></div>
+      <div class="tel-erreur" id="tel-erreur2"></div>
+      <button class="btn btn-primary" id="tel-oui" data-i18n="telOui">Yes, attach</button>
+      <button class="btn btn-ghost"   id="tel-corriger" data-i18n="corriger">Correct</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ RETROUVER UNE CARTE (f04) ═══════════════════
+     Numéro dicté → prénom et solde vérifiés avec le client → QR de 10 minutes que
+     le client scanne avec l'appareil photo de son nouveau téléphone. -->
+<div id="modal-retrouver" class="modal-ww">
+  <div class="modal-sheet">
+    <div id="retrouver-saisie" style="display:flex;flex-direction:column;gap:16px">
+      <div class="modal-title" data-i18n="retrouverTitre">Find a card</div>
+      <div class="modal-sub" data-i18n="retrouverSous">Type the number the client gives you.</div>
+      <input id="retrouver-input" type="tel" inputmode="tel" autocomplete="off" data-i18n-ph="telExemple" placeholder="05X XXX XXXX">
+      <div class="tel-erreur" id="retrouver-erreur"></div>
+      <button class="btn btn-primary" id="retrouver-chercher" data-i18n="chercher">Search</button>
+      <button class="btn btn-ghost"   id="retrouver-annuler" data-i18n="cancel">Cancel</button>
+    </div>
+    <div id="retrouver-trouve" style="display:none;flex-direction:column;gap:16px">
+      <div class="modal-sub" data-i18n="retrouverVerifier">Check with the client:</div>
+      <div class="tel-question" id="retrouver-carte"></div>
+      <div class="tel-erreur" id="retrouver-erreur2"></div>
+      <button class="btn btn-primary" id="retrouver-qr-btn" data-i18n="retrouverConfirmer">That's them — show the QR</button>
+      <button class="btn btn-ghost"   id="retrouver-annuler2" data-i18n="cancel">Cancel</button>
+    </div>
+    <div id="retrouver-qr" style="display:none;flex-direction:column;gap:16px">
+      <div class="modal-title" data-i18n="retrouverQrTitre">Scan with the new phone's camera</div>
+      <img id="retrouver-qr-img" alt="">
+      <div id="retrouver-minuteur"></div>
+      <button class="btn btn-primary" id="retrouver-fin" data-i18n="termine">Done</button>
+    </div>
   </div>
 </div>
 
@@ -717,6 +789,25 @@ const I18N = {
     lockedIncertainHint:'Tap below to retry — never counted twice',
     carteInconnue:'Unknown card for this shop',
     codeInvalide:'Invalid code — scan the QR or type the 6-character backup code',
+    // Numéro de téléphone et récupération de carte (f04)
+    telAjouter:'+ Phone number', telTitre:'Add a phone number',
+    telSous:"The client's number, to find their card if they change phone.",
+    telExemple:'05X XXX XXXX', continuer:'Continue', corriger:'Correct', telOui:'Yes, attach',
+    telQuestion:({tel, prenom})=>`Attach ${tel} to ${prenom}'s card?`,
+    telAttache:({tel})=>`📞 ${tel} attached to this card`,
+    telInchange:'📞 This number is already on this card',
+    telInvalide:'Invalid number — check it and try again',
+    telDejaUn:({fin})=>`This card already has a number (…${fin}). It can be changed from the dashboard.`,
+    telPris:({prenom})=>`This number is already linked to ${prenom}'s card`,
+    telPrisAnon:'This number is already linked to another card',
+    retrouverBouton:'Find a card', retrouverTitre:'Find a card',
+    retrouverSous:'Type the number the client gives you.', chercher:'Search',
+    retrouverVerifier:'Check with the client:',
+    retrouverCarte:({prenom, solde, unite})=>`${prenom} · ${solde} ${unite}`,
+    unitePoints:'points', uniteTampons:'stamps',
+    retrouverConfirmer:"That's them — show the QR",
+    retrouverAucune:'No card with this number', retrouverTrop:'Too many searches — try again in a few minutes',
+    retrouverQrTitre:"Scan with the new phone's camera", termine:'Done', qrExpire:'QR expired',
   },
   fr: {
     appTitle:'Scanner WinWin', loginSub:'Connectez-vous pour scanner',
@@ -773,6 +864,24 @@ const I18N = {
     lockedIncertainHint:'Appuyez ci-dessous pour réessayer — jamais compté deux fois',
     carteInconnue:'Carte inconnue chez ce commerce',
     codeInvalide:'Code invalide — scannez le QR ou tapez les 6 caractères du code de secours',
+    telAjouter:'+ Numéro', telTitre:'Ajouter un numéro',
+    telSous:'Le numéro du client, pour retrouver sa carte s’il change de téléphone.',
+    telExemple:'05X XXX XXXX', continuer:'Continuer', corriger:'Corriger', telOui:'Oui, attacher',
+    telQuestion:({tel, prenom})=>`Attacher le ${tel} à la carte de ${prenom} ?`,
+    telAttache:({tel})=>`📞 ${tel} attaché à cette carte`,
+    telInchange:'📞 Ce numéro est déjà celui de cette carte',
+    telInvalide:'Numéro invalide — vérifiez et recommencez',
+    telDejaUn:({fin})=>`Cette carte a déjà un numéro (…${fin}). Il se change depuis le dashboard.`,
+    telPris:({prenom})=>`Ce numéro est déjà lié à la carte de ${prenom}`,
+    telPrisAnon:'Ce numéro est déjà lié à une autre carte',
+    retrouverBouton:'Retrouver une carte', retrouverTitre:'Retrouver une carte',
+    retrouverSous:'Tapez le numéro que le client vous donne.', chercher:'Chercher',
+    retrouverVerifier:'Vérifiez avec le client :',
+    retrouverCarte:({prenom, solde, unite})=>`${prenom} · ${solde} ${unite}`,
+    unitePoints:'points', uniteTampons:'tampons',
+    retrouverConfirmer:'C’est bien lui / elle — afficher le QR',
+    retrouverAucune:'Aucune carte avec ce numéro', retrouverTrop:'Trop de recherches — réessayez dans quelques minutes',
+    retrouverQrTitre:'Scannez avec l’appareil photo du nouveau téléphone', termine:'Terminé', qrExpire:'QR expiré',
   },
 };
 
@@ -1438,6 +1547,13 @@ function showResult(data, ok, serial) {
   document.getElementById('progress-section').style.display = ok ? '' : 'none';
 
   document.getElementById('result-deja').style.display = 'none';
+  // « + numéro » (f04) : après un scan réussi seulement. Toujours proposé : savoir
+  // si la carte a déjà un numéro coûterait une lecture de plus au scan (règle
+  // n°1) ; le serveur le dit au tap.
+  document.getElementById('result-tel').style.display = 'none';
+  state.resultSerial = ok && data.serial_number ? data.serial_number : null;
+  state.resultPrenom = ok ? (data.prenom || '') : '';
+  document.getElementById('btn-tel-ajouter').style.display = state.resultSerial ? '' : 'none';
 
   if (!ok) {
     const errEl = document.getElementById('result-error');
@@ -1671,6 +1787,160 @@ function backFromHistory() {
 
 document.getElementById('btn-open-history').addEventListener('click', openHistory);
 document.getElementById('btn-history-back').addEventListener('click', backFromHistory);
+
+// ═══════════════════════════════════════════════════════
+// NUMÉRO DE TÉLÉPHONE ET RÉCUPÉRATION DE CARTE (f04, 20/10)
+// Routes /api/comptoir (src/integration/comptoir.js). Rien ici ne part pendant
+// un scan : chaque requête suit un tap du caissier.
+// ═══════════════════════════════════════════════════════
+const $id = id => document.getElementById(id);
+
+async function comptoir(chemin, corps) {
+  const res = await fetch('/api/comptoir' + chemin, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${state.token}` },
+    body: JSON.stringify(corps),
+  });
+  return { statut: res.status, data: await res.json().catch(() => ({})) };
+}
+
+// Affichage seulement (la règle de format est en base, normaliser_telephone).
+function telLisible(n) {
+  return /^\+971\d{9}$/.test(n) ? `+971 ${n.slice(4, 6)} ${n.slice(6, 9)} ${n.slice(9)}` : n;
+}
+
+function erreurTel(el, msg) { el.textContent = msg; el.style.display = msg ? 'block' : 'none'; }
+
+function messageAttache(statut, d) {
+  if (statut === 400) return t('telInvalide');
+  if (d.error === 'deja_un_numero') return t('telDejaUn', { fin: d.fin || '' });
+  if (d.error === 'numero_pris') return d.prenom_autre ? t('telPris', { prenom: d.prenom_autre }) : t('telPrisAnon');
+  if (d.error === 'carte_introuvable') return t('carteInconnue');
+  return t('unknownError');
+}
+
+let _telSaisi = '';
+function ouvrirTel() {
+  _telSaisi = '';
+  $id('tel-input').value = '';
+  erreurTel($id('tel-erreur'), ''); erreurTel($id('tel-erreur2'), '');
+  $id('tel-saisie').style.display = 'flex'; $id('tel-confirmation').style.display = 'none';
+  $id('modal-tel').classList.add('open');
+  setTimeout(() => $id('tel-input').focus(), 100);
+}
+function fermerTel() { $id('modal-tel').classList.remove('open'); }
+
+// 1er temps : aperçu (confirme absent), rien n'est écrit.
+$id('tel-continuer').addEventListener('click', async () => {
+  const brut = $id('tel-input').value.trim();
+  if (!brut) return erreurTel($id('tel-erreur'), t('telInvalide'));
+  const b = $id('tel-continuer'); b.disabled = true;
+  try {
+    const { statut, data } = await comptoir(`/cartes/${encodeURIComponent(state.resultSerial)}/telephone`, { telephone: brut });
+    if (statut === 200 && data.inchange) { fermerTel(); return afficherRetourTel(t('telInchange')); }
+    if (statut !== 200) return erreurTel($id('tel-erreur'), messageAttache(statut, data));
+    _telSaisi = brut;
+    $id('tel-question').textContent = t('telQuestion', { tel: telLisible(data.telephone), prenom: data.prenom || state.resultPrenom });
+    $id('tel-saisie').style.display = 'none'; $id('tel-confirmation').style.display = 'flex';
+  } catch (e) {
+    erreurTel($id('tel-erreur'), t('networkError', { msg: e.message }));
+  } finally { b.disabled = false; }
+});
+
+// 2e temps : seul ce bouton écrit.
+$id('tel-oui').addEventListener('click', async () => {
+  const b = $id('tel-oui'); b.disabled = true;
+  try {
+    const { statut, data } = await comptoir(`/cartes/${encodeURIComponent(state.resultSerial)}/telephone`, { telephone: _telSaisi, confirme: true });
+    if (statut !== 200) return erreurTel($id('tel-erreur2'), messageAttache(statut, data));
+    fermerTel();
+    afficherRetourTel(data.inchange ? t('telInchange') : t('telAttache', { tel: telLisible(data.telephone) }));
+  } catch (e) {
+    erreurTel($id('tel-erreur2'), t('networkError', { msg: e.message }));
+  } finally { b.disabled = false; }
+});
+
+function afficherRetourTel(msg) {
+  const el = $id('result-tel'); el.textContent = msg; el.style.display = 'block';
+  $id('btn-tel-ajouter').style.display = 'none';
+}
+
+$id('btn-tel-ajouter').addEventListener('click', ouvrirTel);
+$id('tel-annuler').addEventListener('click', fermerTel);
+$id('tel-corriger').addEventListener('click', () => {
+  $id('tel-saisie').style.display = 'flex'; $id('tel-confirmation').style.display = 'none';
+  erreurTel($id('tel-erreur2'), '');
+  setTimeout(() => $id('tel-input').focus(), 100);
+});
+$id('tel-input').addEventListener('keydown', e => { if (e.key === 'Enter') $id('tel-continuer').click(); });
+
+// ── Retrouver une carte ──
+let _retrouve = null, _minuteur = null;
+function etapeRetrouver(id) {
+  ['retrouver-saisie', 'retrouver-trouve', 'retrouver-qr'].forEach(x => { $id(x).style.display = x === id ? 'flex' : 'none'; });
+}
+function ouvrirRetrouver() {
+  _retrouve = null;
+  state.processing = true;   // détection en pause tant que la fenêtre est ouverte
+  $id('retrouver-input').value = '';
+  erreurTel($id('retrouver-erreur'), ''); erreurTel($id('retrouver-erreur2'), '');
+  etapeRetrouver('retrouver-saisie');
+  $id('modal-retrouver').classList.add('open');
+  setTimeout(() => $id('retrouver-input').focus(), 100);
+}
+function fermerRetrouver() {
+  clearInterval(_minuteur); _minuteur = null; _retrouve = null;
+  $id('retrouver-qr-img').removeAttribute('src');
+  $id('modal-retrouver').classList.remove('open');
+  state.processing = false;
+}
+
+$id('retrouver-chercher').addEventListener('click', async () => {
+  const brut = $id('retrouver-input').value.trim();
+  if (!brut) return erreurTel($id('retrouver-erreur'), t('telInvalide'));
+  const b = $id('retrouver-chercher'); b.disabled = true;
+  try {
+    const { statut, data } = await comptoir('/recherche', { telephone: brut });
+    if (statut === 404) return erreurTel($id('retrouver-erreur'), t('retrouverAucune'));
+    if (statut === 400) return erreurTel($id('retrouver-erreur'), t('telInvalide'));
+    if (statut === 429) return erreurTel($id('retrouver-erreur'), t('retrouverTrop'));
+    if (statut !== 200) return erreurTel($id('retrouver-erreur'), t('unknownError'));
+    _retrouve = data;
+    $id('retrouver-carte').textContent = t('retrouverCarte', {
+      prenom: data.prenom, solde: data.solde,
+      unite: t(state.typeProgramme === 'points' ? 'unitePoints' : 'uniteTampons') });
+    etapeRetrouver('retrouver-trouve');
+  } catch (e) {
+    erreurTel($id('retrouver-erreur'), t('networkError', { msg: e.message }));
+  } finally { b.disabled = false; }
+});
+
+$id('retrouver-qr-btn').addEventListener('click', async () => {
+  if (!_retrouve) return;
+  const b = $id('retrouver-qr-btn'); b.disabled = true;
+  try {
+    const { statut, data } = await comptoir('/recuperations', { client_id: _retrouve.client_id });
+    if (statut !== 201) return erreurTel($id('retrouver-erreur2'), t('unknownError'));
+    $id('retrouver-qr-img').src = data.qrcode;
+    const fin = new Date(data.expire_le).getTime();
+    const tic = () => {
+      const s = Math.max(0, Math.round((fin - Date.now()) / 1000));
+      $id('retrouver-minuteur').textContent = s > 0 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : t('qrExpire');
+      if (s === 0) { clearInterval(_minuteur); $id('retrouver-qr-img').style.opacity = '.15'; }
+    };
+    $id('retrouver-qr-img').style.opacity = '1';
+    tic(); clearInterval(_minuteur); _minuteur = setInterval(tic, 1000);
+    etapeRetrouver('retrouver-qr');
+  } catch (e) {
+    erreurTel($id('retrouver-erreur2'), t('networkError', { msg: e.message }));
+  } finally { b.disabled = false; }
+});
+
+$id('btn-open-retrouver').addEventListener('click', ouvrirRetrouver);
+$id('retrouver-annuler').addEventListener('click', fermerRetrouver);
+$id('retrouver-annuler2').addEventListener('click', fermerRetrouver);
+$id('retrouver-fin').addEventListener('click', fermerRetrouver);
+$id('retrouver-input').addEventListener('keydown', e => { if (e.key === 'Enter') $id('retrouver-chercher').click(); });
 
 // ═══════════════════════════════════════════════════════
 // NAVIGATION

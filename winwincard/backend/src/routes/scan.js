@@ -235,6 +235,10 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
 
   res.json({
     prenom: client.prenom,
+    // Numéro de série RÉSOLU (f04, 20/10) : l'entrée pouvait être un code de
+    // secours ou un identifiant Google ; la caisse s'en sert pour « + numéro ».
+    // Déjà en main : zéro requête.
+    serial_number: serial,
     stored_value_avant: avantScan,
     stored_value_apres: apresScan,
     max_value: maxValue,

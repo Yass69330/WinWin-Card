@@ -52,12 +52,24 @@ router.post('/', limiterInscription, asyncHandler(async (req, res) => {
     if (date_anniversaire) extraFields.date_anniversaire = date_anniversaire;
   }
 
+  if (extraFields.telephone) Object.assign(extraFields, { telephone_source: 'inscription', telephone_lie_le: new Date().toISOString() });
+
   // Créer le client
-  const { data: client, error: errClient } = await supabase
+  const creer = champs => supabase
     .from('clients')
-    .insert({ marchand_id: marchand.id, prenom: prenomPropre, pass_serial_number: serialNumber, stored_value: 0, ...extraFields })
+    .insert({ marchand_id: marchand.id, prenom: prenomPropre, pass_serial_number: serialNumber, stored_value: 0, ...champs })
     .select()
     .single();
+  let { data: client, error: errClient } = await creer(extraFields);
+
+  // Numéro déjà lié à une autre carte de ce marchand (un numéro = une carte,
+  // migration 066) : c'est le cas « nouveau téléphone ». L'inscription réussit,
+  // la nouvelle carte n'a pas de numéro, l'ancienne garde le sien ; la carte se
+  // récupère au comptoir. Rien n'est dit sur l'autre carte.
+  if (errClient && errClient.code === '23505' && /telephone/.test(errClient.message || '')) {
+    delete extraFields.telephone; delete extraFields.telephone_source; delete extraFields.telephone_lie_le;
+    ({ data: client, error: errClient } = await creer(extraFields));
+  }
 
   if (errClient) return res.status(500).json({ error: 'Error creating client', detail: errClient.message });
 
