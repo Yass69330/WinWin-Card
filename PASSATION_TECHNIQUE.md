@@ -7848,7 +7848,12 @@ en 401 dans les journaux Railway les jours suivants.
 **Correction** : le `CHECK` solde ≥ 0 du contrat API existe déjà (migration 051) ; doc A.5-4
 corrigé, plus de migration à prévoir pour ce point.
 
-## 15 quattuortriginta sexagies. t23 : COPIE CHIFFRÉE DES SAUVEGARDES HORS DE SUPABASE (19/10, en cours)
+## 15 quattuortriginta sexagies. t23 : COPIE CHIFFRÉE DES SAUVEGARDES HORS DE SUPABASE (19-20/10, `165cadc` branche du site, clos)
+
+**Clos le 20/10** : secrets en place (Yass), tâche poussée sur la branche du site (`165cadc`,
+GitHub l'a acceptée), premier lancement à la main **vert**, copie présente chez Backblaze
+(`winwin-sauvegardes-2026`, EU Central, verrou 30 j, cycle 90 j). Rôle `sauvegarde` créé avec
+`BYPASSRLS` sans erreur (hypothèse levée).
 
 **Validé** (pilotage, 19/10) : Backblaze B2 (UE) + tâche planifiée GitHub, verrou 30 jours,
 rétention 90 jours. Point in Time (P5) reporté, décision sur le volume réel.
