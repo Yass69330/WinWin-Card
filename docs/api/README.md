@@ -6,8 +6,9 @@ rattaché à sa carte) et la récupération d'une carte sur un nouveau télépho
 borne. Ce fichier dit où ranger chaque chose et comment, pour qu'un développeur reprenne la
 zone sans deviner.
 
-**État au 20/10/2026** : rien n'est en production. Le contrat est en validation
-(`03-contrat-api-v1.md`) ; un socle déjà codé et testé (téléphone, récupération) attend sur la
+**État au 20/10/2026** : rien n'est en production. Le contrat est **validé**
+(`03-contrat-api-v1.md`, v1.0) ; **invariant : WinWin est additif, jamais bloquant** (une vente
+n'attend ni ne dépend jamais de WinWin) ; un socle déjà codé et testé (téléphone, récupération) attend sur la
 branche `briques/f04-telephone` (passation §0.5 bis).
 
 | Document | Contenu |
@@ -29,6 +30,7 @@ winwincard/backend/
       cle.js              clé d'API (empreinte sha256, cache 60 s, révocation)
       ventes.js           POST /ventes, POST /ventes/:reference/annulation
       cartes.js           GET /cartes/:carte
+      migrations.js       POST /migrations (points d'avant, une fois par carte)
       recuperations.js    POST /recuperations
     recuperation.js       /r/:jeton (page publique) et /api/recuperation/:jeton
   src/services/credit.js  crédit partagé par le comptoir et l'API (résolution de carte, effets d'après)
@@ -111,7 +113,8 @@ Règles qui valent pour tous :
 
 ## 4. Ce qui reste à construire (ordre prévu, sur validation)
 
-1. API v1 selon `03-contrat-api-v1.md` (migration clés + réglages + canal ; 066 ajustée ;
-   crédit partagé ; routes ; admin des clés).
+1. API v1 selon `03-contrat-api-v1.md` (migration clés + réglages + canal + origine ; 066
+   ajustée ; crédit partagé ; routes ventes, annulation, cartes, migrations, récupérations ;
+   admin des clés).
 2. Changement de numéro depuis WinWin (admin, puis fiche client du dashboard).
 3. Récupération en self-service par SMS (f11).

@@ -1,12 +1,11 @@
 # API WinWin v1 — contrat pour les caisses des commerçants
 
-**Version** : brouillon 1 du 20/10/2026, **à valider par le pilotage** avant toute
-implémentation. Rien n'est codé.
+**Version** : 1.0 du 20/10/2026, **validée par le pilotage** (décisions verrouillées le 20/10,
+partie III). Rien n'est codé ; l'implémentation démarre sur validation explicite.
 **Premier intégrateur** : Black Tulip (35 points de vente, Dubaï, caisse développée en
 interne).
 **Lecteurs** : (1) le technicien de la caisse, qui construit contre ce document ; (2) le
-développeur WinWin qui l'implémente (partie II). Les choix encore ouverts sont listés en
-partie III ; tant qu'ils ne sont pas tranchés, la valeur proposée ici fait foi.
+développeur WinWin qui l'implémente (partie II). Les décisions sont consignées en partie III.
 
 Documents voisins : `01-api-caisses-cadrage.md` (cadrage, questions au technicien),
 `README.md` (architecture de la zone `src/integration/`), passation §0.5 bis.
@@ -14,6 +13,25 @@ Documents voisins : `01-api-caisses-cadrage.md` (cadrage, questions au technicie
 ---
 
 # Partie I — Le contrat (ce que le technicien lit)
+
+## 0. Invariant : WinWin est additif, jamais bloquant
+
+**L'API WinWin ne peut bloquer aucune vente.** C'est la règle qui prime sur tout le reste du
+document :
+
+- **Client sans carte** : la vente est encaissée normalement ; la caisse n'appelle pas WinWin
+  (ou reçoit `404`, sans conséquence sur la vente).
+- **WinWin en panne, lent ou injoignable** : la vente est encaissée quand même ; l'appel est mis
+  en file et renvoyé plus tard (§8).
+- **Aucune réponse de WinWin**, quelle qu'elle soit (erreur, refus, délai dépassé), ne doit
+  empêcher, retarder au-delà du délai d'attente, ni annuler l'encaissement. La caisse
+  **clôture la vente d'abord** (ou en parallèle) ; la fidélité suit.
+- WinWin ne renvoie jamais d'instruction du type « refuser la vente ». Ses refus portent
+  **uniquement** sur le crédit de fidélité.
+
+Côté WinWin, l'API est sortie du limiteur global (un serveur central de caisse ne doit jamais
+être freiné par le trafic d'une autre adresse) et répond par des erreurs explicites, jamais par
+une attente sans fin (délai côté serveur : 5 s, puis `503`).
 
 ## 1. Principe
 
@@ -28,7 +46,10 @@ nouveau solde et l'état de la récompense.
 - Une vente peut être **annulée** tant qu'elle est le **dernier mouvement** de la carte.
 - **Aucune donnée personnelle** n'est renvoyée par WinWin (ni prénom, ni téléphone, ni e-mail).
 - La caisse peut, en option, **joindre le numéro de téléphone** du client à la vente : il est
-  rattaché à la carte et sert à **récupérer la carte** si le client change de téléphone.
+  rattaché à la carte et sert à **récupérer la carte** si le client change de téléphone, et
+  ensuite à **créditer par le numéro** quand le client n'a pas sa carte sous la main (§3.1).
+- Les points déjà cumulés par la caisse sous le numéro du client peuvent être **reversés une
+  seule fois** sur sa carte WinWin (§6 bis).
 
 ## 2. Accès
 
@@ -46,7 +67,8 @@ nouveau solde et l'état de la récompense.
   n'est affichée **qu'une fois** à sa création ; WinWin n'en garde qu'une empreinte et ne peut
   pas la retrouver : en cas de perte, une nouvelle clé est créée et l'ancienne révoquée.
 - **Droits de la clé** : créditer une vente, annuler une vente, lire le solde d'une carte,
-  demander un lien de récupération. **Rien d'autre** (aucune liste de clients, aucune donnée
+  reverser les points d'avant (migration, une fois par carte), demander un lien de
+  récupération. **Rien d'autre** (aucune liste de clients, aucune donnée
   personnelle, aucun réglage).
 - **Où la garder** : sur un serveur ou dans la configuration protégée des caisses, **jamais**
   affichée à l'écran ni dans un code accessible au caissier.
@@ -81,6 +103,21 @@ Le champ `carte` de chaque appel accepte **l'un ou l'autre**, tel quel :
 | ne lit pas les QR, ou le lecteur échoue | le code court tapé par le caissier (6 caractères, majuscules ou minuscules) |
 
 - Espaces autour ignorés ; casse ignorée.
+
+### 3.1 Sans la carte : par le numéro de téléphone
+
+Si le client n'a pas sa carte sous la main, la caisse peut l'identifier par son **numéro de
+téléphone** (champ `telephone`, sans `carte`) :
+
+- **Crédit uniquement si ce numéro est rattaché à une carte WinWin** du commerçant (rattaché
+  par une vente précédente, §4.4, ou à l'inscription). La carte est créditée comme si elle
+  avait été scannée.
+- **Jamais de crédit sans carte** : numéro inconnu → `404 carte_inconnue`, avec
+  `lien_installation`, l'adresse où le client obtient sa carte (à afficher ou envoyer : « Votre
+  carte de fidélité est ici »). Une fois la carte installée et le numéro rattaché, les ventes
+  suivantes sont créditées et les points d'avant peuvent être reversés (§6 bis).
+- Si `carte` **et** `telephone` sont fournis, c'est la **carte** qui désigne le compte ; le
+  numéro est seulement rattaché (§4.4).
 - **Code court en collision** (deux cartes du même commerçant finissent par les mêmes 6
   caractères, très rare) : `409 carte_ambigue`, rien n'est crédité ; le caissier **scanne le
   QR** (seul moyen sûr). WinWin ne renvoie jamais la liste des cartes en collision.
@@ -107,19 +144,19 @@ Le champ `carte` de chaque appel accepte **l'un ou l'autre**, tel quel :
 | Champ | Obligatoire | Règle |
 |---|---|---|
 | `reference` | **oui** | identifiant **unique et stable** de la vente chez le commerçant (ticket, commande). 1 à 64 caractères parmi `A-Z a-z 0-9 . _ - : /`. La même vente renvoyée porte **toujours** la même référence. |
-| `carte` | **oui** | contenu du QR ou code court (§3). |
+| `carte` | **oui, sauf** si `telephone` identifie le client (§3.1) | contenu du QR ou code court (§3). |
 | `montant` | **oui** | **entier en fils** (1 AED = 100 fils), montant **payé** par le client (TTC, remises déduites), strictement positif. `185,00 AED` → `18500`. Jamais de virgule ni de chaîne. |
 | `devise` | non | `"AED"` seulement. Absent = `AED`. Toute autre valeur : `400`. |
 | `boutique` | oui si le commerçant a plusieurs boutiques | **code du point de vente** chez le commerçant, tel que transmis à WinWin à l'ouverture (liste des 35 codes). Inconnu ou fermé : voir §4.3. |
 | `date_vente` | non | date et heure de la vente (ISO 8601 avec fuseau). Absente = l'heure de réception. Sert à l'historique ; la vente est créditée à réception. Plus de 7 jours dans le passé, ou dans le futur au-delà de 5 minutes : `422 date_vente_invalide`. |
-| `telephone` | non | numéro du client tel qu'il est dans la fiche de la caisse, **tout format** (`050 123 4567`, `+971501234567`, `00971…`). Rattaché à la carte (§4.4). **Ne fait jamais échouer la vente.** |
+| `telephone` | non (oui si `carte` est absent) | numéro du client tel qu'il est dans la fiche de la caisse, **tout format** (`050 123 4567`, `+971501234567`, `00971…`). Avec `carte` : rattaché à la carte (§4.4), **ne fait jamais échouer le crédit**. Sans `carte` : identifie le client (§3.1). |
 
 Tout autre champ est ignoré (compatibilité future).
 
 ### 4.2 Ce que fait WinWin
 
 1. Vérifie la clé, le corps, la boutique.
-2. Trouve la carte (§3).
+2. Trouve la carte (§3), ou, sans `carte`, la carte rattachée au numéro (§3.1).
 3. **Convertit le montant** selon la règle du commerçant :
    - programme **à points** : `points = arrondi_inférieur(montant ÷ fils_par_point)`, réglé par
      commerçant (par défaut **100 fils = 1 point**, soit 1 point par AED) ;
@@ -166,7 +203,9 @@ Tout autre champ est ignoré (compatibilité future).
 | `recompense_a_remettre` | **cette vente** est celle de la remise : le caissier **remet la récompense maintenant**. Afficher : « Remettre la récompense au client ». |
 | `telephone` | issue du rattachement (§4.4), `null` si aucun numéro n'a été envoyé. |
 
-**Erreurs** — corps toujours `{ "error": "<code>" }`, parfois avec un champ `champ` :
+**Erreurs** — corps toujours `{ "error": "<code>" }`, parfois avec un champ `champ`. **Aucune
+ne concerne l'encaissement** (§0) : dans tous les cas, la vente est déjà encaissée ; seule la
+fidélité est en jeu.
 
 | Statut | `error` | Signification | Que faire côté caisse |
 |---|---|---|---|
@@ -174,7 +213,7 @@ Tout autre champ est ignoré (compatibilité future).
 | 401 | `cle_invalide` | clé absente, fausse ou révoquée | alerter le support, ne pas renvoyer |
 | 403 | `commercant_suspendu` | programme de fidélité suspendu | ne pas renvoyer |
 | 403 | `boutique_fermee` | boutique désactivée chez WinWin | ne pas renvoyer ; prévenir le siège |
-| 404 | `carte_inconnue` | carte inconnue chez ce commerçant | afficher « Carte non reconnue » ; vente encaissée sans fidélité |
+| 404 | `carte_inconnue` (+ `lien_installation`) | carte inconnue chez ce commerçant, ou numéro rattaché à aucune carte | vente encaissée sans fidélité ; proposer au client le `lien_installation` |
 | 409 | `carte_ambigue` | code court en collision | **scanner le QR** puis renvoyer |
 | 409 | `reference_deja_utilisee` | même référence déjà enregistrée avec **une autre carte ou un autre montant** | ne pas renvoyer ; vérifier l'unicité des références |
 | 409 | `vente_annulee` | cette référence a été créditée puis annulée : elle ne sera jamais recréditée | ne pas renvoyer ; créer une nouvelle vente avec une nouvelle référence si besoin |
@@ -204,8 +243,10 @@ son numéro : il vient de la fiche client de la caisse.
 | `"ignore_invalide"` | numéro illisible : rien changé |
 | `"non_traite"` | rattachement momentanément impossible (la vente, elle, est créditée) ; renvoyer le numéro à la prochaine vente suffit |
 
-- **En envoyant un numéro, le commerçant atteste que le client a accepté** qu'il serve à
-  retrouver sa carte (clause du contrat commercial).
+- **Cadre légal** : le commerçant est **responsable du traitement** des données de ses clients ;
+  WinWin agit comme **sous-traitant**. La base légale du rattachement est couverte par le
+  **contrat de sous-traitance** entre le commerçant et WinWin (j04), pas par un mécanisme dans
+  le produit. WinWin n'envoie aucun SMS ni message au numéro.
 
 ### 4.5 La récompense, pas à pas
 
@@ -217,6 +258,13 @@ Même règle qu'au comptoir WinWin :
 - **Tampons** (seuil 10) : 9 → 10, `seuil_atteint: true`. Vente suivante →
   `recompense_a_remettre: true`, le solde repart à **0** (la vente de la remise ne donne pas de
   tampon).
+
+### 4.6 Ce qui suit une vente
+
+Comme au comptoir : la carte du client est mise à jour dans son téléphone ; après la vente qui
+remet une récompense, la demande d'avis Google du commerçant part 30 minutes plus tard (si le
+commerçant l'a activée). **Différence** : une vente reçue par l'API **ne déclenche pas** le
+crédit de parrainage (il reste propre au comptoir WinWin).
 
 ## 5. Annuler une vente
 
@@ -246,6 +294,40 @@ Une référence annulée ne pourra **jamais** être recréditée (`409 vente_ann
 Erreurs : `404 carte_inconnue`, `409 carte_ambigue`, 401, 429, 503.
 À n'utiliser que pour afficher le solde **avant** la vente ; la réponse d'une vente donne déjà
 le solde après.
+
+## 6 bis. Reverser les points d'avant (migration, une fois par carte)
+
+La caisse cumule déjà des points sous le numéro de téléphone de ses clients. Quand un client
+installe sa carte WinWin, ces points peuvent y être **reversés une seule fois**.
+
+`POST /api/v1/migrations`
+
+```json
+{ "carte": "3f6d2a1e-8b4c-4f0a-9d2e-7c1b5a9e0f12", "points": 320, "boutique": "DXB-014" }
+```
+
+| Champ | Obligatoire | Règle |
+|---|---|---|
+| `carte` | oui, sauf si `telephone` | contenu du QR ou code court (§3) |
+| `telephone` | non | identifie le client si `carte` est absent (numéro rattaché, §3.1) |
+| `points` | **oui** | entier **en points** (ou en tampons), déjà converti par le commerçant, de 1 à 100 000. **WinWin n'applique aucun taux** : la conversion des anciens points est une décision du commerçant. |
+| `boutique` | non | code du point de vente où la migration est faite |
+
+- **Une seule fois par carte** : la migration est enregistrée sous une clé propre à la carte.
+  Renvoi avec le même nombre de points → `200` avec `deja_migree: true`, rien recrédité.
+  Nouvel appel avec un autre nombre → `409 migration_deja_faite`, rien changé.
+- **Même chemin que le crédit d'une vente**, marqué `origine = migration` : la carte est mise à
+  jour dans le téléphone ; **pas** de demande d'avis, **pas** de parrainage ; la ligne ne compte
+  **pas** comme un passage dans les statistiques et les relances du commerçant.
+- **Carte qui a déjà atteint son seuil** (récompense en attente) : `409 recompense_en_attente`,
+  rien changé ; la migration se fait après la remise.
+- **Programme à tampons** : `points` (= tampons) au plus égal au seuil, sinon
+  `422 points_hors_bornes` (au-delà du seuil, l'excédent serait perdu à la remise suivante).
+- Réponse `200` : `{ "ok": true, "points_credites": 320, "solde": 320, "seuil": 500,
+  "seuil_atteint": false, "deja_migree": false }`.
+- Corriger une migration erronée : auprès de WinWin (ajustement depuis l'espace commerçant).
+- Moment conseillé : dès que la réponse d'une vente indique `"telephone": "rattache"` (le
+  client vient d'installer sa carte et son numéro y est lié).
 
 ## 7. Récupérer une carte (client qui a changé de téléphone)
 
@@ -292,7 +374,8 @@ vente pour la renvoyer.
 
 - HTTPS seul ; la clé ne transite que dans l'en-tête `Authorization`.
 - WinWin ne renvoie aucune donnée personnelle ; le seul champ personnel reçu est `telephone`,
-  stocké pour la récupération de carte, effacé avec la carte à la demande du client.
+  stocké pour la récupération de carte et le crédit par numéro, effacé avec la carte à la
+  demande du client. WinWin traite ce numéro en sous-traitant du commerçant (§4.4).
 - Journaux WinWin : jamais la clé complète, jamais le numéro de téléphone.
 
 ## 10. Tester
@@ -304,7 +387,9 @@ vente pour la renvoyer.
   renvoyée (`deja_enregistree`) ; carte par code court ; carte inconnue ; montant hors
   plafond ; vente à 0 point ; seuil atteint puis remise ; annulation puis renvoi de
   l'annulation ; annulation refusée après une autre vente ; numéro rattaché puis récupération ;
-  coupure réseau simulée (renvoi).
+  vente par numéro (carte rattachée, puis numéro inconnu → lien d'installation) ; migration
+  des points puis renvoi de la migration ; coupure réseau simulée (renvoi) ; **WinWin coupé :
+  la vente est encaissée et l'appel part plus tard**.
 
 ## 11. Versions
 
@@ -314,7 +399,7 @@ vente pour la renvoyer.
 
 ---
 
-# Partie II — Implémentation côté WinWin (pour le développeur, à valider)
+# Partie II — Implémentation côté WinWin (pour le développeur)
 
 ## 12. Où vit le code
 
@@ -328,6 +413,7 @@ src/integration/
     cle.js               vérification de la clé (empreinte, cache 60 s, révocation)
     ventes.js            POST /ventes, POST /ventes/:reference/annulation
     cartes.js            GET /cartes/:carte
+    migrations.js        POST /migrations
     recuperations.js     POST /recuperations
   recuperation.js        /r/:jeton, /api/recuperation/:jeton (repris des briques)
 services/credit.js       le crédit partagé par le comptoir et l'API (voir §13)
@@ -342,8 +428,10 @@ Aujourd'hui, la résolution de la carte, `crediter_scan` et les effets d'après 
 Apple / Google, parrainage, demande d'avis 30 min après une remise) vivent dans la route du
 scan. Proposition : **extraire** la résolution de carte et les effets d'après dans
 `services/credit.js`, appelés par la route du scan **sans changer son comportement** (prouvé
-par les ~350 contrôles du filet, inchangés) et par `POST /ventes`. `crediter_scan` (la
-transaction d'argent) n'est **pas modifiée**.
+par les ~350 contrôles du filet, inchangés), par `POST /ventes` et par `POST /migrations`.
+`crediter_scan` (la transaction d'argent) n'est **pas modifiée**. Le module reçoit des options
+explicites : canal (`comptoir` / `caisse`), origine (`passage` / `migration`), parrainage
+(comptoir seulement), demande d'avis (pas pour une migration).
 
 ## 14. Base de données (une migration, exécutée avant le code)
 
@@ -354,9 +442,11 @@ transaction d'argent) n'est **pas modifiée**.
 | `marchands.plafond_vente_fils` | entier > 0, défaut 5 000 000 (50 000 AED) |
 | `points_de_vente.code_externe` | code de la boutique chez le commerçant, unique par marchand |
 | `scans.canal` | `comptoir` (défaut, tout l'existant) / `caisse` |
+| `scans.origine` | `passage` (défaut, tout l'existant) / `migration` ; une ligne `migration` est **exclue** des comptages de passages (statistiques `apercu_stats`, segments, relances d'inactivité) |
+| migration une fois par carte | `cle_idempotence = uuid_v5(espace WinWin, marchand_id + ':migration:' + client_id)` : l'index unique t43 garantit l'unicité, sans table de plus |
 | `scans.reference_externe`, `scans.montant_fils`, `scans.vendu_le` | pour l'affichage, le support, et la détection « même référence, autre montant » |
 | idempotence | `cle_idempotence = uuid_v5(espace WinWin fixe, marchand_id + ':' + reference)` : index unique t43 existant, rien à ajouter |
-| téléphone | **migration 066** des briques (normalisation, unicité, `recuperations_carte`, fonctions), **ajustée** : rôle `api` accepté dans `recuperations_carte`, source `caisse` |
+| téléphone | **migration 066** des briques (normalisation, unicité, `recuperations_carte`, fonctions), **ajustée** : rôle `api` accepté dans `recuperations_carte` ; rattachement source `caisse` **sans** ligne `consentements` (base légale : contrat de sous-traitance) ; recherche de carte par numéro pour le crédit (§3.1) |
 | solde jamais négatif | **déjà en production** : `clients_stored_value_non_negatif` (migration 051, `CHECK (stored_value >= 0)`, posée validée ; relevée en production le 19/10) |
 
 `crediter_scan` reçoit le canal, la référence et le montant en fils : soit par de nouveaux
@@ -373,7 +463,10 @@ Le comptoir (scan, caisse WinWin, dashboard), les cartes, les notifications : in
 
 ## 16. Tests (avant tout push)
 
-Chaque ligne des tableaux §4.3, §5, §6, §7 est un contrôle du filet ; plus : les renvois
+Chaque ligne des tableaux §4.3, §5, §6, §6 bis, §7 est un contrôle du filet ; plus : l'invariant
+§0 (aucune réponse ne dépasse le délai serveur ; base coupée → 503 rapide) ; les lignes de
+migration absentes des statistiques et des segments ; aucune demande de parrainage sur une
+vente API ; les renvois
 simultanés (deux mêmes ventes en parallèle → un seul crédit), la révocation, le limiteur par
 clé, l'absence de toute donnée personnelle dans chaque réponse, le comptoir inchangé (filet
 existant), la contre-épreuve sur le code en production.
@@ -396,52 +489,53 @@ existant), la contre-épreuve sur le code en production.
 | B12 Renvois automatiques ? | oui | non | idempotence ; recommandations §8 |
 | B13 Test ? | oui | non | commerçant de test sur la production |
 | B14 Clé secrète ? | serveur | dans la caisse | la clé reste dans la configuration protégée ; révocation rapide |
-| B15 Téléphone joint ? | oui | non | facultatif ; sans lui, pas de récupération v1 |
+| B15 Téléphone joint ? | oui | non | facultatif ; sans lui, ni récupération ni crédit par numéro ni migration par numéro (la migration reste possible avec la carte) |
 | B16 Export ? | oui | non | non nécessaire (rattachement au fil des ventes) |
 
 ---
 
-# Partie III — Décisions restant à trancher (pilotage / Yass)
+# Partie III — Décisions
 
-La valeur entre crochets est celle que ce brouillon propose ; elle fait foi tant que rien
-d'autre n'est décidé.
+## Verrouillées par le pilotage (20/10)
 
-**Argent et règles**
-1. Conversion par défaut : [100 fils = 1 point, arrondi inférieur]. Vente qui donne 0 point :
-   [rien crédité, réponse 200 `enregistree: false`].
-2. Plafond par vente par défaut : [50 000 AED].
-3. Programme à tampons : [1 tampon par vente, sans montant minimum].
-4. Récompense : [même règle qu'au comptoir : acquise au seuil, remise automatiquement à la vente
-   suivante, qui dit `recompense_a_remettre`].
-5. Effets du comptoir sur une vente caisse : mise à jour de la carte [oui, toujours] ;
-   parrainage [oui, comme au comptoir] ; demande d'avis Google 30 min après une remise [oui,
-   comme au comptoir].
+- **Invariant** : WinWin est additif, jamais bloquant (§0).
+- **Montant** : en fils entiers, imposé.
+- **Parrainage** : **non** pour l'API (gardé au comptoir WinWin).
+- **Avis Google** : **oui**, comme au comptoir, aligné sur l'offre commerciale.
+- **Téléphone, cadre légal** : pas de mécanisme de consentement dans le produit. Modèle
+  sous-traitant : le commerçant est responsable du traitement, WinWin sous-traitant ; base
+  légale par le contrat de sous-traitance (j04). Aucun garde-fou codé sur le numéro (WinWin
+  n'envoie aucun SMS) ; à revoir avec f11.
+- **Crédit par téléphone (#16)** : **oui** quand le numéro est rattaché à une carte ; **jamais
+  de crédit sans carte** (lien d'installation à la place).
+- **Migration des points existants** : un crédit unique par carte, idempotent, marqué
+  `origine = migration`, par le chemin de crédit existant ; **le taux de conversion n'est pas
+  codé** (décision métier différée, avec les décisionnaires) : l'API reçoit des points déjà
+  convertis.
+- **Valeurs par défaut acceptées** : 100 fils = 1 point (arrondi inférieur), vente à 0 point
+  non enregistrée ; plafond 50 000 AED par vente ; 1 tampon par vente ; récompense comme au
+  comptoir ; mise à jour de la carte toujours ; boutique obligatoire pour un réseau (code
+  inconnu refusé) ; ventes en retard jusqu'à 7 jours ; annulation renvoyée = succès
+  `deja_annulee` ; 600 requêtes / min / clé, 30 récupérations / 15 min / boutique ; révocation
+  en 60 s ; commerçant de test sur la production ; pas de liste blanche d'adresses en v1 ;
+  contrat remis au technicien en anglais ; changement de numéro jamais par l'API ;
+  récupération en magasin, self-service plus tard (f11) ; crédit partagé extrait du scan
+  (comportement prouvé inchangé) ; canal / origine / référence écrits dans la même transaction
+  sans toucher `crediter_scan` ; dépôt de fichier quotidien hors v1.
 
-**Contrat**
-6. Boutique : [obligatoire pour un commerçant à plusieurs boutiques ; code inconnu → 422].
-   Autre choix : accepter et classer en « non attribué ».
-7. Vente envoyée en retard : [acceptée jusqu'à 7 jours].
-8. Annulation renvoyée : [200 `deja_annulee: true`] plutôt que 409.
-9. Limites : [600 requêtes / min / clé] ; récupérations [30 / 15 min / boutique].
-10. Révocation d'une clé : [effective en 60 s au plus] (cache de la clé).
-11. Test : [commerçant de test sur la production] plutôt qu'un environnement séparé.
-12. Liste blanche d'adresses IP par clé : [non en v1] (proposée si leur caisse appelle d'un
-    serveur central à adresse fixe).
-13. Langue du contrat remis au technicien : [anglais, traduit de ce document validé].
+## Restant à trancher (proposition entre crochets, elle fait foi sans autre décision)
 
-**Téléphone (f04)**
-14. Consentement : [clause du contrat commercial : le commerçant atteste l'accord du client]
-    — zone grise RGPD / PDPL, à Yass.
-15. Changement de numéro : [jamais par l'API ; sur demande à WinWin (admin) en v1].
-16. Téléphone comme identifiant de crédit (vente sans carte) : [non en v1 ; la carte est
-    toujours présentée].
-17. Récupération : [déclenchée en magasin par la caisse ; self-service par SMS plus tard (f11)].
-
-**Implémentation**
-18. Chemin de crédit partagé : extraire du scan la résolution de carte et les effets d'après
-    vers `services/credit.js` [oui, comportement du comptoir inchangé, prouvé par le filet] —
-    touche le fichier du scan.
-19. Écriture du canal, de la référence et du montant en fils : [mise à jour de la ligne de
-    journal dans la même transaction, sans toucher `crediter_scan`] ou nouveaux paramètres de
-    `crediter_scan`.
-20. Cas « pas d'appel à chaque vente » (B1 = non) : dépôt de fichier quotidien [hors v1].
+1. **« Carte installée »** pour le crédit par téléphone : [une carte WinWin existante et non
+   effacée, dont le numéro est rattaché]. Exiger la preuve d'installation dans le portefeuille
+   n'est fiable que côté Apple (appareil enregistré) ; côté Google, WinWin ne voit que le clic
+   et une vérification ponctuelle.
+2. **Migration sur une carte au seuil** : [refus `409 recompense_en_attente`, à refaire après la
+   remise]. En tampons : [au plus le seuil, sinon refus] — sinon l'excédent serait perdu à la
+   remise (règle actuelle des tampons, sans report).
+3. **Migration, plafond** : [1 à 100 000 points, comme le pavé du comptoir].
+4. **Migration, correction** : [par un ajustement depuis l'espace commerçant ; pas d'annulation
+   par l'API].
+5. **Migration, moment** : [à l'initiative de la caisse, conseillé dès `telephone: rattache`] ;
+   WinWin ne déclenche rien seul.
+6. **Lien d'installation** renvoyé avec `404 carte_inconnue` : [la page d'inscription du
+   commerçant (`/l/<slug>`), sans pré-remplissage du numéro].

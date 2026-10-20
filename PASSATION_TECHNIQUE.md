@@ -197,9 +197,10 @@ Ce sont des propositions de la session. L'ordre validé est celui de la carte.
 
 ### 0.5 bis Cap : API caisses (Black Tulip) — posture au 20/10
 
-**État** : la **spec complète** du contrat est écrite (`docs/api/03-contrat-api-v1.md`, 20/10,
-§15 sextriginta sexagies), **en validation** avec 20 décisions ouvertes (partie III). Aucun
-code avant sa validation. Architecture de la zone : `docs/api/README.md`.
+**État** : le contrat est **validé et finalisé** (`docs/api/03-contrat-api-v1.md` v1.0, 20/10,
+§15 septriginta sexagies) ; 6 points mineurs restent ouverts (valeur proposée qui fait foi).
+**Invariant : WinWin additif, jamais bloquant.** Implémentation sur validation explicite.
+Architecture de la zone : `docs/api/README.md`.
 
 **Posture validée par le pilotage** :
 - **On publie le contrat sans attendre le technicien** de Black Tulip ; ses réponses
@@ -8060,6 +8061,39 @@ seraient pas vues comme un conflit sans `scans.montant_fils`.
 
 **Prochaine étape** : validation de la spec et des 20 décisions par le pilotage, puis
 implémentation (lot API v1) ; version anglaise du contrat pour le technicien une fois validé.
+
+## 15 septriginta sexagies. API v1 : CONTRAT VALIDÉ ET FINALISÉ (20/10, rien codé)
+
+**Validé par le pilotage le 20/10**, décisions verrouillées (`docs/api/03-contrat-api-v1.md`
+v1.0, partie III) :
+- **Invariant dur** (§0 du contrat) : **WinWin est additif, jamais bloquant**. Client sans carte
+  → encaissé normalement ; WinWin en panne → la vente passe, l'appel est renvoyé plus tard ;
+  aucune réponse de l'API ne bloque une transaction.
+- **Parrainage : non** pour l'API (gardé au comptoir). **Avis Google : oui** (offre commerciale).
+- **Téléphone** : modèle sous-traitant (commerçant responsable du traitement, WinWin
+  sous-traitant, base légale par le contrat de sous-traitance, j04) ; **aucun mécanisme de
+  consentement dans le produit, aucun garde-fou codé sur le numéro** (aucun SMS envoyé) ; à
+  revoir avec f11. Conséquence technique : le rattachement par l'API n'écrit pas de ligne
+  `consentements` (ajustement de 066).
+- **Crédit par téléphone** : oui si le numéro est rattaché à une carte ; **jamais de crédit
+  sans carte** (`404` avec lien d'installation).
+- **Montant** en fils entiers.
+- **Migration des points existants** (nouveau) : `POST /api/v1/migrations`, crédit unique par
+  carte (clé t43 dérivée de la carte), idempotent, `scans.origine = migration`, même chemin de
+  crédit, sans avis ni parrainage, exclu des comptages de passages ; **taux de conversion non
+  codé** (décision métier différée) : l'API reçoit des points.
+- Défauts #1–#20 de la session acceptés.
+
+**Restent 6 points** (partie III, « restant à trancher », valeur proposée qui fait foi) :
+définition de « carte installée », migration sur une carte au seuil et en tampons, plafond,
+correction, moment, lien d'installation.
+
+**Constat de code utile** : `increment_stored_value` (migration 023) remet à zéro **sans report**
+en tampons et ajoute le montant **tel quel** ; un crédit sur une carte déjà au seuil déclenche
+la remise. D'où les deux garde-fous de la migration (refus au seuil ; en tampons, au plus le
+seuil).
+
+**Prochaine étape** : implémentation sur validation explicite du pilotage (zéro code avant).
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
