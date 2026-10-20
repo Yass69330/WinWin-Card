@@ -270,6 +270,9 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
     // n'entre dans aucun strip, donc aucun bump de strip_config_version (un bump
     // invaliderait tout le cache d'images pour rien).
     'lien_avis_google',
+    // API des caisses (migration 066, 20/10) : conversion montant → points et
+    // plafond par vente, en fils. Contrôlés plus bas.
+    'fils_par_point', 'plafond_vente_fils',
   ];
 
   const updates = {};
@@ -299,6 +302,16 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
     if (q === null || q === '') updates.notification_quota_override = null;
     else if (Number.isInteger(q) && q >= 0 && q <= 1000) updates.notification_quota_override = q;
     else return res.status(400).json({ error: 'Quota notifs : entier de 0 à 1000' });
+  }
+
+  // API des caisses : entiers en fils (100 fils = 1 AED), mêmes bornes que la base.
+  //   fils_par_point : 1 à 10 000 000 (100 = 1 point par AED) ;
+  //   plafond_vente_fils : 100 à 1 000 000 000 (1 AED à 10 millions d'AED).
+  for (const [champ, min, max] of [['fils_par_point', 1, 10000000], ['plafond_vente_fils', 100, 1000000000]]) {
+    if (updates[champ] === undefined) continue;
+    if (!Number.isInteger(updates[champ]) || updates[champ] < min || updates[champ] > max) {
+      return res.status(400).json({ error: `${champ} : entier de ${min} à ${max} (en fils)` });
+    }
   }
 
   // Notification « À proximité » (f10) : lieux contrôlés (services/geo.js).

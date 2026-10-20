@@ -2725,6 +2725,137 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     }
     }
   }
+
+  // ── API v1, étape 1 : le socle d'accès (migration 066, 20/10) ───────────────
+  titre('API v1, étape 1 : clés d\'API, réglages de conversion, canal (20/10)');
+  {
+    const sha = x => crypto.createHash('sha256').update(x).digest('hex');
+    const attendreMs = ms => new Promise(ok => setTimeout(ok, ms));
+    const RELAIS = '198.51.100.1';
+    // Serveur A : mémoire des clés à 1,5 s (au lieu de 60 s), limite par clé haute.
+    const sA = await demarrerServeur('api-v1-a', urlSupabase, { API_CLE_CACHE_MS: '1500', API_V1_MAX_PAR_MINUTE: '1000' });
+    const appel = (srv, methode, chemin, auth, corps, ip = '203.0.113.90') => fetch(srv.url + chemin, { method: methode,
+      headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': `${ip}, ${RELAIS}`, ...(auth ? { Authorization: auth } : {}) },
+      body: corps === undefined ? undefined : JSON.stringify(corps) })
+      .then(async r => { const t = await r.text(); let c; try { c = JSON.parse(t); } catch { c = t; } return { statut: r.status, corps: c, retry: r.headers.get('retry-after') }; });
+    let srvAdmin = sA;   // les clés de la 2e partie se créent par le serveur B
+    const adm = (methode, chemin, corps) => appel(srvAdmin, methode, chemin, `Bearer ${jetonAdmin}`, corps);
+    const ping = (srv, k, ip) => appel(srv, 'GET', '/api/v1/ping', k === undefined ? undefined : `Bearer ${k}`, undefined, ip);
+
+    // Migration : réglages par défaut, canal du journal.
+    verifier('réglages par défaut d\'un commerçant : 100 fils = 1 point, plafond 5 000 000 fils (50 000 AED)',
+      sql(`SELECT fils_par_point || '|' || plafond_vente_fils FROM marchands WHERE id = '${M.tampons}'`), '100|5000000');
+    const cScan = client(M.tampons);
+    await scan(tT, cScan.serial);
+    verifier('journal : un scan du comptoir est marqué canal « comptoir », sans référence ni montant ; aucun scan hors comptoir',
+      [sql(`SELECT canal || '|' || coalesce(reference_externe, '-') || '|' || coalesce(montant_fils::text, '-') FROM scans WHERE client_id = '${cScan.id}'`),
+       sql(`SELECT count(*) FROM scans WHERE canal <> 'comptoir'`)], ['comptoir|-|-', '0']);
+    verifier('la base refuse un canal inconnu et un montant nul ou négatif',
+      [refuseParLaBase(`UPDATE scans SET canal = 'borne' WHERE client_id = '${cScan.id}'`),
+       refuseParLaBase(`UPDATE scans SET montant_fils = 0 WHERE client_id = '${cScan.id}'`)], [true, true]);
+
+    // Réglages dans l'admin : entiers en fils, bornés.
+    const reglage = async corps => (await adm('PATCH', `/api/admin/marchands/${M.points}`, corps)).statut;
+    const okR = [await reglage({ fils_par_point: 50, plafond_vente_fils: 100000 }),
+      sql(`SELECT fils_par_point || '|' || plafond_vente_fils FROM marchands WHERE id = '${M.points}'`)];
+    const refusR = [];
+    for (const corps of [{ fils_par_point: 0 }, { fils_par_point: -5 }, { fils_par_point: 2.5 }, { fils_par_point: '100' },
+      { fils_par_point: null }, { plafond_vente_fils: 99 }, { plafond_vente_fils: 1000000001 }]) refusR.push(await reglage(corps));
+    verifier('admin : conversion et plafond réglés (2 points par AED, plafond 1 000 AED) ; 0, négatif, décimal, texte, vide, hors bornes → 400, rien changé',
+      [okR, refusR, sql(`SELECT fils_par_point || '|' || plafond_vente_fils FROM marchands WHERE id = '${M.points}'`)],
+      [[200, '50|100000'], [400, 400, 400, 400, 400, 400, 400], '50|100000']);
+    await reglage({ fils_par_point: 100, plafond_vente_fils: 5000000 });
+
+    // Création : la clé n'est montrée qu'une fois, la base n'en garde que l'empreinte.
+    const cree = await adm('POST', `/api/admin/marchands/${M.tampons}/cles-api`, { environnement: 'live' });
+    const kLive = cree.corps.cle;
+    verifier('admin : clé de production créée (wwk_live_ + 40 caractères), préfixe lisible, en base seulement l\'empreinte sha256',
+      [cree.statut, /^wwk_live_[A-Za-z0-9_-]{40}$/.test(kLive), cree.corps.prefixe === kLive.slice(0, 15),
+       sql(`SELECT count(*) FROM api_cles WHERE id = '${cree.corps.id}' AND empreinte = '${sha(kLive)}'`),
+       sql(`SELECT count(*) FROM api_cles WHERE empreinte = '${kLive}' OR prefixe = '${kLive}'`)],
+      [201, true, true, '1', '0']);
+    const kTest = (await adm('POST', `/api/admin/marchands/${M.tampons}/cles-api`, { environnement: 'test' })).corps.cle;
+    const liste = await adm('GET', `/api/admin/marchands/${M.tampons}/cles-api`);
+    verifier('admin : la liste ne contient jamais la clé ni son empreinte',
+      [liste.statut, liste.corps.length, liste.corps.every(k => !('cle' in k) && !('empreinte' in k)), JSON.stringify(liste.corps).includes(kLive.slice(15))],
+      [200, 2, true, false]);
+    const refusAdm = [(await adm('POST', `/api/admin/marchands/${M.tampons}/cles-api`, { environnement: 'prod' })).statut,
+      (await adm('POST', `/api/admin/marchands/${crypto.randomUUID()}/cles-api`, { environnement: 'live' })).statut,
+      (await appel(sA, 'POST', `/api/admin/marchands/${M.tampons}/cles-api`, `Bearer ${tT}`, { environnement: 'live' })).statut,
+      (await appel(sA, 'POST', `/api/admin/marchands/${M.tampons}/cles-api`, `Bearer ${kLive}`, { environnement: 'live' })).statut,
+      (await appel(sA, 'GET', `/api/admin/marchands/${M.tampons}/cles-api`)).statut];
+    verifier('admin : environnement inconnu 400, marchand inconnu 404 ; jeton marchand 403, clé d\'API 401, sans jeton 401',
+      refusAdm, [400, 404, 403, 401, 401]);
+
+    // Authentification : seule une clé d'API ouvre /api/v1, et elle n'ouvre rien d'autre.
+    const p1 = await ping(sA, kLive), p2 = await ping(sA, kTest);
+    verifier('/api/v1/ping avec la clé : 200, environnement (production / test), aucune donnée du commerçant',
+      [p1.statut, p1.corps, p2.corps.environnement], [200, { ok: true, environnement: 'live' }, 'test']);
+    verifier('dernière utilisation de la clé notée', sql(`SELECT derniere_utilisation_le IS NOT NULL FROM api_cles WHERE id = '${cree.corps.id}'`), 't');
+    const refusAuth = [await ping(sA, undefined), await ping(sA, 'n-importe-quoi'), await ping(sA, `wwk_live_${'A'.repeat(40)}`),
+      await ping(sA, tT), await ping(sA, tB1), await ping(sA, jetonAdmin)];
+    verifier('/api/v1 sans clé, clé mal formée, clé inconnue, jeton marchand, jeton boutique, jeton admin : 401 « cle_invalide »',
+      [refusAuth.map(r => r.statut), refusAuth.every(r => r.corps.error === 'cle_invalide')], [[401, 401, 401, 401, 401, 401], true]);
+    verifier('la clé d\'API n\'ouvre rien d\'autre : dashboard 401, caisse (scan) 401',
+      [(await appel(sA, 'GET', '/api/merchants/me', `Bearer ${kLive}`)).statut,
+       (await appel(sA, 'POST', '/api/scan', `Bearer ${kLive}`, { serial_number: cScan.serial, cle_idempotence: crypto.randomUUID() })).statut],
+      [401, 401]);
+    verifier('route inconnue de /api/v1 (avec une clé) : 404 JSON', [(await appel(sA, 'GET', '/api/v1/ventes', `Bearer ${kLive}`)).statut], [404]);
+
+    // Révocation.
+    const rev = await adm('POST', `/api/admin/cles-api/${cree.corps.id}/revoquer`);
+    const apres = await ping(sA, kLive);
+    const rev2 = await adm('POST', `/api/admin/cles-api/${cree.corps.id}/revoquer`);
+    verifier('révocation depuis l\'admin : effective tout de suite sur ce serveur (401) ; la redemander ne change pas sa date ; clé inconnue 404',
+      [rev.statut, apres.statut, rev2.statut, rev2.corps.revoquee_le === rev.corps.revoquee_le,
+       (await adm('POST', `/api/admin/cles-api/${crypto.randomUUID()}/revoquer`)).statut], [200, 401, 200, true, 404]);
+    const kT2 = (await adm('POST', `/api/admin/marchands/${M.tampons}/cles-api`, { environnement: 'live' })).corps.cle;
+    await ping(sA, kT2);
+    sql(`UPDATE api_cles SET revoquee_le = now() WHERE empreinte = '${sha(kT2)}'`);   // comme depuis un autre serveur
+    const pendant = (await ping(sA, kT2)).statut;
+    await attendreMs(1700);
+    verifier('révocation faite ailleurs : la clé sert au plus le temps de sa mémoire (60 s en production, 1,5 s ici), puis 401',
+      [pendant, (await ping(sA, kT2)).statut], [200, 401]);
+
+    // Commerçant suspendu.
+    const kS = (await adm('POST', `/api/admin/marchands/${M.suspendu}/cles-api`, { environnement: 'live' })).corps.cle;
+    const avantS = (await ping(sA, kS)).statut;
+    sql(`UPDATE marchands SET actif = false WHERE id = '${M.suspendu}'`);
+    await attendreMs(1700);
+    const suspendu = await ping(sA, kS);
+    sql(`UPDATE marchands SET actif = true WHERE id = '${M.suspendu}'`);
+    verifier('commerçant suspendu : 403 « commercant_suspendu » (au plus le temps de la mémoire)',
+      [avantS, suspendu.statut, suspendu.corps.error], [200, 403, 'commercant_suspendu']);
+
+    // Hors du limiteur global (300 / 15 min par adresse).
+    const kG = (await adm('POST', `/api/admin/marchands/${M.points}/cles-api`, { environnement: 'live' })).corps.cle;
+    const ipCentrale = '203.0.113.91';
+    const rafale = await Promise.all(Array.from({ length: 320 }, () => ping(sA, kG, ipCentrale)));
+    verifier('serveur central : 320 appels de suite depuis une adresse passent (hors du limiteur global), le dashboard de la même adresse n\'est pas freiné',
+      [rafale.every(r => r.statut === 200), (await appel(sA, 'GET', '/api/merchants/me', `Bearer ${tP}`, undefined, ipCentrale)).statut],
+      [true, 200]);
+    sA.processus.kill();
+
+    // Serveur B : 5 appels / min / clé, 3 échecs / 15 min / adresse.
+    const sB = await demarrerServeur('api-v1-b', urlSupabase, { API_V1_MAX_PAR_MINUTE: '5', API_V1_ECHECS_MAX: '3' });
+    srvAdmin = sB;
+    const kB1 = (await adm('POST', `/api/admin/marchands/${M.tampons}/cles-api`, { environnement: 'live' })).corps.cle;
+    const kB2 = (await adm('POST', `/api/admin/marchands/${M.points}/cles-api`, { environnement: 'live' })).corps.cle;
+    const serie = [];
+    for (let i = 0; i < 6; i++) serie.push(await ping(sB, kB1, '203.0.113.92'));
+    verifier('limite par clé : la 6e requête de la minute reçoit 429 « trop_de_requetes » avec Retry-After ; une autre clé, même adresse, passe',
+      [serie.map(r => r.statut), serie[5].corps.error, Number(serie[5].retry) > 0, (await ping(sB, kB2, '203.0.113.92')).statut],
+      [[200, 200, 200, 200, 200, 429], 'trop_de_requetes', true, 200]);
+    const ipMal = '203.0.113.93';
+    await ping(sB, kB2, ipMal);   // clé reconnue depuis cette adresse
+    const essais = [];
+    for (let i = 0; i < 4; i++) essais.push(await ping(sB, `wwk_live_${String(i).repeat(40)}`, ipMal));
+    const kNeuve = (await adm('POST', `/api/admin/marchands/${M.points}/cles-api`, { environnement: 'live' })).corps.cle;
+    verifier('3 échecs depuis une adresse : elle ne peut plus essayer de clé nouvelle (429) ; une clé déjà reconnue y passe toujours ; une autre adresse n\'est pas touchée',
+      [essais.map(r => r.statut), (await ping(sB, kB2, ipMal)).statut, (await ping(sB, kNeuve, ipMal)).statut, (await ping(sB, kNeuve, '203.0.113.94')).statut],
+      [[401, 401, 401, 429], 200, 429, 200]);
+    sB.processus.kill();
+  }
 }
 
 module.exports = { FIXTURES, jouer, M, B };

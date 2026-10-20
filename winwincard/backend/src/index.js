@@ -64,7 +64,10 @@ app.use(rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'rate_limited' },
-  skip: req => req.path.startsWith('/v1/'),
+  // /api/v1 (API des caisses, 20/10) : limiteur propre PAR CLÉ
+  // (src/integration/api-v1) ; un serveur central de caisse ne doit pas être
+  // freiné par ce compteur par adresse.
+  skip: req => req.path.startsWith('/v1/') || req.path.startsWith('/api/v1/'),
 }));
 
 // Rate limiters dédiés (anti brute-force logins).
@@ -138,6 +141,10 @@ app.use('/api/notifications', notificationsRoutes);
 // Diagnostic caméra — instrument temporaire, isolé de tout le reste.
 // Le POST est public (limiteur dédié dans le routeur), le GET est authAdmin.
 app.use('/api/diag', diagRoutes);
+
+// Zone « intégration » (API des caisses, 20/10) : délimitée dans
+// src/integration/ (architecture : docs/api/README.md).
+app.use(require('./integration'));
 
 app.use('/api/admin/login', limiterAdminLogin);
 app.use('/api/admin/workflows', workflowsRoutes);

@@ -751,6 +751,35 @@
         </div>
       </div>
 
+      <!-- Section : API des caisses (20/10, mode édition) — docs/api/03-contrat-api-v1.md -->
+      <div class="form-section" id="section-api" style="display:none">
+        <div class="form-section-title">API caisse</div>
+        <div class="field-hint" style="margin-bottom:8px">Pour un commerçant dont la caisse appelle WinWin à chaque vente. Les points d'une vente = montant ÷ montant pour 1 point, arrondi vers le bas.</div>
+        <div class="field-row" style="display:flex;gap:10px">
+          <div class="field" style="flex:1">
+            <label for="f-api-aed-par-point">Montant pour 1 point (AED)</label>
+            <input id="f-api-aed-par-point" type="number" min="0.01" step="0.01" placeholder="1.00">
+          </div>
+          <div class="field" style="flex:1">
+            <label for="f-api-plafond-aed">Plafond par vente (AED)</label>
+            <input id="f-api-plafond-aed" type="number" min="1" step="1" placeholder="50000">
+          </div>
+        </div>
+        <div class="field-hint" style="margin-bottom:8px">Enregistrés avec la fiche. Au-delà du plafond, une vente est refusée par l'API (garde-fou contre une saisie absurde) ; la caisse encaisse quand même.</div>
+        <div style="font-weight:600;font-size:13px;margin:6px 0">Clés d'API</div>
+        <div id="api-cles-liste" style="display:flex;flex-direction:column;gap:8px"></div>
+        <div id="api-cle-nouvelle" style="display:none;background:var(--surface2);border:1px solid var(--warning);border-radius:10px;padding:12px;margin-top:8px">
+          <div style="font-weight:600;font-size:13px;color:var(--warning)">Nouvelle clé — copiez-la maintenant, elle ne sera plus jamais affichée</div>
+          <code id="api-cle-valeur" style="display:block;word-break:break-all;font-size:13px;margin:8px 0;user-select:all"></code>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-api-cle-copier">Copier</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <button type="button" class="btn btn-outline btn-sm" id="btn-api-cle-live">Générer une clé de production</button>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-api-cle-test">Générer une clé de test</button>
+        </div>
+        <div id="api-cles-statut" class="field-hint" style="margin-top:6px"></div>
+      </div>
+
       <!-- Section : Avancé -->
       <div class="form-section">
         <div class="form-section-title">Avancé</div>
@@ -1162,6 +1191,62 @@ function lireLieuxGeo() {
 document.getElementById('btn-geo-ajouter').addEventListener('click', () => ajouterLieuGeo());
 
 // ── f17 : thèmes de carte ───────────────────────────────────────────────────
+// ════════════════════════════════════
+// CLÉS D'API DES CAISSES (20/10) — src/integration/api-v1/admin-cles.js
+// La clé n'est montrée qu'une fois, juste après sa création.
+// ════════════════════════════════════
+const dateCourte = iso => iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+async function chargerClesApi() {
+  const liste = document.getElementById('api-cles-liste');
+  liste.innerHTML = '<span class="field-hint">Chargement…</span>';
+  try {
+    const res = await api(`/api/admin/marchands/${S.editId}/cles-api`);
+    const cles = await res.json();
+    if (!res.ok) throw new Error(cles.error || 'Erreur');
+    liste.innerHTML = cles.length ? '' : '<span class="field-hint">Aucune clé.</span>';
+    for (const k of cles) {
+      const div = document.createElement('div');
+      div.className = 'api-cle';
+      div.style.cssText = 'display:flex;gap:10px;align-items:center;background:var(--surface2);border-radius:10px;padding:10px;font-size:13px';
+      div.innerHTML = `<div style="flex:1"><code>${esc(k.prefixe)}…</code> · ${k.environnement === 'test' ? 'test' : 'production'}
+        <div class="field-hint">créée le ${esc(dateCourte(k.cree_le))} · dernière utilisation : ${esc(dateCourte(k.derniere_utilisation_le))}${k.revoquee_le ? ` · <strong style="color:var(--error)">révoquée le ${esc(dateCourte(k.revoquee_le))}</strong>` : ''}</div></div>
+        ${k.revoquee_le ? '' : `<button type="button" class="btn btn-ghost btn-sm" data-revoquer="${esc(k.id)}">Révoquer</button>`}`;
+      liste.appendChild(div);
+    }
+  } catch (e) {
+    liste.innerHTML = `<span class="field-hint" style="color:var(--error)">${esc(e.message)}</span>`;
+  }
+}
+async function genererCleApi(environnement) {
+  const statut = document.getElementById('api-cles-statut');
+  statut.textContent = '';
+  try {
+    const res = await api(`/api/admin/marchands/${S.editId}/cles-api`, { method: 'POST', body: JSON.stringify({ environnement }) });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'Erreur');
+    document.getElementById('api-cle-valeur').textContent = d.cle;
+    document.getElementById('api-cle-nouvelle').style.display = 'block';
+    chargerClesApi();
+  } catch (e) { statut.textContent = 'Création impossible : ' + e.message; }
+}
+document.getElementById('btn-api-cle-live').addEventListener('click', () => genererCleApi('live'));
+document.getElementById('btn-api-cle-test').addEventListener('click', () => genererCleApi('test'));
+document.getElementById('btn-api-cle-copier').addEventListener('click', () => {
+  const v = document.getElementById('api-cle-valeur').textContent;
+  try { navigator.clipboard.writeText(v); document.getElementById('api-cles-statut').textContent = 'Clé copiée.'; } catch {}
+});
+document.getElementById('api-cles-liste').addEventListener('click', async e => {
+  const b = e.target.closest('[data-revoquer]');
+  if (!b) return;
+  if (!confirm('Révoquer cette clé ? La caisse qui l\'utilise ne pourra plus créditer de points (en 60 s au plus).')) return;
+  b.disabled = true;
+  try {
+    const res = await api(`/api/admin/cles-api/${b.dataset.revoquer}/revoquer`, { method: 'POST', body: '{}' });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Erreur');
+    chargerClesApi();
+  } catch (err) { document.getElementById('api-cles-statut').textContent = 'Révocation impossible : ' + err.message; b.disabled = false; }
+});
+
 async function chargerThemes() {
   const liste = document.getElementById('themes-liste');
   const etat = document.getElementById('themes-etat');
@@ -1397,6 +1482,12 @@ function resetForm() {
   document.getElementById('section-strip-tiers').style.display = 'none';
   document.getElementById('section-geo').style.display = 'none';
   document.getElementById('section-themes').style.display = 'none';
+  document.getElementById('section-api').style.display = 'none';
+  document.getElementById('api-cle-nouvelle').style.display = 'none';
+  document.getElementById('api-cle-valeur').textContent = '';
+  document.getElementById('api-cles-statut').textContent = '';
+  document.getElementById('f-api-aed-par-point').value = '';
+  document.getElementById('f-api-plafond-aed').value = '';
   document.getElementById('f-geo-actif').checked = false;
   document.getElementById('geo-lieux').innerHTML = '';
   document.getElementById('section-workflows').style.display     = 'none';
@@ -1473,6 +1564,11 @@ function fillForm(m) {
     document.getElementById('f-themes-actifs').checked = m.themes_actifs === true;
     chargerThemes();
   }
+  // API des caisses (tous forfaits) : réglages en fils, affichés en AED.
+  document.getElementById('section-api').style.display = '';
+  document.getElementById('f-api-aed-par-point').value = ((m.fils_par_point ?? 100) / 100).toFixed(2);
+  document.getElementById('f-api-plafond-aed').value = Math.round((m.plafond_vente_fils ?? 5000000) / 100);
+  chargerClesApi();
   renderStripTiers(m.images_tiers);
   // Workflows : Pro ET Pro+ (basic exclu). Miroir exact de FORFAITS_WORKFLOWS
   // côté cron — sans ça, un Pro n'aurait aucun interrupteur à cocher.
@@ -1754,6 +1850,16 @@ function collectForm() {
   // f17 : interrupteur des cartes à thème, envoyé seulement si la section (Pro+) est visible.
   if (S.editId && document.getElementById('section-themes').style.display !== 'none') {
     body.themes_actifs = document.getElementById('f-themes-actifs').checked;
+  }
+
+  // API des caisses : AED saisis → fils entiers. Envoyés seulement en modification.
+  if (S.editId && document.getElementById('section-api').style.display !== 'none') {
+    const parPoint = Math.round(parseFloat(document.getElementById('f-api-aed-par-point').value) * 100);
+    const plafond  = Math.round(parseFloat(document.getElementById('f-api-plafond-aed').value) * 100);
+    if (!Number.isInteger(parPoint) || parPoint < 1) { showSheetErr('API caisse : montant pour 1 point invalide (0,01 AED au moins)'); return null; }
+    if (!Number.isInteger(plafond) || plafond < 100) { showSheetErr('API caisse : plafond par vente invalide (1 AED au moins)'); return null; }
+    body.fils_par_point = parPoint;
+    body.plafond_vente_fils = plafond;
   }
 
   body.referral_enabled      = document.getElementById('f-referral-enabled').checked;
