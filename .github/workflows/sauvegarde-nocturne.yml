@@ -1,0 +1,119 @@
+# ════════════════════════════════════════════════════════════════════════════
+# SAUVEGARDE NOCTURNE DE LA BASE WINWIN (t23, audit 06 §6, P4)
+#
+# Chaque nuit : export complet du schéma public (pg_dump 17, droits compris),
+# chiffré (AES-256, phrase secrète), relu et restauré à blanc dans une base
+# jetable (contrôle), puis envoyé chez Backblaze B2 (UE), compartiment verrouillé
+# 30 jours, clé en écriture seule. Hors du serveur de l'API : rien dans Railway.
+#
+# Ce fichier vit sur la branche par défaut du dépôt (GitHub n'exécute les tâches
+# planifiées que là). Il ne contient aucun secret : six secrets du dépôt
+# (Settings → Secrets and variables → Actions) :
+#   SAUVEGARDE_BASE_URL  adresse « Session pooler » de Supabase, rôle sauvegarde
+#   SAUVEGARDE_PHRASE    phrase secrète du chiffrement (copie chez Yass, papier)
+#   B2_KEY_ID, B2_APP_KEY  clé Backblaze « Write Only », limitée au compartiment
+#   B2_BUCKET, B2_ENDPOINT nom du compartiment, adresse S3 (https://s3.<région>.backblazeb2.com)
+#
+# Le dépôt est public, ses journaux aussi : le journal n'affiche que « ok » ou
+# l'étape qui a échoué, jamais de données ni de chiffres.
+# Restauration : PASSATION_TECHNIQUE.md (branche de production), « t23 ».
+# ════════════════════════════════════════════════════════════════════════════
+name: Sauvegarde nocturne
+
+on:
+  schedule:
+    - cron: '17 23 * * *'   # 23:17 UTC, 03:17 à Dubaï ; Supabase fait la sienne vers 03:06 UTC
+  workflow_dispatch:         # lancement à la main (essai)
+
+permissions:
+  contents: read
+  issues: write              # alerte en cas d'échec
+
+concurrency:
+  group: sauvegarde
+  cancel-in-progress: false
+
+jobs:
+  sauvegarde:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      essai:                 # base jetable du contrôle de restauration
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: essai
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - name: Outils (client PostgreSQL 17)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common > /dev/null
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y > /dev/null
+          sudo apt-get install -y -qq postgresql-client-17 > /dev/null
+          /usr/lib/postgresql/17/bin/pg_dump --version
+
+      - name: Export, chiffrement, contrôle, envoi
+        env:
+          PG: /usr/lib/postgresql/17/bin
+          ESSAI_URL: postgresql://postgres:essai@localhost:5432/postgres
+          BASE_URL: ${{ secrets.SAUVEGARDE_BASE_URL }}
+          PHRASE: ${{ secrets.SAUVEGARDE_PHRASE }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.B2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_APP_KEY }}
+          B2_BUCKET: ${{ secrets.B2_BUCKET }}
+          B2_ENDPOINT: ${{ secrets.B2_ENDPOINT }}
+          # Backblaze ne suit pas les sommes de contrôle par défaut des aws-cli récents.
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+        run: |
+          set -euo pipefail
+          umask 077
+          for v in BASE_URL PHRASE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY B2_BUCKET B2_ENDPOINT; do
+            [ -n "${!v:-}" ] || { echo "Secret manquant : $v"; exit 1; }
+          done
+          T=$(mktemp -d)
+          trap 'rm -rf "$T"' EXIT
+          NOM="winwin-$(date -u +%Y%m%d-%H%M).dump.gpg"
+
+          echo "1. export"
+          "$PG/pg_dump" "$BASE_URL" --schema=public --format=custom --compress=9 --file "$T/base.dump"
+
+          echo "2. chiffrement"
+          printf '%s' "$PHRASE" > "$T/phrase"
+          gpg --batch --quiet --pinentry-mode loopback --passphrase-file "$T/phrase" \
+              --symmetric --cipher-algo AES256 --output "$T/$NOM" "$T/base.dump"
+          rm -f "$T/base.dump"
+
+          echo "3. contrôle : déchiffrer la copie, la restaurer à blanc"
+          gpg --batch --quiet --pinentry-mode loopback --passphrase-file "$T/phrase" \
+              --decrypt --output "$T/relu.dump" "$T/$NOM"
+          # Prélude Supabase minimal : les valeurs par défaut appellent extensions.uuid_generate_v4().
+          "$PG/psql" -q -v ON_ERROR_STOP=1 "$ESSAI_URL" -c 'CREATE SCHEMA extensions;
+            CREATE EXTENSION "uuid-ossp" SCHEMA extensions; CREATE EXTENSION pgcrypto SCHEMA extensions;'
+          # Droits et règles propres à Supabase (rôles absents ici) échouent sans gravité :
+          # on ne compte que leur nombre. Le détail n'est jamais affiché (il peut citer des données).
+          "$PG/pg_restore" --no-owner --no-privileges --dbname "$ESSAI_URL" "$T/relu.dump" 2> "$T/restore.err" || true
+          echo "   erreurs tolérées à la restauration : $(grep -c '^pg_restore: error' "$T/restore.err" || true)"
+          OK=$("$PG/psql" -tA "$ESSAI_URL" -c "SELECT (SELECT count(*) > 0 FROM public.marchands)
+            AND (SELECT count(*) > 0 FROM public.clients) AND (SELECT count(*) > 0 FROM public.passes)
+            AND (SELECT count(*) > 0 FROM public.scans)" 2>/dev/null || echo f)
+          [ "$OK" = "t" ] || { echo "Contrôle raté : une table centrale manque ou est vide dans la copie"; exit 1; }
+          rm -f "$T/relu.dump"
+
+          echo "4. envoi"
+          REGION=$(printf '%s' "$B2_ENDPOINT" | sed -E 's#^https://s3\.([^.]+)\..*#\1#')
+          MD5=$(openssl dgst -md5 -binary "$T/$NOM" | base64)
+          aws s3api put-object --region "$REGION" --endpoint-url "$B2_ENDPOINT" \
+              --bucket "$B2_BUCKET" --key "$NOM" --body "$T/$NOM" --content-md5 "$MD5" > /dev/null
+          echo "ok"
+
+      - name: Alerte
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "Sauvegarde nocturne échouée ($(date -u +%d/%m/%Y))" \
+            --body "Journal : $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
