@@ -7902,6 +7902,42 @@ jours sans activité) ; les tickets sont ouverts sur le dépôt (alerte).
 **Limite** : une tâche qui ne se lance plus ne crée pas de ticket. Contrôle à prévoir : un
 regard mensuel sur Backblaze (dernière copie datée de la veille).
 
+## 15 quinquatriginta sexagies. f04 : CODÉ PUIS RECADRÉ DANS LE CHANTIER API (20/10, rien en production)
+
+**Recadrage du pilotage (20/10), avant toute migration ou push** : Black Tulip n'utilise aucune
+interface WinWin ; ses caissiers travaillent sur leur propre caisse, branchée par l'API.
+L'attache du numéro et le déclenchement de la récupération passeront donc **par l'API** (le
+numéro dans la vente, la récupération demandée par leur caisse), pas par la caisse WinWin. Les
+deux boutons ajoutés à la caisse WinWin (« + Numéro », « Retrouver une carte ») ne servent
+personne (les autres marchands ne se voient pas imposer le téléphone) : **remisés**. **f04
+fusionne dans le chantier API**, en pause jusqu'aux réponses du technicien (webhook ? scan du
+QR ?).
+
+**Rien n'a touché la production** : migration 066 **non exécutée**, rien poussé.
+
+**Les briques sont gardées, hors de la branche de production**, sur la branche
+**`briques/f04-telephone`** (commits `a80621a` code, `ae8039c` passation détaillée), pour que le
+prochain push de production ne les emporte pas :
+- **à reprendre telles quelles** : migration 066 (normalisation Émirats, garde-fou
+  anti-collision, unicité par marchand, `recuperations_carte` au jeton haché, fonctions
+  `attacher_telephone` avec aperçu puis écriture = la confirmation avant attache,
+  `trouver_carte_par_telephone`, `creer_recuperation`, `ouvrir_recuperation`, effacement RGPD) ;
+  page client `public/recuperation.html` ; `src/integration/recuperation.js` ; patron d'attribut
+  et conventions de la zone (`docs/api/README.md`) ; l'inscription qui ne casse pas sur un
+  numéro déjà lié ; les tests SQL et de la page client ;
+- **remisé** : les écrans de `public/scanner/index.html` et `src/integration/comptoir.js` (routes
+  au jeton caissier) — à remplacer par les routes de l'API (clé du marchand) ;
+- **à revoir au moment du lot API** : `serial_number` dans la réponse du scan (utile seulement
+  à la caisse WinWin) ; la mesure de la migration (5,6 s à 100 000 clients : requête de taille
+  avant exécution) reste valable.
+
+**Branche de production** : remise sur les seuls commits de documentation (`e304496`
+passation t23, `85c7887` plan f04, et celui-ci), qui partiront avec le premier vrai push.
+
+**Point de vigilance** : `briques/f04-telephone` n'existe que dans ce conteneur tant qu'elle
+n'est pas poussée ; la pousser (branche à part, que Railway ne déploie pas) demande le feu vert
+de Yass.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)

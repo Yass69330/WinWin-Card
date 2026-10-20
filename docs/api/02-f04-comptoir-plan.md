@@ -1,4 +1,11 @@
-# f04 côté comptoir — plan de code (20/10/2026, à valider, rien codé)
+# f04 côté comptoir — plan de code (20/10/2026)
+
+> **RECADRÉ le 20/10 (pilotage) : ce plan n'est pas livré tel quel.** Black Tulip n'utilise
+> aucune interface WinWin : l'attache du numéro et la récupération passeront par **l'API**
+> (chantier API, `01-api-caisses-cadrage.md` §D). Les écrans de la caisse WinWin (§6) sont
+> **remisés**. Le socle (migration 066, page client, confirmation avant attache, patron
+> d'attribut) est codé et testé, gardé sur la branche `briques/f04-telephone` ; voir la
+> passation, « f04 : codé puis recadré ».
 
 Périmètre (pilotage, 20/10) : stockage du numéro de téléphone sur la carte, attache par le
 caissier après un scan, récupération de la carte au comptoir par le numéro. **Hors lot**

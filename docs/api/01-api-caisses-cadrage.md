@@ -278,7 +278,14 @@ L'identité qui commande Supabase et Railway est le compte GitHub de Yass (audit
 
 ---
 
-## D. Addendum f04 — identité du client : numéro de téléphone attaché à la carte (zéro code)
+## D. Addendum f04
+
+> **20/10 — recadrage** : f04 se construit **avec l'API**. Attache : le numéro arrive dans la
+> charge de la vente (`source = 'caisse'`). Récupération : déclenchée par leur caisse via l'API,
+> elle aboutit sur la page client `recuperation.html`. Socle prêt (migration 066, page client,
+> confirmation avant attache) sur la branche `briques/f04-telephone` ; écrans de la caisse
+> WinWin remisés. En attente des réponses du technicien (webhook ? scan du QR ?).
+ — identité du client : numéro de téléphone attaché à la carte (zéro code)
 
 ### D.1 Le besoin (pilotage, 19/10)
 
