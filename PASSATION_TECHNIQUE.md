@@ -7902,6 +7902,63 @@ jours sans activité) ; les tickets sont ouverts sur le dépôt (alerte).
 **Limite** : une tâche qui ne se lance plus ne crée pas de ticket. Contrôle à prévoir : un
 regard mensuel sur Backblaze (dernière copie datée de la veille).
 
+## 15 quinquatriginta sexagies. f04 CÔTÉ COMPTOIR : NUMÉRO ATTACHÉ À LA CARTE, RÉCUPÉRATION (20/10)
+
+**Validé** (pilotage, 20/10) : plan `docs/api/02-f04-comptoir-plan.md` tel quel, plus un ajout :
+**confirmation AVANT l'écriture** (« Attacher le … à la carte de … ? »), puisque sans écrasement
+une faute de frappe bloquerait la récupération du vrai client.
+
+**Livré (code)** :
+- **Zone délimitée** `src/integration/` (`index.js`, `comptoir.js`, `recuperation.js`), montée par
+  une ligne dans `src/index.js` ; architecture, conventions et patron d'attribut :
+  **`docs/api/README.md`** (à lire avant d'y toucher).
+- **Migration 066** (`database/migration_066_telephone_carte.sql`) : `normaliser_telephone`
+  (Émirats par défaut), garde-fou anti-collision normalisée, `clients.telephone_normalise`
+  (générée), `telephone_source`, `telephone_lie_le`, index unique `(marchand, numéro)`,
+  `consentements.source`, table `recuperations_carte` (jeton haché), fonctions
+  `attacher_telephone` (aperçu / écriture), `trouver_carte_par_telephone`,
+  `creer_recuperation`, `ouvrir_recuperation`, `effacer_client` redéfinie (récupérations
+  effacées ; `rgpd_effacement.sql` mis à jour, texte identique).
+- **Routes** : `POST /api/comptoir/cartes/:serial/telephone` (`confirme` absent = aperçu),
+  `POST /api/comptoir/recherche` (30 / 15 min par boutique), `POST /api/comptoir/recuperations`
+  (QR 10 min), `GET /r/:jeton`, `GET /api/recuperation/:jeton`.
+- **Scan** : la réponse gagne `serial_number` (numéro de série résolu, déjà en main, zéro
+  requête). Seule ligne touchée dans `scan.js`.
+- **Inscription** : numéro déjà lié à une autre carte du marchand → la carte est créée sans
+  numéro (pas d'échec, pas de consentement téléphone).
+- **Caisse** (`public/scanner/index.html`) : « + Numéro » après un scan réussi (aperçu →
+  confirmation → écriture ; « Corriger ») ; « Retrouver une carte » (numéro → prénom + solde →
+  QR + compte à rebours) ; FR / EN. **Page client** `public/recuperation.html`.
+
+**Filet** : 372/372 (23 contrôles f04 : format, attache en deux temps, refus, unicité par
+marchand, scan au code de secours, inscription, recherche et limite, QR tracé et haché,
+ouverture, expiration, effacement RGPD, migration sur base avec numéros : garde-fou puis
+rattrapage, rejouable). Navigateur `tests/navigateur/comptoir_telephone.js` : 12 contrôles
+(confirmation avant écriture, faute corrigée jamais écrite, scan toujours à une requête, QR,
+page client iPhone et lien expiré). **Suite complète 476/476.** **Contre-épreuve** sur le code
+en production (`e064951`) : les 349 contrôles existants passent, la section f04 s'arrête à son
+premier contrôle (fonction absente).
+
+**Mesures** : migration 066 sur 100 000 clients (2 000 avec numéro) : **5,6 s** (réécriture de
+`clients`, scans en attente pendant ce temps) → **requête de taille avant exécution**. Colonne
+générée recalculée à chaque mise à jour de la ligne, donc à chaque scan : ≈ 20 µs au plus
+(mesuré, 100 000 appels en 1,9 s), pour un scan de plus de 100 ms.
+
+**Hypothèses** : règles de format simples (un numéro étranger saisi sans « + » ne se retrouve
+pas ; `libphonenumber` écartée) ; vérification humaine à la récupération (prénom + solde,
+tracée), sans code SMS ; un numéro partagé (famille) ne va qu'à une carte.
+
+**Décisions hors pilotage** (à valider) :
+- une carte dont le numéro brut est **illisible** (forme normalisée vide) peut recevoir un
+  numéro au comptoir, qui remplace la valeur brute (ce n'était pas une ancre de récupération) ;
+- le QR n'est pas à usage unique (aperçu de lien, double tap) : 10 minutes, ouvertures comptées ;
+- page client : Apple seul sur iPhone (Google en second si la carte en a un), Google d'abord
+  ailleurs ; langue du commerce.
+
+**Reste (dans l'ordre, docs/api/README.md §4)** : API des caisses (attend le technicien) ;
+changement de numéro depuis la fiche du dashboard ; « Retrouver » dans l'onglet Scanner du
+dashboard (avec t42) ; code SMS / e-mail (amélioration).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
