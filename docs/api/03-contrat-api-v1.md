@@ -84,6 +84,14 @@ nouveau solde et l'état de la récompense.
 
 - **600 requêtes par minute et par clé** (toutes routes confondues). Au-delà : `429` avec
   l'en-tête `Retry-After` (secondes). Les limites ne sont jamais partagées entre commerçants.
+- **Clés fausses** : après 30 échecs d'authentification en 15 minutes depuis une même adresse,
+  cette adresse ne peut plus essayer de clé nouvelle (`429`) ; une clé valable déjà utilisée
+  depuis cette adresse continue de fonctionner.
+
+### 2.3 Vérifier sa clé
+
+`GET /api/v1/ping` → `200 { "ok": true, "environnement": "live" }` (ou `"test"`). Sans clé
+valable : `401 { "error": "cle_invalide" }` ; commerçant suspendu : `403 commercant_suspendu`.
 - Temps de réponse visé : sous 1 seconde. **Délai d'attente conseillé côté caisse : 10 s.**
 
 ## 3. Identifier la carte du client

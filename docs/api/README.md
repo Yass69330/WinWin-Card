@@ -26,8 +26,9 @@ winwincard/backend/
   src/integration/
     index.js              monte la zone ; UNE ligne dans src/index.js
     api-v1/               /api/v1/*  API machine des caisses (clé par commerçant)
-      index.js            routeur : vérification de la clé, limiteur par clé, erreurs JSON
-      cle.js              clé d'API (empreinte sha256, cache 60 s, révocation)
+      index.js            routeur : échecs par adresse, vérification de la clé, limiteur par clé, /ping   [étape 1, fait]
+      cle.js              clé d'API (empreinte sha256, mémoire 60 s, révocation)                         [étape 1, fait]
+      admin-cles.js       /api/admin/… : créer, lister, révoquer les clés (admin WinWin)                   [étape 1, fait]
       ventes.js           POST /ventes, POST /ventes/:reference/annulation
       cartes.js           GET /cartes/:carte
       migrations.js       POST /migrations (points d'avant, une fois par carte)

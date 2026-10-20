@@ -8095,6 +8095,55 @@ seuil).
 
 **Prochaine étape** : implémentation sur validation explicite du pilotage (zéro code avant).
 
+## 15 duodequadraginta sexagies. API v1, ÉTAPE 1 : LE SOCLE D'ACCÈS (20/10, à pousser après la migration 066)
+
+**Feu vert implémentation** (pilotage, 20/10) ; les 6 cas limites du contrat acceptés tels que
+proposés ; migration des points = plomberie au plus simple, taux réglé plus tard.
+
+**Livré (code)** :
+- **Migration 066** (`database/migration_066_api_cles.sql`) : table `api_cles` (empreinte
+  sha256, préfixe, `live` / `test`, révocation, dernière utilisation), fonction
+  `verifier_cle_api` (un aller ; note l'usage une fois par minute au plus) ;
+  `marchands.fils_par_point` (défaut 100) et `plafond_vente_fils` (défaut 5 000 000) ;
+  `scans.canal` (défaut `comptoir`, contrôle posé NOT VALID puis validé), `reference_externe`,
+  `montant_fils`, `vendu_le` (rien ne les écrit encore). **La table `clients` n'est pas
+  touchée.**
+- **Zone** `src/integration/` : `index.js` ; `api-v1/cle.js` (clé `wwk_live_` / `wwk_test_` +
+  40 caractères, empreinte, mémoire 60 s `API_CLE_CACHE_MS`, révocation immédiate sur ce
+  serveur) ; `api-v1/index.js` (échecs par adresse : 30 / 15 min, au-delà plus de clé
+  nouvelle mais les clés déjà reconnues passent ; clé ; limiteur par clé 600 / min
+  `API_V1_MAX_PAR_MINUTE` ; `GET /api/v1/ping`) ; `api-v1/admin-cles.js` (lister, créer —
+  clé montrée une fois —, révoquer). `src/index.js` : une ligne de montage, et `/api/v1`
+  sorti du limiteur global.
+- **Admin** : `PATCH` marchand accepte `fils_par_point` (1 à 10 000 000) et
+  `plafond_vente_fils` (100 à 1 000 000 000), entiers, sinon 400. Fiche marchand : section
+  « API caisse » (montant pour 1 point et plafond saisis en AED, enregistrés en fils ; clés :
+  générer production / test, copier, révoquer).
+- Une clé d'API n'ouvre que `/api/v1` ; aucun jeton (marchand, boutique, admin) n'ouvre
+  `/api/v1`.
+
+**Hors de cette étape (décision de la session, à valider)** : la migration téléphone **n'est
+pas exécutée** ici. Elle réécrit la table `clients` (5,6 s à 100 000 clients, les scans
+attendent), ajoute un calcul à chaque scan et exige en même temps le correctif de
+l'inscription : elle touche la caisse, contraire à la consigne de l'étape. **Son ajustement
+est fait** sur `briques/f04-telephone` (`70fc0a1`, local) : renumérotée **067**, rattachement
+`caisse` sans ligne `consentements`, rôle `api` dans `recuperations_carte` ; filet de la
+branche 372/372.
+
+**Filet** : 367/367 (18 contrôles « API v1, étape 1 ») ; navigateur
+`tests/navigateur/admin_cles_api.js` 6/6 ; **suite complète 465/465**. **Contre-épreuve** sur le
+code en production (`e064951`) : les 349 contrôles existants passent, la nouvelle section
+s'arrête à son premier contrôle (colonne absente).
+
+**Hypothèses** : une seule instance Railway (révocation immédiate sur elle ; 60 s au plus
+sinon) ; compteurs des limiteurs en mémoire (remis à zéro à chaque redémarrage) ; l'adresse du
+client lue avec `trust proxy` à 2 relais (comme le reste).
+
+**Décisions hors pilotage** (à valider) : limiteur des échecs par adresse qui laisse passer les
+clés déjà reconnues (au lieu d'un blocage de l'adresse) ; route `GET /api/v1/ping` (ajoutée au
+contrat §2.3) ; plusieurs clés possibles par commerçant (rotation) ; admin des clés pour tous
+les forfaits.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
