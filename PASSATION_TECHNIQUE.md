@@ -62,8 +62,9 @@ indiquée.
   (non exécutée) et contient des écrans de caisse remisés.
 - Branche de travail des sessions : jamais poussée (consigne de Yass), sauf feu vert
   explicite. Le crochet d'arrêt qui demande de la pousser est ignoré.
-- Dernière migration exécutée en production : **065** (18/10). **066 n'est PAS exécutée**
-  (elle n'existe que sur `briques/f04-telephone`).
+- Dernière migration exécutée en production : **066** (20/10, clés d'API et réglages de
+  conversion ; contrôle de Yass : true, true, true, 0). La migration téléphone (**067**, sur
+  `briques/f04-telephone`) n'est **pas** exécutée.
 - Tests : `npm test` (filet `tests/lancer.js`, base jetable, PostgREST, vrai
   serveur, sections 0 à 26) avec contrôle de syntaxe des écrans. Dernier total sur la
   branche de production : **349/349** filet seul, **441/441** avec les 8 tests navigateur
@@ -8095,7 +8096,9 @@ seuil).
 
 **Prochaine étape** : implémentation sur validation explicite du pilotage (zéro code avant).
 
-## 15 duodequadraginta sexagies. API v1, ÉTAPE 1 : LE SOCLE D'ACCÈS (20/10, à pousser après la migration 066)
+## 15 duodequadraginta sexagies. API v1, ÉTAPE 1 : LE SOCLE D'ACCÈS (20/10, `c2225d7`, poussé)
+
+**Migration 066 exécutée** par Yass le 20/10 (contrôle : true, true, true, 0), puis push.
 
 **Feu vert implémentation** (pilotage, 20/10) ; les 6 cas limites du contrat acceptés tels que
 proposés ; migration des points = plomberie au plus simple, taux réglé plus tard.
