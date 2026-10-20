@@ -40,7 +40,7 @@ begin
   where client_id = p_client_id
     and marchand_id = p_marchand_id;
 
-  -- 3 bis. Supprimer les récupérations de carte (migration 066)
+  -- 3 bis. Supprimer les récupérations de carte (migration 067)
   delete from recuperations_carte
   where client_id = p_client_id
     and marchand_id = p_marchand_id;

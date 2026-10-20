@@ -63,7 +63,7 @@ router.post('/', limiterInscription, asyncHandler(async (req, res) => {
   let { data: client, error: errClient } = await creer(extraFields);
 
   // Numéro déjà lié à une autre carte de ce marchand (un numéro = une carte,
-  // migration 066) : c'est le cas « nouveau téléphone ». L'inscription réussit,
+  // migration 067) : c'est le cas « nouveau téléphone ». L'inscription réussit,
   // la nouvelle carte n'a pas de numéro, l'ancienne garde le sien ; la carte se
   // récupère au comptoir. Rien n'est dit sur l'autre carte.
   if (errClient && errClient.code === '23505' && /telephone/.test(errClient.message || '')) {

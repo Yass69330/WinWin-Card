@@ -1,4 +1,9 @@
--- Migration 066 : numéro de téléphone attaché à la carte, récupération au comptoir
+-- Migration 067 : numéro de téléphone attaché à la carte, récupération de carte
+-- (numérotée 066 à l'origine, jamais exécutée ; renumérotée le 20/10 : la 066
+-- exécutée est celle des clés d'API. Ajustée le 20/10 pour l'API des caisses :
+-- rattachement source « caisse » sans ligne de consentement — modèle
+-- sous-traitant, base légale par le contrat de sous-traitance, j04 — et rôle
+-- « api » dans recuperations_carte.)
 -- (f04 côté comptoir, plan validé par le pilotage le 20/10, docs/api/02-f04-comptoir-plan.md)
 --
 -- POURQUOI. Un client qui change de téléphone n'a aujourd'hui aucun moyen de
@@ -62,7 +67,7 @@ BEGIN
      WHERE deleted_at IS NULL AND public.normaliser_telephone(telephone) IS NOT NULL
      GROUP BY marchand_id, public.normaliser_telephone(telephone) HAVING count(*) > 1) d;
   IF n > 0 THEN
-    RAISE EXCEPTION 'migration 066 arrêtée : % numéro(s) en double une fois normalisé(s), rien n''a été changé', n;
+    RAISE EXCEPTION 'migration 067 arrêtée : % numéro(s) en double une fois normalisé(s), rien n''a été changé', n;
   END IF;
 END $$;
 
@@ -91,7 +96,7 @@ CREATE TABLE IF NOT EXISTS public.recuperations_carte (
   marchand_id       uuid        NOT NULL REFERENCES public.marchands(id) ON DELETE CASCADE,
   client_id         uuid        NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE,
   point_de_vente_id uuid        REFERENCES public.points_de_vente(id) ON DELETE SET NULL,
-  role              text        NOT NULL CHECK (role IN ('scanner', 'marchand')),
+  role              text        NOT NULL CHECK (role IN ('scanner', 'marchand', 'api')),
   jeton_hash        text        NOT NULL UNIQUE,   -- sha256 du jeton, jamais le jeton
   cree_le           timestamptz NOT NULL DEFAULT now(),
   expire_le         timestamptz NOT NULL,
@@ -151,8 +156,14 @@ BEGIN
   EXCEPTION WHEN unique_violation THEN   -- même numéro attaché au même instant ailleurs
     RETURN jsonb_build_object('ok', false, 'reason', 'numero_pris');
   END;
-  INSERT INTO public.consentements (client_id, marchand_id, type, valeur, source)
-  VALUES (v_id, p_marchand_id, 'telephone', true, p_source);
+  -- Rattachement par la caisse d'un commerçant (API) : pas de ligne de
+  -- consentement. Le commerçant est responsable du traitement, WinWin sous-traitant ;
+  -- la base légale est le contrat de sous-traitance (j04), pas un mécanisme du
+  -- produit (décision du pilotage, 20/10). La trace reste : source et date.
+  IF p_source <> 'caisse' THEN
+    INSERT INTO public.consentements (client_id, marchand_id, type, valeur, source)
+    VALUES (v_id, p_marchand_id, 'telephone', true, p_source);
+  END IF;
   RETURN jsonb_build_object('ok', true, 'telephone', v_norm, 'prenom', v_prenom);
 END $$;
 GRANT EXECUTE ON FUNCTION public.attacher_telephone(uuid, text, text, text, boolean) TO service_role;
@@ -252,7 +263,7 @@ begin
   where client_id = p_client_id
     and marchand_id = p_marchand_id;
 
-  -- 3 bis. Supprimer les récupérations de carte (migration 066)
+  -- 3 bis. Supprimer les récupérations de carte (migration 067)
   delete from recuperations_carte
   where client_id = p_client_id
     and marchand_id = p_marchand_id;

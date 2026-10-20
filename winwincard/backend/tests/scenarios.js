@@ -2726,7 +2726,7 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     }
   }
 
-  // ── f04. Numéro de téléphone et récupération au comptoir (migration 066) ────
+  // ── f04. Numéro de téléphone et récupération au comptoir (migration 067) ────
   titre('f04. Numéro attaché à la carte, récupération au comptoir (20/10)');
   {
     // Serveur neuf (limiteurs à zéro), recherches limitées à 6 pour tester le 429.
@@ -2860,7 +2860,7 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     banc.psqlSocket(`CREATE DATABASE ${base}`, 'postgres');
     banc.psqlSocket(`ALTER DATABASE ${base} SET search_path = "$user", public, extensions`, 'postgres');
     banc.psqlSocket('CREATE SCHEMA extensions; CREATE EXTENSION "uuid-ossp" SCHEMA extensions; CREATE EXTENSION pgcrypto SCHEMA extensions;', base);
-    const avant066 = fs.readdirSync(dossier).filter(f => /^migration_\d+.*\.sql$/.test(f) && f < 'migration_066').sort();
+    const avant066 = fs.readdirSync(dossier).filter(f => /^migration_\d+.*\.sql$/.test(f) && f < 'migration_067').sort();
     for (const f of ['schema.sql', ...avant066, 'rgpd_effacement.sql']) {
       if (f === 'rgpd_effacement.sql') continue;   // il cite la table de 066 : rejoué après
       banc.psqlSocket(fs.readFileSync(path.join(dossier, f), 'utf8'), base);
@@ -2869,10 +2869,10 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     g(`INSERT INTO marchands (id, nom, slug, forfait, type_programme, max_value) VALUES ('${M.tampons}', 'G', 'g', 'pro', 'stamps', 10);
        INSERT INTO clients (marchand_id, prenom, pass_serial_number, telephone) VALUES
          ('${M.tampons}', 'A', 'g-1', '0501112222'), ('${M.tampons}', 'B', 'g-2', '+971 50 111 2222'), ('${M.tampons}', 'C', 'g-3', 'pas un numéro');`);
-    const m066 = fs.readFileSync(path.join(dossier, 'migration_066_telephone_carte.sql'), 'utf8');
+    const m066 = fs.readFileSync(path.join(dossier, 'migration_067_telephone_carte.sql'), 'utf8');
     let erreur = '';
     try { g(m066); } catch (e) { erreur = e.message; }
-    verifier('migration 066, deux numéros égaux UNE FOIS normalisés (0501112222 et +971 50 111 2222) : arrêt, rien changé',
+    verifier('migration 067, deux numéros égaux UNE FOIS normalisés (0501112222 et +971 50 111 2222) : arrêt, rien changé',
       [/1 numéro\(s\) en double/.test(erreur), g(`SELECT count(*) FROM information_schema.columns WHERE table_name = 'clients' AND column_name LIKE 'telephone_%'`)],
       [true, '0']);
     g(`UPDATE clients SET telephone = '0503334444' WHERE pass_serial_number = 'g-2'`);

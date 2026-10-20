@@ -3,7 +3,7 @@
 //
 // Jeton boutique ou marchand (authScanner, comme le scan). Chaque route fait UN
 // aller vers la base : la règle (format, un numéro = une carte, pas
-// d'écrasement) vit dans une fonction SQL (migration 066), la route reste mince.
+// d'écrasement) vit dans une fonction SQL (migration 067), la route reste mince.
 // Aucune de ces routes n'est appelée par le scan : elles partent au tap du
 // caissier, jamais pendant un passage en caisse (règle n°1).
 //
