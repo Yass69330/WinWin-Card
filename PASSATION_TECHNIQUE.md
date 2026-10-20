@@ -197,9 +197,9 @@ Ce sont des propositions de la session. L'ordre validé est celui de la carte.
 
 ### 0.5 bis Cap : API caisses (Black Tulip) — posture au 20/10
 
-**Prochaine tâche** (une nouvelle session de pilotage la lancera) : **le contrat d'API
-complet, spec d'abord**, aucun code avant sa validation. Base de départ :
-`docs/api/01-api-caisses-cadrage.md` (brouillon A, questions B, prérequis C, addendum D).
+**État** : la **spec complète** du contrat est écrite (`docs/api/03-contrat-api-v1.md`, 20/10,
+§15 sextriginta sexagies), **en validation** avec 20 décisions ouvertes (partie III). Aucun
+code avant sa validation. Architecture de la zone : `docs/api/README.md`.
 
 **Posture validée par le pilotage** :
 - **On publie le contrat sans attendre le technicien** de Black Tulip ; ses réponses
@@ -8026,6 +8026,40 @@ passation t23, `85c7887` plan f04, et celui-ci), qui partiront avec le premier v
 **Poussée le 20/10** sur feu vert de Yass (branche à part, que Railway ne déploie pas). Le retrait
 du commit de code de la branche de production (avant qu'il parte au prochain push) est validé
 par le pilotage.
+
+## 15 sextriginta sexagies. API v1 : SPEC COMPLÈTE DU CONTRAT (20/10, rien codé, à valider)
+
+**Demande du pilotage (20/10)** : la spec complète contre laquelle le technicien de Black Tulip
+construira, sans attendre ses réponses (spec défensive), avec les décisions déjà tranchées.
+
+**Livré (documentation)** :
+- **`docs/api/03-contrat-api-v1.md`** : partie I, le contrat (clé par commerçant, identifiant
+  de carte = QR **ou** code court de 6 caractères, `POST /api/v1/ventes` en fils, conversion
+  par commerçant + plafond, idempotence par la référence, réponses sans donnée personnelle,
+  récompense, annulation du dernier mouvement, lecture du solde, récupération de carte par
+  téléphone, renvois, test, versions) ; partie II, l'implémentation (zone, crédit partagé
+  avec le comptoir, migration, tests, couverture des 16 inconnues cas A / cas B) ; partie III,
+  **20 décisions ouvertes** avec la valeur proposée.
+- **`docs/api/README.md`** : architecture de la zone `src/integration/` (cible API v1),
+  conventions, patron d'attribut client ; les écrans remisés y sont signalés.
+
+**Vérité établie sur « solde jamais négatif »** (question du pilotage) : **en production
+aujourd'hui**, indépendamment de 066. Contrainte `clients_stored_value_non_negatif`
+(`CHECK (stored_value >= 0)`) posée par la **migration 051** (exécutée en production, c'est
+elle qui crée `crediter_scan`), posée **validée** (pas `NOT VALID` : une ligne négative aurait
+fait échouer la migration) ; présence relevée en production par Yass le 19/10
+(`pg_constraint`, « contrainte ok »). La migration 066 n'y touche pas.
+
+**Points relevés dans le code pour la spec** : le QR des cartes Apple et Google contient le
+numéro de série ; le code court = ses 6 derniers caractères (`utils/backup-code.js`), résolu
+par suffixe, collision → 409 ; en tampons, la vente de la remise ne donne pas de tampon ; le
+limiteur global (300 / 15 min / adresse) bloquerait un serveur central : l'API doit en être
+exclue, avec son propre limiteur par clé ; `recuperations_carte.role` (066) doit accepter
+`api` ; deux ventes de même référence et même nombre de points mais de montants différents ne
+seraient pas vues comme un conflit sans `scans.montant_fils`.
+
+**Prochaine étape** : validation de la spec et des 20 décisions par le pilotage, puis
+implémentation (lot API v1) ; version anglaise du contrat pour le technicien une fois validé.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
