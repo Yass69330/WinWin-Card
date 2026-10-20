@@ -20,7 +20,7 @@
 
 ---
 
-## 0. DÉMARRAGE DE SESSION : ÉTAT AU 15/10/2026 (à lire en premier)
+## 0. DÉMARRAGE DE SESSION : ÉTAT AU 20/10/2026 (à lire en premier)
 
 Cette section suffit pour démarrer. Le détail de chaque point est dans la section
 indiquée.
@@ -42,16 +42,35 @@ indiquée.
 ### 0.2 Production
 
 - Branche déployée : `claude/keen-goldberg-MXslu`, sur Railway, déployée à chaque
-  push. Dernier push : **`34073a2`** (19/10, t17 : désinscription Apple contrôlée, quota manuel borné).
+  push. Dernier push de code : **`34073a2`** (19/10, t17 : désinscription Apple contrôlée,
+  quota manuel borné) ; dernier commit poussé : `e064951` (passation t23).
   - Pousser en avance rapide seulement, sur feu vert de Yass.
   - La migration est exécutée dans Supabase AVANT le push du code qui en dépend.
-- Branche de travail des sessions : jamais poussée (consigne de Yass). Le crochet
-  d'arrêt qui demande de la pousser est ignoré.
-- Dernière migration exécutée en production : **065** (18/10 : 064 index avant le push, 065 après ; 3 × true chacune).
+  - **En attente sur cette branche, en local, documentation seulement** (décision du pilotage :
+    ils partent avec le premier vrai push) : `e304496` (t23 clos), `85c7887` (plan f04, marqué
+    recadré), `a759cc0` (f04 recadré), et le commit de cette mise à jour. **Aucun code.**
+    Une session neuve dans un conteneur neuf ne les a pas : ils sont à refaire depuis cette
+    passation, ou le pilotage autorise leur push.
+- **Branche par défaut du dépôt** : `claude/winwin-card-landing-ohS22` (le site
+  winwin-card.com, GitHub Pages). Elle porte aussi la **tâche de sauvegarde nocturne**
+  (`.github/workflows/sauvegarde-nocturne.yml`, `165cadc`, t23) : GitHub n'exécute les
+  tâches planifiées que sur la branche par défaut. Copie de référence :
+  `docs/exploitation/sauvegarde-nocturne.yml` (les deux doivent rester identiques).
+- **Branche `briques/f04-telephone`** (poussée le 20/10 sur feu vert, **jamais déployée**) :
+  le socle f04 codé et testé, remisé en attendant le chantier API. Contenu au §0.5 bis.
+  **Ne pas la fusionner dans la production telle quelle** : elle dépend de la migration 066
+  (non exécutée) et contient des écrans de caisse remisés.
+- Branche de travail des sessions : jamais poussée (consigne de Yass), sauf feu vert
+  explicite. Le crochet d'arrêt qui demande de la pousser est ignoré.
+- Dernière migration exécutée en production : **065** (18/10). **066 n'est PAS exécutée**
+  (elle n'existe que sur `briques/f04-telephone`).
 - Tests : `npm test` (filet `tests/lancer.js`, base jetable, PostgREST, vrai
-  serveur, sections 0 à 26) avec contrôle de syntaxe des écrans. Dernier total :
-  **342/342** filet seul, **437/437** avec les 8 tests navigateur (18/10). Tests navigateur hors `npm test` : `tests/navigateur/*.js`, avec
-  Playwright. Détail au §15 septquinquagies.
+  serveur, sections 0 à 26) avec contrôle de syntaxe des écrans. Dernier total sur la
+  branche de production : **349/349** filet seul, **441/441** avec les 8 tests navigateur
+  (19/10, t17). Tests navigateur hors `npm test` : `tests/navigateur/*.js`, avec
+  Playwright (`NODE_PATH=/opt/node22/lib/node_modules FILET_EN_PLUS=…`). Détail au §15 septquinquagies.
+  Sur `briques/f04-telephone` : 372/372 et 476/476.
+- Postgres local à démarrer avant le filet : `service postgresql start`.
 - Commande :
   `PATH=~/.cache/winwin-filet/node-v24.21.0-linux-x64/bin:$PATH npm test`
   depuis `winwincard/backend`. Node doit être 24.21.0.
@@ -80,6 +99,15 @@ indiquée.
 - **Campagnes ciblées** (index des segments + inactifs 60 j seulement) : en production le
   18/10 (`665f57a`, migrations 064 et 065). Contrôle de Yass : déploiement vert, scan passé,
   menu à 60 j, comptage sans erreur. **Clos.** Détail au §15 novoquinquagies.
+- **t17** (reste avant l'API : désinscription Apple avec contrôle du jeton, quota manuel de
+  notifications borné 0 à 1 000) : en production le 19/10 (`34073a2`), déploiement vert.
+  **Clos.** À surveiller : des `DELETE /v1/devices` en 401 dans Railway (hypothèse : Apple
+  envoie toujours le jeton). §15 tritriginta sexagies.
+- **t23** (copie chiffrée des sauvegardes hors de Supabase) : en service le 20/10. Chaque nuit
+  à 23:17 UTC, export chiffré, restauré à blanc pour contrôle, envoyé chez Backblaze
+  (`winwin-sauvegardes-2026`, UE, verrou 30 j, cycle 90 j) ; échec = ticket GitHub. Premier
+  lancement vert, copie présente. Point in Time (P5) reporté. **Clos.** Procédure de
+  restauration et limites : §15 quattuortriginta sexagies.
 - **t37** (campagnes par lots, débit partagé de 30 iPhone par 10 s) : en
   production. **Clos.** C'est ce même débit qui protège la caisse pendant les
   envois de f10 et f17.
@@ -91,7 +119,7 @@ indiquée.
      (51 scans sur 14 jours, 0 sans clé).
    - Contrôle de Yass : déploiement vert, aucune ligne `ALERTE cle_idempotence`,
      scan réel passé. Détail au §15 octoquinquagies.
-2. **Gain Google (règle D2, depuis le 13/10) : mesure à refaire vers le 20/10.**
+2. **Gain Google (règle D2, depuis le 13/10) : mesure à refaire vers le 20/10 (pas encore faite au 20/10).**
    - Premier relevé, le 15/10 :
      - en brut, scan 1238 → 246 et inactive 821 → 100 ;
      - mais « avant » couvre 7 jours et « après » 2,5 jours. Par jour, environ
@@ -146,12 +174,9 @@ Ce sont des propositions de la session. L'ordre validé est celui de la carte.
     - Le 01/12 ne change donc plus rien.
   - **Clé historique Supabase (fin 2026)** : **close**. Bascule de clé le 29/09,
     clés historiques désactivées le 01/10 (§15 septies).
-- **Dette de sécurité** (§16), **rangée par le pilotage le 15/10** dans le chantier
-  sécurité (reste de t17) et dans le contrôle de sécurité (gate) de f17 :
-  - **désinscription d'un appareil Apple sans contrôle du jeton** : n'importe qui
-    connaissant un identifiant d'appareil et un numéro de série peut couper les
-    mises à jour d'une carte ;
-  - **quota manuel de notifications non validé** côté serveur.
+- **Dette de sécurité** (§16) : la désinscription Apple sans contrôle du jeton et le quota
+  manuel non validé sont **soldés** (t17, 19/10). Reste : le logo Google à sortir du dépôt
+  avant de le rendre privé ; les jetons morts (pas de nettoyage sur 410).
 - **Dette de justesse silencieuse** : **soldée** (vérifié le 18/10, §15 novoquinquagies) :
   `/me/stats` passe par `apercu_stats` (étape 26), la liste des clients est paginée
   (étape 21).
@@ -170,15 +195,79 @@ Ce sont des propositions de la session. L'ordre validé est celui de la carte.
   - la clé d'idempotence obligatoire (point 0.4, n° 1) ;
   - la phase 2 du filet (point 0.4, n° 4).
 
-### 0.5 bis Cap du 19/10 : API caisses (Black Tulip)
+### 0.5 bis Cap : API caisses (Black Tulip) — posture au 20/10
 
-- t42 en pause après 3 onglets (Notifs, Réseau, Scans) ; Clients, Aperçu, Scanner plus tard.
-- Cadrage de l'API caisses : `docs/api/01-api-caisses-cadrage.md` (§15 untriginta sexagies).
-  Rien codé avant validation du contrat et réponses de leur technicien.
+**Prochaine tâche** (une nouvelle session de pilotage la lancera) : **le contrat d'API
+complet, spec d'abord**, aucun code avant sa validation. Base de départ :
+`docs/api/01-api-caisses-cadrage.md` (brouillon A, questions B, prérequis C, addendum D).
+
+**Posture validée par le pilotage** :
+- **On publie le contrat sans attendre le technicien** de Black Tulip ; ses réponses
+  (questions B, notamment : webhook à chaque vente ? lecture du QR ?) ajusteront la spec,
+  elles ne la bloquent pas.
+- **Authentification** : une **clé d'API par marchand**, stockée hachée, envoyée par leur
+  serveur (jamais dans l'application du caissier), révocable.
+- **Identifiant de la carte** dans l'appel : le **contenu du QR** de la carte (numéro de
+  série) **ou le code court** de 6 caractères (code de secours au dos de la carte), résolus
+  comme le scan d'aujourd'hui.
+- **Conversion montant → points** : **règle réglable par marchand** (en admin), la caisse
+  n'envoie que le montant ; **plafond par vente très élevé**, simple garde-fou contre une
+  saisie absurde (migration).
+- **Idempotence** : la clé t43 en place (`scans.cle_idempotence`), **dérivée de la référence
+  de vente** (UUID v5 de marchand + référence) : une vente renvoyée ne crédite qu'une fois ;
+  même référence avec autre carte ou autre montant → 409.
+- **Annulation** : du **dernier mouvement** seulement (`annuler_scan`, garde-fous inchangés) ;
+  **pas de remboursement tardif, f05 tombe** (19/10).
+- **Solde jamais négatif** : déjà garanti en base (`clients_stored_value_non_negatif`,
+  migration 051, prouvé en production le 19/10) : rien à ajouter.
+- **Colonne `canal`** sur les scans (`comptoir` / `caisse`) : oui, avec l'API (migration).
+- Prérequis du lot 1 : **faits** (t17 le 19/10, t23 le 20/10).
+
+**f04 (identité du client par son téléphone) : EN PAUSE, fusionné dans le chantier API**
+(recadrage du 20/10, §15 quinquatriginta sexagies). Black Tulip n'utilise aucune interface
+WinWin : l'**attache du numéro** viendra dans la **charge de la vente** (`source = 'caisse'`) et
+la **récupération** sera **déclenchée par leur caisse via l'API**, avec aboutissement sur la page
+client `recuperation.html`. Le client ne tape jamais son numéro ; vérification SMS / e-mail =
+amélioration notée, pas un barrage.
+
+**Branche `briques/f04-telephone`** (poussée le 20/10, jamais déployée, 2 commits au-dessus
+de `85c7887` : `a80621a` code, `ae8039c` passation détaillée de ce lot) :
+- **à reprendre telles quelles** :
+  - `database/migration_066_telephone_carte.sql` : `normaliser_telephone` (Émirats par
+    défaut), garde-fou qui arrête la migration si deux numéros d'un marchand sont égaux une
+    fois normalisés, `clients.telephone_normalise` (générée), `telephone_source`,
+    `telephone_lie_le`, index unique (un numéro = une carte par marchand),
+    `consentements.source`, table `recuperations_carte` (jeton haché sha256, 10 min,
+    ouvertures comptées), fonctions `attacher_telephone` (aperçu puis écriture = **la
+    confirmation avant attache**, aucun écrasement d'un numéro déjà posé),
+    `trouver_carte_par_telephone`, `creer_recuperation`, `ouvrir_recuperation`,
+    `effacer_client` redéfinie ; mesurée à **5,6 s sur 100 000 clients** (réécriture de la
+    table, les scans attendent) → requête de taille avant exécution ; ≈ 20 µs ajoutés à
+    chaque scan (colonne générée recalculée) ;
+  - `public/recuperation.html` et `src/integration/recuperation.js` (`/r/:jeton`,
+    `/api/recuperation/:jeton`) ;
+  - `docs/api/README.md` : **architecture de la zone `src/integration/`**, conventions,
+    **patron d'attribut client** (à lire avant de coder l'API) ;
+  - `src/routes/clients.js` : l'inscription ne casse pas sur un numéro déjà lié ;
+  - tests : section « f04 » de `tests/scenarios.js` (format, attache, unicité, QR, RGPD,
+    migration sur base avec numéros) et page client dans `tests/navigateur/comptoir_telephone.js` ;
+- **remisé** : les écrans « + Numéro » / « Retrouver une carte » de
+  `public/scanner/index.html` et `src/integration/comptoir.js` (routes au jeton caissier),
+  à remplacer par des routes d'API (clé du marchand) ;
+- **à revoir** : `serial_number` ajouté à la réponse du scan (`scan.js`), utile seulement à la
+  caisse WinWin.
+- Reprise : partir de la branche de production à jour, reprendre les fichiers voulus de
+  `briques/f04-telephone` (`git checkout briques/f04-telephone -- <fichier>`), pas de fusion
+  en bloc.
+
+**t42** (découpage du dashboard) : en pause après 3 onglets sur 6 (Notifs, Réseau, Scans) ;
+Clients, Aperçu, Scanner plus tard.
 
 ### 0.6 Où lire quoi
 
-- Dernier chantier livré : f17, au §15 septquinquagies.
+- Derniers chantiers : t17 (§15 tritriginta sexagies), t23 (§15 quattuortriginta
+  sexagies), f04 codé puis recadré (§15 quinquatriginta sexagies) ; cadrage API au §15
+  untriginta et duotriginta sexagies et dans `docs/api/`.
 - Décisions prises sans le pilotage : §17. Dette : §16.
 - Requêtes utiles : `winwincard/backend/database/requetes/` et les blocs SQL des
   sections 15.
@@ -7819,7 +7908,7 @@ caissier → QR de réinstallation à usage limité de la **même** carte. Code 
 amélioration, pas en barrage. Limite : aucune clé commune entre leurs fiches et nos cartes, le
 rattrapage se fait surtout au fil des ventes.
 
-**Décisions hors pilotage** (à valider) : borne du quota à 1 000 ; Backblaze B2 (UE) et GitHub
+**Décisions hors pilotage** (**validées par le pilotage le 19/10**) : borne du quota à 1 000 ; Backblaze B2 (UE) et GitHub
 Actions pour t23 ; verrou 30 jours, rétention 90 jours ; un numéro = une carte par marchand ;
 pas de fusion automatique de cartes.
 
@@ -7934,9 +8023,9 @@ prochain push de production ne les emporte pas :
 **Branche de production** : remise sur les seuls commits de documentation (`e304496`
 passation t23, `85c7887` plan f04, et celui-ci), qui partiront avec le premier vrai push.
 
-**Point de vigilance** : `briques/f04-telephone` n'existe que dans ce conteneur tant qu'elle
-n'est pas poussée ; la pousser (branche à part, que Railway ne déploie pas) demande le feu vert
-de Yass.
+**Poussée le 20/10** sur feu vert de Yass (branche à part, que Railway ne déploie pas). Le retrait
+du commit de code de la branche de production (avant qu'il parte au prochain push) est validé
+par le pilotage.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 

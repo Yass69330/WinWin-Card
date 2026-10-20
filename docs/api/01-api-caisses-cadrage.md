@@ -11,6 +11,13 @@ Sources : le code de production (`src/routes/scan.js`, `crediter_scan` migration
 Les fiches de cartes t33 et f02 à f05 ne sont pas dans le dépôt : elles sont reprises ici
 d'après leur intitulé (message du pilotage du 19/10).
 
+> **Posture du pilotage au 20/10** : le contrat est publié **sans attendre le technicien** (ses
+> réponses ajusteront la spec) ; clé d'API par marchand ; identifiant de carte = contenu du QR
+> **ou** code court de 6 caractères ; conversion montant → points réglable par marchand, plafond
+> par vente très élevé ; idempotence par la clé t43 dérivée de la référence ; annulation du
+> dernier mouvement seulement (f05 tombe) ; f04 (téléphone) fusionné ici (§D). Prochaine étape :
+> le contrat complet, spec d'abord (passation §0.5 bis).
+
 ---
 
 ## A. Brouillon du contrat d'API
