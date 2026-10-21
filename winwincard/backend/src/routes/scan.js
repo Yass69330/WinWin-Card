@@ -2,10 +2,13 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../services/supabase');
 const asyncHandler = require('../utils/asyncHandler');
-const { lireCanaux, servirGoogle } = require('../services/canal-google');   // règle D2 (étape 23)
+const { lireCanaux } = require('../services/canal-google');   // règle D2 (étape 23)
 const { suivre } = require('../services/arret');   // envois après la réponse, attendus à l'arrêt (étape 14a)
 const { authScanner, authMarchand } = require('../middleware/auth');
 const { notif } = require('../i18n/messages');
+// Mise à jour de la carte après un crédit (Apple, Google) : partagée avec l'API
+// des caisses (src/integration/api-v1/ventes.js), déplacée telle quelle le 21/10.
+const { notifierMiseAJourPass, mettreAJourGoogleWallet } = require('../services/mise-a-jour-carte');
 
 // Clé d'idempotence (étape 11) : un identifiant par scan voulu, fourni par
 // l'écran. OBLIGATOIRE depuis t43 (100 % des scans avec clé depuis le 05/10) :
@@ -273,56 +276,6 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
     });
   }
 }));
-
-// `canaux` : lecture partagée avec mettreAJourGoogleWallet (lireCanaux).
-async function notifierMiseAJourPass(serialNumber, marchandId, canaux = lireCanaux(serialNumber)) {
-  const tokens = (await canaux).jetons.map(push_token => ({ push_token }));
-
-  if (tokens.length === 0) return;
-
-  const registre = require('../services/notif-registre');
-  const lot = registre.creerLot('scan', marchandId);
-
-  const { sendPushUpdate } = require('../services/apns');
-  for (const { push_token } of tokens) {
-    let erreur = null;
-    await sendPushUpdate(push_token).catch(e => { erreur = e; console.error(`[scan] sendPushUpdate échoué (…${push_token.slice(-8)}):`, e.message); });
-    lot.ajouter({ plateforme: 'apple', serialNumber, pushToken: push_token, erreur });
-  }
-  // Après les envois : ne retarde rien. Un appareil porte typiquement 1 jeton
-  // par carte, donc 1 ligne — le lot reste un insert unique par scan.
-  await lot.ecrire();
-}
-
-// options.message = false : met à jour l'objet (solde, visuel) sans ajouter de
-// message — renvoi d'un scan déjà enregistré (le message s'afficherait deux fois).
-// options.canaux : lecture partagée avec le push Apple. Règle D2 (étape 23) :
-// carte sur iPhone seulement (jeton Apple, lien Google jamais ouvert) → rien
-// vers Google, ni mise à jour ni message.
-async function mettreAJourGoogleWallet(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, scanMessage, imagesTiers, prenom, couleurFond, couleurFondReward, marchand, { message = true, canaux = lireCanaux(serialNumber) } = {}) {
-  if (!servirGoogle(await canaux)) return;
-  const { updateLoyaltyObjectPoints, addMessageToLoyaltyObject } = require('../services/google-pass');
-  const registre = require('../services/notif-registre');
-  const lot = registre.creerLot('scan', marchandId);
-
-  // updateLoyaltyObjectPoints NE LEVAIT PAS sur un statut non-200 (le statut
-  // n'était pas lu) ; il le fait désormais. Sans ce catch, l'exception
-  // sauterait l'addMessage qui suit et le message Android ne partirait plus —
-  // ce serait un changement de comportement visible, hors périmètre de ce lot.
-  let errUpd = null;
-  await updateLoyaltyObjectPoints(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, imagesTiers, prenom, couleurFond, couleurFondReward, marchand)
-    .catch(e => { errUpd = e; console.error('[scan] Google updateObject:', e.message); });
-  lot.ajouter({ plateforme: 'google', serialNumber, erreur: errUpd });
-
-  if (message) {
-    let errMsg = null;
-    await addMessageToLoyaltyObject(serialNumber, null, scanMessage)
-      .catch(e => { errMsg = e; console.error('[scan] Google addMessage:', e.message); });
-    lot.ajouter({ plateforme: 'google', serialNumber, erreur: errMsg });
-  }
-
-  await lot.ecrire();
-}
 
 async function creditReferrerIfApplicable(filleulClientId, marchandId, bonusPoints) {
   // Récupérer le lien de parrainage du filleul

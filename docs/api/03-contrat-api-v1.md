@@ -432,6 +432,18 @@ Le comptoir (`src/routes/scan.js`) et l'API passent **par la même fonction de c
 
 ## 13. Le chemin de crédit partagé
 
+**Fait à l'étape 2 (21/10)** : la transaction reste `crediter_scan` ; `crediter_vente`
+(migration 067) l'appelle puis marque la ligne (canal, référence, montant en fils, date de
+vente) dans la même transaction, et refuse un renvoi de la même référence avec un autre montant
+en fils. Les mises à jour Apple / Google après crédit sont dans
+`services/mise-a-jour-carte.js`, appelé par le comptoir et par l'API (déplacées telles quelles
+de `routes/scan.js`, filet inchangé). La résolution de la carte (QR ou code court) est écrite
+dans `ventes.js`, sur le modèle du scan, sans modifier le scan ; la mettre en commun est une
+amélioration possible, pas un besoin. Les envois de mise à jour d'une vente sont tracés sous la
+source `scan` du registre (même surface).
+
+Proposition d'origine :
+
 Aujourd'hui, la résolution de la carte, `crediter_scan` et les effets d'après (mise à jour
 Apple / Google, parrainage, demande d'avis 30 min après une remise) vivent dans la route du
 scan. Proposition : **extraire** la résolution de carte et les effets d'après dans

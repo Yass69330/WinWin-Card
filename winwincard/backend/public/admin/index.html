@@ -1366,8 +1366,10 @@ async function loadPdvList() {
         <div style="min-width:0">
           <div>${esc(b.nom)}</div>
           <div class="field-hint" style="margin:0">${b.scanner_login ? '🔑 ' + esc(b.scanner_login) : '— aucun identifiant scanner —'}</div>
+          <div class="field-hint pdv-code" style="margin:0">${b.code_externe ? '🧾 code caisse : ' + esc(b.code_externe) : '— aucun code caisse —'}</div>
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn btn-outline btn-sm btn-pdv-code" data-id="${esc(b.id)}" data-nom="${esc(b.nom)}" data-code="${esc(b.code_externe || '')}">Code caisse</button>
           <button class="btn btn-outline btn-sm btn-pdv-cred" data-id="${esc(b.id)}" data-nom="${esc(b.nom)}" data-login="${esc(b.scanner_login || '')}">Identifiants</button>
           <button class="btn btn-danger btn-sm btn-pdv-archive" data-id="${esc(b.id)}" data-nom="${esc(b.nom)}">Archiver</button>
         </div>
@@ -1376,7 +1378,20 @@ async function loadPdvList() {
       b.addEventListener('click', () => archivePdv(b.dataset.id, b.dataset.nom)));
     listEl.querySelectorAll('.btn-pdv-cred').forEach(b =>
       b.addEventListener('click', () => setPdvCredentials(b.dataset.id, b.dataset.nom, b.dataset.login)));
+    listEl.querySelectorAll('.btn-pdv-code').forEach(b =>
+      b.addEventListener('click', () => setPdvCodeCaisse(b.dataset.id, b.dataset.nom, b.dataset.code)));
   } catch (e) { listEl.innerHTML = '<div class="alert alert-error">Erreur de chargement</div>'; }
+}
+
+// Code caisse d'une boutique (API des caisses, 21/10) : le code du magasin dans
+// la caisse du commerçant, envoyé dans chaque vente (champ « boutique »). Vide = retiré.
+async function setPdvCodeCaisse(id, nom, code) {
+  const saisi = prompt(`Code caisse de « ${nom} » (tel que dans la caisse du commerçant, ex. DXB-014). Vide pour le retirer :`, code || '');
+  if (saisi === null) return;
+  const res = await api(`/api/admin/points-de-vente/${id}/code-caisse`, { method: 'PATCH', body: JSON.stringify({ code_externe: saisi.trim() }) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { alert(data.error || 'Erreur'); return; }
+  await loadPdvList();
 }
 
 // Provisioning des identifiants scanner d'une boutique (étape 3b, admin).

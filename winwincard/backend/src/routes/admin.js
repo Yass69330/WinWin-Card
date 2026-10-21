@@ -89,7 +89,7 @@ router.get('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
 router.get('/marchands/:id/points-de-vente', authAdmin, asyncHandler(async (req, res) => {
   const { data, error } = await supabase
     .from('points_de_vente')
-    .select('id, nom, created_at, scanner_login, actif')
+    .select('id, nom, created_at, scanner_login, actif, code_externe')
     .eq('marchand_id', req.params.id)
     .is('deleted_at', null)
     .order('nom');

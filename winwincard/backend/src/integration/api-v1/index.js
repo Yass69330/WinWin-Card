@@ -14,8 +14,7 @@
 //   3. limiteur PAR CLÉ (600 / min). L'API est hors du limiteur global de
 //      src/index.js (300 / 15 min par adresse), qui freinerait un serveur central.
 //
-// Étape 1 (20/10) : seulement GET /ping (vérifier sa clé). Les ventes viennent à
-// l'étape 2.
+// Routes : GET /ping (étape 1, vérifier sa clé) ; POST /ventes (étape 2, ventes.js).
 // ════════════════════════════════════════════════════════════════════════════
 const express = require('express');
 const router = express.Router();
@@ -74,6 +73,8 @@ router.use(authCle, limiterCle);
 
 // Vérifier sa clé (aide à l'intégration). Aucune donnée du commerçant.
 router.get('/ping', (req, res) => res.json({ ok: true, environnement: req.acces.environnement }));
+
+router.use('/ventes', require('./ventes'));
 
 router.use((req, res) => res.status(404).json({ error: 'route_inconnue' }));
 

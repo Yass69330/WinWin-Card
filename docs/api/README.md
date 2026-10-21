@@ -28,13 +28,14 @@ winwincard/backend/
     api-v1/               /api/v1/*  API machine des caisses (clé par commerçant)
       index.js            routeur : échecs par adresse, vérification de la clé, limiteur par clé, /ping   [étape 1, fait]
       cle.js              clé d'API (empreinte sha256, mémoire 60 s, révocation)                         [étape 1, fait]
-      admin-cles.js       /api/admin/… : créer, lister, révoquer les clés (admin WinWin)                   [étape 1, fait]
-      ventes.js           POST /ventes, POST /ventes/:reference/annulation
+      admin.js            /api/admin/… : clés (créer, lister, révoquer) [étape 1] ; code caisse des boutiques [étape 2]
+      ventes.js           POST /ventes [étape 2, fait] ; POST /ventes/:reference/annulation [à venir]
       cartes.js           GET /cartes/:carte
       migrations.js       POST /migrations (points d'avant, une fois par carte)
       recuperations.js    POST /recuperations
     recuperation.js       /r/:jeton (page publique) et /api/recuperation/:jeton
-  src/services/credit.js  crédit partagé par le comptoir et l'API (résolution de carte, effets d'après)
+  src/services/mise-a-jour-carte.js  mise à jour de la carte après un crédit (Apple, Google), partagée
+                          par le comptoir et l'API [étape 2, déplacée telle quelle de routes/scan.js]
   public/recuperation.html               page du client qui ouvre le lien de récupération
   database/migration_0NN_*.sql           tables et fonctions SQL de la zone
   tests/scenarios.js                     sections « API v1 » et « f04 »

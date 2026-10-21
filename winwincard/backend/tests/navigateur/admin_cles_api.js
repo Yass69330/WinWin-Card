@@ -5,7 +5,8 @@
 //
 // API des caisses, étape 1 : réglage de la conversion et du plafond (saisis en
 // AED, enregistrés en fils), création d'une clé montrée UNE seule fois,
-// révocation. Contre le vrai serveur et la base du filet.
+// révocation. Étape 2 : code caisse d'une boutique. Contre le vrai serveur et la
+// base du filet.
 // ════════════════════════════════════════════════════════════════════════════
 
 const crypto = require('crypto');
@@ -33,6 +34,8 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur }) {
       await p.waitForSelector('#section-api', { state: 'visible' });
       await p.waitForFunction(() => !document.getElementById('api-cles-liste').textContent.includes('Chargement'));
     };
+    // Point de départ connu : aucune clé (les scénarios en créent pour ce marchand).
+    sql(`DELETE FROM api_cles WHERE marchand_id = '${M.reseau}'`);
     // La fiche exige un e-mail ; le marchand du filet n'en a pas.
     const emailAvant = sql(`SELECT coalesce(email_contact, '') FROM marchands WHERE id = '${M.reseau}'`);
     sql(`UPDATE marchands SET email_contact = 'filet-reseau@example.com' WHERE id = '${M.reseau}'`);
@@ -79,6 +82,20 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur }) {
     verifier('montant pour 1 point à 0 : refusé avant envoi, message clair, réglage inchangé',
       [(await p.locator('#sheet-err').innerText()).trim(), reglages()],
       ['API caisse : montant pour 1 point invalide (0,01 AED au moins)', '50|100000']);
+    // Étape 2 (21/10) : code caisse d'une boutique, depuis la fiche « Boutiques ».
+    const { B } = require('../scenarios');
+    const avantCode = sql(`SELECT coalesce(code_externe, '') FROM points_de_vente WHERE id = '${B.b2}'`);
+    const p2 = await ctx.newPage();
+    p2.on('dialog', d => d.accept(d.type() === 'prompt' ? 'DXB-NAV-2' : undefined).catch(() => {}));
+    await p2.goto(urlServeur + '/admin/');
+    await p2.waitForSelector(`.btn-pdv[data-id="${M.reseau}"]`);
+    await p2.click(`.btn-pdv[data-id="${M.reseau}"]`);
+    await p2.waitForSelector(`.btn-pdv-code[data-id="${B.b2}"]`);
+    await p2.click(`.btn-pdv-code[data-id="${B.b2}"]`);
+    await p2.waitForFunction(() => document.getElementById('pdv-list').textContent.includes('DXB-NAV-2'));
+    verifier('fiche « Boutiques » : « Code caisse » enregistre le code (DXB-NAV-2) et l\'affiche sous la boutique',
+      sql(`SELECT code_externe FROM points_de_vente WHERE id = '${B.b2}'`), 'DXB-NAV-2');
+    sql(`UPDATE points_de_vente SET code_externe = ${avantCode ? `'${avantCode}'` : 'NULL'} WHERE id = '${B.b2}'`);
     sql(`UPDATE marchands SET fils_par_point = 100, plafond_vente_fils = 5000000, email_contact = ${emailAvant ? `'${emailAvant}'` : 'NULL'} WHERE id = '${M.reseau}'`);
     await ctx.close();
   } finally {

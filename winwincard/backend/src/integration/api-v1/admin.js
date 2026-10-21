@@ -1,11 +1,15 @@
 // ════════════════════════════════════════════════════════════════════════════
-// Gestion des clés d'API — admin WinWin seulement (authAdmin)
+// Administration de l'API des caisses — admin WinWin seulement (authAdmin)
 //
+// Clés d'API :
 //   GET  /api/admin/marchands/:id/cles-api        liste (jamais la clé ni son empreinte)
 //   POST /api/admin/marchands/:id/cles-api        { environnement: 'live' | 'test' }
 //        → 201 { cle, … } : la SEULE fois où la clé est visible
 //   POST /api/admin/cles-api/:cleId/revoquer      révocation (immédiate sur ce serveur,
 //        60 s au plus ailleurs, voir cle.js)
+// Boutiques (étape 2, 21/10) :
+//   PATCH /api/admin/points-de-vente/:id/code-caisse  { code_externe }  code du magasin
+//        dans la caisse du commerçant (champ `boutique` des ventes) ; vide = retiré
 // ════════════════════════════════════════════════════════════════════════════
 const express = require('express');
 const router = express.Router();
@@ -51,6 +55,25 @@ router.post('/cles-api/:cleId/revoquer', authAdmin, siUuid('cleId'), asyncHandle
   const { data: deja } = await supabase.from('api_cles').select(COLONNES).eq('id', req.params.cleId).maybeSingle();
   if (!deja) return res.status(404).json({ error: 'Clé introuvable' });
   res.json(deja);
+}));
+
+// Code caisse d'une boutique : unique par commerçant parmi ses boutiques actives
+// (index de la migration 067). Dès qu'une boutique a un code, toute vente de ce
+// commerçant doit porter un code de boutique connu.
+router.patch('/points-de-vente/:id/code-caisse', authAdmin, siUuid('id'), asyncHandler(async (req, res) => {
+  const brut = req.body.code_externe;
+  const code = brut == null || String(brut).trim() === '' ? null : String(brut).trim();
+  if (code !== null && !/^[A-Za-z0-9._:/-]{1,64}$/.test(code)) {
+    return res.status(400).json({ error: 'Code caisse : 1 à 64 caractères parmi lettres, chiffres et . _ - : /' });
+  }
+  const { data, error } = await supabase.from('points_de_vente').update({ code_externe: code })
+    .eq('id', req.params.id).is('deleted_at', null).select('id, nom, code_externe').maybeSingle();
+  if (error) {
+    if (error.code === '23505') return res.status(409).json({ error: 'Une autre boutique de ce marchand porte déjà ce code' });
+    return res.status(500).json({ error: error.message });
+  }
+  if (!data) return res.status(404).json({ error: 'Boutique introuvable' });
+  res.json(data);
 }));
 
 module.exports = router;

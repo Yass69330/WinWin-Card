@@ -2856,6 +2856,142 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       [[401, 401, 401, 429], 200, 429, 200]);
     sB.processus.kill();
   }
+
+  // ── API v1, étape 2 : POST /ventes (migration 067, 21/10) ───────────────────
+  titre('API v1, étape 2 : créditer une vente (POST /api/v1/ventes, 21/10)');
+  {
+    const s2 = await demarrerServeur('api-v1-ventes', urlSupabase, { API_V1_MAX_PAR_MINUTE: '5000' });
+    const attendreMs = ms => new Promise(ok => setTimeout(ok, ms));
+    const appel = (methode, chemin, auth, corps) => fetch(s2.url + chemin, { method: methode,
+      headers: { 'Content-Type': 'application/json', ...(auth ? { Authorization: auth } : {}) },
+      body: corps === undefined ? undefined : JSON.stringify(corps) })
+      .then(async r => { const t = await r.text(); let c; try { c = JSON.parse(t); } catch { c = t; } return { statut: r.status, corps: c }; });
+    const adm = (methode, chemin, corps) => appel(methode, chemin, `Bearer ${jetonAdmin}`, corps);
+    const cleDe = async m => (await adm('POST', `/api/admin/marchands/${m}/cles-api`, { environnement: 'live' })).corps.cle;
+    const kP = await cleDe(M.points), kT = await cleDe(M.tampons), kR = await cleDe(M.reseau);
+    const vente = (k, corps) => appel('POST', '/api/v1/ventes', `Bearer ${k}`, corps);
+    let n = 0;
+    const ref = () => `BT-TEST-${Date.now()}-${++n}`;
+    const ligne = id => sql(`SELECT canal || '|' || coalesce(reference_externe, '-') || '|' || coalesce(montant_fils::text, '-') || '|' || coalesce(point_de_vente_id::text, '-') || '|' || (vendu_le IS NOT NULL)
+      FROM scans WHERE client_id = '${id}' ORDER BY date_scan DESC, id DESC LIMIT 1`);
+
+    // Vente simple, puis renvois.
+    const cP = client(M.points);
+    const r1 = ref();
+    const v1 = await vente(kP, { reference: r1, carte: cP.serial, montant: 18550, devise: 'AED' });
+    verifier('vente en points : 185,50 AED → 185 points (1 point par AED, arrondi bas), réponse complète, aucune donnée personnelle',
+      [v1.statut, v1.corps, JSON.stringify(v1.corps).includes('Filet')],
+      [200, { ok: true, reference: r1, enregistree: true, deja_enregistree: false, programme: 'points', points_credites: 185, solde: 185,
+        seuil: 500, seuil_atteint: false, recompense_a_remettre: false, telephone: null }, false]);
+    verifier('journal : une ligne canal « caisse », référence, montant en fils ; la carte a reçu son message',
+      [ligne(cP.id), lignes(cP.id), messageCarte(cP.serial)], [`caisse|${r1}|18550|-|false`, 1, '+185 — Filet : 185/500 pts']);
+    const v1b = await vente(kP, { reference: r1, carte: cP.serial, montant: 18550 });
+    verifier('même vente renvoyée : 200 « deja_enregistree », mêmes chiffres, rien recrédité',
+      [v1b.statut, v1b.corps.deja_enregistree, v1b.corps.points_credites, v1b.corps.solde, solde(cP.id), lignes(cP.id)], [200, true, 185, 185, 185, 1]);
+    const autreMontant = await vente(kP, { reference: r1, carte: cP.serial, montant: 18599 });
+    const cP2 = client(M.points);
+    const autreCarte = await vente(kP, { reference: r1, carte: cP2.serial, montant: 18550 });
+    verifier('même référence avec un autre montant (même nombre de points) ou une autre carte : 409 « reference_deja_utilisee », rien écrit',
+      [autreMontant.statut, autreMontant.corps.error, autreCarte.statut, autreCarte.corps.error, solde(cP.id), lignes(cP.id), lignes(cP2.id)],
+      [409, 'reference_deja_utilisee', 409, 'reference_deja_utilisee', 185, 1, 0]);
+    const paralleles = await Promise.all([1, 2, 3].map(() => vente(kP, { reference: 'BT-PARALLELE-1', carte: cP2.serial, montant: 1000 })));
+    verifier('trois envois simultanés de la même vente : un seul crédit',
+      [paralleles.every(r => r.statut === 200), paralleles.filter(r => r.corps.deja_enregistree === false).length, solde(cP2.id), lignes(cP2.id)], [true, 1, 10, 1]);
+
+    // Identifiant : code court, carte inconnue.
+    const parCode = await vente(kP, { reference: ref(), carte: `  ${cP.serial.slice(-6).toUpperCase()} `, montant: 1000 });
+    verifier('carte par code court (6 caractères, majuscules, espaces) : créditée', [parCode.statut, parCode.corps.solde], [200, 195]);
+    const inconnue = await vente(kP, { reference: ref(), carte: crypto.randomUUID(), montant: 1000 });
+    const ailleurs = await vente(kP, { reference: ref(), carte: client(M.tampons).serial, montant: 1000 });
+    verifier('carte inconnue ou d\'un autre commerçant : 404 « carte_inconnue » avec le lien d\'installation du commerçant',
+      [inconnue.statut, inconnue.corps.error, String(inconnue.corps.lien_installation).endsWith('/l/filet-points'), ailleurs.statut], [404, 'carte_inconnue', true, 404]);
+    const ambA = crypto.randomUUID().slice(0, 30) + 'abc123', ambB = crypto.randomUUID().slice(0, 30) + 'abc123';
+    client(M.points, { serial: ambA }); client(M.points, { serial: ambB });
+    verifier('code court partagé par deux cartes : 409 « carte_ambigue », rien crédité',
+      [(await vente(kP, { reference: ref(), carte: 'ABC123', montant: 1000 })).corps.error], ['carte_ambigue']);
+
+    // Conversion, plafond, vente à 0 point.
+    const zero = await vente(kP, { reference: ref(), carte: cP.serial, montant: 99 });
+    verifier('vente sous 1 point (0,99 AED) : 200 « enregistree: false », rien écrit', [zero.statut, zero.corps.enregistree, zero.corps.points_credites, lignes(cP.id)], [200, false, 0, 2]);
+    sql(`UPDATE marchands SET fils_par_point = 50, plafond_vente_fils = 100000 WHERE id = '${M.points}'`);
+    const double = await vente(kP, { reference: ref(), carte: cP.serial, montant: 1000 });
+    const plafond = await vente(kP, { reference: ref(), carte: cP.serial, montant: 100001 });
+    sql(`UPDATE marchands SET fils_par_point = 100, plafond_vente_fils = 5000000 WHERE id = '${M.points}'`);
+    verifier('conversion réglée à 2 points par AED : 10 AED → 20 points ; au-delà du plafond (1 000 AED) : 422 « montant_hors_plafond », rien écrit',
+      [double.corps.points_credites, plafond.statut, plafond.corps.error, solde(cP.id)], [20, 422, 'montant_hors_plafond', 215]);
+
+    // Récompense, comme au comptoir.
+    sql(`UPDATE clients SET stored_value = 480 WHERE id = '${cP.id}'`);
+    const seuil = await vente(kP, { reference: ref(), carte: cP.serial, montant: 5000 });
+    const remise = await vente(kP, { reference: ref(), carte: cP.serial, montant: 5000 });
+    verifier('points : 480 + 50 = 530, seuil atteint (récompense acquise) ; vente suivante : récompense à remettre, solde 530 − 500 + 50 = 80',
+      [[seuil.corps.solde, seuil.corps.seuil_atteint, seuil.corps.recompense_a_remettre], [remise.corps.solde, remise.corps.points_credites, remise.corps.seuil_atteint, remise.corps.recompense_a_remettre]],
+      [[530, true, false], [80, 50, false, true]]);
+    const cT = client(M.tampons, { solde: 9 });
+    const t1 = await vente(kT, { reference: ref(), carte: cT.serial, montant: 999999 });
+    const t2 = await vente(kT, { reference: ref(), carte: cT.serial, montant: 100 });
+    verifier('tampons : 1 tampon par vente quel que soit le montant ; 9 → 10 seuil atteint ; vente suivante : remise, 0 tampon, solde 0',
+      [[t1.corps.programme, t1.corps.points_credites, t1.corps.solde, t1.corps.seuil_atteint], [t2.corps.points_credites, t2.corps.solde, t2.corps.recompense_a_remettre]],
+      [['tampons', 1, 10, true], [0, 0, true]]);
+
+    // Pas de parrainage pour une vente de caisse (décision du 20/10).
+    const parrain = client(M.tampons, { solde: 2 });
+    const filleul = client(M.tampons, { parrain: parrain.id });
+    await vente(kT, { reference: ref(), carte: filleul.serial, montant: 1000 });
+    await attendreMs(800);
+    verifier('premier crédit d\'un filleul par la caisse : le parrain n\'est PAS crédité (parrainage propre au comptoir)', [solde(filleul.id), solde(parrain.id)], [1, 2]);
+
+    // Boutiques (codes caisse).
+    const code = (pdv, c) => adm('PATCH', `/api/admin/points-de-vente/${pdv}/code-caisse`, { code_externe: c });
+    const codes = [await code(B.b1, 'DXB-001'), await code(B.b2, 'DXB-002'), await code(B.coupee, 'DXB-003')];
+    const doublon = await code(B.b2, 'DXB-001'), mauvais = await code(B.b2, 'DXB 002');
+    verifier('admin : codes caisse posés ; même code sur deux boutiques 409 ; caractères interdits 400',
+      [codes.map(r => r.statut), doublon.statut, mauvais.statut, (await adm('GET', `/api/admin/marchands/${M.reseau}/points-de-vente`)).corps.find(x => x.id === B.b1).code_externe],
+      [[200, 200, 200], 409, 400, 'DXB-001']);
+    const cR = client(M.reseau);
+    const sansB = await vente(kR, { reference: ref(), carte: cR.serial, montant: 1000 });
+    const inconnueB = await vente(kR, { reference: ref(), carte: cR.serial, montant: 1000, boutique: 'DXB-999' });
+    const coupee = await vente(kR, { reference: ref(), carte: cR.serial, montant: 1000, boutique: 'DXB-003' });
+    const okB = await vente(kR, { reference: ref(), carte: cR.serial, montant: 1000, boutique: 'DXB-001' });
+    verifier('réseau : sans boutique 400 ; code inconnu 422 ; boutique coupée 403 ; bon code : vente rattachée à la boutique',
+      [[sansB.statut, sansB.corps.champ], [inconnueB.statut, inconnueB.corps.error], [coupee.statut, coupee.corps.error], okB.statut, ligne(cR.id).split('|')[3]],
+      [[400, 'boutique'], [422, 'boutique_inconnue'], [403, 'boutique_fermee'], 200, B.b1]);
+    verifier('commerçant sans code caisse : la boutique envoyée est ignorée, vente non attribuée',
+      [(await vente(kP, { reference: ref(), carte: cP2.serial, montant: 1000, boutique: 'X-1' })).statut, ligne(cP2.id).split('|')[3]], [200, '-']);
+
+    // Corps invalides, date, téléphone.
+    const corps = { reference: ref(), carte: cP2.serial, montant: 1000 };
+    const essais = [
+      ['reference', { ...corps, reference: undefined }], ['reference', { ...corps, reference: 'avec espace' }], ['reference', { ...corps, reference: 'x'.repeat(65) }],
+      ['carte', { ...corps, carte: undefined }], ['carte', { ...corps, carte: 'pas-une-carte' }],
+      ['montant', { ...corps, montant: 185.5 }], ['montant', { ...corps, montant: '18500' }], ['montant', { ...corps, montant: 0 }], ['montant', { ...corps, montant: -1 }],
+      ['devise', { ...corps, devise: 'USD' }], ['date_vente', { ...corps, date_vente: 'hier' }], ['telephone', { ...corps, telephone: 12 }],
+    ];
+    const obtenus = [];
+    for (const [, c] of essais) { const r = await vente(kP, c); obtenus.push([r.statut, r.corps.champ]); }
+    verifier('corps invalides : 400 « corps_invalide » avec le champ en cause, rien écrit',
+      [obtenus, lignes(cP2.id)], [essais.map(([ch]) => [400, ch]), 2]);
+    const vieille = await vente(kP, { ...corps, date_vente: new Date(Date.now() - 8 * 86400e3).toISOString() });
+    const future = await vente(kP, { ...corps, date_vente: new Date(Date.now() + 600e3).toISOString() });
+    const datee = await vente(kP, { ...corps, date_vente: new Date(Date.now() - 3600e3).toISOString(), telephone: '050 123 4567' });
+    verifier('date de vente : 8 jours 422, 10 min dans le futur 422, il y a 1 h acceptée et notée ; téléphone reçu mais pas encore traité (« non_traite »), fiche inchangée',
+      [vieille.statut, future.statut, datee.statut, ligne(cP2.id).split('|')[4], datee.corps.telephone, sql(`SELECT coalesce(telephone, '-') FROM clients WHERE id = '${cP2.id}'`)],
+      [422, 422, 200, 'true', 'non_traite', '-']);
+
+    // Vente annulée puis renvoyée : jamais recréditée.
+    const cA = client(M.points);
+    const rA = ref();
+    await vente(kP, { reference: rA, carte: cA.serial, montant: 1000 });
+    await annuler(tP, derniereLigne(cA.id));
+    const renvoi = await vente(kP, { reference: rA, carte: cA.serial, montant: 1000 });
+    verifier('vente annulée (au comptoir) puis renvoyée : 409 « vente_annulee », jamais recréditée', [renvoi.statut, renvoi.corps.error, solde(cA.id)], [409, 'vente_annulee', 0]);
+
+    // Le comptoir n'a pas bougé.
+    const cC = client(M.points);
+    const rc = await scan(tP, cC.serial, 30);
+    verifier('le comptoir est inchangé : scan crédité, canal « comptoir », sans référence', [rc.statut, rc.corps.stored_value_apres, ligne(cC.id)], [200, 30, 'comptoir|-|-|-|false']);
+    s2.processus.kill();
+  }
 }
 
 module.exports = { FIXTURES, jouer, M, B };

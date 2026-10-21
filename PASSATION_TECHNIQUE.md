@@ -8147,6 +8147,48 @@ clés déjà reconnues (au lieu d'un blocage de l'adresse) ; route `GET /api/v1/
 contrat §2.3) ; plusieurs clés possibles par commerçant (rotation) ; admin des clés pour tous
 les forfaits.
 
+## 15 undequadraginta sexagies. API v1, ÉTAPE 2 : POST /ventes (21/10, à pousser après la migration 067)
+
+**Feu vert** du pilotage (21/10, après la validation à l'œil de l'étape 1 : 5 points bons).
+
+**Livré (code)** :
+- **Migration 067** (`database/migration_067_api_ventes.sql`) : `points_de_vente.code_externe`
+  (code du magasin chez le commerçant, unique parmi ses boutiques actives, format
+  `[A-Za-z0-9._:/-]{1,64}`) ; fonction **`crediter_vente`** qui appelle `crediter_scan`
+  (**non modifiée**) puis marque la ligne (canal `caisse`, référence, montant en fils, date de
+  vente) dans la même transaction ; renvoi de la même référence avec un autre montant en fils →
+  refus `cle_autre_scan`. **Ni `clients` ni `scans` réécrites.**
+- **`src/integration/api-v1/ventes.js`** : `POST /api/v1/ventes` selon le contrat §4 (corps
+  validé champ par champ ; boutique obligatoire dès qu'un code caisse existe chez le commerçant,
+  422 si inconnue, 403 si coupée ; plafond ; conversion `floor(montant / fils_par_point)`, 1
+  tampon par vente ; vente à 0 point non enregistrée ; carte par QR ou code court, 409 si
+  ambigu, 404 + `lien_installation` (`/l/<slug>`) si inconnue ; clé t43 =
+  **UUID v5 de `marchand:référence`** dans l'espace fixe `feaf209d-c24a-4578-888e-dc1490544243`
+  — **ne jamais changer** ; réponse sans donnée personnelle ; après la réponse : carte mise à
+  jour, avis Google après une remise, **pas de parrainage**). `telephone` accepté, réponse
+  `non_traite` (étape téléphone) ; vente sans `carte` → 400.
+- **`src/services/mise-a-jour-carte.js`** : `notifierMiseAJourPass` et
+  `mettreAJourGoogleWallet` **déplacées telles quelles** de `routes/scan.js` (seul changement du
+  fichier du scan : l'import) ; filet du comptoir inchangé (367/367 avant d'ajouter les ventes).
+- **Admin** : `api-v1/admin-cles.js` renommé `api-v1/admin.js` ; `PATCH
+  /api/admin/points-de-vente/:id/code-caisse` ; la liste des boutiques renvoie `code_externe` ;
+  fiche « Boutiques » : bouton « Code caisse » (même geste que « Identifiants »).
+
+**Filet** : 387/387 (20 contrôles « API v1, étape 2 ») ; navigateur `admin_cles_api.js` 7/7
+(code caisse ajouté ; il vide d'abord les clés du marchand de test) ; **suite complète
+486/486**. **Contre-épreuve** sur `b87a2ec` (production) : 368 bons, 19 en échec = les nouveaux
+contrôles (le contrôle « comptoir inchangé » passe aussi sur la production, comme attendu).
+
+**Non testé au filet** : la demande d'avis Google après une remise par la caisse (même appel
+que le comptoir, `services/avis.planifier`) ; une base en panne pendant une vente (même client
+Supabase coupé à 5 s que le scan → 503).
+
+**Décisions hors pilotage** (à valider) : traçage des mises à jour de carte sous la source
+`scan` du registre (pas de nouvelle source, donc pas de migration) ; la boutique devient
+obligatoire pour un commerçant **dès qu'une de ses boutiques a un code caisse** (et non selon
+les identifiants scanner) ; référence de vente limitée à `[A-Za-z0-9._:/-]{1,64}` ; numéro de
+carte mal formé → 400 (`corps_invalide`, champ `carte`) plutôt que 404.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)

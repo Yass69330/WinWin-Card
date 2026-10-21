@@ -8,12 +8,12 @@
 // Contrat : docs/api/03-contrat-api-v1.md.
 //
 //   api-v1/          /api/v1/*                     API machine (clé du commerçant)
-//   api-v1/admin-cles.js  /api/admin/.../cles-api  gestion des clés (admin WinWin)
+//   api-v1/admin.js  /api/admin/…                 clés d'API, codes caisse des boutiques (admin WinWin)
 // ════════════════════════════════════════════════════════════════════════════
 const express = require('express');
 const router = express.Router();
 
 router.use('/api/v1', require('./api-v1'));
-router.use('/api/admin', require('./api-v1/admin-cles'));
+router.use('/api/admin', require('./api-v1/admin'));
 
 module.exports = router;
