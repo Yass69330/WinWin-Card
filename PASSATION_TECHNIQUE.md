@@ -62,9 +62,10 @@ indiquée.
   (non exécutée) et contient des écrans de caisse remisés.
 - Branche de travail des sessions : jamais poussée (consigne de Yass), sauf feu vert
   explicite. Le crochet d'arrêt qui demande de la pousser est ignoré.
-- Dernière migration exécutée en production : **066** (20/10, clés d'API et réglages de
-  conversion ; contrôle de Yass : true, true, true, 0). La migration téléphone (**067**, sur
-  `briques/f04-telephone`) n'est **pas** exécutée.
+- Dernière migration exécutée en production : **067** (21/10, ventes de l'API : code caisse
+  des boutiques, `crediter_vente` ; contrôle de Yass : true, true, true). 066 (20/10) : clés
+  d'API et réglages de conversion. La migration téléphone (n° **067 sur
+  `briques/f04-telephone`**, à renuméroter **068**) n'est **pas** exécutée.
 - Tests : `npm test` (filet `tests/lancer.js`, base jetable, PostgREST, vrai
   serveur, sections 0 à 26) avec contrôle de syntaxe des écrans. Dernier total sur la
   branche de production : **349/349** filet seul, **441/441** avec les 8 tests navigateur
@@ -8147,7 +8148,9 @@ clés déjà reconnues (au lieu d'un blocage de l'adresse) ; route `GET /api/v1/
 contrat §2.3) ; plusieurs clés possibles par commerçant (rotation) ; admin des clés pour tous
 les forfaits.
 
-## 15 undequadraginta sexagies. API v1, ÉTAPE 2 : POST /ventes (21/10, à pousser après la migration 067)
+## 15 undequadraginta sexagies. API v1, ÉTAPE 2 : POST /ventes (21/10, `f387a4d`, poussé)
+
+**Migration 067 exécutée** par Yass le 21/10 (contrôle : true, true, true), puis push.
 
 **Feu vert** du pilotage (21/10, après la validation à l'œil de l'étape 1 : 5 points bons).
 
