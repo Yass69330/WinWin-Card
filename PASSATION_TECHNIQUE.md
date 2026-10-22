@@ -64,7 +64,8 @@ indiquée.
   dans la production le 22/10** après la migration 068 ; ne plus s'en servir.
 - Branche de travail des sessions : jamais poussée (consigne de Yass), sauf feu vert
   explicite. Le crochet d'arrêt qui demande de la pousser est ignoré.
-- Dernière migration exécutée en production : **068** (22/10, téléphone : normalisation,
+- Dernière migration exécutée en production : **069** (22/10, migration des points au journal
+  des ajustements ; contrôle : true, true, true, 0). 068 (22/10, téléphone : normalisation,
   unicité, récupérations ; contrôle : true, true, true, 5 utilisables, 6 illisibles). 067
   (21/10) : ventes de l'API. 066 (20/10) : clés d'API et réglages de conversion.
 - Tests : `npm test` (filet `tests/lancer.js`, base jetable, PostgREST, vrai
@@ -8256,7 +8257,10 @@ production (ordre migration → code) ; numéro illisible dans une vente sans ca
 `carte_inconnue` (comme un numéro inconnu) ; récupération : numéro illisible → 400, inconnu →
 404 `telephone_inconnu` ; la limite des récupérations compte aussi les demandes refusées.
 
-## 15 unquadragies sexagies. API v1, ÉTAPE 4 : POST /migrations (22/10, à pousser après la migration 069)
+## 15 unquadragies sexagies. API v1, ÉTAPE 4 : POST /migrations (22/10, `09925fc`, poussé)
+
+**Migration 069 exécutée** par Yass le 22/10 (contrôle : true, true, true, 0), feu vert du
+pilotage, puis push.
 
 **Plan validé** par le pilotage (22/10), **y compris le choix de ranger la migration des points
 dans le journal des AJUSTEMENTS** et non des scans (« une migration est un ajustement de solde,
