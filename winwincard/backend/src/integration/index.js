@@ -9,11 +9,13 @@
 //
 //   api-v1/          /api/v1/*                     API machine (clé du commerçant)
 //   api-v1/admin.js  /api/admin/…                 clés d'API, codes caisse des boutiques (admin WinWin)
+//   recuperation.js  /r/:jeton, /api/recuperation/:jeton   page publique de récupération de carte
 // ════════════════════════════════════════════════════════════════════════════
 const express = require('express');
 const router = express.Router();
 
 router.use('/api/v1', require('./api-v1'));
 router.use('/api/admin', require('./api-v1/admin'));
+router.use(require('./recuperation'));   // /r/:jeton et /api/recuperation/:jeton (page du client)
 
 module.exports = router;

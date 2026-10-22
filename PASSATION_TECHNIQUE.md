@@ -60,6 +60,8 @@ indiquée.
   le socle f04 codé et testé, remisé en attendant le chantier API. Contenu au §0.5 bis.
   **Ne pas la fusionner dans la production telle quelle** : elle dépend de la migration 066
   (non exécutée) et contient des écrans de caisse remisés.
+- **Branche `claude/api-etape3-telephone`** (22/10) : étape 3 de l'API (téléphone), poussée
+  pour être préservée, **à ne fusionner qu'après la migration 068** (§15 quadragies sexagies).
 - Branche de travail des sessions : jamais poussée (consigne de Yass), sauf feu vert
   explicite. Le crochet d'arrêt qui demande de la pousser est ignoré.
 - Dernière migration exécutée en production : **067** (21/10, ventes de l'API : code caisse
@@ -8191,6 +8193,55 @@ Supabase coupé à 5 s que le scan → 503).
 obligatoire pour un commerçant **dès qu'une de ses boutiques a un code caisse** (et non selon
 les identifiants scanner) ; référence de vente limitée à `[A-Za-z0-9._:/-]{1,64}` ; numéro de
 carte mal formé → 400 (`corps_invalide`, champ `carte`) plutôt que 404.
+
+## 15 quadragies sexagies. API v1, ÉTAPE 3 : TÉLÉPHONE, CRÉDIT PAR NUMÉRO, RÉCUPÉRATION (22/10, branche à part, NON fusionnée)
+
+**Contexte** : Railway en panne (builds bloqués pour le forfait Hobby) ; le push de l'étape 2
+(`f387a4d`) est sur GitHub, **pas déployé** ; la production tourne sur l'ancien code ; la
+migration 067 est exécutée. Le pilotage demande d'avancer l'étape 3 et de la pousser sur GitHub
+pour la préserver.
+
+**Où est le code** : branche **`claude/api-etape3-telephone`** (partie de `f17c7df`), **pas
+la branche de production**. Raison : Railway déploie la branche de production dès que les builds
+reviennent ; l'étape 3 y partirait AVANT l'exécution de la migration 068, et l'inscription
+écrirait dans des colonnes absentes (500). **Ordre à suivre** :
+1. Railway revenu : l'étape 2 se déploie ; validation à l'œil de Yass (ventes).
+2. Requête de taille (`SELECT count(*) FROM clients;`), puis **migration 068** à un moment
+   calme (réécriture de `clients`, 5,6 s mesurées à 100 000 clients, les scans attendent).
+3. Fusion en avance rapide de `claude/api-etape3-telephone` dans la branche de production, push,
+   validation à l'œil.
+Ne PAS exécuter 068 tant que le code de l'étape 3 ne peut pas partir juste après : l'ancien
+code de l'inscription ne sait pas qu'un numéro déjà rattaché est refusé.
+
+**Livré (code, sur la branche)** :
+- **Migration 068** (`database/migration_068_telephone_carte.sql`) = le socle f04 des briques,
+  renuméroté (066 → 067 → 068), ajusté : rattachement `caisse` **sans** ligne `consentements`,
+  rôle `api` dans `recuperations_carte`, `trouver_carte_par_telephone` rend aussi le numéro de
+  série. `rgpd_effacement.sql` et l'inscription (`routes/clients.js` : numéro déjà rattaché →
+  carte créée sans numéro) repris des briques.
+- **`api-v1/telephone.js`** (carte par numéro ; rattachement → `rattache`, `deja_rattache`,
+  `ignore_autre_numero`, `ignore_numero_pris`, `ignore_invalide`, `non_traite` ; ne lève
+  jamais) ; **`api-v1/boutiques.js`** (champ `boutique`, mis en commun avec les ventes).
+- **Ventes** : `telephone` avec `carte` → rattaché après le crédit (y compris une vente à 0
+  point) ; `telephone` sans `carte` → crédit de la carte rattachée, **jamais de crédit sans
+  carte** (404 + lien d'installation) ; le crédit n'échoue jamais à cause du numéro.
+- **`POST /api/v1/recuperations`** `{ telephone, boutique }` → 201 `{ url, expire_le,
+  qrcode_png, solde }`, tracé (rôle `api`, boutique), 30 / 15 min par clé et boutique
+  (`API_V1_RECUP_MAX`) ; **page client** `public/recuperation.html` et
+  `src/integration/recuperation.js` repris des briques (textes : « demandez un nouveau lien en
+  magasin »).
+- **Non repris** (remisé) : écrans de la caisse WinWin, `comptoir.js`, `serial_number` dans la
+  réponse du scan.
+
+**Filet** : 407/407 (20 contrôles « étape 3 », dont le garde-fou de la migration 068 sur une
+base avec numéros) ; navigateur `recuperation_page.js` 2/2 ; **suite complète 508/508**.
+**Contre-épreuve** sur `f17c7df` : les 387 contrôles existants passent, la section de l'étape 3
+s'arrête à son premier contrôle (fonction absente).
+
+**Décisions hors pilotage** (à valider) : code poussé sur une branche à part plutôt que sur la
+production (ordre migration → code) ; numéro illisible dans une vente sans carte → 404
+`carte_inconnue` (comme un numéro inconnu) ; récupération : numéro illisible → 400, inconnu →
+404 `telephone_inconnu` ; la limite des récupérations compte aussi les demandes refusées.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 

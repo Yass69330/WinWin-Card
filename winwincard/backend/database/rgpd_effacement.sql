@@ -40,12 +40,19 @@ begin
   where client_id = p_client_id
     and marchand_id = p_marchand_id;
 
+  -- 3 bis. Supprimer les récupérations de carte (migration 068)
+  delete from recuperations_carte
+  where client_id = p_client_id
+    and marchand_id = p_marchand_id;
+
   -- 4. Anonymiser les données personnelles du client (soft delete)
   --    On conserve la ligne pour garder les scans cohérents
   update clients set
     prenom              = '[effacé]',
     email               = null,
     telephone           = null,
+    telephone_source    = null,
+    telephone_lie_le    = null,
     date_anniversaire   = null,
     pass_serial_number  = 'deleted-' || p_client_id::text,
     deleted_at          = now(),

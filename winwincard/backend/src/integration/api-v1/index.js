@@ -14,7 +14,8 @@
 //   3. limiteur PAR CLÉ (600 / min). L'API est hors du limiteur global de
 //      src/index.js (300 / 15 min par adresse), qui freinerait un serveur central.
 //
-// Routes : GET /ping (étape 1, vérifier sa clé) ; POST /ventes (étape 2, ventes.js).
+// Routes : GET /ping (étape 1, vérifier sa clé) ; POST /ventes (étape 2, ventes.js ;
+// téléphone à l'étape 3) ; POST /recuperations (étape 3, recuperations.js).
 // ════════════════════════════════════════════════════════════════════════════
 const express = require('express');
 const router = express.Router();
@@ -75,6 +76,7 @@ router.use(authCle, limiterCle);
 router.get('/ping', (req, res) => res.json({ ok: true, environnement: req.acces.environnement }));
 
 router.use('/ventes', require('./ventes'));
+router.use('/recuperations', require('./recuperations'));
 
 router.use((req, res) => res.status(404).json({ error: 'route_inconnue' }));
 

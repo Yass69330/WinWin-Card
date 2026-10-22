@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>WinWin — votre carte</title>
+<!--
+  Récupération de carte (f04, API des caisses, 22/10). Ouverte par le lien (ou son
+  QR) que la caisse du commerçant obtient de WinWin, valable 10 minutes : /r/<jeton>. Lit /api/recuperation/<jeton> et propose
+  la MÊME carte (Apple Wallet sur iPhone, Google Wallet ailleurs). Aucune saisie.
+  Code serveur : src/integration/recuperation.js.
+-->
+<style>
+  :root { --bg1: #1a1a2e; --bg2: #0a0a14; --texte: #fff; --doux: rgba(255,255,255,.65); }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+         background: linear-gradient(160deg, var(--bg1) 0%, var(--bg2) 100%); color: var(--texte);
+         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 24px 16px; }
+  main { width: 100%; max-width: 380px; text-align: center; }
+  h1 { font-size: 24px; margin: 0 0 8px; }
+  p { color: var(--doux); font-size: 15px; line-height: 1.5; margin: 0 0 28px; }
+  .bouton { display: block; width: 100%; padding: 16px; border-radius: 14px; font-size: 16px; font-weight: 600;
+            text-decoration: none; margin-bottom: 12px; }
+  .apple { background: #000; color: #fff; border: 1px solid rgba(255,255,255,.25); }
+  .google { background: #fff; color: #1f1f1f; }
+  .cache { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <div id="attente"><p id="t-attente">…</p></div>
+  <div id="carte" class="cache">
+    <h1 id="titre"></h1>
+    <p id="sous"></p>
+    <a id="btn-apple" class="bouton apple cache" href="#"></a>
+    <a id="btn-google" class="bouton google cache" href="#"></a>
+  </div>
+  <div id="erreur" class="cache"><h1 id="err-titre"></h1><p id="err-sous"></p></div>
+</main>
+<script>
+(function () {
+  'use strict';
+  const TXT = {
+    fr: { attente: 'Un instant…', titre: 'Bonjour {prenom} !', sous: 'Voici votre carte {marchand}, avec tous vos points.',
+          apple: 'Ajouter à Apple Wallet', google: 'Ajouter à Google Wallet',
+          expire: 'Ce lien a expiré', expireSous: 'Demandez un nouveau lien en magasin.',
+          introuvable: 'Lien invalide', introuvableSous: 'Demandez un nouveau lien en magasin.',
+          panne: 'Connexion impossible', panneSous: 'Réessayez dans un instant.' },
+    en: { attente: 'One moment…', titre: 'Hello {prenom}!', sous: 'Here is your {marchand} card, with all your points.',
+          apple: 'Add to Apple Wallet', google: 'Add to Google Wallet',
+          expire: 'This link has expired', expireSous: 'Ask in store for a new link.',
+          introuvable: 'Invalid link', introuvableSous: 'Ask in store for a new link.',
+          panne: 'Connection failed', panneSous: 'Please try again in a moment.' },
+  };
+  let langue = (navigator.language || 'fr').slice(0, 2) === 'fr' ? 'fr' : 'en';
+  const t = (cle, v = {}) => TXT[langue][cle].replace(/\{(\w+)\}/g, (_, k) => v[k] ?? '');
+  const $ = id => document.getElementById(id);
+  const montrer = id => { ['attente', 'carte', 'erreur'].forEach(x => $(x).classList.toggle('cache', x !== id)); };
+  $('t-attente').textContent = t('attente');
+
+  function erreur(cle) {
+    $('err-titre').textContent = t(cle);
+    $('err-sous').textContent = t(cle + 'Sous');
+    montrer('erreur');
+  }
+
+  const jeton = location.pathname.split('/').filter(Boolean).pop() || '';
+  fetch('/api/recuperation/' + encodeURIComponent(jeton))
+    .then(async res => {
+      const d = await res.json().catch(() => ({}));
+      if (res.status === 410) return erreur('expire');
+      if (!res.ok) return erreur(res.status >= 500 ? 'panne' : 'introuvable');
+      if (d.langue === 'fr' || d.langue === 'en') langue = d.langue;
+      $('titre').textContent = t('titre', { prenom: d.prenom });
+      $('sous').textContent = t('sous', { marchand: d.marchand });
+      const ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      const apple = $('btn-apple'), google = $('btn-google');
+      apple.textContent = t('apple'); apple.href = d.apple_pass_url;
+      google.textContent = t('google');
+      if (d.google_wallet_url) google.href = d.google_wallet_url;
+      // iPhone : Apple seul (Google en second s'il existe) ; ailleurs : Google, puis Apple.
+      if (ios) { apple.classList.remove('cache'); if (d.google_wallet_url) google.classList.remove('cache'); }
+      else if (d.google_wallet_url) { google.classList.remove('cache'); apple.parentNode.appendChild(apple); apple.classList.remove('cache'); }
+      else apple.classList.remove('cache');
+      montrer('carte');
+    })
+    .catch(() => erreur('panne'));
+})();
+</script>
+</body>
+</html>

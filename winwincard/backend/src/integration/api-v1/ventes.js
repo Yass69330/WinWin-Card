@@ -15,8 +15,10 @@
 // Invariant (§0) : WinWin ne bloque jamais une vente. Toute réponse ici ne parle
 // que de la fidélité ; la caisse encaisse quoi qu'il arrive.
 //
-// Pas encore (étape « téléphone ») : `telephone` est accepté mais pas traité
-// (réponse « non_traite ») ; une vente sans `carte` est refusée (400).
+// Téléphone (étape 3, 22/10) : avec `carte`, le numéro est rattaché à la carte
+// après le crédit (jamais d'écrasement ; un échec ne fait jamais échouer la
+// vente) ; sans `carte`, il désigne la carte qui lui est rattachée — jamais de
+// crédit sans carte (404 avec le lien d'installation).
 // ════════════════════════════════════════════════════════════════════════════
 const express = require('express');
 const router = express.Router();
@@ -28,6 +30,8 @@ const { lireCanaux } = require('../../services/canal-google');
 const { notifierMiseAJourPass, mettreAJourGoogleWallet } = require('../../services/mise-a-jour-carte');
 const { COLONNES_MARCHAND_CARTE } = require('../../services/colonnes-carte');
 const { notif } = require('../../i18n/messages');
+const { trouverParTelephone, rattacher } = require('./telephone');
+const { lireBoutiques, choisirBoutique } = require('./boutiques');
 
 // Espace fixe des clés de vente. NE JAMAIS LE CHANGER : une vente déjà créditée
 // renvoyée après le changement serait créditée une seconde fois.
@@ -49,13 +53,17 @@ router.post('/', asyncHandler(async (req, res) => {
 
   // ── 1. Le corps ────────────────────────────────────────────────────────────
   if (typeof b.reference !== 'string' || !RE_REFERENCE.test(b.reference)) return invalide('reference');
-  if (typeof b.carte !== 'string') return invalide('carte');
-  const carte = b.carte.trim().toLowerCase();
-  if (!RE_UUID.test(carte) && !RE_CODE_COURT.test(carte)) return invalide('carte');
+  if (b.telephone != null && (typeof b.telephone !== 'string' || !b.telephone.trim() || b.telephone.length > 40)) return invalide('telephone');
+  const parTelephone = b.carte == null && b.telephone != null;
+  let carte = null;
+  if (!parTelephone) {
+    if (typeof b.carte !== 'string') return invalide('carte');
+    carte = b.carte.trim().toLowerCase();
+    if (!RE_UUID.test(carte) && !RE_CODE_COURT.test(carte)) return invalide('carte');
+  }
   if (!Number.isInteger(b.montant) || b.montant <= 0) return invalide('montant');
   if (b.devise != null && b.devise !== 'AED') return invalide('devise');
   if (b.boutique != null && (typeof b.boutique !== 'string' || !RE_REFERENCE.test(b.boutique))) return invalide('boutique');
-  if (b.telephone != null && (typeof b.telephone !== 'string' || b.telephone.length > 40)) return invalide('telephone');
   let venduLe = null;
   if (b.date_vente != null) {
     const t = typeof b.date_vente === 'string' ? Date.parse(b.date_vente) : NaN;
@@ -68,46 +76,49 @@ router.post('/', asyncHandler(async (req, res) => {
   const [{ data: marchand, error: errM }, { data: boutiques, error: errB }] = await Promise.all([
     supabase.from('marchands').select(`${COLONNES_MARCHAND_CARTE}, fils_par_point, plafond_vente_fils`)
       .eq('id', req.marchandId).single(),
-    supabase.from('points_de_vente').select('id, code_externe, actif')
-      .eq('marchand_id', req.marchandId).is('deleted_at', null).not('code_externe', 'is', null),
+    lireBoutiques(req.marchandId),
   ]);
   if (errM) return indisponible(res, 'lecture du commerçant', errM);
   if (errB) return indisponible(res, 'lecture des boutiques', errB);
 
-  let pointDeVenteId = null;
-  if (boutiques.length > 0) {
-    // Réseau : la boutique est obligatoire, et doit être connue et ouverte.
-    if (b.boutique == null) return invalide('boutique');
-    const pdv = boutiques.find(x => x.code_externe === b.boutique);
-    if (!pdv) return res.status(422).json({ error: 'boutique_inconnue' });
-    if (!pdv.actif) return res.status(403).json({ error: 'boutique_fermee' });
-    pointDeVenteId = pdv.id;
-  }
+  const boutique = choisirBoutique(boutiques, b.boutique);
+  if (boutique.statut) return res.status(boutique.statut).json(boutique.corps);
+  const pointDeVenteId = boutique.id;
 
   if (b.montant > marchand.plafond_vente_fils) return res.status(422).json({ error: 'montant_hors_plafond' });
 
-  // ── 3. La carte (contenu du QR ou code court), comme au comptoir ───────────
-  let requete = supabase.from('clients').select('id, prenom, stored_value, pass_serial_number')
-    .eq('marchand_id', req.marchandId).is('deleted_at', null);
-  requete = RE_UUID.test(carte) ? requete.eq('pass_serial_number', carte) : requete.ilike('pass_serial_number', '%' + carte);
-  const { data: trouves, error: errC } = await requete.limit(2);
-  if (errC) return indisponible(res, 'lecture de la carte', errC);
-  if (trouves.length > 1) return res.status(409).json({ error: 'carte_ambigue' });
-  if (trouves.length === 0) {
-    const base = process.env.API_BASE_URL || 'https://app.winwin-card.com';
-    return res.status(404).json({ error: 'carte_inconnue', lien_installation: `${base}/l/${marchand.slug}` });
+  // ── 3. La carte : contenu du QR ou code court (comme au comptoir), ou numéro
+  const inconnue = () => res.status(404).json({ error: 'carte_inconnue',
+    lien_installation: `${process.env.API_BASE_URL || 'https://app.winwin-card.com'}/l/${marchand.slug}` });
+  let client;
+  if (parTelephone) {
+    const t = await trouverParTelephone(req.marchandId, b.telephone);
+    if (t.erreur) return indisponible(res, 'lecture de la carte par numéro', t.erreur);
+    if (!t.client) return inconnue();   // numéro illisible ou rattaché à aucune carte : jamais de crédit sans carte
+    client = t.client;
+  } else {
+    let requete = supabase.from('clients').select('id, prenom, stored_value, pass_serial_number')
+      .eq('marchand_id', req.marchandId).is('deleted_at', null);
+    requete = RE_UUID.test(carte) ? requete.eq('pass_serial_number', carte) : requete.ilike('pass_serial_number', '%' + carte);
+    const { data: trouves, error: errC } = await requete.limit(2);
+    if (errC) return indisponible(res, 'lecture de la carte', errC);
+    if (trouves.length > 1) return res.status(409).json({ error: 'carte_ambigue' });
+    if (trouves.length === 0) return inconnue();
+    client = trouves[0];
   }
-  const client = trouves[0];
+  // Statut du numéro dans la réponse (§4.4) : rattaché APRÈS le crédit.
+  const statutTelephone = async () => (b.telephone == null ? null
+    : parTelephone ? 'deja_rattache' : rattacher(req.marchandId, client.pass_serial_number, b.telephone));
 
   // ── 4. Conversion : points = montant ÷ fils_par_point (arrondi bas) ; tampons : 1
   const enPoints = marchand.type_programme === 'points';
   const programme = enPoints ? 'points' : 'tampons';
   const maxValue = marchand.max_value;
-  const telephone = b.telephone != null ? 'non_traite' : null;
   const montant = enPoints ? Math.floor(b.montant / marchand.fils_par_point) : 1;
   if (montant === 0) {
     return res.json({ ok: true, reference: b.reference, enregistree: false, deja_enregistree: false, programme,
-      points_credites: 0, solde: client.stored_value, seuil: maxValue, seuil_atteint: false, recompense_a_remettre: false, telephone });
+      points_credites: 0, solde: client.stored_value, seuil: maxValue, seuil_atteint: false, recompense_a_remettre: false,
+      telephone: await statutTelephone() });
   }
 
   // ── 5. Le crédit (une transaction) ─────────────────────────────────────────
@@ -138,6 +149,7 @@ router.post('/', asyncHandler(async (req, res) => {
   const avant = credit.stored_value_avant, apres = credit.stored_value_apres;
   const remise = credit.is_reset === true;
   const seuilAtteint = !remise && apres >= maxValue;
+  const telephone = await statutTelephone();
   res.json({
     ok: true, reference: b.reference, enregistree: true, deja_enregistree: deja, programme,
     // Une remise en tampons ne donne pas de tampon ; en points, le surplus est reporté.

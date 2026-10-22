@@ -2973,10 +2973,9 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       [obtenus, lignes(cP2.id)], [essais.map(([ch]) => [400, ch]), 2]);
     const vieille = await vente(kP, { ...corps, date_vente: new Date(Date.now() - 8 * 86400e3).toISOString() });
     const future = await vente(kP, { ...corps, date_vente: new Date(Date.now() + 600e3).toISOString() });
-    const datee = await vente(kP, { ...corps, date_vente: new Date(Date.now() - 3600e3).toISOString(), telephone: '050 123 4567' });
-    verifier('date de vente : 8 jours 422, 10 min dans le futur 422, il y a 1 h acceptée et notée ; téléphone reçu mais pas encore traité (« non_traite »), fiche inchangée',
-      [vieille.statut, future.statut, datee.statut, ligne(cP2.id).split('|')[4], datee.corps.telephone, sql(`SELECT coalesce(telephone, '-') FROM clients WHERE id = '${cP2.id}'`)],
-      [422, 422, 200, 'true', 'non_traite', '-']);
+    const datee = await vente(kP, { ...corps, date_vente: new Date(Date.now() - 3600e3).toISOString() });
+    verifier('date de vente : 8 jours 422, 10 min dans le futur 422, il y a 1 h acceptée et notée',
+      [vieille.statut, future.statut, datee.statut, ligne(cP2.id).split('|')[4], datee.corps.telephone], [422, 422, 200, 'true', null]);
 
     // Vente annulée puis renvoyée : jamais recréditée.
     const cA = client(M.points);
@@ -2991,6 +2990,158 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     const rc = await scan(tP, cC.serial, 30);
     verifier('le comptoir est inchangé : scan crédité, canal « comptoir », sans référence', [rc.statut, rc.corps.stored_value_apres, ligne(cC.id)], [200, 30, 'comptoir|-|-|-|false']);
     s2.processus.kill();
+  }
+
+  // ── API v1, étape 3 : téléphone, crédit par numéro, récupération (migration 068, 22/10)
+  titre('API v1, étape 3 : numéro rattaché par la vente, crédit par numéro, récupération de carte (22/10)');
+  {
+    const s3 = await demarrerServeur('api-v1-tel', urlSupabase, { API_V1_MAX_PAR_MINUTE: '5000', API_V1_RECUP_MAX: '4' });
+    const appel = (methode, chemin, auth, corps) => fetch(s3.url + chemin, { method: methode,
+      headers: { 'Content-Type': 'application/json', ...(auth ? { Authorization: auth } : {}) },
+      body: corps === undefined ? undefined : JSON.stringify(corps) })
+      .then(async r => { const t = await r.text(); let c; try { c = JSON.parse(t); } catch { c = t; } return { statut: r.status, corps: c, type: r.headers.get('content-type') || '' }; });
+    const adm = (methode, chemin, corps) => appel(methode, chemin, `Bearer ${jetonAdmin}`, corps);
+    const cleDe = async m => (await adm('POST', `/api/admin/marchands/${m}/cles-api`, { environnement: 'live' })).corps.cle;
+    const kP = await cleDe(M.points), kT = await cleDe(M.tampons), kR = await cleDe(M.reseau);
+    const vente = (k, corps) => appel('POST', '/api/v1/ventes', `Bearer ${k}`, corps);
+    const recup = (k, corps) => appel('POST', '/api/v1/recuperations', `Bearer ${k}`, corps);
+    let n = 0;
+    const ref = () => `TEL-${Date.now()}-${++n}`;
+    const fiche = id => sql(`SELECT coalesce(telephone, '-') || '|' || coalesce(telephone_normalise, '-') || '|' || coalesce(telephone_source, '-')
+      || '|' || (telephone_lie_le IS NOT NULL) FROM clients WHERE id = '${id}'`);
+    const sha = x => crypto.createHash('sha256').update(x).digest('hex');
+
+    // Format : une seule règle, en base.
+    const cas = [['050 123 4567', '+971501234567'], ['0501234567', '+971501234567'], ['+971 50 123 4567', '+971501234567'],
+      ['00971501234567', '+971501234567'], ['971501234567', '+971501234567'], ['501234567', '+971501234567'],
+      ['+971 050-123-4567', '+971501234567'], ['04 123 4567', '+97141234567'], ['(050) 123.4567', '+971501234567'],
+      ['+33 6 12 34 56 78', '+33612345678'], ['12345', null], ['abc', null], ['', null], ['+0501234567', null]];
+    verifier('normaliser_telephone : Émirats par défaut (05…, 5…, 971…, 00971…, +971 0…, fixe 04…), étranger avec +, le reste → null',
+      cas.map(([b]) => sql(`SELECT coalesce(normaliser_telephone('${b}'), 'null')`)), cas.map(([, x]) => x || 'null'));
+
+    // Rattachement par la vente.
+    const c = client(M.points), c2 = client(M.points), cAutre = client(M.tampons);
+    const v1 = await vente(kP, { reference: ref(), carte: c.serial, montant: 1000, telephone: '050 701 0001' });
+    verifier('vente avec numéro : crédit fait, numéro rattaché (« rattache »), origine « caisse », AUCUNE ligne de consentement (modèle sous-traitant)',
+      [v1.statut, v1.corps.solde, v1.corps.telephone, fiche(c.id), sql(`SELECT count(*) FROM consentements WHERE client_id = '${c.id}'`)],
+      [200, 10, 'rattache', '+971507010001|+971507010001|caisse|true', '0']);
+    const v2 = await vente(kP, { reference: ref(), carte: c.serial, montant: 1000, telephone: '+971507010001' });
+    const v3 = await vente(kP, { reference: ref(), carte: c.serial, montant: 1000, telephone: '0507010099' });
+    const v4 = await vente(kP, { reference: ref(), carte: c2.serial, montant: 1000, telephone: '00971 50 701 0001' });
+    const v5 = await vente(kP, { reference: ref(), carte: c2.serial, montant: 1000, telephone: '123' });
+    verifier('même numéro : « deja_rattache » ; autre numéro sur une carte qui en a un : « ignore_autre_numero » (jamais d\'écrasement) ; numéro d\'une autre carte : « ignore_numero_pris » ; illisible : « ignore_invalide » — et la vente est TOUJOURS créditée',
+      [[v2.corps.telephone, v3.corps.telephone, v4.corps.telephone, v5.corps.telephone], [v2.statut, v3.statut, v4.statut, v5.statut],
+       fiche(c.id).split('|')[1], fiche(c2.id), solde(c2.id)],
+      [['deja_rattache', 'ignore_autre_numero', 'ignore_numero_pris', 'ignore_invalide'], [200, 200, 200, 200], '+971507010001', '-|-|-|false', 20]);
+    verifier('même numéro chez un AUTRE commerçant : rattaché (un numéro = une carte PAR commerçant)',
+      (await vente(kT, { reference: ref(), carte: cAutre.serial, montant: 1000, telephone: '0507010001' })).corps.telephone, 'rattache');
+    const zero = await vente(kP, { reference: ref(), carte: c2.serial, montant: 50, telephone: '0507010002' });
+    verifier('vente à 0 point avec numéro : rien crédité, numéro rattaché quand même', [zero.corps.enregistree, zero.corps.telephone, fiche(c2.id).split('|')[1]], [false, 'rattache', '+971507010002']);
+
+    // Crédit par numéro (sans carte).
+    const parNum = await vente(kP, { reference: ref(), telephone: '+971 50 701 0001', montant: 2000 });
+    verifier('vente par numéro seul (rattaché) : la carte rattachée est créditée, « deja_rattache », aucune donnée personnelle',
+      [parNum.statut, parNum.corps.points_credites, parNum.corps.solde, parNum.corps.telephone, solde(c.id), JSON.stringify(parNum.corps).includes('Filet')],
+      [200, 20, 50, 'deja_rattache', 50, false]);
+    const inconnu = await vente(kP, { reference: ref(), telephone: '0507019999', montant: 2000 });
+    const illisible = await vente(kP, { reference: ref(), telephone: 'abc', montant: 2000 });
+    verifier('numéro rattaché à aucune carte, ou illisible : JAMAIS de crédit sans carte, 404 « carte_inconnue » avec le lien d\'installation',
+      [inconnu.statut, inconnu.corps.error, String(inconnu.corps.lien_installation).endsWith('/l/filet-points'), illisible.statut],
+      [404, 'carte_inconnue', true, 404]);
+    verifier('ni carte ni numéro : 400 champ carte ; numéro vide : 400 champ telephone',
+      [(await vente(kP, { reference: ref(), montant: 2000 })).corps.champ, (await vente(kP, { reference: ref(), telephone: '  ', montant: 2000 })).corps.champ],
+      ['carte', 'telephone']);
+    const rPar = ref();
+    await vente(kP, { reference: rPar, telephone: '0507010001', montant: 1000 });
+    const rPar2 = await vente(kP, { reference: rPar, telephone: '0507010001', montant: 1000 });
+    verifier('vente par numéro renvoyée : « deja_enregistree », rien recrédité', [rPar2.corps.deja_enregistree, solde(c.id)], [true, 60]);
+
+    // Inscription (landing) avec un numéro déjà rattaché : la carte est créée sans numéro.
+    sql(`UPDATE marchands SET landing_premium = true WHERE id = '${M.points}'`);
+    const ins = await appel('POST', '/api/clients', null, { prenom: 'Nouveau', marchand_slug: 'filet-points', telephone: '050 701 0001' });
+    const ins2 = await appel('POST', '/api/clients', null, { prenom: 'Autre', marchand_slug: 'filet-points', telephone: '0507010003' });
+    sql(`UPDATE marchands SET landing_premium = false WHERE id = '${M.points}'`);
+    // Le consentement de l'inscription s'écrit juste après la réponse (suivre()).
+    await attendre(async () => sql(`SELECT count(*) FROM consentements WHERE client_id = '${ins2.corps.client_id}' AND type = 'telephone'`) === '1');
+    verifier('inscription avec un numéro déjà rattaché : 201, nouvelle carte SANS numéro (l\'ancienne garde le sien) ; numéro libre : gardé, origine « inscription », consentement écrit',
+      [ins.statut, fiche(ins.corps.client_id), ins2.statut, fiche(ins2.corps.client_id),
+       sql(`SELECT count(*) FROM consentements WHERE client_id = '${ins2.corps.client_id}' AND type = 'telephone'`), fiche(c.id).split('|')[1]],
+      [201, '-|-|-|false', 201, '0507010003|+971507010003|inscription|true', '1', '+971507010001']);
+    verifier('la base refuse elle-même un doublon de numéro chez un commerçant (index unique)',
+      refuseParLaBase(`UPDATE clients SET telephone = '0507010001' WHERE id = '${ins.corps.client_id}'`), true);
+
+    // Récupération de carte.
+    const rec = await recup(kP, { telephone: '050 701 0001' });
+    const jeton = String(rec.corps.url || '').split('/r/')[1] || '';
+    verifier('récupération : 201, lien /r/<jeton 32 hex> valable 10 min, QR, solde ; aucune donnée personnelle ; tracée (rôle api, empreinte du jeton, jamais le jeton)',
+      [rec.statut, /^[0-9a-f]{32}$/.test(jeton), String(rec.corps.qrcode_png).startsWith('data:image/png'), rec.corps.solde, JSON.stringify(rec.corps).includes('Filet'),
+       sql(`SELECT role || '|' || coalesce(point_de_vente_id::text, '-') || '|' || (jeton_hash = '${sha(jeton)}') || '|' || extract(epoch FROM expire_le - cree_le)::int FROM recuperations_carte WHERE client_id = '${c.id}'`),
+       sql(`SELECT count(*) FROM recuperations_carte WHERE jeton_hash = '${jeton}'`)],
+      [201, true, true, 60, false, 'api|-|true|600', '0']);
+    const ouvre = await appel('GET', `/api/recuperation/${jeton}`);
+    const ouvre2 = await appel('GET', `/api/recuperation/${jeton}`);
+    const page = await appel('GET', `/r/${jeton}`);
+    verifier('le client ouvre le lien : la MÊME carte (lien Apple de son numéro de série), ouvertures comptées, page servie',
+      [ouvre.statut, String(ouvre.corps.apple_pass_url).endsWith(`/api/passes/${c.serial}/apple`), ouvre.corps.marchand, ouvre2.statut,
+       sql(`SELECT ouvertures FROM recuperations_carte WHERE client_id = '${c.id}'`), page.statut, page.type.includes('text/html')],
+      [200, true, 'Filet Points', 200, '2', 200, true]);
+    sql(`UPDATE recuperations_carte SET expire_le = now() - interval '1 second' WHERE client_id = '${c.id}'`);
+    verifier('lien expiré : 410, ouverture non comptée ; jeton inconnu ou mal formé : 404',
+      [(await appel('GET', `/api/recuperation/${jeton}`)).statut, sql(`SELECT ouvertures FROM recuperations_carte WHERE client_id = '${c.id}'`),
+       (await appel('GET', `/api/recuperation/${crypto.randomBytes(16).toString('hex')}`)).statut, (await appel('GET', '/api/recuperation/x')).statut],
+      [410, '2', 404, 404]);
+    const rInc = await recup(kP, { telephone: '0507019998' }), rInv = await recup(kP, { telephone: 'abc' }), rSans = await recup(kP, {});
+    verifier('récupération : numéro inconnu 404 « telephone_inconnu », illisible ou absent 400 ; le numéro d\'un autre commerçant reste invisible',
+      [rInc.statut, rInc.corps.error, rInv.statut, rSans.statut, (await recup(kR, { telephone: '0507010001', boutique: 'DXB-001' })).statut],
+      [404, 'telephone_inconnu', 400, 400, 404]);
+    const cR = client(M.reseau);
+    await vente(kR, { reference: ref(), carte: cR.serial, montant: 1000, boutique: 'DXB-001', telephone: '0507010004' });
+    const recR = await recup(kR, { telephone: '0507010004', boutique: 'DXB-002' });
+    verifier('réseau : boutique obligatoire (400 sans), récupération tracée sur la boutique',
+      [(await recup(kR, { telephone: '0507010004' })).statut, recR.statut, sql(`SELECT point_de_vente_id FROM recuperations_carte WHERE client_id = '${cR.id}'`)],
+      [400, 201, B.b2]);
+    const serie = [];
+    for (let i = 0; i < 4; i++) serie.push((await recup(kR, { telephone: '0507010004', boutique: 'DXB-001' })).statut);
+    // DXB-001 a déjà servi une fois (numéro d'un autre commerçant, plus haut) : 4 demandes au plus.
+    verifier('récupérations limitées par boutique (4 ici, 30 en production) : la 5e reçoit 429 ; une autre boutique n\'est pas touchée',
+      [serie, (await recup(kR, { telephone: '0507010004', boutique: 'DXB-001' })).statut, (await recup(kR, { telephone: '0507010004', boutique: 'DXB-002' })).statut],
+      [[201, 201, 201, 429], 429, 201]);
+
+    // Effacement RGPD.
+    sql(`SELECT effacer_client('${c.id}', '${M.points}')`);
+    verifier('effacement RGPD : numéro, origine et date effacés, récupérations supprimées ; le numéro redevient libre',
+      [fiche(c.id), sql(`SELECT count(*) FROM recuperations_carte WHERE client_id = '${c.id}'`),
+       (await vente(kP, { reference: ref(), carte: ins.corps.serial_number, montant: 1000, telephone: '0507010001' })).corps.telephone],
+      ['-|-|-|false', '0', 'rattache']);
+    s3.processus.kill();
+
+    // Migration 068 sur une base qui a déjà des numéros : garde-fou, puis rattrapage.
+    const banc = require('./lancer');
+    const path = require('path'), fs = require('fs');
+    const dossier = path.join(__dirname, '..', 'database');
+    const base = 'winwin_m068_garde';
+    banc.psqlSocket(`DROP DATABASE IF EXISTS ${base}`, 'postgres');
+    banc.psqlSocket(`CREATE DATABASE ${base}`, 'postgres');
+    banc.psqlSocket(`ALTER DATABASE ${base} SET search_path = "$user", public, extensions`, 'postgres');
+    banc.psqlSocket('CREATE SCHEMA extensions; CREATE EXTENSION "uuid-ossp" SCHEMA extensions; CREATE EXTENSION pgcrypto SCHEMA extensions;', base);
+    const avant = fs.readdirSync(dossier).filter(f => /^migration_\d+.*\.sql$/.test(f) && f < 'migration_068').sort();
+    for (const f of ['schema.sql', ...avant]) banc.psqlSocket(fs.readFileSync(path.join(dossier, f), 'utf8'), base);
+    const g = q => banc.psqlSocket(q, base);
+    g(`INSERT INTO marchands (id, nom, slug, forfait, type_programme, max_value) VALUES ('${M.tampons}', 'G', 'g', 'pro', 'stamps', 10);
+       INSERT INTO clients (marchand_id, prenom, pass_serial_number, telephone) VALUES
+         ('${M.tampons}', 'A', 'g-1', '0501112222'), ('${M.tampons}', 'B', 'g-2', '+971 50 111 2222'), ('${M.tampons}', 'C', 'g-3', 'pas un numéro');`);
+    const m068 = fs.readFileSync(path.join(dossier, 'migration_068_telephone_carte.sql'), 'utf8');
+    let erreur = '';
+    try { g(m068); } catch (e) { erreur = e.message; }
+    verifier('migration 068, deux numéros égaux UNE FOIS normalisés (0501112222 et +971 50 111 2222) : arrêt, rien changé',
+      [/migration 068 arrêtée : 1 numéro\(s\) en double/.test(erreur), g(`SELECT count(*) FROM information_schema.columns WHERE table_name = 'clients' AND column_name LIKE 'telephone_%'`)],
+      [true, '0']);
+    g(`UPDATE clients SET telephone = '0503334444' WHERE pass_serial_number = 'g-2'`);
+    g(m068); g(m068);
+    verifier('… doublon réglé : migration passée (rejouée deux fois), numéros existants marqués « inscription » à leur date de création, numéro illisible gardé brut',
+      g(`SELECT string_agg(pass_serial_number || ':' || coalesce(telephone_normalise, '-') || ':' || coalesce(telephone_source, '-') || ':' || coalesce((telephone_lie_le = created_at)::text, '-'), ' ' ORDER BY pass_serial_number) FROM clients`),
+      'g-1:+971501112222:inscription:true g-2:+971503334444:inscription:true g-3:-:-:-');
+    banc.psqlSocket(`DROP DATABASE IF EXISTS ${base}`, 'postgres');
   }
 }
 

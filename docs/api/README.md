@@ -30,10 +30,12 @@ winwincard/backend/
       cle.js              clé d'API (empreinte sha256, mémoire 60 s, révocation)                         [étape 1, fait]
       admin.js            /api/admin/… : clés (créer, lister, révoquer) [étape 1] ; code caisse des boutiques [étape 2]
       ventes.js           POST /ventes [étape 2, fait] ; POST /ventes/:reference/annulation [à venir]
+      telephone.js        numéro : carte rattachée à un numéro, rattachement (règles en base, migration 068) [étape 3]
+      boutiques.js        champ `boutique` des appels (code caisse) [étape 3, mis en commun]
       cartes.js           GET /cartes/:carte
       migrations.js       POST /migrations (points d'avant, une fois par carte)
-      recuperations.js    POST /recuperations
-    recuperation.js       /r/:jeton (page publique) et /api/recuperation/:jeton
+      recuperations.js    POST /recuperations [étape 3]
+    recuperation.js       /r/:jeton (page publique) et /api/recuperation/:jeton [étape 3]
   src/services/mise-a-jour-carte.js  mise à jour de la carte après un crédit (Apple, Google), partagée
                           par le comptoir et l'API [étape 2, déplacée telle quelle de routes/scan.js]
   public/recuperation.html               page du client qui ouvre le lien de récupération
