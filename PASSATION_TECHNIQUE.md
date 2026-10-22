@@ -8256,6 +8256,49 @@ production (ordre migration → code) ; numéro illisible dans une vente sans ca
 `carte_inconnue` (comme un numéro inconnu) ; récupération : numéro illisible → 400, inconnu →
 404 `telephone_inconnu` ; la limite des récupérations compte aussi les demandes refusées.
 
+## 15 unquadragies sexagies. API v1, ÉTAPE 4 : POST /migrations (22/10, à pousser après la migration 069)
+
+**Plan validé** par le pilotage (22/10), **y compris le choix de ranger la migration des points
+dans le journal des AJUSTEMENTS** et non des scans (« une migration est un ajustement de solde,
+pas un achat ») ; affichage « ajustement » dans la fiche client (relabel plus tard) ; une
+migration réussie n'est pas rejouable par l'API (correction par ajustement manuel).
+
+**Diagnostic qui a fondé le choix** : une ligne dans `scans` compte comme un passage dans une
+douzaine de fonctions SQL (`apercu_stats`, `group_stats`, `compter_segment`,
+`client_dans_segment`, `reserver_relances`, `recalculer_visible` / `visible_apres_*`,
+campagnes, `admin_marchands_stats`) et dans l'historique ; le journal des ajustements est
+déclaré hors des visites depuis la migration 052 et n'est lu que par la fiche client et
+l'annulation.
+
+**Livré (code)** :
+- **Migration 069** (`database/migration_069_api_migrations.sql`) : `ajustements.origine`
+  (`dashboard` défaut / `migration`), `ajustements.point_de_vente_id`, index unique
+  `ajustements_migration_unique (client_id) WHERE origine = 'migration'` (même annulée),
+  fonction **`crediter_migration`** (verrou de la carte comme `crediter_scan` ; renvoi du même
+  nombre → `deja_migree` ; autre nombre → `migration_deja_faite` ; carte au seuil →
+  `recompense_en_attente` ; tampons : solde après ≤ seuil, sinon `points_hors_bornes` ; 1 à
+  100 000 ; message et date de la carte comme après un scan). Ni `clients` ni `scans`
+  restructurées.
+- **`api-v1/migrations.js`** : `POST /api/v1/migrations` `{ carte | telephone, points,
+  boutique }` → 200 `{ ok, deja_migree, points_credites, solde, seuil, seuil_atteint }` ; carte
+  mise à jour après la réponse ; **ni avis, ni parrainage**.
+- **`api-v1/identification.js`** : désignation de la carte (QR, code court, numéro rattaché)
+  sortie de `ventes.js` et partagée ; ventes prouvées inchangées (407/407 avant d'ajouter les
+  migrations).
+
+**Filet** : 420/420 (13 contrôles « étape 4 », dont **la preuve « pas un passage »** : sur un
+client inactif depuis 70 jours, nombre de scans, `apercu_stats`, `compter_segment` inactifs
+60 j, `client_dans_segment`, dernier passage et historique `GET /api/scan` identiques avant et
+après la migration ; correction depuis la fiche puis refus d'une seconde migration ; parrain non
+crédité ; comptoir inchangé) ; **suite complète 521/521**. **Contre-épreuve** sur `cd5fc60` : les
+407 contrôles existants passent, la section s'arrête à son premier contrôle (colonne absente).
+
+**Décisions hors pilotage** (à valider) : en tampons, la borne porte sur le **solde après
+migration** (≤ seuil), pas seulement sur le nombre de points (même raison : rien de perdu à la
+remise) ; à l'effacement RGPD d'un client, sa ligne de migration reste au journal des
+ajustements, anonyme comme ses scans (aucune donnée personnelle) — j'avais annoncé à tort au
+plan qu'elle partirait avec la carte.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)

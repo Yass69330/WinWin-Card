@@ -33,7 +33,8 @@ winwincard/backend/
       telephone.js        numéro : carte rattachée à un numéro, rattachement (règles en base, migration 068) [étape 3]
       boutiques.js        champ `boutique` des appels (code caisse) [étape 3, mis en commun]
       cartes.js           GET /cartes/:carte
-      migrations.js       POST /migrations (points d'avant, une fois par carte)
+      migrations.js       POST /migrations (points d'avant, une fois par carte, journal des ajustements) [étape 4]
+      identification.js   désigner la carte : QR, code court ou numéro rattaché (ventes, migrations) [étape 4, mis en commun]
       recuperations.js    POST /recuperations [étape 3]
     recuperation.js       /r/:jeton (page publique) et /api/recuperation/:jeton [étape 3]
   src/services/mise-a-jour-carte.js  mise à jour de la carte après un crédit (Apple, Google), partagée

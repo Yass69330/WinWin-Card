@@ -3143,6 +3143,110 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       'g-1:+971501112222:inscription:true g-2:+971503334444:inscription:true g-3:-:-:-');
     banc.psqlSocket(`DROP DATABASE IF EXISTS ${base}`, 'postgres');
   }
+
+  // ── API v1, étape 4 : POST /migrations (migration 069, 22/10) ───────────────
+  titre('API v1, étape 4 : reverser les points d\'avant (POST /api/v1/migrations, 22/10)');
+  {
+    const s4 = await demarrerServeur('api-v1-migrations', urlSupabase, { API_V1_MAX_PAR_MINUTE: '5000' });
+    const appel = (methode, chemin, auth, corps) => fetch(s4.url + chemin, { method: methode,
+      headers: { 'Content-Type': 'application/json', ...(auth ? { Authorization: auth } : {}) },
+      body: corps === undefined ? undefined : JSON.stringify(corps) })
+      .then(async r => { const t = await r.text(); let c; try { c = JSON.parse(t); } catch { c = t; } return { statut: r.status, corps: c }; });
+    const attendreMs = ms => new Promise(ok => setTimeout(ok, ms));
+    const MG = 'e6900000-0000-4000-8000-000000000001';   // commerçant isolé (preuve « pas un passage »)
+    sql(`INSERT INTO marchands (id, nom, slug, forfait, type_programme, max_value, display_max_value, langue)
+         VALUES ('${MG}', 'Filet Migration', 'filet-migration', 'pro', 'points', 500, 500, 'fr')`);
+    const cleDe = async m => (await appel('POST', `/api/admin/marchands/${m}/cles-api`, `Bearer ${jetonAdmin}`, { environnement: 'live' })).corps.cle;
+    const kG = await cleDe(MG), kT = await cleDe(M.tampons);
+    const migrer = (k, corps) => appel('POST', '/api/v1/migrations', `Bearer ${k}`, corps);
+    const lignesMig = id => sql(`SELECT count(*) || '|' || coalesce(max(stored_value_avant || '>' || stored_value_apres), '-') FROM ajustements WHERE client_id = '${id}' AND origine = 'migration'`);
+
+    // Crédit unique.
+    const c = client(MG);
+    const m1 = await migrer(kG, { carte: c.serial, points: 320 });
+    verifier('migration : 320 points reversés, réponse sans donnée personnelle, une ligne « migration » au journal des AJUSTEMENTS, AUCUNE ligne de scan, la carte reçoit son message',
+      [m1.statut, m1.corps, JSON.stringify(m1.corps).includes('Filet'), lignesMig(c.id), lignes(c.id), solde(c.id), messageCarte(c.serial)],
+      [200, { ok: true, deja_migree: false, points_credites: 320, solde: 320, seuil: 500, seuil_atteint: false }, false, '1|0>320', 0, 320, '+320 — Filet : 320/500 pts']);
+    const m2 = await migrer(kG, { carte: c.serial, points: 320 });
+    const m3 = await migrer(kG, { carte: c.serial, points: 400 });
+    verifier('renvoi du même nombre : 200 « deja_migree », rien recrédité ; autre nombre : 409 « migration_deja_faite », rien changé',
+      [m2.statut, m2.corps.deja_migree, m2.corps.points_credites, m3.statut, m3.corps.error, solde(c.id), lignesMig(c.id)],
+      [200, true, 320, 409, 'migration_deja_faite', 320, '1|0>320']);
+    const cP = client(MG);
+    const par = await Promise.all([1, 2, 3].map(() => migrer(kG, { carte: cP.serial, points: 100 })));
+    verifier('trois envois simultanés : un seul crédit',
+      [par.every(r => r.statut === 200), par.filter(r => r.corps.deja_migree === false).length, solde(cP.id), lignesMig(cP.id)], [true, 1, 100, '1|0>100']);
+
+    // Désigner la carte : code court, numéro rattaché, inconnue.
+    const cC = client(MG);
+    verifier('carte par code court : migrée', (await migrer(kG, { carte: cC.serial.slice(-6).toUpperCase(), points: 10 })).corps.solde, 10);
+    const cN = client(MG);
+    sql(`UPDATE clients SET telephone = '0507690001', telephone_source = 'caisse' WHERE id = '${cN.id}'`);
+    const parTel = await migrer(kG, { telephone: '+971 50 769 0001', points: 25 });
+    const telInconnu = await migrer(kG, { telephone: '0507690099', points: 25 });
+    verifier('carte par numéro rattaché : migrée ; numéro inconnu : 404 « carte_inconnue » avec le lien d\'installation, rien crédité',
+      [parTel.statut, solde(cN.id), telInconnu.statut, telInconnu.corps.error, String(telInconnu.corps.lien_installation).endsWith('/l/filet-migration')],
+      [200, 25, 404, 'carte_inconnue', true]);
+
+    // Garde-fous.
+    const cS = client(MG, { solde: 500 });
+    const auSeuil = await migrer(kG, { carte: cS.serial, points: 50 });
+    verifier('carte au seuil (récompense en attente) : 409 « recompense_en_attente », rien écrit',
+      [auSeuil.statut, auSeuil.corps.error, solde(cS.id), lignesMig(cS.id)], [409, 'recompense_en_attente', 500, '0|-']);
+    const cT = client(M.tampons, { solde: 3 });
+    const trop = await migrer(kT, { carte: cT.serial, points: 8 });
+    const juste = await migrer(kT, { carte: cT.serial, points: 7 });
+    verifier('tampons : 3 + 8 = 11 > seuil 10 → 422 « points_hors_bornes », rien écrit ; 3 + 7 = 10 → migrée, seuil atteint',
+      [trop.statut, trop.corps.error, juste.statut, juste.corps.solde, juste.corps.seuil_atteint], [422, 'points_hors_bornes', 200, 10, true]);
+    const cI = client(MG);
+    const refus = [];
+    for (const corps of [{ carte: cI.serial, points: 0 }, { carte: cI.serial, points: 100001 }, { carte: cI.serial, points: 2.5 },
+      { carte: cI.serial, points: '10' }, { carte: cI.serial }, { points: 10 }]) {
+      const r = await migrer(kG, corps); refus.push([r.statut, r.corps.champ]);
+    }
+    verifier('points hors de 1 à 100 000, décimaux, en texte ou absents ; ni carte ni numéro : 400 « corps_invalide », rien écrit',
+      [refus, lignesMig(cI.id)], [[[400, 'points'], [400, 'points'], [400, 'points'], [400, 'points'], [400, 'points'], [400, 'carte']], '0|-']);
+
+    // La preuve : une migration ne compte NULLE PART comme un passage.
+    const cV = client(MG);
+    sql(`INSERT INTO scans (client_id, marchand_id, stored_value_avant, stored_value_apres, montant_credite, date_scan)
+         VALUES ('${cV.id}', '${MG}', 0, 10, 10, now() - interval '70 days');
+         UPDATE clients SET stored_value = 10 WHERE id = '${cV.id}'`);
+    rendreVisibles(`marchand_id = '${MG}'`);
+    const tMG = jeton(MG);
+    const mesure = async () => [
+      sql(`SELECT count(*) FROM scans WHERE marchand_id = '${MG}'`),
+      sql(`SELECT apercu_stats('${MG}', '2026-10-22T12:00:00Z')`),
+      sql(`SELECT compter_segment('${MG}', '{"type":"inactifs","jours":60}')`),
+      sql(`SELECT client_dans_segment('${cV.id}', '${MG}', '{"type":"inactifs","jours":60}', now())`),
+      sql(`SELECT max(date_scan)::text FROM scans WHERE client_id = '${cV.id}' AND annule_le IS NULL`),
+      JSON.stringify((await api('GET', '/api/scan?lieu=1', tMG)).corps.map(x => x.id)),
+    ];
+    const avant = await mesure();
+    const mV = await migrer(kG, { carte: cV.serial, points: 50 });
+    const apres = await mesure();
+    verifier('migration d\'un client inactif depuis 70 jours : scans, statistiques de l\'Aperçu, segment « inactifs 60 j » (compte et appartenance), dernier passage (base des relances) et historique des scans IDENTIQUES avant et après',
+      [mV.statut, solde(cV.id), apres, avant[3]], [200, 60, avant, 't']);
+
+    // Correction depuis le dashboard ; une migration ne se refait pas.
+    const ajId = sql(`SELECT id FROM ajustements WHERE client_id = '${c.id}' AND origine = 'migration'`);
+    const annul = await api('POST', `/api/clients/ajustements/${ajId}/annuler`, tMG);
+    const refaite = await migrer(kG, { carte: c.serial, points: 200 });
+    verifier('correction : « Annuler le dernier mouvement » de la fiche annule la migration (solde 0) ; une nouvelle migration par l\'API est refusée (one-shot strict)',
+      [annul.statut, solde(c.id), refaite.statut, refaite.corps.error], [200, 0, 409, 'migration_deja_faite']);
+    verifier('les ajustements du dashboard restent d\'origine « dashboard »',
+      sql(`SELECT count(*) FROM ajustements WHERE origine NOT IN ('dashboard', 'migration')`), '0');
+
+    // Ni parrainage ; le comptoir n'a pas bougé.
+    const parrain = client(M.tampons, { solde: 2 });
+    const filleul = client(M.tampons, { parrain: parrain.id });
+    await migrer(kT, { carte: filleul.serial, points: 4 });
+    await attendreMs(800);
+    verifier('migration d\'un filleul : le parrain n\'est PAS crédité', [solde(filleul.id), solde(parrain.id)], [4, 2]);
+    const rc = await scan(tMG, cP.serial, 30);
+    verifier('le comptoir est inchangé : un scan après migration crédite normalement (100 + 30)', [rc.statut, rc.corps.stored_value_apres, lignes(cP.id)], [200, 130, 1]);
+    s4.processus.kill();
+  }
 }
 
 module.exports = { FIXTURES, jouer, M, B };

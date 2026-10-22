@@ -329,7 +329,7 @@ installe sa carte WinWin, ces points peuvent y être **reversés une seule fois*
   **pas** comme un passage dans les statistiques et les relances du commerçant.
 - **Carte qui a déjà atteint son seuil** (récompense en attente) : `409 recompense_en_attente`,
   rien changé ; la migration se fait après la remise.
-- **Programme à tampons** : `points` (= tampons) au plus égal au seuil, sinon
+- **Programme à tampons** : le solde **après** migration au plus égal au seuil, sinon
   `422 points_hors_bornes` (au-delà du seuil, l'excédent serait perdu à la remise suivante).
 - Réponse `200` : `{ "ok": true, "points_credites": 320, "solde": 320, "seuil": 500,
   "seuil_atteint": false, "deja_migree": false }`.
@@ -462,8 +462,7 @@ explicites : canal (`comptoir` / `caisse`), origine (`passage` / `migration`), p
 | `marchands.plafond_vente_fils` | entier > 0, défaut 5 000 000 (50 000 AED) |
 | `points_de_vente.code_externe` | code de la boutique chez le commerçant, unique par marchand |
 | `scans.canal` | `comptoir` (défaut, tout l'existant) / `caisse` |
-| `scans.origine` | `passage` (défaut, tout l'existant) / `migration` ; une ligne `migration` est **exclue** des comptages de passages (statistiques `apercu_stats`, segments, relances d'inactivité) |
-| migration une fois par carte | `cle_idempotence = uuid_v5(espace WinWin, marchand_id + ':migration:' + client_id)` : l'index unique t43 garantit l'unicité, sans table de plus |
+| migration des points (étape 4, **décision du 22/10**) | **dans le journal des ajustements, pas des scans** (migration 069) : `ajustements.origine` (`dashboard` / `migration`), `ajustements.point_de_vente_id`, index unique « une migration par carte » (même annulée), fonction `crediter_migration`. Aucune statistique, aucun segment, aucune relance ne lit ce journal : la migration ne compte nulle part comme un passage, sans toucher une fonction de statistiques. |
 | `scans.reference_externe`, `scans.montant_fils`, `scans.vendu_le` | pour l'affichage, le support, et la détection « même référence, autre montant » |
 | idempotence | `cle_idempotence = uuid_v5(espace WinWin fixe, marchand_id + ':' + reference)` : index unique t43 existant, rien à ajouter |
 | téléphone | **migration 066** des briques (normalisation, unicité, `recuperations_carte`, fonctions), **ajustée** : rôle `api` accepté dans `recuperations_carte` ; rattachement source `caisse` **sans** ligne `consentements` (base légale : contrat de sous-traitance) ; recherche de carte par numéro pour le crédit (§3.1) |

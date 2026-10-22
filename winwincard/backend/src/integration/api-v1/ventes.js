@@ -30,15 +30,14 @@ const { lireCanaux } = require('../../services/canal-google');
 const { notifierMiseAJourPass, mettreAJourGoogleWallet } = require('../../services/mise-a-jour-carte');
 const { COLONNES_MARCHAND_CARTE } = require('../../services/colonnes-carte');
 const { notif } = require('../../i18n/messages');
-const { trouverParTelephone, rattacher } = require('./telephone');
+const { rattacher } = require('./telephone');
+const { lireIdentifiant, trouverCarte } = require('./identification');
 const { lireBoutiques, choisirBoutique } = require('./boutiques');
 
 // Espace fixe des clés de vente. NE JAMAIS LE CHANGER : une vente déjà créditée
 // renvoyée après le changement serait créditée une seconde fois.
 const ESPACE_VENTES = 'feaf209d-c24a-4578-888e-dc1490544243';
 const RE_REFERENCE = /^[A-Za-z0-9._:/-]{1,64}$/;
-const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const RE_CODE_COURT = /^[0-9a-f]{6}$/;
 const RETARD_MAX_MS = 7 * 24 * 3600 * 1000;   // vente envoyée en retard : 7 jours au plus
 const AVANCE_MAX_MS = 5 * 60 * 1000;          // horloge de la caisse en avance : 5 min au plus
 
@@ -53,14 +52,9 @@ router.post('/', asyncHandler(async (req, res) => {
 
   // ── 1. Le corps ────────────────────────────────────────────────────────────
   if (typeof b.reference !== 'string' || !RE_REFERENCE.test(b.reference)) return invalide('reference');
-  if (b.telephone != null && (typeof b.telephone !== 'string' || !b.telephone.trim() || b.telephone.length > 40)) return invalide('telephone');
-  const parTelephone = b.carte == null && b.telephone != null;
-  let carte = null;
-  if (!parTelephone) {
-    if (typeof b.carte !== 'string') return invalide('carte');
-    carte = b.carte.trim().toLowerCase();
-    if (!RE_UUID.test(carte) && !RE_CODE_COURT.test(carte)) return invalide('carte');
-  }
+  const ident = lireIdentifiant(b);
+  if (ident.champ) return invalide(ident.champ);
+  const { parTelephone } = ident;
   if (!Number.isInteger(b.montant) || b.montant <= 0) return invalide('montant');
   if (b.devise != null && b.devise !== 'AED') return invalide('devise');
   if (b.boutique != null && (typeof b.boutique !== 'string' || !RE_REFERENCE.test(b.boutique))) return invalide('boutique');
@@ -88,24 +82,10 @@ router.post('/', asyncHandler(async (req, res) => {
   if (b.montant > marchand.plafond_vente_fils) return res.status(422).json({ error: 'montant_hors_plafond' });
 
   // ── 3. La carte : contenu du QR ou code court (comme au comptoir), ou numéro
-  const inconnue = () => res.status(404).json({ error: 'carte_inconnue',
-    lien_installation: `${process.env.API_BASE_URL || 'https://app.winwin-card.com'}/l/${marchand.slug}` });
-  let client;
-  if (parTelephone) {
-    const t = await trouverParTelephone(req.marchandId, b.telephone);
-    if (t.erreur) return indisponible(res, 'lecture de la carte par numéro', t.erreur);
-    if (!t.client) return inconnue();   // numéro illisible ou rattaché à aucune carte : jamais de crédit sans carte
-    client = t.client;
-  } else {
-    let requete = supabase.from('clients').select('id, prenom, stored_value, pass_serial_number')
-      .eq('marchand_id', req.marchandId).is('deleted_at', null);
-    requete = RE_UUID.test(carte) ? requete.eq('pass_serial_number', carte) : requete.ilike('pass_serial_number', '%' + carte);
-    const { data: trouves, error: errC } = await requete.limit(2);
-    if (errC) return indisponible(res, 'lecture de la carte', errC);
-    if (trouves.length > 1) return res.status(409).json({ error: 'carte_ambigue' });
-    if (trouves.length === 0) return inconnue();
-    client = trouves[0];
-  }
+  const trouve = await trouverCarte(req.marchandId, marchand.slug, ident, b.telephone);
+  if (trouve.erreur) return indisponible(res, 'lecture de la carte', trouve.erreur);
+  if (trouve.statut) return res.status(trouve.statut).json(trouve.corps);
+  const { client } = trouve;
   // Statut du numéro dans la réponse (§4.4) : rattaché APRÈS le crédit.
   const statutTelephone = async () => (b.telephone == null ? null
     : parTelephone ? 'deja_rattache' : rattacher(req.marchandId, client.pass_serial_number, b.telephone));
