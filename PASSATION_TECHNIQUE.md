@@ -60,14 +60,13 @@ indiquée.
   le socle f04 codé et testé, remisé en attendant le chantier API. Contenu au §0.5 bis.
   **Ne pas la fusionner dans la production telle quelle** : elle dépend de la migration 066
   (non exécutée) et contient des écrans de caisse remisés.
-- **Branche `claude/api-etape3-telephone`** (22/10) : étape 3 de l'API (téléphone), poussée
-  pour être préservée, **à ne fusionner qu'après la migration 068** (§15 quadragies sexagies).
+- **Branche `claude/api-etape3-telephone`** (22/10) : étape 3 de l'API (téléphone), **fusionnée
+  dans la production le 22/10** après la migration 068 ; ne plus s'en servir.
 - Branche de travail des sessions : jamais poussée (consigne de Yass), sauf feu vert
   explicite. Le crochet d'arrêt qui demande de la pousser est ignoré.
-- Dernière migration exécutée en production : **067** (21/10, ventes de l'API : code caisse
-  des boutiques, `crediter_vente` ; contrôle de Yass : true, true, true). 066 (20/10) : clés
-  d'API et réglages de conversion. La migration téléphone (n° **067 sur
-  `briques/f04-telephone`**, à renuméroter **068**) n'est **pas** exécutée.
+- Dernière migration exécutée en production : **068** (22/10, téléphone : normalisation,
+  unicité, récupérations ; contrôle : true, true, true, 5 utilisables, 6 illisibles). 067
+  (21/10) : ventes de l'API. 066 (20/10) : clés d'API et réglages de conversion.
 - Tests : `npm test` (filet `tests/lancer.js`, base jetable, PostgREST, vrai
   serveur, sections 0 à 26) avec contrôle de syntaxe des écrans. Dernier total sur la
   branche de production : **349/349** filet seul, **441/441** avec les 8 tests navigateur
@@ -8194,7 +8193,21 @@ obligatoire pour un commerçant **dès qu'une de ses boutiques a un code caisse*
 les identifiants scanner) ; référence de vente limitée à `[A-Za-z0-9._:/-]{1,64}` ; numéro de
 carte mal formé → 400 (`corps_invalide`, champ `carte`) plutôt que 404.
 
-## 15 quadragies sexagies. API v1, ÉTAPE 3 : TÉLÉPHONE, CRÉDIT PAR NUMÉRO, RÉCUPÉRATION (22/10, branche à part, NON fusionnée)
+## 15 quadragies sexagies. API v1, ÉTAPE 3 : TÉLÉPHONE, CRÉDIT PAR NUMÉRO, RÉCUPÉRATION (22/10, `7740a2d`, fusionné et poussé)
+
+**Déroulé du 22/10** : Railway revenu ; étape 2 déployée (`f17c7df`, « Deploy Latest Commit ») et
+validée à l'œil par Yass (scan, vente, renvoi, conflit de référence) ; `count(*) clients` =
+**2 921** ; **migration 068 exécutée** (avertissement « destructive operations » de Supabase :
+`DROP CONSTRAINT IF EXISTS` d'une règle pas encore créée, `UPDATE` des nouvelles colonnes, et
+les `delete` du corps de `effacer_client`, défini et non exécuté ; contrôle : true, true, true,
+**5 numéros utilisables, 6 illisibles** = les 11 du 19/10) ; aussitôt, fusion en avance rapide
+de `claude/api-etape3-telephone` dans la production et push.
+
+**À regarder** : les 6 numéros illisibles (format non reconnu par `normaliser_telephone`) ne
+servent ni à la récupération ni au crédit par numéro ; requête pour les voir (sans les
+recopier ici) : `SELECT marchand_id, telephone FROM clients WHERE coalesce(trim(telephone), '')
+<> '' AND telephone_normalise IS NULL;`. Selon leur forme : règle de format à élargir
+(migration) ou saisies fausses.
 
 **Contexte** : Railway en panne (builds bloqués pour le forfait Hobby) ; le push de l'étape 2
 (`f387a4d`) est sur GitHub, **pas déployé** ; la production tourne sur l'ancien code ; la
