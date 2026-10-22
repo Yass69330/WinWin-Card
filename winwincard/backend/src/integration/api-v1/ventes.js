@@ -154,4 +154,41 @@ router.post('/', asyncHandler(async (req, res) => {
   if (remise && !deja) require('../../services/avis').planifier({ marchand, prenom: client.prenom, serial });
 }));
 
+// ════════════════════════════════════════════════════════════════════════════
+// POST /api/v1/ventes/:reference/annulation — annuler une vente (contrat v1 §5,
+// étape 5, 22/10). Seulement le DERNIER mouvement de la carte (annuler_scan,
+// garde-fous inchangés : rien depuis, ni vente, ni passage, ni ajustement ; solde
+// cohérent). La vente est retrouvée par sa clé dérivée de la référence. Renvoi
+// d'une annulation déjà faite : succès « deja_annulee ». La carte est remise à
+// jour par le même chemin que l'annulation au comptoir.
+// ════════════════════════════════════════════════════════════════════════════
+router.post('/:reference/annulation', asyncHandler(async (req, res) => {
+  const reference = String(req.params.reference);
+  if (!RE_REFERENCE.test(reference)) return res.status(400).json({ error: 'corps_invalide', champ: 'reference' });
+  const { data: vente, error: errV } = await supabase.from('scans')
+    .select('id, annule_le, clients(stored_value)')
+    .eq('marchand_id', req.marchandId).eq('cle_idempotence', uuidv5(`${req.marchandId}:${reference}`, ESPACE_VENTES))
+    .maybeSingle();
+  if (errV) return indisponible(res, 'lecture de la vente', errV);
+  if (!vente) return res.status(404).json({ error: 'vente_inconnue' });
+  const dejaAnnulee = () => res.json({ ok: true, reference, solde: vente.clients ? vente.clients.stored_value : null, deja_annulee: true });
+  if (vente.annule_le) return dejaAnnulee();
+
+  const { data, error } = await supabase.rpc('annuler_scan', { p_scan_id: vente.id, p_marchand_id: req.marchandId });
+  if (error) return indisponible(res, 'annulation', error);
+  if (!data || data.ok !== true) {
+    const raison = data && data.reason;
+    if (raison === 'deja_annule') return dejaAnnulee();
+    if (raison === 'pas_le_dernier') return res.status(409).json({ error: 'pas_le_dernier_mouvement' });
+    if (raison === 'solde_incoherent') return res.status(409).json({ error: 'solde_modifie' });
+    return res.status(404).json({ error: 'vente_inconnue' });
+  }
+  res.json({ ok: true, reference, solde: data.stored_value, deja_annulee: false });
+
+  const { data: client } = await supabase.from('clients').select('prenom').eq('id', data.client_id).maybeSingle();
+  const { syncPassAfterAdjustment } = require('../../routes/clients');
+  suivre(syncPassAfterAdjustment(data.serial, req.marchandId, (client && client.prenom) || '', data.stored_value, 'annulation')
+    .catch(e => console.error('[api-v1] annulation, carte :', e.message)));
+}));
+
 module.exports = router;

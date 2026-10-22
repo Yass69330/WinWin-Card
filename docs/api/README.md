@@ -15,7 +15,8 @@ branche `briques/f04-telephone` (passation §0.5 bis).
 |---|---|
 | `01-api-caisses-cadrage.md` | cadrage, points durs tranchés, questions au technicien |
 | `02-f04-comptoir-plan.md` | premier plan f04 (au comptoir WinWin), **recadré** dans l'API |
-| `03-contrat-api-v1.md` | **le contrat de l'API v1** (partie I pour le technicien, II pour le développeur, III décisions ouvertes) |
+| `03-contrat-api-v1.md` | **le contrat de l'API v1** (partie I pour le technicien, II pour le développeur, III décisions) |
+| `04-api-v1-contract-en.md` | **le contrat remis au technicien** (anglais, v1.0, conforme à la production) |
 
 ---
 
@@ -29,7 +30,7 @@ winwincard/backend/
       index.js            routeur : échecs par adresse, vérification de la clé, limiteur par clé, /ping   [étape 1, fait]
       cle.js              clé d'API (empreinte sha256, mémoire 60 s, révocation)                         [étape 1, fait]
       admin.js            /api/admin/… : clés (créer, lister, révoquer) [étape 1] ; code caisse des boutiques [étape 2]
-      ventes.js           POST /ventes [étape 2, fait] ; POST /ventes/:reference/annulation [à venir]
+      ventes.js           POST /ventes [étape 2] ; POST /ventes/:reference/annulation [étape 5]
       telephone.js        numéro : carte rattachée à un numéro, rattachement (règles en base, migration 068) [étape 3]
       boutiques.js        champ `boutique` des appels (code caisse) [étape 3, mis en commun]
       cartes.js           GET /cartes/:carte

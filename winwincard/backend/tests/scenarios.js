@@ -3247,6 +3247,38 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     verifier('le comptoir est inchangé : un scan après migration crédite normalement (100 + 30)', [rc.statut, rc.corps.stored_value_apres, lignes(cP.id)], [200, 130, 1]);
     s4.processus.kill();
   }
+
+  // ── API v1, étape 5 : annuler une vente par sa référence (22/10) ────────────
+  titre('API v1, étape 5 : annuler une vente (POST /api/v1/ventes/{ref}/annulation, 22/10)');
+  {
+    const s5 = await demarrerServeur('api-v1-annulation', urlSupabase, { API_V1_MAX_PAR_MINUTE: '5000' });
+    const appel = (chemin, k, corps) => fetch(s5.url + chemin, { method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${k}` }, body: JSON.stringify(corps || {}) })
+      .then(async r => ({ statut: r.status, corps: await r.json().catch(() => ({})) }));
+    const kP = (await appel(`/api/admin/marchands/${M.points}/cles-api`, jetonAdmin, { environnement: 'live' })).corps.cle;
+    const vente = corps => appel('/api/v1/ventes', kP, corps);
+    const annule = ref => appel(`/api/v1/ventes/${encodeURIComponent(ref)}/annulation`, kP);
+    const c = client(M.points, { solde: 40 });
+    const ref = `ANN-${Date.now()}`;
+    await vente({ reference: ref, carte: c.serial, montant: 2500 });
+    const a1 = await annule(ref), a2 = await annule(ref);
+    verifier('annulation de la dernière vente : solde remis (65 → 40), ligne marquée annulée ; renvoi : 200 « deja_annulee », rien changé',
+      [a1.statut, a1.corps, a2.statut, a2.corps.deja_annulee, solde(c.id), sql(`SELECT annule_le IS NOT NULL FROM scans WHERE client_id = '${c.id}'`)],
+      [200, { ok: true, reference: ref, solde: 40, deja_annulee: false }, 200, true, 40, 't']);
+    verifier('vente annulée renvoyée : 409 « vente_annulee », jamais recréditée',
+      [(await vente({ reference: ref, carte: c.serial, montant: 2500 })).corps.error, solde(c.id)], ['vente_annulee', 40]);
+    const r1 = `ANN-A-${Date.now()}`, r2 = `ANN-B-${Date.now()}`;
+    await vente({ reference: r1, carte: c.serial, montant: 1000 });
+    await vente({ reference: r2, carte: c.serial, montant: 1000 });
+    const pasDernier = await annule(r1);
+    verifier('vente qui n\'est plus le dernier mouvement : 409 « pas_le_dernier_mouvement », rien changé ; référence inconnue : 404 ; référence mal formée : 400',
+      [pasDernier.statut, pasDernier.corps.error, solde(c.id), (await annule('INCONNUE-1')).corps.error, (await annule('a b')).statut],
+      [409, 'pas_le_dernier_mouvement', 60, 'vente_inconnue', 400]);
+    const kT = (await appel(`/api/admin/marchands/${M.tampons}/cles-api`, jetonAdmin, { environnement: 'live' })).corps.cle;
+    verifier('la vente d\'un autre commerçant est introuvable avec sa clé (404)',
+      (await appel(`/api/v1/ventes/${r2}/annulation`, kT)).statut, 404);
+    s5.processus.kill();
+  }
 }
 
 module.exports = { FIXTURES, jouer, M, B };

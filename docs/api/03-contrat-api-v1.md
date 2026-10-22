@@ -294,7 +294,12 @@ créditée ; le commerçant corrige au besoin depuis son espace WinWin.
 
 Une référence annulée ne pourra **jamais** être recréditée (`409 vente_annulee`).
 
-## 6. Lire le solde d'une carte (facultatif)
+## 6. Lire le solde d'une carte (facultatif — **non livré en v1.0**, 22/10)
+
+> Décision du pilotage (22/10) : route facultative, reportée ; elle s'ajoutera sans rien
+> casser si une caisse en a besoin. Contrat remis au technicien :
+> `04-api-v1-contract-en.md` (anglais, conforme à ce qui est en production).
+
 
 `GET /api/v1/cartes/{carte}` — `{carte}` = contenu du QR ou code court.
 

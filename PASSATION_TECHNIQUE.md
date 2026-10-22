@@ -8303,6 +8303,32 @@ remise) ; à l'effacement RGPD d'un client, sa ligne de migration reste au journ
 ajustements, anonyme comme ses scans (aucune donnée personnelle) — j'avais annoncé à tort au
 plan qu'elle partirait avec la carte.
 
+## 15 duoquadragies sexagies. API v1, ÉTAPE 5 : ANNULATION PAR RÉFÉRENCE + CONTRAT FINAL (22/10, à pousser)
+
+**Demande du pilotage (22/10)** : aller à l'essentiel ; ne livrer que ce qui est obligatoire.
+- **Annulation par référence** (obligatoire : §5 du contrat, seul moyen pour une caisse
+  d'annuler une vente faite par erreur) : `POST /api/v1/ventes/:reference/annulation` dans
+  `api-v1/ventes.js`. Vente retrouvée par la clé dérivée de la référence ; `annuler_scan`
+  (garde-fous inchangés) ; renvoi → 200 `deja_annulee` ; `pas_le_dernier` → 409
+  `pas_le_dernier_mouvement` ; `solde_incoherent` → 409 `solde_modifie` ; inconnue → 404 ; carte
+  remise à jour par `syncPassAfterAdjustment` (même chemin que l'annulation au comptoir).
+  **Aucune migration.**
+- **Lecture du solde** (`GET /cartes/{carte}`, facultative) : **non livrée**, reportée ; notée
+  dans les deux contrats.
+- **Contrat final remis au technicien** : **`docs/api/04-api-v1-contract-en.md`** (anglais,
+  conforme à ce qui est en production : ping, ventes avec téléphone, annulation, récupération,
+  migrations, erreurs, renvois, recette, versions).
+
+**Filet** : 424/424 (4 contrôles « étape 5 »). **Contre-épreuve** sur `56eef01` : 421 bons, 3 en
+échec = les nouveaux contrôles (le 4e, « vente d'un autre commerçant → 404 », passe aussi en
+production puisque la route n'y existe pas).
+
+**État de l'API v1 après ce push** : routes du contrat toutes livrées sauf la lecture du solde.
+**Reste ouvert** (hors code) : réponses du technicien de Black Tulip (questions B du cadrage) ;
+codes caisse de ses 35 boutiques et sa clé de production à créer dans l'admin ; taux de
+conversion des points d'avant (décision métier) ; les 6 numéros illisibles (§15 quadragies
+sexagies).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
