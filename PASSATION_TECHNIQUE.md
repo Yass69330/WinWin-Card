@@ -8303,7 +8303,7 @@ remise) ; à l'effacement RGPD d'un client, sa ligne de migration reste au journ
 ajustements, anonyme comme ses scans (aucune donnée personnelle) — j'avais annoncé à tort au
 plan qu'elle partirait avec la carte.
 
-## 15 duoquadragies sexagies. API v1, ÉTAPE 5 : ANNULATION PAR RÉFÉRENCE + CONTRAT FINAL (22/10, à pousser)
+## 15 duoquadragies sexagies. API v1, ÉTAPE 5 : ANNULATION PAR RÉFÉRENCE + CONTRAT FINAL (22/10, `06d04d9`, poussé sur « go push » du pilotage)
 
 **Demande du pilotage (22/10)** : aller à l'essentiel ; ne livrer que ce qui est obligatoire.
 - **Annulation par référence** (obligatoire : §5 du contrat, seul moyen pour une caisse
