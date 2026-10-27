@@ -8332,9 +8332,11 @@ sexagies).
 
 ## 15 trequadragies sexagies. f10 « À PROXIMITÉ » : RÈGLE 7 À 30 JOURS (27/10, `ee14409`, poussé)
 
-**Migration 070 exécutée** par Yass le 27/10 (contrôle : true, 0), feu vert, puis push. Reste à
-faire : la mise à jour unique des cartes iPhone de hamza-salon (bouton admin), puis le contrôle
-du registre (source `geo`).
+**Migration 070 exécutée** par Yass le 27/10 (contrôle : true, 0), feu vert, puis push.
+Déploiement vert ; mise à jour unique des cartes iPhone de hamza-salon lancée depuis l'admin ;
+registre `geo` contrôlé par Yass : **ok**. **À surveiller** : une ligne `[geo] mise à jour
+quotidienne (fenêtre 7-30 j)` par jour vers 02:00 UTC dans Railway ; l'absence de notification
+sur l'iPhone pendant ces mises à jour (non signalée à ce jour).
 
 **Test terrain de Yass (22/10)** : l'aperçu s'affiche dès la création de la carte (créée en
 boutique, donc près de l'adresse) et reste ~1 h sur l'écran verrouillé. Moment et durée
