@@ -64,7 +64,8 @@ indiquée.
   dans la production le 22/10** après la migration 068 ; ne plus s'en servir.
 - Branche de travail des sessions : jamais poussée (consigne de Yass), sauf feu vert
   explicite. Le crochet d'arrêt qui demande de la pousser est ignoré.
-- Dernière migration exécutée en production : **069** (22/10, migration des points au journal
+- Dernière migration exécutée en production : **070** (27/10, f10 : règle 7 à 30 jours ;
+  contrôle : true, 0). 069 (22/10, migration des points au journal
   des ajustements ; contrôle : true, true, true, 0). 068 (22/10, téléphone : normalisation,
   unicité, récupérations ; contrôle : true, true, true, 5 utilisables, 6 illisibles). 067
   (21/10) : ventes de l'API. 066 (20/10) : clés d'API et réglages de conversion.
@@ -8329,7 +8330,11 @@ codes caisse de ses 35 boutiques et sa clé de production à créer dans l'admin
 conversion des points d'avant (décision métier) ; les 6 numéros illisibles (§15 quadragies
 sexagies).
 
-## 15 trequadragies sexagies. f10 « À PROXIMITÉ » : RÈGLE 7 À 30 JOURS (27/10, à pousser après la migration 070)
+## 15 trequadragies sexagies. f10 « À PROXIMITÉ » : RÈGLE 7 À 30 JOURS (27/10, `ee14409`, poussé)
+
+**Migration 070 exécutée** par Yass le 27/10 (contrôle : true, 0), feu vert, puis push. Reste à
+faire : la mise à jour unique des cartes iPhone de hamza-salon (bouton admin), puis le contrôle
+du registre (source `geo`).
 
 **Test terrain de Yass (22/10)** : l'aperçu s'affiche dès la création de la carte (créée en
 boutique, donc près de l'adresse) et reste ~1 h sur l'écran verrouillé. Moment et durée
