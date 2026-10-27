@@ -130,9 +130,9 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur }) {
     await admin.click(`.btn-edit[data-id="${idT}"]`);
     await admin.waitForSelector('#section-geo .geo-lieu');
     await admin.locator('#section-geo').screenshot({ path: path.join(captures, 'f10-admin-a-proximite.png') });
-    verifier('navigateur, fiche admin : section « À proximité » cochée, le lieu et ses horaires (UTC) relus',
-      [await admin.isChecked('#f-geo-actif'), await admin.inputValue('#section-geo .geo-lat'), await admin.inputValue('#section-geo .geo-jour[data-jour="1"]')],
-      [true, '25.086111', '08:00-20:00']);
+    verifier('navigateur, fiche admin : section « À proximité » cochée, le lieu relu, plus aucune saisie de créneaux',
+      [await admin.isChecked('#f-geo-actif'), await admin.inputValue('#section-geo .geo-lat'), await admin.locator('#section-geo .geo-jour').count()],
+      [true, '25.086111', 0]);
     await ctxA.close();
     console.log(`captures : ${captures}`);
   } finally {

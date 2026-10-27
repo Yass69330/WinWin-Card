@@ -2350,54 +2350,44 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     const path = require('path');
     let geo = null;
     try { geo = require('../src/services/geo'); } catch { /* absent avant f10 */ }
-    const lieu = (nom, lat, lng, horaires) => ({ nom, lat, lng, horaires });
+    const lieu = (nom, lat, lng) => ({ nom, lat, lng });
     if (!geo) verifier('f10 : module services/geo.js présent', false, true);
     else {
 
-    // ── Contrôle des lieux ──
+    // ── Contrôle des lieux (sans horaires depuis le 27/10) ──
     const erreurs = [
-      geo.validerLieux('x').erreur, geo.validerLieux(Array(11).fill(lieu('a', 1, 1, {}))).erreur,
-      geo.validerLieux([lieu('a', 91, 1, {})]).erreur, geo.validerLieux([lieu('a', 1, 'abc', {})]).erreur,
-      geo.validerLieux([lieu('a', 1, 1, { 8: ['09:00-10:00'] })]).erreur, geo.validerLieux([lieu('a', 1, 1, { 1: ['9h-10h'] })]).erreur,
-      geo.validerLieux([lieu('a', 1, 1, { 1: ['18:00-02:00'] })]).erreur,
+      geo.validerLieux('x').erreur, geo.validerLieux(Array(11).fill(lieu('a', 1, 1))).erreur,
+      geo.validerLieux([lieu('a', 91, 1)]).erreur, geo.validerLieux([lieu('a', 1, 'abc')]).erreur,
     ].map(e => !!e);
-    const bon = geo.validerLieux([{ nom: ' Centre ', lat: '25.086111', lng: '55.382388', horaires: { 1: [' 08:00-12:00 ', '14:00-24:00'], 2: [] } }]);
-    verifier('lieux : liste, 10 au plus, latitude/longitude, jour 1 à 7, format HH:MM-HH:MM, fin après le début dans la journée UTC ; forme normalisée',
-      [erreurs.every(Boolean), JSON.stringify(bon.lieux)],
-      [true, JSON.stringify([{ nom: 'Centre', lat: 25.086111, lng: 55.382388, horaires: { 1: ['08:00-12:00', '14:00-24:00'] } }])]);
+    const bon = geo.validerLieux([{ nom: ' Centre ', lat: '25.086111', lng: '55.382388', horaires: { 1: ['08:00-12:00'] } }]);
+    verifier('lieux : liste, 10 au plus, latitude/longitude ; forme normalisée (nom, lat, lng), d\'anciens horaires ignorés',
+      [erreurs.every(Boolean), JSON.stringify(bon.lieux)], [true, JSON.stringify([{ nom: 'Centre', lat: 25.086111, lng: 55.382388 }])]);
 
-    // ── Créneaux : union des lieux, 60 jours, créneaux passés retirés ──
-    const lundi = new Date('2026-10-19T10:00:00Z');   // un lundi, 10:00 UTC
-    const deuxLieux = [lieu('A', 1, 1, { 1: ['08:00-12:00'], 3: ['09:00-10:00'] }), lieu('B', 2, 2, { 1: ['11:00-13:00', '18:00-24:00'] })];
-    const c = geo.creneaux(deuxLieux, lundi);
-    verifier('créneaux : lundi 08:00-12:00 + 11:00-13:00 réunis en 08:00-13:00, 18:00-24:00 → 23:59:59 ; mercredi 09:00-10:00 ; un créneau en cours est gardé',
-      [JSON.stringify(c.slice(0, 3)), c.length],
-      [JSON.stringify([{ startDate: '2026-10-19T08:00:00Z', endDate: '2026-10-19T13:00:00Z' },
-                       { startDate: '2026-10-19T18:00:00Z', endDate: '2026-10-19T23:59:59Z' },
-                       { startDate: '2026-10-21T09:00:00Z', endDate: '2026-10-21T10:00:00Z' }]),
-       // 60 jours à partir du lundi 19/10 : 9 lundis (2 créneaux) + 9 mercredis (1) = 27
-       27]);
-    verifier('… un créneau déjà terminé ce jour-là n\'est pas écrit (lundi 14:00 UTC : 08:00-13:00 est passé)',
-      geo.creneaux(deuxLieux, new Date('2026-10-19T14:00:00Z'))[0].startDate, '2026-10-19T18:00:00Z');
+    // ── La fenêtre : dernier passage (sinon création) entre 7 et 30 jours ──
+    const maintenant = new Date('2026-10-27T10:00:00Z');
+    const ilYa = j => new Date(maintenant.getTime() - j * 86400e3).toISOString();
+    verifier('fenêtre : 6,9 j non ; 7 j oui ; 29,9 j oui ; 30 j non ; aucune date non',
+      [geo.dansFenetre(ilYa(6.9), maintenant), geo.dansFenetre(ilYa(7), maintenant), geo.dansFenetre(ilYa(29.9), maintenant),
+       geo.dansFenetre(ilYa(30), maintenant), geo.dansFenetre(null, maintenant)], [false, true, true, false, false]);
 
     // ── Ce que reçoit la carte ──
     const mq = { nom: 'Hamza Salon', langue: 'fr', max_value: 10, type_programme: 'stamps', geo_actif: true,
-      geo_lieux: [lieu('Salon', 25.086111, 55.382388, { 1: ['10:00-18:00'] })] };
-    const cl = { prenom: 'Test Docker', stored_value: 7 };
-    const champs = geo.champsPass(mq, cl, lundi);
-    verifier('carte : chaque lieu avec le texte de repli (prénom + solde) et les créneaux ; récompense atteinte : autre texte',
-      [JSON.stringify(champs.locations), champs.relevantDates[0].startDate, geo.champsPass(mq, { prenom: 'A', stored_value: 10 }, lundi).locations[0].relevantText],
-      [JSON.stringify([{ latitude: 25.086111, longitude: 55.382388, relevantText: 'Test Docker, plus que 3 tampons pour ta récompense chez Hamza Salon !' }]),
-       '2026-10-19T10:00:00Z', 'A, ta récompense t\'attend chez Hamza Salon !']);
-    verifier('rien sur la carte : f10 désactivé, aucun lieu, aucun horaire (plutôt qu\'une carte affichée à toute heure)',
-      [geo.champsPass({ ...mq, geo_actif: false }, cl, lundi), geo.champsPass({ ...mq, geo_lieux: [] }, cl, lundi),
-       geo.champsPass({ ...mq, geo_lieux: [lieu('X', 1, 1, {})] }, cl, lundi)], [null, null, null]);
+      geo_lieux: [lieu('Salon', 25.086111, 55.382388)] };
+    const cl = { prenom: 'Test Docker', stored_value: 7, geo_reference: ilYa(10) };
+    const champs = geo.champsPass(mq, cl, maintenant);
+    verifier('carte dans la fenêtre : chaque lieu avec le texte (prénom + reste), AUCUNE date (ni relevantDates ni relevantDate) ; récompense atteinte : autre texte',
+      [JSON.stringify(champs), geo.champsPass(mq, { ...cl, stored_value: 10 }, maintenant).locations[0].relevantText],
+      [JSON.stringify({ locations: [{ latitude: 25.086111, longitude: 55.382388, relevantText: 'Test Docker, plus que 3 tampons pour ta récompense chez Hamza Salon !' }] }),
+       'A, ta récompense t\'attend chez Hamza Salon !'.replace('A,', 'Test Docker,')]);
+    verifier('rien sur la carte : passage il y a 2 j ou 40 j, f10 désactivé, aucun lieu',
+      [geo.champsPass(mq, { ...cl, geo_reference: ilYa(2) }, maintenant), geo.champsPass(mq, { ...cl, geo_reference: ilYa(40) }, maintenant),
+       geo.champsPass({ ...mq, geo_actif: false }, cl, maintenant), geo.champsPass({ ...mq, geo_lieux: [] }, cl, maintenant)], [null, null, null, null]);
 
     // ── Admin : enregistrement contrôlé ; bloc « Mes smart notifications » ──
     const ST = 'e2400000-0000-4000-8000-000000000003';   // « Filet Smart Tampons » (section 24)
     const mauvais = await api('PATCH', `/api/admin/marchands/${ST}`, jetonAdmin, { geo_actif: true, geo_lieux: [lieu('X', 200, 1, {})] });
     const ok = await api('PATCH', `/api/admin/marchands/${ST}`, jetonAdmin,
-      { geo_actif: true, geo_lieux: [{ nom: 'Centre', lat: '25.086111', lng: '55.382388', horaires: { 1: ['08:00-20:00'] } }] });
+      { geo_actif: true, geo_lieux: [{ nom: 'Centre', lat: '25.086111', lng: '55.382388' }] });
     const bloc = (await api('GET', '/api/merchants/me/smart-notifications', jeton(ST))).corps;
     verifier('admin : lieu invalide refusé (400 lisible) ; lieu valide enregistré ; « À proximité » mentionné dans le bloc du marchand',
       [mauvais.statut, /latitude/.test(mauvais.corps.error || ''), ok.statut, ok.corps.geo_actif, ok.corps.geo_lieux && ok.corps.geo_lieux[0].lat, bloc.proximite],
@@ -2429,10 +2419,45 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       [3, 1, 'geo-1,geo-2,geo-3-panne', 'ttt', 'f']);
     verifier('… chaque envoi tracé dans notification_envois (source « geo », CLAUDE.md), l\'échec compris',
       sql(`SELECT count(*) || '|' || count(*) FILTER (WHERE NOT ok) FROM notification_envois WHERE source = 'geo' AND marchand_id = '${MGEO}'`), '3|1');
+    // ── Migration 070 rejouée : la clé « horaires » disparaît des lieux, le reste est gardé ──
+    sql(`UPDATE marchands SET geo_lieux = '[{"nom":"A","lat":1,"lng":2,"horaires":{"1":["08:00-20:00"]}},{"nom":"B","lat":3,"lng":4}]' WHERE id = '${MAUTRE}'`);
+    sql(require('fs').readFileSync(path.join(__dirname, '..', 'database', 'migration_070_geo_fenetre.sql'), 'utf8'));
+    verifier('migration 070 (rejouable) : « horaires » retirés de chaque lieu, nom et coordonnées gardés',
+      sql(`SELECT geo_lieux::text FROM marchands WHERE id = '${MAUTRE}'`), '[{"lat": 1, "lng": 2, "nom": "A"}, {"lat": 3, "lng": 4, "nom": "B"}]');
+
+    // ── Règle 7 à 30 jours (migration 070) : date de référence, cron quotidien ──
+    sql(`UPDATE marchands SET geo_lieux = '[{"nom":"Salon","lat":25.1,"lng":55.3}]' WHERE id = '${MGEO}'`);
+    const carteDatee = (jeton, creeIlYa, scanIlYa, annule = false) => {
+      const serial = carteGeo(MGEO, jeton);
+      sql(`UPDATE clients SET created_at = now() - interval '${creeIlYa} hours' WHERE pass_serial_number = '${serial}'`);
+      if (scanIlYa != null) sql(`INSERT INTO scans (client_id, marchand_id, stored_value_avant, stored_value_apres, montant_credite, date_scan, annule_le)
+        SELECT id, '${MGEO}', 0, 1, 1, now() - interval '${scanIlYa} hours', ${annule ? 'now()' : 'NULL'} FROM clients WHERE pass_serial_number = '${serial}'`);
+      return serial;
+    };
+    const j = n => n * 24;
+    const neuf7 = carteDatee('fen-cree-7j', j(7) + 2, null);             // jamais scannée, créée il y a 7 j + 2 h : franchit J+7
+    const scan30 = carteDatee('fen-scan-30j', j(60), j(30) + 3);          // dernier passage il y a 30 j + 3 h : franchit J+30
+    const scanAnnule = carteDatee('fen-annule', j(7) + 1, j(2), true);    // scan récent ANNULÉ : on compte depuis la création
+    const recente = carteDatee('fen-recente', j(60), j(3));               // passage il y a 3 j : rien
+    const milieu = carteDatee('fen-milieu', j(60), j(15));                // il y a 15 j : déjà dans la fenêtre, rien à faire
+    const vieille = carteDatee('fen-vieille', j(60), j(45));              // il y a 45 j : déjà sortie, rien
+    const choisis = sql(`SELECT string_agg(push_token, ',' ORDER BY push_token) FROM geo_cartes_a_rafraichir(now()) WHERE marchand_id = '${MGEO}'`);
+    verifier('sélection quotidienne : SEULES les cartes qui franchissent J+7 (jamais scannée, ou dernier scan annulé : depuis la création) ou J+30 ; ni celles déjà dedans, ni récentes, ni sorties',
+      choisis, 'fen-annule,fen-cree-7j,fen-scan-30j');
+    verifier('… jamais un marchand sans f10', sql(`SELECT count(*) FROM geo_cartes_a_rafraichir(now()) WHERE marchand_id = '${MAUTRE}'`), '0');
+    const avantReg = Number(sql(`SELECT count(*) FROM notification_envois WHERE source = 'geo' AND marchand_id = '${MGEO}'`));
     pousses.length = 0;
-    await geoP.rafraichirTous();
-    verifier('mise à jour mensuelle : tous les marchands qui ont f10, et eux seuls',
-      [pousses.includes('autre-1'), pousses.filter(j => j.startsWith('geo-')).length >= 3], [false, true]);
+    const quotidien = await geoP.rafraichirFenetre();
+    verifier('cron quotidien : un push silencieux par carte qui franchit un seuil (3), cartes marquées modifiées, tracé (source « geo »), les autres non touchées',
+      [quotidien.iphones, pousses.slice().sort().join(','), [neuf7, scan30, scanAnnule].map(majRecente).join(''), [recente, milieu, vieille].map(majRecente).join(''),
+       Number(sql(`SELECT count(*) FROM notification_envois WHERE source = 'geo' AND marchand_id = '${MGEO}'`)) - avantReg],
+      [3, 'fen-annule,fen-cree-7j,fen-scan-30j', 'ttt', 'fff', 3]);
+    const ref = async s => { const c = JSON.parse(sql(`SELECT json_build_object('id', id, 'cree', created_at) FROM clients WHERE pass_serial_number = '${s}'`));
+      return geoP.referencePassage({ geo_actif: true }, c.id, c.cree); };
+    const [rRecente, rNeuf, rAnnule, rSansGeo] = [await ref(recente), await ref(neuf7), await ref(scanAnnule),
+      await geoP.referencePassage({ geo_actif: false }, crypto.randomUUID(), null)];
+    verifier('date de référence (au téléchargement de la carte) : dernier passage non annulé, sinon création ; marchand sans f10 : aucune lecture (null)',
+      [geoP.dansFenetre(rRecente), geoP.dansFenetre(rNeuf), geoP.dansFenetre(rAnnule), rSansGeo], [false, true, true, null]);
     modules.forEach(x => delete require.cache[x]);
     for (const k of Object.keys(process.env)) if (!(k in env)) delete process.env[k];
     Object.assign(process.env, env);

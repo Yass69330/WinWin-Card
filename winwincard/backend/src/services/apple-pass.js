@@ -435,8 +435,9 @@ async function generateApplePass({ client, marchand, serialNumber, passNotificat
   const brut = marchand;
   marchand = require('./themes').appliquerTheme(marchand);
   const passJson = buildPassJson({ client, marchand, serialNumber, passNotification });
-  // f10 (migration 062) : lieux et créneaux si le marchand a la notification
-  // « À proximité » (services/geo.js). Rien sinon : carte identique à avant.
+  // f10 (migrations 062, 070) : si le marchand a la notification
+  // « À proximité » (services/geo.js) : l'adresse, sans date, seulement si le
+  // dernier passage date de 7 à 30 jours (client.geo_reference). Rien sinon.
   const geo = require('./geo').champsPass(marchand, client);
   if (geo) Object.assign(passJson, geo);
 

@@ -422,8 +422,8 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
       .catch(e => console.error('[theme] fermeture par l\'admin :', e.message)));
   }
 
-  // f10 : interrupteur ou lieux changés (activation, désactivation, adresses,
-  // horaires) → les cartes iPhone du marchand sont mises à jour en arrière-plan.
+  // f10 : interrupteur ou lieux changés (activation, désactivation, adresses)
+  // → les cartes iPhone du marchand sont mises à jour en arrière-plan.
   if (geoAvant && (geoAvant.geo_actif !== data.geo_actif
       || (data.geo_actif && JSON.stringify(geoAvant.geo_lieux) !== JSON.stringify(data.geo_lieux)))) {
     suivre(require('../services/geo').rafraichir(data.id, 'admin').catch(e => console.error('[geo] mise à jour :', e.message)));
@@ -1071,6 +1071,19 @@ router.post('/marchands/:id/themes/:themeId/logo', authAdmin, (req, res, next) =
   if (!data) return res.status(404).json({ error: 'Thème introuvable' });
   suivre(require('../services/themes').preparerApercus(req.params.id));   // aperçu « Ma carte » prêt
   res.json(data);
+}));
+
+// POST /api/admin/marchands/:id/geo/rafraichir — f10 (27/10) : mettre à jour tout
+// de suite, en silence, les cartes iPhone d'un marchand (au déploiement de la
+// règle 7 à 30 jours ; ensuite seulement en cas de besoin). En arrière-plan, au
+// débit partagé, tracé (source 'geo').
+router.post('/marchands/:id/geo/rafraichir', authAdmin, asyncHandler(async (req, res) => {
+  const { data: m, error } = await supabase.from('marchands').select('id, geo_actif').eq('id', req.params.id).maybeSingle();
+  if (error) return res.status(500).json({ error: error.message });
+  if (!m) return res.status(404).json({ error: 'Marchand introuvable' });
+  if (!m.geo_actif) return res.status(409).json({ error: '« À proximité » n\'est pas activée pour ce marchand' });
+  suivre(require('../services/geo').rafraichir(m.id, 'admin-manuel').catch(e => console.error('[geo] mise à jour :', e.message)));
+  res.status(202).json({ ok: true });
 }));
 
 module.exports = router;

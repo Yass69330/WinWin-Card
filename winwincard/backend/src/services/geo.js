@@ -1,33 +1,33 @@
 'use strict';
 
 // ════════════════════════════════════════════════════════════════════════════
-// NOTIFICATION « À PROXIMITÉ » SUR IPHONE (f10, migration 062)
+// NOTIFICATION « À PROXIMITÉ » SUR IPHONE (f10, migrations 062 et 070)
 //
-// La carte Apple d'un marchand qui a f10 activé (marchands.geo_actif) porte :
-//   - ses lieux (`locations`, 10 au plus), chacun avec un texte (prénom + solde,
-//     façon boost ; le produit favori viendra avec f06) ;
-//   - des créneaux (`relevantDates`, iOS 18) : les horaires de tous les lieux,
-//     réunis (décision du 14/10 : une boutique fermée peut apparaître pendant
-//     qu'une autre est ouverte, marge d'erreur acceptée), sur HORIZON_JOURS.
-// Près d'un lieu, pendant un créneau, iOS montre la carte sur l'écran verrouillé.
-// Test réussi sur l'iPhone de Yass le 14/10. Exige que l'app Cartes ait accès à
-// la localisation : hors de notre main.
+// Règle (pilotage, 27/10, après le test terrain du 22/10) : la carte Apple d'un
+// marchand qui a f10 activé (marchands.geo_actif) porte ses lieux (`locations`,
+// 10 au plus, chacun avec un texte : prénom + reste à faire) SEULEMENT si son
+// dernier passage non annulé date de 7 à 30 jours (carte jamais scannée : depuis
+// sa création). Aucune date (relevantDates, créneaux) : sur une carte de fidélité
+// (storeCard), iOS décide seul du moment et de la durée d'affichage près du lieu ;
+// la présence de l'adresse est notre seul levier.
 //
-// Horaires saisis par Yass EN UTC (décision du 14/10 : pas de fuseau stocké).
-//
-// Les créneaux sont des DATES : une carte qui n'est jamais mise à jour finit par
-// ne plus en avoir. D'où la mise à jour silencieuse : à l'activation, à chaque
-// changement de lieux ou d'horaires, et une fois par mois (cron, le 1er à
-// 02:00 UTC), au débit partagé (t37), tracée dans notification_envois (source
-// 'geo'). Aucun message n'est affiché au client.
+// Mises à jour : la carte est régénérée à chaque téléchargement par l'iPhone
+// (après un scan, notamment : l'écart retombe à 0, l'adresse disparaît). Pour
+// les cartes sans passage, le cron quotidien (02:00 UTC) ne pousse QUE les cartes
+// qui franchissent J+7 ou J+30 (geo_cartes_a_rafraichir, migration 070) : au plus
+// 2 mises à jour par carte et par cycle. Silencieuses : seul le message de la
+// carte (champ à changeMessage) déclenche une alerte iOS, et il ne change pas.
+// Tracées dans notification_envois (source 'geo'). Exige que l'app Cartes ait
+// accès à la localisation : hors de notre main.
 // ════════════════════════════════════════════════════════════════════════════
 
-const HORIZON_JOURS = 60;
 const MAX_LIEUX = 10;
-const PLAGE = /^([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]|24):([0-5]\d)$/;
+const JOUR_MS = 86400e3;
+const DEBUT_JOURS = 7, FIN_JOURS = 30;
 
 // ── Contrôle des lieux saisis par l'admin ─────────────────────────────────
-// Rend { lieux } (forme normalisée) ou { erreur } (message lisible).
+// Rend { lieux } (forme normalisée : nom, lat, lng) ou { erreur } (message lisible).
+// Une clé « horaires » éventuelle (ancien format) est ignorée.
 function validerLieux(brut) {
   if (!Array.isArray(brut)) return { erreur: 'lieux : une liste est attendue' };
   if (brut.length > MAX_LIEUX) return { erreur: `${MAX_LIEUX} lieux au plus (limite d'Apple)` };
@@ -39,57 +39,36 @@ function validerLieux(brut) {
     if (!Number.isFinite(lat) || lat < -90 || lat > 90) return { erreur: `${n} : latitude invalide` };
     if (!Number.isFinite(lng) || lng < -180 || lng > 180) return { erreur: `${n} : longitude invalide` };
     const nom = typeof l.nom === 'string' ? l.nom.trim().slice(0, 60) : '';
-    const horaires = {};
-    for (const [jour, plages] of Object.entries(l.horaires || {})) {
-      if (!/^[1-7]$/.test(jour)) return { erreur: `${n} : jour inconnu (${jour})` };
-      if (!Array.isArray(plages)) return { erreur: `${n} : horaires du jour ${jour} illisibles` };
-      const propres = [];
-      for (const p of plages) {
-        const m = typeof p === 'string' ? p.trim().match(PLAGE) : null;
-        if (!m) return { erreur: `${n} : plage « ${p} » invalide (format HH:MM-HH:MM, en UTC)` };
-        const debut = +m[1] * 60 + +m[2], fin = +m[3] * 60 + +m[4];
-        if (fin > 24 * 60 || fin <= debut) return { erreur: `${n} : plage « ${p} » invalide (la fin doit suivre le début, dans la même journée UTC)` };
-        propres.push(p.trim());
-      }
-      if (propres.length) horaires[jour] = propres;
-    }
-    lieux.push({ nom, lat, lng, horaires });
+    lieux.push({ nom, lat, lng });
   }
   return { lieux };
 }
 
-// ── Créneaux : union des horaires de tous les lieux, jour UTC par jour UTC ──
-const enMinutes = p => { const m = p.match(PLAGE); return [+m[1] * 60 + +m[2], +m[3] * 60 + +m[4]]; };
-const iso = d => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
+// ── La fenêtre : dernier passage (sinon création) entre 7 et 30 jours ──────
+function dansFenetre(reference, maintenant = new Date()) {
+  const t = reference ? new Date(reference).getTime() : NaN;
+  if (!Number.isFinite(t)) return false;
+  const ecart = maintenant.getTime() - t;
+  return ecart >= DEBUT_JOURS * JOUR_MS && ecart < FIN_JOURS * JOUR_MS;
+}
 
-function creneaux(lieux, maintenant = new Date(), jours = HORIZON_JOURS) {
-  const parJour = {};   // "1".."7" → [[debut, fin], …] fusionnés
-  for (const l of lieux || []) {
-    for (const [jour, plages] of Object.entries(l.horaires || {})) {
-      parJour[jour] = (parJour[jour] || []).concat(plages.map(enMinutes));
-    }
+// Date de référence d'une carte, lue SEULEMENT pour un marchand f10 (au
+// téléchargement de la carte par l'iPhone, jamais au scan) : dernier passage non
+// annulé (index scans(client_id, date_scan), migration 064), sinon création.
+// Rend la date, ou null si la lecture échoue (la carte part alors sans adresse :
+// jamais d'échec de téléchargement à cause de f10).
+async function referencePassage(marchand, clientId, creeLe) {
+  if (!marchand || marchand.geo_actif !== true || !clientId) return null;
+  try {
+    const supabase = require('./supabase');
+    const { data, error } = await supabase.from('scans').select('date_scan')
+      .eq('client_id', clientId).is('annule_le', null).order('date_scan', { ascending: false }).limit(1);
+    if (error) { console.error('[geo] dernier passage illisible :', error.message); return null; }
+    return (data && data[0] && data[0].date_scan) || creeLe || null;
+  } catch (e) {
+    console.error('[geo] dernier passage illisible :', e.message);
+    return null;
   }
-  for (const jour of Object.keys(parJour)) {
-    const tri = parJour[jour].sort((a, b) => a[0] - b[0]);
-    const fusion = [];
-    for (const [d, f] of tri) {
-      const der = fusion[fusion.length - 1];
-      if (der && d <= der[1]) der[1] = Math.max(der[1], f); else fusion.push([d, f]);
-    }
-    parJour[jour] = fusion;
-  }
-  const minuit = Date.UTC(maintenant.getUTCFullYear(), maintenant.getUTCMonth(), maintenant.getUTCDate());
-  const resultat = [];
-  for (let k = 0; k < jours; k++) {
-    const jourMs = minuit + k * 86400e3;
-    const isoJour = String(((new Date(jourMs).getUTCDay() + 6) % 7) + 1);   // 1 = lundi … 7 = dimanche
-    for (const [d, f] of parJour[isoJour] || []) {
-      const fin = jourMs + Math.min(f * 60e3, 86400e3 - 1000);   // 24:00 → 23:59:59 (un créneau = un jour au plus)
-      if (fin <= maintenant.getTime()) continue;                  // créneau déjà passé
-      resultat.push({ startDate: iso(new Date(jourMs + d * 60e3)), endDate: iso(new Date(fin)) });
-    }
-  }
-  return resultat;
 }
 
 // ── Texte affiché sur l'écran verrouillé (repli décidé par Yass) ───────────
@@ -106,18 +85,15 @@ function texteProximite(client, marchand) {
             : `${client.prenom}, your reward is waiting at ${marchand.nom}!`;
 }
 
-// Champs à ajouter au pass.json, ou null (f10 inactif, aucun lieu, aucun créneau).
+// Champs à ajouter au pass.json, ou null (f10 inactif, aucun lieu, hors fenêtre).
+// client.geo_reference : date de référence (referencePassage), posée par l'appelant.
 function champsPass(marchand, client, maintenant = new Date()) {
-  if (!marchand || marchand.geo_actif !== true) return null;
+  if (!marchand || marchand.geo_actif !== true || !client) return null;
   const lieux = Array.isArray(marchand.geo_lieux) ? marchand.geo_lieux.slice(0, MAX_LIEUX) : [];
   if (!lieux.length) return null;
-  const dates = creneaux(lieux, maintenant);
-  if (!dates.length) return null;   // aucun horaire : rien, plutôt qu'une carte affichée à toute heure
+  if (!dansFenetre(client.geo_reference, maintenant)) return null;
   const texte = texteProximite(client, marchand);
-  return {
-    locations: lieux.map(l => ({ latitude: l.lat, longitude: l.lng, relevantText: texte })),
-    relevantDates: dates,
-  };
+  return { locations: lieux.map(l => ({ latitude: l.lat, longitude: l.lng, relevantText: texte })) };
 }
 
 // ── Mise à jour silencieuse des cartes iPhone d'un marchand ───────────────
@@ -170,12 +146,48 @@ async function rafraichir(marchandId, raison = 'manuel') {
   return bilan;
 }
 
-// Le 1er du mois (cron) : tous les marchands qui ont f10 activé, l'un après l'autre.
-async function rafraichirTous() {
+// Cron quotidien (02:00 UTC) : les seules cartes iPhone qui franchissent J+7 ou
+// J+30 (geo_cartes_a_rafraichir, migration 070), marquées modifiées puis
+// poussées en silence, au débit partagé, tracées (source 'geo'). Ne lève jamais.
+async function rafraichirFenetre(maintenant = new Date()) {
+  const bilan = { cartes: 0, iphones: 0, erreurs: 0 };
+  if (!appleActif()) return { ...bilan, ignore: 'apns_non_configure' };
   const supabase = require('./supabase');
-  const { data, error } = await supabase.from('marchands').select('id').eq('geo_actif', true);
-  if (error) { console.error('[geo] lecture des marchands impossible :', error.message); return; }
-  for (const m of data || []) await rafraichir(m.id, 'mensuelle');
+  const debit = require('./debit');
+  const registre = require('./notif-registre');
+  try {
+    const { data, error } = await supabase.rpc('geo_cartes_a_rafraichir', { p_maintenant: maintenant.toISOString() });
+    if (error) { bilan.arret = error.message; return bilan; }
+    const parMarchand = new Map();
+    for (const l of data || []) {
+      if (!parMarchand.has(l.marchand_id)) parMarchand.set(l.marchand_id, []);
+      parMarchand.get(l.marchand_id).push(l);
+    }
+    for (const [marchandId, lignes] of parMarchand) {
+      for (let i = 0; i < lignes.length; i += config.parLot) {
+        const lot = lignes.slice(i, i + config.parLot);
+        const serials = [...new Set(lot.map(l => l.serial_number))];
+        const { error: errMaj } = await supabase.from('passes').update({ updated_at: new Date().toISOString() })
+          .eq('marchand_id', marchandId).in('serial_number', serials);
+        if (errMaj) { bilan.arret = errMaj.message; return bilan; }
+        bilan.cartes += serials.length;
+        const reg = registre.creerLot('geo', marchandId, { long: true });
+        for (const l of lot) {
+          await debit.prendre();
+          let erreur = null;
+          try { await envoyer(l.push_token); } catch (e) { erreur = e; bilan.erreurs++; }
+          reg.ajouter({ plateforme: 'apple', serialNumber: l.serial_number, pushToken: l.push_token, erreur });
+          bilan.iphones++;
+        }
+        await reg.ecrire();
+      }
+    }
+  } catch (e) {
+    bilan.arret = e.message;
+  } finally {
+    console.log(`[geo] mise à jour quotidienne (fenêtre 7-30 j) : ${bilan.cartes} carte(s), ${bilan.iphones} iPhone, ${bilan.erreurs} erreur(s)${bilan.arret ? `, arrêt : ${bilan.arret}` : ''}`);
+  }
+  return bilan;
 }
 
 function _pourTests({ envoyeur, actif, parLot } = {}) {
@@ -184,4 +196,4 @@ function _pourTests({ envoyeur, actif, parLot } = {}) {
   if (parLot) config.parLot = parLot;
 }
 
-module.exports = { HORIZON_JOURS, MAX_LIEUX, validerLieux, creneaux, texteProximite, champsPass, rafraichir, rafraichirTous, _pourTests };
+module.exports = { MAX_LIEUX, validerLieux, dansFenetre, referencePassage, texteProximite, champsPass, rafraichir, rafraichirFenetre, _pourTests };

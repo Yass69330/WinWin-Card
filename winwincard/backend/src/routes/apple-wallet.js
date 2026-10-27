@@ -137,7 +137,7 @@ router.get('/v1/passes/:passTypeId/:serialNumber', asyncHandler(async (req, res)
   // une au lieu de trois. Mêmes colonnes qu'avant.
   const { data: pass, error: errPass } = await supabase
     .from('passes')
-    .select(`updated_at, notification_message, clients(prenom, stored_value), marchands(${COLONNES_MARCHAND_CARTE})`)
+    .select(`updated_at, notification_message, clients(id, prenom, stored_value, created_at), marchands(${COLONNES_MARCHAND_CARTE})`)
     .eq('serial_number', serialNumber)
     .single();
 
@@ -159,6 +159,9 @@ router.get('/v1/passes/:passTypeId/:serialNumber', asyncHandler(async (req, res)
   const marchand = pass.marchands;
 
   if (!client || !marchand) return res.status(404).send();
+  // f10 (27/10) : date de référence de la règle 7 à 30 jours ; une lecture de
+  // plus, indexée, SEULEMENT pour un marchand f10 (aucune sinon).
+  client.geo_reference = await require('../services/geo').referencePassage(marchand, client.id, client.created_at);
 
   const { generateApplePass } = require('../services/apple-pass');
 

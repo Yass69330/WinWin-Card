@@ -54,7 +54,7 @@ router.get('/:serialNumber/apple', asyncHandler(async (req, res) => {
 
   const [{ data: client }, { data: marchand }] = await Promise.all([
     supabase.from('clients')
-      .select('prenom, stored_value')
+      .select('id, prenom, stored_value, created_at')
       .eq('id', pass.client_id)
       .is('deleted_at', null)
       .single(),
@@ -66,6 +66,8 @@ router.get('/:serialNumber/apple', asyncHandler(async (req, res) => {
   ]);
 
   if (!client || !marchand) return res.status(404).json({ error: 'Données introuvables' });
+  // f10 (27/10) : règle 7 à 30 jours (une lecture de plus, pour un marchand f10 seulement).
+  client.geo_reference = await require('../services/geo').referencePassage(marchand, client.id, client.created_at);
 
   const { generateApplePass } = require('../services/apple-pass');
 

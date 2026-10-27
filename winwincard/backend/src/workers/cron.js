@@ -25,11 +25,12 @@ const tache = cron.schedule('0 8 * * *', () => {
   suivre(passageQuotidien().catch(e => console.error('[cron] passage:', e.message)));
 });
 
-// f10 (migration 062) : le 1er du mois à 02:00 UTC, mise à jour silencieuse des
-// cartes iPhone des marchands qui ont « À proximité » : leurs créneaux couvrent
-// 60 jours, cette mise à jour les prolonge. Loin du passage de 08:00.
-const tacheGeo = cron.schedule('0 2 1 * *', () => {
-  suivre(require('../services/geo').rafraichirTous().catch(e => console.error('[geo] mise à jour mensuelle :', e.message)));
+// f10 (migration 070, 27/10) : chaque jour à 02:00 UTC, mise à jour silencieuse
+// des SEULES cartes iPhone qui franchissent J+7 (l'adresse apparaît) ou J+30
+// (elle disparaît) depuis leur dernier passage. Remplace la tournée mensuelle de
+// toutes les cartes. Loin du passage de 08:00.
+const tacheGeo = cron.schedule('0 2 * * *', () => {
+  suivre(require('../services/geo').rafraichirFenetre().catch(e => console.error('[geo] mise à jour quotidienne :', e.message)));
 });
 
 function arreterPlanification() {

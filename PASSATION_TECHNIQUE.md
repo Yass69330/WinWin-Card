@@ -8329,6 +8329,63 @@ codes caisse de ses 35 boutiques et sa clé de production à créer dans l'admin
 conversion des points d'avant (décision métier) ; les 6 numéros illisibles (§15 quadragies
 sexagies).
 
+## 15 trequadragies sexagies. f10 « À PROXIMITÉ » : RÈGLE 7 À 30 JOURS (27/10, à pousser après la migration 070)
+
+**Test terrain de Yass (22/10)** : l'aperçu s'affiche dès la création de la carte (créée en
+boutique, donc près de l'adresse) et reste ~1 h sur l'écran verrouillé. Moment et durée
+décidés par iOS ; la carte est une **`storeCard`**, pertinente par **lieu** ; aucune garantie
+qu'iOS lise `relevantDates` sur ce type (hypothèse, cohérente avec le test). Seul levier :
+l'adresse dans la carte, ou pas.
+
+**Règle validée** (pilotage, 27/10) : l'adresse (`locations`, sans aucune date) seulement si le
+dernier passage non annulé date de **7 à 30 jours** (jamais scannée : depuis la création) ; au
+plus 2 mises à jour par cycle (ajout à J+7, retrait à J+30) ; un scan avant J+30 retire déjà
+l'adresse ; mises à jour silencieuses ; plus de créneaux dans l'admin.
+
+**Livré (code)** :
+- **Migration 070** (`database/migration_070_geo_fenetre.sql`) : retrait de la clé `horaires`
+  de `marchands.geo_lieux` ; fonction **`geo_cartes_a_rafraichir(p_maintenant)`** : les seules
+  cartes iPhone des marchands f10 (actifs, avec lieux) dont la date de référence tombe dans
+  ]maintenant − 8 j, maintenant − 7 j] ou ]maintenant − 31 j, maintenant − 30 j].
+- **`services/geo.js`** : `dansFenetre()`, `referencePassage()` (lecture indexée du dernier
+  passage non annulé, **seulement pour un marchand f10**, jamais d'échec de téléchargement à
+  cause de f10) ; `champsPass()` rend `{ locations }` dans la fenêtre, sinon `null` ; retirés :
+  `creneaux()`, `HORIZON_JOURS`, horaires de `validerLieux()` (une clé `horaires` est ignorée),
+  `rafraichirTous()` ; ajouté : **`rafraichirFenetre()`** (cron quotidien : marque les cartes
+  modifiées, push silencieux au débit partagé, registre `geo`).
+- **Routes de la carte Apple** (`GET /v1/passes/...` et `GET /api/passes/:serial/apple`) :
+  lisent `id` et `created_at` du client et posent `geo_reference`. Aucune lecture de plus pour un
+  marchand sans f10 (contrôle « une requête au lieu de trois » de la section 17 inchangé).
+- **Cron** (`workers/cron.js`) : `0 2 * * *` → `rafraichirFenetre()` (remplace `0 2 1 * *` →
+  `rafraichirTous()`).
+- **Admin** : saisie des créneaux retirée ; texte d'aide mis à jour ; bouton **« Mettre à jour
+  les cartes iPhone maintenant »** (`POST /api/admin/marchands/:id/geo/rafraichir`, 202, 409 si
+  f10 désactivé) — sert à la mise à jour unique au déploiement (hamza-salon).
+- **Inchangés** : `crediter_scan`, le scan, l'écran caissier, Google.
+
+**Silence** : seul le champ `notification_txt` porte un `changeMessage` ; ajouter ou retirer
+l'adresse ne le change pas. Exception assumée : un message de carte écrit en base mais jamais
+reçu par l'iPhone s'afficherait à ce moment-là.
+
+**Filet** : 426/426 (section 25 refaite : fenêtre, carte sans date, rien hors fenêtre,
+migration 070 rejouée, sélection quotidienne — seules les cartes qui franchissent J+7 ou J+30,
+scan annulé ignoré —, cron quotidien tracé, date de référence) ; navigateur : la fiche admin n'a
+plus de créneaux ; **suite complète 528/528**. **Contre-épreuve** sur `41242f2` : la section f10
+échoue à son premier contrôle.
+
+**Risques** : comportement d'iOS non garanti ; jours en UTC ; jetons morts (dette 410) ; un
+cron manqué (serveur arrêté à 02:00) laisse passer les cartes de ce jour-là (rattrapées à leur
+prochaine mise à jour) ; ordre : exécuter 070 juste avant le déploiement (l'ancien code, sans
+`horaires`, retirerait l'adresse de toutes les cartes à leur prochain téléchargement — sans
+gravité).
+
+**Volume** : au plus ~2 pushes par carte iPhone et par cycle d'inactivité ; aujourd'hui
+(hamza-salon seul) quelques-uns par jour ; tous marchands f10 : de l'ordre de 100 par jour au
+plus (audit 06 : ≈ 40 inscriptions et ≈ 41 clients crédités par jour).
+
+**Décision hors pilotage** (à valider) : le bouton admin « Mettre à jour les cartes iPhone
+maintenant » (moyen de la mise à jour unique au déploiement, réutilisable).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)

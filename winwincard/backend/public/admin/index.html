@@ -452,13 +452,15 @@
       <!-- Section : Notification « À proximité » (f10, iPhone, tous forfaits, mode édition) -->
       <div class="form-section" id="section-geo" style="display:none">
         <div class="form-section-title">Notification « À proximité » <span style="color:var(--warning);font-size:10px">iPhone</span></div>
-        <div class="field-hint" style="margin-bottom:8px">Près d'un lieu, pendant ses horaires, l'iPhone du client affiche la carte sur l'écran verrouillé (texte : prénom + solde). Horaires <b>en UTC</b> (Dubaï = heure locale − 4 h). Plages « HH:MM-HH:MM » séparées par des virgules ; jour vide = fermé. 10 lieux au plus. Activer, désactiver ou modifier les lieux met à jour les cartes iPhone du marchand (en arrière-plan, au débit des campagnes).</div>
+        <div class="field-hint" style="margin-bottom:8px">Près d'un lieu, l'iPhone du client peut afficher la carte sur l'écran verrouillé (texte : prénom + solde ; moment et durée décidés par iOS). La carte ne porte l'adresse que si le dernier passage du client date de 7 à 30 jours (jamais scannée : depuis sa création). 10 lieux au plus. Activer, désactiver ou modifier les lieux met à jour les cartes iPhone du marchand (en arrière-plan, au débit des campagnes).</div>
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;font-weight:600;margin-bottom:10px">
           <input type="checkbox" id="f-geo-actif" style="width:18px;height:18px;accent-color:var(--accent)">
           Activer la notification à proximité
         </label>
         <div id="geo-lieux" style="display:flex;flex-direction:column;gap:10px"></div>
         <button type="button" class="btn btn-outline btn-sm" id="btn-geo-ajouter" style="margin-top:8px;align-self:flex-start">+ Ajouter un lieu</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-geo-rafraichir" style="margin-top:4px;align-self:flex-start">Mettre à jour les cartes iPhone maintenant</button>
+        <div id="geo-rafraichir-statut" class="field-hint"></div>
       </div>
 
       <!-- Section : Thèmes de carte (f17, Pro+, mode édition) -->
@@ -1155,7 +1157,6 @@ document.getElementById('btn-effacer-reglages-marchand').addEventListener('click
 });
 
 // ── f10 : lieux de la notification « À proximité » ──────────────────────────
-const JOURS_GEO = [['1', 'Lun'], ['2', 'Mar'], ['3', 'Mer'], ['4', 'Jeu'], ['5', 'Ven'], ['6', 'Sam'], ['7', 'Dim']];
 function ajouterLieuGeo(l = {}) {
   const liste = document.getElementById('geo-lieux');
   if (liste.children.length >= 10) return;
@@ -1169,23 +1170,23 @@ function ajouterLieuGeo(l = {}) {
       <input class="geo-lat" placeholder="Latitude" style="${champ};width:110px" value="${l.lat ?? ''}">
       <input class="geo-lng" placeholder="Longitude" style="${champ};width:110px" value="${l.lng ?? ''}">
       <button type="button" class="btn btn-ghost btn-sm geo-retirer">Retirer</button>
-    </div>
-    <div style="display:grid;grid-template-columns:42px 1fr;gap:4px 8px;align-items:center;font-size:12px;color:var(--muted)">
-      ${JOURS_GEO.map(([k, nom]) => `<span>${nom}</span><input class="geo-jour" data-jour="${k}" placeholder="fermé" style="${champ}"
-        value="${esc(((l.horaires || {})[k] || []).join(', '))}">`).join('')}
     </div>`;
   div.querySelector('.geo-retirer').addEventListener('click', () => div.remove());
   liste.appendChild(div);
 }
+// f10 (27/10) : mise à jour silencieuse immédiate des cartes iPhone (déploiement de
+// la règle 7 à 30 jours, ou au besoin). Fiche enregistrée d'abord si les lieux ont changé.
+document.getElementById('btn-geo-rafraichir').addEventListener('click', async () => {
+  const statut = document.getElementById('geo-rafraichir-statut');
+  if (!confirm('Mettre à jour en silence toutes les cartes iPhone de ce marchand ?')) return;
+  const res = await api(`/api/admin/marchands/${S.editId}/geo/rafraichir`, { method: 'POST', body: '{}' });
+  const d = await res.json().catch(() => ({}));
+  statut.textContent = res.ok ? 'Mise à jour lancée en arrière-plan.' : (d.error || 'Erreur');
+});
 function lireLieuxGeo() {
   return [...document.querySelectorAll('#geo-lieux .geo-lieu')].map(div => {
-    const horaires = {};
-    div.querySelectorAll('.geo-jour').forEach(inp => {
-      const plages = inp.value.split(',').map(x => x.trim()).filter(Boolean);
-      if (plages.length) horaires[inp.dataset.jour] = plages;
-    });
     return { nom: div.querySelector('.geo-nom').value.trim(), lat: div.querySelector('.geo-lat').value.trim(),
-      lng: div.querySelector('.geo-lng').value.trim(), horaires };
+      lng: div.querySelector('.geo-lng').value.trim() };
   });
 }
 document.getElementById('btn-geo-ajouter').addEventListener('click', () => ajouterLieuGeo());
