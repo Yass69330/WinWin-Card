@@ -459,10 +459,13 @@ async function generateApplePass({ client, marchand, serialNumber, passNotificat
   const iconUrl      = marchand.icon_url || marchand.logo_url || null;
   const activeLogoUrl = (doré && marchand.logo_reward_url) ? marchand.logo_reward_url : marchand.logo_url;
   // icon@3x.png (87×87px) is what Apple uses on all modern iPhones (@3x screens).
+  // f17, morceau 2 : lus une fois par serveur, normalisés, gardés en mémoire
+  // (services/logos.js). Illisible → carré uni, comme avant.
+  const logos = require('./logos');
   const [icon3Buf, logoBuf, logo2Buf] = await Promise.all([
-    iconUrl        ? fetchImage(iconUrl).catch(() => icon3Png)        : icon3Png,
-    activeLogoUrl  ? fetchImage(activeLogoUrl).catch(() => iconPng)   : iconPng,
-    activeLogoUrl  ? fetchImage(activeLogoUrl).catch(() => icon2Png)  : icon2Png,
+    logos.lire(iconUrl, 'icone3x').then(b => b || icon3Png),
+    logos.lire(activeLogoUrl, 'logo1x').then(b => b || iconPng),
+    logos.lire(activeLogoUrl, 'logo2x').then(b => b || icon2Png),
   ]);
 
   // Précédence strip : images_tiers → image_strip_url (override universel) → strip généré → solid

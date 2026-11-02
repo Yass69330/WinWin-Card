@@ -1731,6 +1731,22 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     verifier('corps multipart mal formé : 400, et le serveur répond toujours', [casse.statut, vivant], [400, 200]);
     const stat = await envoyer(`/api/admin/marchands/${M.tampons}/strip-static`, { image: { blob: new Blob([png], { type: 'image/png' }), nom: 'fond.png' } });
     verifier('envoi de l\'image statique du bandeau : 200, stockée', [stat.statut, /strip_static\.png$/.test(stat.corps.url || '')], [200, true]);
+    // f17, morceau 2 : logo d'un thème normalisé à l'envoi (vrai PNG, 1 320 px au plus, jamais agrandi).
+    const idTh = sql(`INSERT INTO themes_marchand (marchand_id, nom, couleur_fond, message_ouverture) VALUES ('${M.tampons}', 'Filet logo', '#123456', 'Bonjour') RETURNING id`);
+    const avant = stockes.length;
+    const jpegGeant = await sharp({ create: { width: 3000, height: 1000, channels: 3, background: '#cc3300' } }).jpeg().toBuffer();
+    const petitPng = await sharp({ create: { width: 200, height: 80, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).png().toBuffer();
+    const envoiLogo = (type, buf, mime, nom) => envoyer(`/api/admin/marchands/${M.tampons}/themes/${idTh}/logo?type=${type}`,
+      { image: { blob: new Blob([buf], { type: mime }), nom } });
+    const lg = await envoiLogo('apple', jpegGeant, 'image/jpeg', 'logo.jpg');
+    const lp = await envoiLogo('google', petitPng, 'image/png', 'logo.png');
+    const illisible = await envoiLogo('apple', Buffer.from('pas une image du tout'), 'image/png', 'faux.png');
+    const deposes = stockes.slice(avant);
+    verifier('logo de thème : JPEG 3000x1000 → PNG 1320x440 ; PNG 200x80 transparent → PNG 200x80, transparence gardée, jamais agrandi ; fichier illisible → 400, rien déposé',
+      [lg.statut, lp.statut, deposes.length, await dims(deposes[0].corps), await dims(deposes[1].corps), (await sharp(deposes[1].corps).metadata()).hasAlpha,
+       /themes-logos\/.*-apple-\d+\.png$/.test(lg.corps.logo_url || ''), illisible.statut, illisible.corps.error],
+      [200, 200, 2, 'png 1320x440', 'png 200x80', true, true, 400, 'Image illisible (PNG, JPEG ou WebP attendu)']);
+    sql(`DELETE FROM themes_marchand WHERE id = '${idTh}'`);
     s20.processus.kill();
     relais.close();
 
@@ -2753,6 +2769,87 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
   }
 
   // ── API v1, étape 1 : le socle d'accès (migration 066, 20/10) ───────────────
+  titre('27. f17, morceau 2 : logos des cartes Apple lus une fois, normalisés, gardés en mémoire (03/11)');
+  {
+    const sharp = require('sharp');
+    const fs = require('fs'), os = require('os'), path = require('path');
+    const { execFileSync } = require('child_process');
+    const logos = require('../src/services/logos');
+    const applePass = require('../src/services/apple-pass');
+    const dims = async b => { const m = await sharp(b).metadata(); return `${m.format} ${m.width}x${m.height}${m.hasAlpha ? ' alpha' : ''}`; };
+    const images = {
+      'https://logos.filet/grand.jpg': await sharp({ create: { width: 1000, height: 300, channels: 3, background: '#0b3d2e' } }).jpeg().toBuffer(),
+      'https://logos.filet/petit.png': await sharp({ create: { width: 120, height: 40, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).png().toBuffer(),
+      'https://logos.filet/carre.png': await sharp({ create: { width: 512, height: 512, channels: 4, background: '#d4af37' } }).png().toBuffer(),
+    };
+    let t = 1e6;
+    const appels = [];
+    const reglage = logos._pourTests({
+      telechargeur: async url => { appels.push(url); await new Promise(r => setTimeout(r, 20));
+        if (!images[url]) throw new Error('HTTP 404'); return images[url]; },
+      horloge: () => t, reglages: { max: 100, dureeMs: 600e3, echecMs: 60e3 } });
+
+    const [a, b, c] = await Promise.all([1, 2, 3].map(() => logos.lire('https://logos.filet/grand.jpg', 'logo2x')));
+    verifier('3 demandes simultanées du même logo : UN téléchargement ; JPEG 1000x300 → PNG 320x96 (tient dans le cadre @2x 320x100, proportions gardées), même image pour les 3',
+      [appels.length, await dims(a), a.equals(b) && b.equals(c)], [1, 'png 320x96', true]);
+    verifier('… normalisé par taille : @1x 160x48, icône 87x26 (proportions gardées) ; petit logo transparent jamais agrandi, transparence gardée',
+      [await dims(await logos.lire('https://logos.filet/grand.jpg', 'logo1x')), await dims(await logos.lire('https://logos.filet/grand.jpg', 'icone3x')),
+       await dims(await logos.lire('https://logos.filet/petit.png', 'logo2x'))], ['png 160x48', 'png 87x26', 'png 120x40 alpha']);
+    appels.length = 0;
+    await logos.lire('https://logos.filet/grand.jpg', 'logo2x');
+    t += 600e3 + 1;
+    await logos.lire('https://logos.filet/grand.jpg', 'logo2x');
+    verifier('gardé en mémoire 10 min : aucun téléchargement avant, un seul après (lien remplacé à la même adresse : repris au plus tard après 10 min)',
+      appels.length, 1);
+    appels.length = 0;
+    const r1 = await logos.lire('https://logos.filet/absent.png', 'logo2x');
+    const r2 = await logos.lire('https://logos.filet/absent.png', 'logo2x');
+    t += 60e3 + 1;
+    await logos.lire('https://logos.filet/absent.png', 'logo2x');
+    verifier('logo injoignable : null (la carte part avec le carré uni, comme avant), échec gardé 1 min puis retenté ; aucune adresse → null sans téléchargement',
+      [r1, r2, appels.length, await logos.lire(null, 'logo2x'), await logos.lire('', 'logo1x')], [null, null, 2, null, null]);
+    reglage.config.max = 2;
+    await logos.lire('https://logos.filet/carre.png', 'logo2x');
+    verifier('mémoire bornée (ici 2 entrées) : les plus anciennes partent', reglage.memoire.size, 2);
+    reglage.config.max = 100;
+
+    // La carte Apple : logos normalisés dans le paquet, un téléchargement par taille pour 3 cartes.
+    // Certificats de test (comme la section 26), remis après.
+    const envAvant = { ...process.env };
+    const dossierC = fs.mkdtempSync(path.join(os.tmpdir(), 'filet-logos-'));
+    execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', path.join(dossierC, 'k.pem'),
+      '-out', path.join(dossierC, 'c.pem'), '-subj', '/CN=filet', '-days', '1'], { stdio: 'ignore' });
+    const b64c = f => fs.readFileSync(path.join(dossierC, f)).toString('base64');
+    Object.assign(process.env, { JWT_SECRET: secretJwt, APPLE_WWDR_CERT_B64: b64c('c.pem'), APPLE_SIGNER_CERT_B64: b64c('c.pem'), APPLE_SIGNER_KEY_B64: b64c('k.pem') });
+    logos._pourTests({ telechargeur: async url => { appels.push(url); return images[url]; }, horloge: () => t });
+    appels.length = 0;
+    const fichiers = zip => {
+      const f = {};
+      for (let i = 0; zip.readUInt32LE(i) === 0x04034b50;) {
+        const taille = zip.readUInt32LE(i + 18), lnom = zip.readUInt16LE(i + 26);
+        f[zip.slice(i + 30, i + 30 + lnom).toString()] = zip.slice(i + 30 + lnom, i + 30 + lnom + taille);
+        i += 30 + lnom + taille;
+      }
+      return f;
+    };
+    const marchand = { id: 'filet-logos', nom: 'Filet Logos', couleur_fond: '#111111', max_value: 10,
+      logo_url: 'https://logos.filet/grand.jpg', icon_url: 'https://logos.filet/carre.png' };
+    const zips = [];
+    for (const k of [1, 2, 3]) zips.push(fichiers(await applePass.generateApplePass({ client: { prenom: 'Sarah', stored_value: k }, marchand, serialNumber: `filet-logos-${k}` })));
+    verifier('3 cartes Apple : 3 téléchargements en tout (logo @1x, @2x, icône), pas 9 ; logo.png 160x50, logo@2x.png 320x100, icon@3x.png 87x87',
+      [appels.length, await dims(zips[2]['logo.png']), await dims(zips[2]['logo@2x.png']), await dims(zips[2]['icon@3x.png'])],
+      [3, 'png 160x48', 'png 320x96', 'png 87x87 alpha']);
+    logos._pourTests({ telechargeur: async () => { throw new Error('HTTP 500'); }, horloge: () => t });
+    const repli = fichiers(await applePass.generateApplePass({ client: { prenom: 'Sarah', stored_value: 1 }, marchand: { ...marchand, id: 'filet-logos-2' }, serialNumber: 'filet-logos-x' }));
+    verifier('logo injoignable : la carte part quand même, logo = carré uni de la couleur du marchand (comme avant)',
+      [repli['logo.png'].equals(applePass.createSolidPng(29, 29, 17, 17, 17)), repli['logo@2x.png'].equals(applePass.createSolidPng(58, 58, 17, 17, 17))], [true, true]);
+    logos._pourTests({ telechargeur: url => applePass.fetchImage(url), horloge: () => Date.now(), reglages: { max: 100, dureeMs: 600e3, echecMs: 60e3 } });
+    for (const k of ['JWT_SECRET', 'APPLE_WWDR_CERT_B64', 'APPLE_SIGNER_CERT_B64', 'APPLE_SIGNER_KEY_B64']) {
+      if (envAvant[k] === undefined) delete process.env[k]; else process.env[k] = envAvant[k];
+    }
+    fs.rmSync(dossierC, { recursive: true, force: true });
+  }
+
   titre('API v1, étape 1 : clés d\'API, réglages de conversion, canal (20/10)');
   {
     const sha = x => crypto.createHash('sha256').update(x).digest('hex');

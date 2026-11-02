@@ -8512,6 +8512,34 @@ ne change pas d'API. **Retour arrière** : revenir au commit `2374f00`.
   iPhone avant de figer.** Le changement de libellé ne déclenche pas d'alerte (pas de
   `changeMessage`).
 
+**Morceau 1 poussé** (`7e3a755`, avec `f793d8f`) ; contrôlé par Yass (03/11) : déploiement vert,
+iPhone ok (texte au-dessus du solde). **Écart signalé** : « Ramadan Mubarak » s'est affiché
+**sans l'emoji lune** sur hamza-salon. Cause à établir (emoji absent du thème saisi, ou retiré
+par iOS dans un libellé) : requête de lecture donnée à Yass.
+
+### Morceau 2 : logos lus une fois, normalisés, gardés en mémoire (local)
+
+- **`services/logos.js`** (nouveau) : `lire(url, forme)` rend le PNG normalisé ou `null`.
+  Formes : `logo1x` (160×50), `logo2x` (320×100), `icone3x` (87×87) ; `fit: inside`, jamais
+  agrandi, proportions et transparence gardées, toujours en vrai PNG. Un téléchargement par
+  adresse et par forme par serveur (demandes simultanées regroupées) ; mémoire de 100 entrées,
+  **10 min** ; échec gardé **1 min**. Aucune requête à la base.
+- **`apple-pass.js`** : icône, logo, logo @2x passent par `logos.lire` (avant : 3
+  téléchargements bruts par carte). Illisible → carré uni, comme avant. Vaut pour les 3 logos
+  (normal, récompense, thème) et l'icône.
+- **Envoi d'un logo de thème** (admin) : ré-encodé en PNG, côté le plus long ≤ 1 320 px
+  (Google affiche 660 px), jamais agrandi ; image illisible → 400 (avant : déposée telle
+  quelle, JPEG nommé `.png`).
+- Non touchés : le logo des tampons de la bannière (calculé une fois par état, puis en cache),
+  les logos Google (lus par Google, pas par notre serveur), les routes de contrôle de l'admin.
+- **Filet 435/435** (+8 : section 27 et logo de thème en section 20) ; **suite complète
+  537/537**. **Contre-épreuve** sur `7e3a755` : le logo de thème est déposé brut (JPEG
+  3000×1000) et un fichier illisible accepté (200) ; la section 27 ne tourne pas (module absent).
+- **Hypothèses et limites** : un logo normal remplacé **à la même adresse** est repris au plus
+  tard après 10 min (par serveur) ; le rendu ne change pas (iOS réduisait déjà l'image à ces
+  tailles) — **à confirmer à l'œil sur une carte après déploiement** ; chaque forme télécharge
+  une fois (3 téléchargements par adresse et par 10 min au plus, au lieu de 3 par carte).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)

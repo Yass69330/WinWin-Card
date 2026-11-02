@@ -1060,9 +1060,19 @@ router.post('/marchands/:id/themes/:themeId/logo', authAdmin, (req, res, next) =
   const { data: m } = await supabase.from('marchands').select('slug').eq('id', req.params.id).single();
   if (!m) return res.status(404).json({ error: 'Marchand introuvable' });
   if (await themeChoisi(req.params.id, req.params.themeId)) return res.status(409).json({ error: 'theme_choisi' });
+  // f17, morceau 2 : normalisé à l'envoi : vrai PNG (transparence gardée), côté
+  // le plus long réduit à 1 320 px au plus (le logo Google s'affiche en 660 px ;
+  // marge pour l'écran 2x), jamais agrandi. Image illisible → refusée.
+  let png;
+  try {
+    png = await require('sharp')(req.file.buffer)
+      .resize({ width: 1320, height: 1320, fit: 'inside', withoutEnlargement: true }).png().toBuffer();
+  } catch {
+    return res.status(400).json({ error: 'Image illisible (PNG, JPEG ou WebP attendu)' });
+  }
   const chemin = `marchands/${m.slug}/themes-logos/${req.params.themeId}-${colonne === 'google_logo_url' ? 'google' : 'apple'}-${Date.now()}.png`;
   const { error: upErr } = await supabase.storage.from('passes')
-    .upload(chemin, req.file.buffer, { contentType: req.file.mimetype, upsert: true });
+    .upload(chemin, png, { contentType: 'image/png', upsert: true });
   if (upErr) return res.status(500).json({ error: `Upload Storage: ${upErr.message}` });
   const { data: { publicUrl } } = supabase.storage.from('passes').getPublicUrl(chemin);
   const { data, error } = await supabase.from('themes_marchand').update({ [colonne]: publicUrl })
