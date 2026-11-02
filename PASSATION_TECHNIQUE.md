@@ -8393,6 +8393,36 @@ plus (audit 06 : ≈ 40 inscriptions et ≈ 41 clients crédités par jour).
 **Décision hors pilotage** (à valider) : le bouton admin « Mettre à jour les cartes iPhone
 maintenant » (moyen de la mise à jour unique au déploiement, réutilisable).
 
+## 15 quaterquadragies sexagies. ROUTINE NPM AUDIT (02/11) : DÉPENDANCES, PUIS NODE 24.22.2
+
+**Diagnostic** (29/10, `npm audit --omit=dev`) : 5 alertes.
+- **body-parser 2.3.0** (grave) — **joignable** : `express.json()` accepte les corps compressés
+  sur les routes publiques. Corrigé en 2.4.0 (mineure).
+- **multer 2.4.0** (grave) — non joignable en pratique : routes admin seules, `fileFilter`
+  synchrone, stockage mémoire. Corrigé en 2.5.0.
+- **qs 6.16.0** (modérée) — non joignable (aucun `stringify`). Corrigé en 6.17.1.
+- **uuid 9.0.1** (modérée, `buf` fourni à v3/v5/v6) — non joignable : `v5` et `v4` appelés sans
+  `buf`. Correction = majeure 14 : **reportée** (dette ci-dessous).
+- **node-cron 3.0.3** (modérée, via son uuid 8) — non joignable (`uuid.v4()` sans `buf`).
+  Correction = majeure 4 : **reportée**.
+- **Node** : 24.22.1 (21/10, publication de sécurité : agent http, dns, tls, permissions, crypto,
+  brotli), puis 24.22.2 (28/10, dernier correctif).
+
+**Feu vert du pilotage (02/11)** : 1) `npm audit fix` sans `--force` ; 2) Node 24.22.2 comme à
+l'étape 20a ; un push séparé par changement (retour arrière simple).
+
+### Étape 1 : dépendances (lockfile seul)
+
+- `package-lock.json` seul (`package.json` inchangé, npm 11.19.0) : body-parser 2.3.0 → 2.4.0,
+  multer 2.4.0 → 2.5.0, qs 6.16.0 → 6.17.1 ; **en plus**, minimatch 10.2.5 → 10.2.6
+  (développement seul, via nodemon : absent de l'image, `npm ci --omit=dev`).
+- `npm audit --omit=dev` après : 2 alertes modérées (uuid, node-cron), toutes deux reportées.
+- **Filet 427/427**, **suite complète 528/528** (Node 24.21.0). **Contre-épreuve** : le commit
+  en production avec ses anciennes versions (`npm ci`, body-parser 2.3.0 vérifié) : 427/427 —
+  aucun comportement couvert ne change.
+- **Hypothèse** : une version mineure ne change pas d'API (semver respecté par ces paquets).
+  **Retour arrière** : revenir au commit précédent (le lockfile seul).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
@@ -8628,6 +8658,16 @@ le dépôt ? Réponse prouvée par deux rejeux locaux et par le projet de test :
   `cle_ecrans.js` s'arrête sur une attente de 30 s (« scanner (tampons) »). Mêmes erreurs
   sur le commit de production, donc antérieures à t43. `caisse_erreurs.js` passe. Non
   examinés plus loin.
+
+### uuid 14 et node-cron 4 (routine npm audit du 02/11, reporté par le pilotage)
+
+Deux alertes modérées **non joignables** restent : uuid 9.0.1 (faille seulement si un `buf` est
+fourni à v3/v5/v6 ; nous n'en passons jamais) et node-cron 3.0.3 (embarque uuid 8, même
+condition). Correction = montées **majeures** (uuid 14, node-cron 4). **Ce qui rendrait la
+faille joignable** : un appel `uuid.v5(nom, espace, buf)` ou équivalent. **À faire un jour** :
+uuid 14 (vérifier que `v5` rend le même identifiant pour ESPACE_VENTES : l'idempotence des
+ventes en dépend) et node-cron 4 (vérifier `cron.schedule` et le fuseau). Revoir à la routine
+mensuelle.
 
 ## 17. DÉCISIONS HORS PILOTAGE
 
