@@ -8452,8 +8452,9 @@ l'étape 20a ; un push séparé par changement (retour arrière simple).
 - Alerte `[adresse] X-Forwarded-For porte 0 adresse(s)` au démarrage local : attendue (pas de
   relais Railway en local).
 
-**À vérifier après déploiement** : une carte iPhone ajoutée puis mise à jour (openssl de
-l'image), comme le dit le Dockerfile. **Hypothèse** : un correctif de Node 24 (même ligne LTS)
+**Poussé** (`71c65ed`, feu vert du pilotage) ; **contrôlé par Yass (02/11)** : déploiement vert,
+`/health` → `v24.22.2`, carte iPhone ajoutée puis mise à jour : **ok**. Routine close ; prochaine
+routine mensuelle : début décembre (uuid 14 et node-cron 4 à revoir, dette §16). **Hypothèse** : un correctif de Node 24 (même ligne LTS)
 ne change pas d'API. **Retour arrière** : revenir au commit `2374f00`.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
