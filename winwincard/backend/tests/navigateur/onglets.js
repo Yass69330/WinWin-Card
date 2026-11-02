@@ -100,7 +100,7 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
       images, ['truetruetrue', 'truetruetrue', 'truetruetrue']);
     const noms = await p.$$eval('#tab-carte .mc-nom', els => els.map(e => e.textContent.trim()));
     const fonds = await p.$$eval('#tab-carte .mc-carte', els => els.map(e => getComputedStyle(e).backgroundColor));
-    const cases = await p.$$eval('#tab-carte .mc-case', els => els.map(e => e.textContent.trim()));
+    const cases = await p.$$eval('#tab-carte .mc-solde', els => els.map(e => e.textContent.trim()));
     await p.locator('#tab-carte').screenshot({ path: path.join(captures, 'f17-1-ma-carte.png') });
     await p.click('#tab-carte [data-choisir]');
     await p.waitForSelector('#tab-carte .mc-form');
@@ -115,10 +115,10 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     const fiche = sql(`SELECT theme_actif->>'etat' FROM marchands WHERE id = '${id}'`);
     await p.click('#mc-arreter');
     await p.waitForFunction(() => !document.querySelector('#tab-carte .mc-etat #mc-arreter'));
-    verifier('navigateur, « Ma carte » : carte standard + 2 thèmes (fond et texte de la case dessinés) ; message d\'ouverture affiché avant activation ; activé → « en cours », plus de choix possible ; arrêt → carte standard ; aucune erreur',
+    verifier('navigateur, « Ma carte » : carte standard + 2 thèmes (fond dessiné ; texte du thème à la place de PROGRESS, comme sur l\'iPhone) ; message d\'ouverture affiché avant activation ; activé → « en cours », plus de choix possible ; arrêt → carte standard ; aucune erreur',
       [noms, fonds, cases, message, /Thème « Ramadan » en cours/.test(etat), boutons, fiche,
        sql(`SELECT theme_actif IS NULL FROM marchands WHERE id = '${id}'`), a.erreurs],
-      [['Carte standard', 'Ramadan', 'Fête nationale'], ['rgb(74, 26, 42)', 'rgb(11, 61, 46)', 'rgb(0, 115, 47)'], ['Ramadan Kareem'],
+      [['Carte standard', 'Ramadan', 'Fête nationale'], ['rgb(74, 26, 42)', 'rgb(11, 61, 46)', 'rgb(0, 115, 47)'], ['PROGRESS', 'Ramadan Kareem', 'PROGRESS'],
        'À l\'ouverture, vos clients reçoivent : « Ramadan Kareem ! Votre carte se met aux couleurs du mois. »', true, 0, 'en_cours', 't', []]);
 
     // 4. Notifications (notifs.js, t42) : la langue change après la construction
@@ -201,6 +201,23 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
        scc.erreurs.length, /Unexpected|SyntaxError|expected/i.test(scc.erreurs[0] || '')],
       [true, 'Onglet momentanément indisponible. Rechargez la page.', 1, true]);
     await scc.contexte.close();
+
+    // 5. Fiche admin, section « Thèmes de carte » : l'aperçu montre la ligne de
+    // l'iPhone (CLIENT à gauche ; à droite, le texte du thème coiffe le solde à
+    // la place de PROGRESS), comme « Ma carte ».
+    const ctxA = await navigateur.newContext({ serviceWorkers: 'block', viewport: { width: 520, height: 1400 } });
+    await ctxA.addInitScript(t => localStorage.setItem('ww_admin_token', t), jwt.sign({ role: 'admin' }, secretJwt, { expiresIn: '1h' }));
+    await ctxA.route('https://logos.exemple/**', r => r.fulfill({ contentType: 'image/png', body: logos[r.request().url().split('/').pop()] || logos['standard.png'] }));
+    const admin = await ctxA.newPage();
+    await admin.goto(urlServeur + '/admin/');
+    await admin.waitForSelector(`.btn-edit[data-id="${id}"]`);
+    await admin.click(`.btn-edit[data-id="${id}"]`);
+    await admin.waitForSelector('#themes-liste .theme-champs');
+    const lignesAdmin = await admin.$$eval('#themes-liste .theme-champs', els => els.map(e => e.innerText.replace(/\s+/g, ' ').trim()));
+    await admin.locator('#section-themes').screenshot({ path: path.join(captures, 'f17-6-admin-themes.png') });
+    verifier('navigateur, fiche admin : aperçu de chaque thème avec CLIENT et, à droite, le texte du thème à la place de PROGRESS (comme l\'iPhone)',
+      lignesAdmin.map(l => l.replace(/\d+ \/ \d+$/, 'n / m')), ['CLIENT Sarah Ramadan Kareem n / m', 'CLIENT Sarah PROGRESS n / m']);
+    await ctxA.close();
     console.log(`captures : ${captures}`);
   } finally {
     await navigateur.close();

@@ -104,7 +104,6 @@
     #tab-carte .mc-champs { display: flex; justify-content: space-between; padding: 12px 16px 0; }
     #tab-carte .mc-champs small { display: block; font-size: 11px; font-weight: 600; letter-spacing: .8px; }
     #tab-carte .mc-champs b { display: block; font-size: 22px; font-weight: 400; margin-top: 1px; }
-    #tab-carte .mc-case { padding: 8px 16px 0; font-size: 15px; }
     #tab-carte .mc-qr { display: block; width: 116px; height: 116px; margin: 16px auto 0; background: #fff; border-radius: 8px; padding: 6px; }
     #tab-carte .mc-form { display: grid; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
     #tab-carte .mc-form .mc-ligne { display: flex; gap: 8px; }
@@ -127,8 +126,9 @@
   }
 
   // La vraie carte : bannière et logo réels (servis par le serveur), couleurs,
-  // nom, prénom + progression, texte de la case, disposés comme dans Wallet.
-  // Libellés CLIENT / PROGRESS : ceux de la carte (en anglais sur toutes les cartes).
+  // nom, prénom + progression, disposés comme dans Wallet. Libellés CLIENT /
+  // PROGRESS : ceux de la carte (en anglais) ; pendant un thème, son texte coiffe
+  // le solde à la place de PROGRESS, comme sur l'iPhone (apple-pass.js).
   function carte(a) {
     const qr = donnees && donnees.qr;
     return `
@@ -141,9 +141,8 @@
           : a.banniere_en_preparation ? `<div class="mc-banniere mc-prepa">${esc(tx('prepa'))}</div>` : ''}
         <div class="mc-champs">
           <div><small style="color:${esc(a.couleur_label)}">CLIENT</small><b>Sarah</b></div>
-          <div style="text-align:right"><small style="color:${esc(a.couleur_label)}">PROGRESS</small><b>${esc(a.rempli)} / ${esc(a.max)}</b></div>
+          <div style="text-align:right"><small class="mc-solde" style="color:${esc(a.couleur_label)}">${esc(a.texte_case || 'PROGRESS')}</small><b>${esc(a.rempli)} / ${esc(a.max)}</b></div>
         </div>
-        ${a.texte_case ? `<div class="mc-case">${esc(a.texte_case)}</div>` : ''}
         ${qr ? `<img class="mc-qr" src="${esc(qr)}" alt="">` : ''}
       </div>`;
   }

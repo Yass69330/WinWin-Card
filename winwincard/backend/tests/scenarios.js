@@ -2541,12 +2541,13 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       const pj = JSON.parse(f['pass.json']);
       const dore = applePass.buildPassJson({ client: { prenom: 'Sarah', stored_value: 10 }, marchand: enCours, serialNumber: 's' });
       const std = applePass.buildPassJson({ client: { prenom: 'Sarah', stored_value: 3 }, marchand: base, serialNumber: 's' });
-      verifier('entrée 1 (carte Apple) : fond, textes, libellés du thème ; texte du thème dans la case sous le prénom ; bannière peinte sur le fond du thème ; icône à la couleur STANDARD ; prénom et solde inchangés',
-        [pj.backgroundColor, pj.foregroundColor, pj.labelColor, JSON.stringify(pj.storeCard.auxiliaryFields), await pixel(f['strip@2x.png']),
+      verifier('entrée 1 (carte Apple) : fond, textes, libellés du thème ; texte du thème à la place de PROGRESS, CLIENT gardé, aucun champ auxiliaire ; bannière peinte sur le fond du thème ; icône à la couleur STANDARD ; prénom et solde inchangés',
+        [pj.backgroundColor, pj.foregroundColor, pj.labelColor, pj.storeCard.secondaryFields.map(x => x.label).join('|'), JSON.stringify(pj.storeCard.auxiliaryFields), await pixel(f['strip@2x.png']),
          f['icon.png'].equals(applePass.createSolidPng(29, 29, 17, 17, 17)), pj.storeCard.secondaryFields.map(x => x.value).join('|')],
-        ['rgb(11, 61, 46)', 'rgb(255, 255, 255)', 'rgb(212, 175, 55)', JSON.stringify([{ key: 'theme', label: '', value: 'Ramadan Kareem' }]), '#0b3d2e', true, 'Sarah|3 / 10']);
-      verifier('… récompense atteinte pendant le thème : le doré (ici la couleur de récompense du marchand) garde la priorité ; hors thème : aucune case, couleurs standard',
-        [dore.backgroundColor, std.backgroundColor, std.storeCard.auxiliaryFields.length], ['rgb(170, 0, 0)', 'rgb(17, 17, 17)', 0]);
+        ['rgb(11, 61, 46)', 'rgb(255, 255, 255)', 'rgb(212, 175, 55)', 'CLIENT|Ramadan Kareem', '[]', '#0b3d2e', true, 'Sarah|3 / 10']);
+      verifier('… récompense atteinte pendant le thème : le doré (ici la couleur de récompense du marchand) et le libellé REWARD gardent la priorité ; hors thème : PROGRESS, couleurs standard',
+        [dore.backgroundColor, dore.storeCard.secondaryFields[1].label, std.backgroundColor, std.storeCard.secondaryFields[1].label, std.storeCard.auxiliaryFields.length],
+        ['rgb(170, 0, 0)', '🎉 REWARD', 'rgb(17, 17, 17)', 'PROGRESS', 0]);
 
       // ── Point d'entrée 2 : les bannières (cache) ──
       const cleStd = stripCache.storageKey({ ...base, strip_mode: 'stamps' }, 3, 'strip2x');

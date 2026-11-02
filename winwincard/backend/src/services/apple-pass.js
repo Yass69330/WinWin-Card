@@ -353,18 +353,17 @@ function buildPassJson({ client, marchand, serialNumber, passNotification }) {
           value: client.prenom,
         },
         {
+          // f17 (décision du pilotage, 03/11) : pendant un thème, son texte
+          // coiffe le solde à la place de PROGRESS. Sur une storeCard à bannière,
+          // iOS met secondaires et auxiliaires sur UNE ligne : aucune case sous
+          // le prénom. La récompense garde son libellé (le doré prime).
           key:           'points',
-          label:         doré ? '🎉 REWARD' : 'PROGRESS',
+          label:         doré ? '🎉 REWARD' : (marchand._theme && marchand._theme.texte_case) || 'PROGRESS',
           value:         `${displayValue} / ${displayMax}`,
           textAlignment: 'PKTextAlignmentRight',
         },
       ],
-      // f17 : texte court du thème, dans la case sous le prénom. Vide hors thème.
-      auxiliaryFields: marchand._theme && marchand._theme.texte_case ? [{
-        key:   'theme',
-        label: '',
-        value: marchand._theme.texte_case,
-      }] : [],
+      auxiliaryFields: [],
       backFields: [
         {
           // Toujours présent même vide — iOS compare old/new value et déclenche

@@ -8457,6 +8457,61 @@ l'étape 20a ; un push séparé par changement (retour arrière simple).
 routine mensuelle : début décembre (uuid 14 et node-cron 4 à revoir, dette §16). **Hypothèse** : un correctif de Node 24 (même ligne LTS)
 ne change pas d'API. **Retour arrière** : revenir au commit `2374f00`.
 
+## 15 quinquadragies sexagies. f17 FINITION ET MISE EN PRODUCTION (03/11)
+
+**Diagnostic** (rien codé, validé par le pilotage le 03/11) :
+- **Case** : sur une `storeCard` à bannière, iOS met les champs secondaires ET auxiliaires sur
+  **une seule ligne** (4 au plus) : le texte du thème (`auxiliaryFields`) devenait une 3e case à
+  côté de CLIENT et PROGRESS ; les deux aperçus le dessinaient dessous. Aucune place « sous le
+  prénom » n'existe sur iPhone.
+- **Logo de thème** : même bucket Supabase (`passes`) que les autres logos, lien public
+  horodaté ; seul le geste diffère (envoi dans l'admin). Le vrai risque de volume est commun
+  aux 3 logos : `generateApplePass` retélécharge le logo **3 fois par carte**, sans cache, sans
+  contrôle de taille ni de format (5 Mo, JPEG/WebP rangés en `.png`). Repli en cas d'échec : un
+  **carré de couleur**, pas le logo d'origine (silencieux).
+- **Jeton** : le message d'ouverture partait tel quel ; la convention du dépôt est `{nom}`.
+- **Sécurité** : isolation par marchand, Pro+ et interrupteur, dates et contenu contrôlés côté
+  serveur : en place. Manquent : limite des ouvertures (martèlement, file Apple commune) et
+  propriétaire en base de la bascule (double bascule possible au redéploiement).
+- **500 porteurs** : ≈ 675 pushes Apple (1,35 appareil par carte) à 30 par 10 s ≈ 4 min, puis
+  Google ≤ 1 min 40 : 4 à 6 min, file vide. Invariant « la caisse prime » : tenu (scan sans
+  requête de plus, mises à jour après la réponse, `scan.js:224-225`).
+
+**Décisions du pilotage (03/11)** :
+1. Le texte du thème **remplace le libellé PROGRESS** (CLIENT gardé), au-dessus du solde ;
+   aperçus alignés ; test sur un vrai iPhone avant de figer.
+2. **Cache des logos + normalisation**, pour les 3 logos ; pas de lien collé ; sans migration ;
+   contrôle à l'œil d'une carte après ré-encodage.
+3. Table **`themes_gabarits`** (migration 071), bouton admin « Appliquer un gabarit » (copie
+   dans le marchand) ; jeton **`{nom}`** = `pass_display_name`, repli `nom`, remplacé à la
+   copie ; message FR + EN selon la langue du marchand ; deux préconçus (Ramadan, Noël).
+4. **Deux garde-fous** : verrou en base sur la bascule ; **24 h** entre deux ouvertures (409),
+   l'arrêt reste libre. **Reporté** : plafond global Google. **Abandonné** : fermeture si le
+   Pro+ est perdu.
+
+**Découpage** (un push par morceau, vert montré avant chacun) :
+1. Case sur PROGRESS + deux aperçus (sans migration).
+2. Cache des logos + normalisation (sans migration).
+3. Migration 071 + gabarits (071 exécutée AVANT le push).
+4. Migration 072 + verrou de bascule + délai de 24 h (072 exécutée AVANT le push).
+
+### Morceau 1 : texte du thème à la place de PROGRESS (local)
+
+- `apple-pass.js` : libellé du solde = `texte_case` du thème en cours, sinon `PROGRESS` ;
+  `🎉 REWARD` garde la priorité (le doré prime, décision 2 du 14/10) ; `auxiliaryFields`
+  toujours vide.
+- `ma-carte.js` (`?v=2`) et aperçu de la fiche admin : la ligne de l'iPhone, CLIENT à gauche,
+  texte du thème (sinon PROGRESS) au-dessus du solde à droite ; plus de ligne dessous. Aide du
+  champ admin mise à jour.
+- Google : inchangé (texte du thème dans un module de la classe).
+- **Filet 427/427** ; **suite complète 529/529** (+1 : aperçu de la fiche admin, capture
+  `f17-6-admin-themes.png`). **Contre-épreuve** sur `71c65ed` : 426/427, seul KO le contrôle
+  « texte à la place de PROGRESS, aucun champ auxiliaire ».
+- **Hypothèses** : iOS affiche un libellé long (40 car. au plus) sans le couper dans une
+  colonne à droite, avec emoji ; il peut le mettre en majuscules. **À vérifier sur un vrai
+  iPhone avant de figer.** Le changement de libellé ne déclenche pas d'alerte (pas de
+  `changeMessage`).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)

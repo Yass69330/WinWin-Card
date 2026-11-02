@@ -482,7 +482,7 @@
             <label>Texte <input type="color" id="th-texte" value="#ffffff"></label>
             <label>Libellés <input type="color" id="th-label" value="#d4af37"></label>
           </div>
-          <input id="th-case" placeholder="Texte sous le prénom (40 car. max, facultatif)" maxlength="40">
+          <input id="th-case" placeholder="Texte au-dessus du solde, à la place de PROGRESS (40 car. max, facultatif)" maxlength="40">
           <textarea id="th-message" placeholder="Message d'ouverture (150 car. max)" maxlength="150" rows="2"></textarea>
           <button type="button" class="btn btn-outline btn-sm" id="btn-theme-creer" style="align-self:flex-start">Créer le thème</button>
           <div id="theme-statut" class="field-hint"></div>
@@ -1269,7 +1269,10 @@ async function chargerThemes() {
         <div style="width:150px;flex-shrink:0;border-radius:8px;overflow:hidden;background:${esc(a.couleur_fond || th.couleur_fond)};color:${esc(a.couleur_texte || '#fff')};font-size:11px">
           <div style="padding:5px 7px;display:flex;gap:5px;align-items:center">${a.logo_url ? `<img src="${esc(a.logo_url)}" style="max-height:16px;max-width:60px">` : ''}<b>${esc(a.nom || '')}</b></div>
           ${a.banniere ? `<img src="${esc(a.banniere)}" style="display:block;width:100%">` : ''}
-          <div style="padding:4px 7px 6px">${esc(a.texte_case || '')}</div>
+          <div class="theme-champs" style="display:flex;justify-content:space-between;padding:4px 7px 6px">
+            <div><div style="font-size:8px;font-weight:600;color:${esc(a.couleur_label || '#a0a0b0')}">CLIENT</div>Sarah</div>
+            <div style="text-align:right"><div class="theme-solde" style="font-size:8px;font-weight:600;color:${esc(a.couleur_label || '#a0a0b0')}">${esc(a.texte_case || 'PROGRESS')}</div>${esc(a.rempli ?? '')} / ${esc(a.max ?? '')}</div>
+          </div>
         </div>
         <div style="flex:1;min-width:0;font-size:12px">
           <div style="font-weight:600;font-size:13px">${esc(th.nom)}${choisi ? ' <span style="color:var(--warning)">(choisi)</span>' : ''}</div>
