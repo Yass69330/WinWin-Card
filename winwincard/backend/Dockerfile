@@ -3,7 +3,7 @@
 # Railway l'utilise d'office : Dockerfile à la racine du dossier source
 # (winwincard/backend), journal « Using detected Dockerfile! ».
 #
-# Node 24.21.0 EXACT (étape 20a, 13/10/2026 ; avant : 24.10.0), image officielle
+# Node 24.22.2 EXACT (routine npm audit, 02/11/2026 ; avant : 24.21.0, étape 20a), image officielle
 # épinglée par empreinte : rien ne change sans commit, ni Node ni le système.
 # Mettre à jour = changer cette ligne, `engines` de package.json et .nvmrc (le
 # filet refuse de tourner sous une autre version, tests/lancer.js), puis vérifier
@@ -14,7 +14,7 @@
 # « slim » ne l'a pas ; sans lui, plus aucune carte iPhone ne se génère, et le
 # healthcheck /health/db ne le verrait pas. Plus lourde, mais rien n'est
 # téléchargé à la construction en dehors des paquets npm.
-FROM node:24.21.0-trixie@sha256:1278a37eb510ec1606fba0e80f554bcc941ae0b44f35ae373c4822ae7717c64d
+FROM node:24.22.2-trixie@sha256:8c761eca2bf7eec965f946cf47b8090143cb41f45f2f8699af0cc0298d2d2d19
 
 # Posé par Nixpacks sans être écrit nulle part : NODE_ENV=production choisit le
 # serveur de notifications Apple de production (services/apns.js). Sans lui, les

@@ -8423,6 +8423,39 @@ l'étape 20a ; un push séparé par changement (retour arrière simple).
 - **Hypothèse** : une version mineure ne change pas d'API (semver respecté par ces paquets).
   **Retour arrière** : revenir au commit précédent (le lockfile seul).
 
+### Étape 2 : Node 24.22.2 (comme l'étape 20a)
+
+Étape 1 poussée (`2374f00`) ; **déploiement vert** confirmé par Yass (02/11).
+
+- `Dockerfile` : `node:24.22.2-trixie@sha256:8c761eca2bf7eec965f946cf47b8090143cb41f45f2f8699af0cc0298d2d2d19`
+  (avant : `24.21.0`, `sha256:1278a37e…`, empreinte lue au registre Docker Hub) ; commentaire
+  d'en-tête mis à jour.
+- `package.json` `engines.node`, `package-lock.json` (même champ, racine) et `.nvmrc` :
+  `24.22.2`. Aucune autre ligne.
+- Node du filet : binaire officiel 24.22.2 (somme SHA256 vérifiée contre SHASUMS256.txt) dans
+  `~/.cache/winwin-filet/node-v24.22.2-linux-x64`. Commande du filet :
+  `PATH=~/.cache/winwin-filet/node-v24.22.2-linux-x64/bin:$PATH npm test`.
+
+**Preuves** :
+- Filet **427/427** (« Node v24.22.2 (celui de la production) ») ; suite complète **528/528**.
+- Filet sous 24.21.0 : **refusé**, code 2. Même code sous 24.21.0 (étape 1) : 427/427 ; seul
+  Node change entre les deux.
+- **Image construite en local** (Docker 29.8.2), même empreinte : `node v24.22.2`,
+  `npm 11.19.1`, **openssl du système 3.5.7** (inchangé : c'est lui qui signe les cartes ;
+  la 3.5.9 annoncée par nodejs.org est celle intégrée à Node, pas celle de l'image) ; sharp OK
+  (libvips 8.18.7), resvg OK ; **signature des cartes** : la commande d'`apple-pass.js`
+  (smime -sign -binary -md sha256 -outform DER) avec des certificats de TEST : « Verification
+  successful » ; le serveur démarre (« Workflows planifiés ») et `/health` répond 200
+  (`"node":"v24.22.2"`). Le conteneur de session passe par un proxy : la construction locale
+  a utilisé une **copie de test** du Dockerfile qui ajoute seulement le certificat du proxy
+  (jamais commitée ; Railway n'en a pas besoin).
+- Alerte `[adresse] X-Forwarded-For porte 0 adresse(s)` au démarrage local : attendue (pas de
+  relais Railway en local).
+
+**À vérifier après déploiement** : une carte iPhone ajoutée puis mise à jour (openssl de
+l'image), comme le dit le Dockerfile. **Hypothèse** : un correctif de Node 24 (même ligne LTS)
+ne change pas d'API. **Retour arrière** : revenir au commit `2374f00`.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
