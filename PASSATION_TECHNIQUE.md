@@ -8540,6 +8540,50 @@ par iOS dans un libellé) : requête de lecture donnée à Yass.
   tailles) — **à confirmer à l'œil sur une carte après déploiement** ; chaque forme télécharge
   une fois (3 téléchargements par adresse et par 10 min au plus, au lieu de 3 par carte).
 
+**Morceau 2 poussé** (`b9f04dd`, feu vert du pilotage, 03/11).
+
+**Emoji lune** : vérification faite par Yass (03/11), « on avance ». Le code garde l'emoji de
+bout en bout (saisie, base, libellé de la carte) : prouvé par le filet (section 28) et le test
+navigateur (emoji tapés au clavier).
+
+### Morceau 3 : gabarits (migration 071), {nom}, édition d'un thème, strip custom (local)
+
+**Ajouts du pilotage (03/11)** : 3e gabarit « Fête Nationale » (générique, sans drapeau :
+Émirats le 2/12, France le 14/07) ; notif éditable dans l'admin (défaut du gabarit, modifiable) ;
+édition d'un thème existant sans supprimer + recréer ; emoji acceptés à la saisie ; **strip
+custom gardée telle quelle sous un thème**.
+
+- **Strip custom, constat** : `appliquerTheme` mettait `strip_custom_background_url` à `null`
+  (la bannière était redessinée sur le fond du thème, sans le fond perso). **Il y avait donc à
+  coder.** Les bannières à image fixe (`images_tiers`, `image_strip_url`) étaient déjà gardées.
+- **Migration 071** (`database/migration_071_themes_gabarits.sql`) : table `themes_gabarits`
+  (RLS, `service_role` seul), 3 préconçus insérés s'ils manquent (Ramadan, Noël, Fête
+  Nationale), textes de case et messages FR + EN. **À exécuter AVANT le push.**
+- **`themes.js`** : `remplacerNom` ({nom} = `pass_display_name`, sinon `nom`), `depuisGabarit`
+  (langue du marchand : `fr`, sinon `en`), `ficheBanniere` : pour un marchand Pro+ à fond de
+  bannière perso, la bannière dessinée est celle de la fiche standard (même fichier que hors
+  thème, aucun calcul) ; la carte prend quand même fond, textes, logo et texte du thème.
+- **`strip-cache.js`** : les 3 entrées (`getOrGenerate`, `lireCache`, `getPublicUrl`) passent
+  par `ficheBanniere`.
+- **Routes admin** : `GET /api/admin/themes-gabarits` ; `POST
+  /api/admin/marchands/:id/themes/gabarit {gabarit_id}` (copie ; 409 si déjà appliqué, 404
+  inconnu) ; création et modification remplacent {nom} avant le contrôle des longueurs.
+- **Fiche admin** : bloc « Appliquer un gabarit » ; bouton **« Modifier »** sur chaque thème
+  (nom, 3 couleurs, texte de la case, message ; les logos gardent leurs boutons) ; un thème
+  choisi par le marchand reste non modifiable (409, message clair).
+- **Filet 445/445** (+10, section 28) ; **suite complète 548/548** (+1 : gabarit appliqué et
+  thème modifié depuis la fiche, emoji tapés ; capture `f17-7-admin-gabarit-edition.png`).
+  **Contre-épreuve** sur `b9f04dd` avec la 071 en base : tout passe jusqu'à la section 28, qui
+  s'arrête (route des gabarits absente) — la migration seule ne casse rien.
+- **Hypothèses et limites** : {nom} est remplacé à l'écriture (un marchand renommé ensuite garde
+  l'ancien nom dans ses thèmes déjà copiés) ; un gabarit modifié dans Supabase ne change pas les
+  thèmes déjà copiés ; strip custom = condition « fond perso + Pro+ », comme la lecture du fond
+  (`_fetchCustomBg`) ; la longueur de 40 caractères est comptée comme le navigateur (un emoji
+  compte pour 2).
+
+**Décision hors pilotage** (à valider) : le libellé de la notif dans l'admin accepte `{nom}` à
+la création et à la modification à la main, pas seulement à la copie d'un gabarit.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)

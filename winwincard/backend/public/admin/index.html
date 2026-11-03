@@ -474,6 +474,15 @@
         <div class="field-hint" style="margin-bottom:8px">Enregistré avec la fiche. Décocher pendant un thème en cours le termine (retour silencieux à la carte standard). Préparez les thèmes avant d'ouvrir : leurs bannières sont calculées ici, jamais chez le marchand.</div>
         <div id="themes-etat" class="field-hint" style="margin-bottom:8px"></div>
         <div id="themes-liste" style="display:flex;flex-direction:column;gap:10px"></div>
+        <div id="theme-gabarit" style="background:var(--surface2);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;margin-top:10px">
+          <div style="font-weight:600;font-size:13px">Appliquer un gabarit</div>
+          <div class="field-hint">Copie un thème préconçu dans les thèmes de ce marchand, dans sa langue ; {nom} devient le nom affiché sur sa carte. Ajoutez ensuite le logo ; tout reste modifiable.</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <select id="th-gabarit" style="flex:1;min-width:160px"></select>
+            <button type="button" class="btn btn-outline btn-sm" id="btn-theme-gabarit">Appliquer un gabarit</button>
+          </div>
+          <div id="theme-gabarit-statut" class="field-hint"></div>
+        </div>
         <div id="theme-form" style="background:var(--surface2);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;margin-top:10px">
           <div style="font-weight:600;font-size:13px">Nouveau thème</div>
           <input id="th-nom" placeholder="Nom (ex. Ramadan)" maxlength="40">
@@ -483,7 +492,7 @@
             <label>Libellés <input type="color" id="th-label" value="#d4af37"></label>
           </div>
           <input id="th-case" placeholder="Texte au-dessus du solde, à la place de PROGRESS (40 car. max, facultatif)" maxlength="40">
-          <textarea id="th-message" placeholder="Message d'ouverture (150 car. max)" maxlength="150" rows="2"></textarea>
+          <textarea id="th-message" placeholder="Message d'ouverture (150 car. max ; {nom} = nom affiché sur la carte)" maxlength="150" rows="2"></textarea>
           <button type="button" class="btn btn-outline btn-sm" id="btn-theme-creer" style="align-self:flex-start">Créer le thème</button>
           <div id="theme-statut" class="field-hint"></div>
         </div>
@@ -1279,10 +1288,33 @@ async function chargerThemes() {
           <div style="color:var(--muted);margin:2px 0 6px">« ${esc(th.message_ouverture)} »</div>
           <label class="btn btn-ghost btn-sm" style="cursor:pointer">Logo Apple<input type="file" accept="image/*" data-logo="apple" hidden ${choisi ? 'disabled' : ''}></label>
           <label class="btn btn-ghost btn-sm" style="cursor:pointer">Logo Google<input type="file" accept="image/*" data-logo="google" hidden ${choisi ? 'disabled' : ''}></label>
+          <button type="button" class="btn btn-ghost btn-sm" data-modifier="1" ${choisi ? 'disabled' : ''}>Modifier</button>
           <button type="button" class="btn btn-ghost btn-sm" data-suppr="1" ${choisi ? 'disabled' : ''}>Supprimer</button>
+          <div class="theme-edition" style="display:none;flex-direction:column;gap:6px;margin-top:8px">
+            <input data-champ="nom" maxlength="40" value="${esc(th.nom)}" placeholder="Nom">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;color:var(--muted)">
+              <label>Fond <input type="color" data-champ="couleur_fond" value="${esc(th.couleur_fond)}"></label>
+              <label>Texte <input type="color" data-champ="couleur_texte" value="${esc(th.couleur_texte || '#ffffff')}"></label>
+              <label>Libellés <input type="color" data-champ="couleur_label" value="${esc(th.couleur_label || '#a0a0b0')}"></label>
+            </div>
+            <input data-champ="texte_case" maxlength="40" value="${esc(th.texte_case || '')}" placeholder="Texte au-dessus du solde, à la place de PROGRESS (facultatif)">
+            <textarea data-champ="message_ouverture" maxlength="150" rows="2" placeholder="Message d'ouverture ({nom} = nom affiché sur la carte)">${esc(th.message_ouverture)}</textarea>
+            <button type="button" class="btn btn-outline btn-sm" data-enregistrer="1" style="align-self:flex-start">Enregistrer</button>
+          </div>
           <div class="theme-ligne-statut field-hint"></div>
         </div>`;
       const statut = div.querySelector('.theme-ligne-statut');
+      const edition = div.querySelector('.theme-edition');
+      div.querySelector('[data-modifier]').addEventListener('click', () => { edition.style.display = edition.style.display === 'none' ? 'flex' : 'none'; });
+      div.querySelector('[data-enregistrer]').addEventListener('click', async () => {
+        const corps = {};
+        edition.querySelectorAll('[data-champ]').forEach(c => { corps[c.dataset.champ] = c.value; });
+        statut.textContent = 'Enregistrement…';
+        const res = await api(`/api/admin/marchands/${S.editId}/themes/${th.id}`, { method: 'PATCH', body: JSON.stringify(corps) });
+        const r = await res.json().catch(() => ({}));
+        if (!res.ok) { statut.textContent = r.error === 'theme_choisi' ? 'Thème choisi par le marchand : il ne se modifie pas.' : (r.error || 'Erreur'); return; }
+        chargerThemes();
+      });
       div.querySelectorAll('input[data-logo]').forEach(inp => inp.addEventListener('change', async () => {
         if (!inp.files[0]) return;
         statut.textContent = 'Envoi…';
@@ -1304,6 +1336,27 @@ async function chargerThemes() {
     }
   } catch (e) { liste.innerHTML = ''; etat.textContent = e.message; }
 }
+// Gabarits partagés (migration 071) : chargés une fois par ouverture de fiche.
+async function chargerGabarits() {
+  const sel = document.getElementById('th-gabarit');
+  try {
+    const res = await api('/api/admin/themes-gabarits');
+    const liste = await res.json();
+    if (!res.ok) throw new Error(liste.error || 'Erreur');
+    sel.innerHTML = liste.map(g => `<option value="${esc(g.id)}">${esc(g.nom)}</option>`).join('');
+  } catch (e) { sel.innerHTML = ''; document.getElementById('theme-gabarit-statut').textContent = e.message; }
+}
+document.getElementById('btn-theme-gabarit').addEventListener('click', async () => {
+  const statut = document.getElementById('theme-gabarit-statut');
+  const gabarit_id = document.getElementById('th-gabarit').value;
+  if (!gabarit_id) return;
+  statut.textContent = '';
+  const res = await api(`/api/admin/marchands/${S.editId}/themes/gabarit`, { method: 'POST', body: JSON.stringify({ gabarit_id }) });
+  const r = await res.json().catch(() => ({}));
+  if (!res.ok) { statut.textContent = r.error || 'Erreur'; return; }
+  statut.textContent = `✓ Thème « ${r.nom} » ajouté. Ajoutez son logo ci-dessus.`;
+  chargerThemes();
+});
 document.getElementById('btn-theme-creer').addEventListener('click', async () => {
   const statut = document.getElementById('theme-statut');
   statut.textContent = '';
@@ -1582,6 +1635,7 @@ function fillForm(m) {
     document.getElementById('section-themes').style.display = '';
     document.getElementById('f-themes-actifs').checked = m.themes_actifs === true;
     chargerThemes();
+    chargerGabarits();
   }
   // API des caisses (tous forfaits) : réglages en fils, affichés en AED.
   document.getElementById('section-api').style.display = '';

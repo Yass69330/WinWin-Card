@@ -209,6 +209,8 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     await ctxA.addInitScript(t => localStorage.setItem('ww_admin_token', t), jwt.sign({ role: 'admin' }, secretJwt, { expiresIn: '1h' }));
     await ctxA.route('https://logos.exemple/**', r => r.fulfill({ contentType: 'image/png', body: logos[r.request().url().split('/').pop()] || logos['standard.png'] }));
     const admin = await ctxA.newPage();
+    const erreursAdmin = [];
+    admin.on('pageerror', e => erreursAdmin.push(`page : ${e.message}`));
     await admin.goto(urlServeur + '/admin/');
     await admin.waitForSelector(`.btn-edit[data-id="${id}"]`);
     await admin.click(`.btn-edit[data-id="${id}"]`);
@@ -217,6 +219,24 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     await admin.locator('#section-themes').screenshot({ path: path.join(captures, 'f17-6-admin-themes.png') });
     verifier('navigateur, fiche admin : aperçu de chaque thème avec CLIENT et, à droite, le texte du thème à la place de PROGRESS (comme l\'iPhone)',
       lignesAdmin.map(l => l.replace(/\d+ \/ \d+$/, 'n / m')), ['CLIENT Sarah Ramadan Kareem n / m', 'CLIENT Sarah PROGRESS n / m']);
+    // 6. Gabarit appliqué depuis la fiche, puis thème modifié en place, emoji tapés au clavier.
+    await admin.waitForFunction(() => document.querySelectorAll('#th-gabarit option').length === 3);
+    const optionsGab = await admin.$$eval('#th-gabarit option', os => os.map(o => o.textContent));
+    await admin.selectOption('#th-gabarit', { label: 'Noël' });
+    await admin.click('#btn-theme-gabarit');
+    await admin.waitForFunction(() => document.querySelectorAll('#themes-liste .theme-champs').length === 3);
+    const ligneNoel = admin.locator('#themes-liste > div', { hasText: 'Noël' });
+    await ligneNoel.locator('[data-modifier]').click();
+    await ligneNoel.locator('[data-champ="texte_case"]').fill('Joyeux Noël 🎅🎄');
+    await ligneNoel.locator('[data-champ="message_ouverture"]').fill('{nom} fête Noël avec vous ✨');
+    await ligneNoel.locator('[data-enregistrer]').click();
+    await admin.waitForFunction(() => /Joyeux Noël/.test(document.querySelector('#themes-liste').innerText));
+    await admin.locator('#section-themes').screenshot({ path: path.join(captures, 'f17-7-admin-gabarit-edition.png') });
+    const nomCarte = sql(`SELECT coalesce(pass_display_name, nom) FROM marchands WHERE id = '${id}'`);
+    verifier('navigateur, fiche admin : 3 gabarits proposés ; « Appliquer un gabarit » ajoute Noël ; « Modifier » change texte et message en place, emoji tapés gardés, {nom} remplacé',
+      [optionsGab, sql(`SELECT texte_case || '|' || message_ouverture FROM themes_marchand WHERE marchand_id = '${id}' AND nom = 'Noël'`), erreursAdmin],
+      [['Ramadan', 'Noël', 'Fête Nationale'], `Joyeux Noël 🎅🎄|${nomCarte} fête Noël avec vous ✨`, []]);
+    sql(`DELETE FROM themes_marchand WHERE marchand_id = '${id}' AND nom = 'Noël'`);
     await ctxA.close();
     console.log(`captures : ${captures}`);
   } finally {

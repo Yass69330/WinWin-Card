@@ -71,13 +71,48 @@ function appliquerTheme(marchand) {
   if (t.couleur_label) m.couleur_label = t.couleur_label;
   if (t.logo_url) m.logo_url = t.logo_url;
   if (t.google_logo_url || t.logo_url) m.google_logo_url = t.google_logo_url || t.logo_url;
-  for (const c of COULEURS_BANNIERE) m[c] = null;
-  // Fond personnalisé de la bannière (Pro+) : il recouvrirait le fond du thème.
-  m.strip_custom_background_url = null;
+  // Fond personnalisé de la bannière (Pro+, « strip custom ») : la bannière du
+  // marchand reste TELLE QUELLE sous un thème, même si elle ne va pas avec le
+  // fond du thème (décision du pilotage, 03/11). strip-cache dessine alors la
+  // bannière de la fiche standard (même fichier que hors thème, aucun calcul).
+  const banniereStandard = aBanniereCustom(marchand);
+  if (!banniereStandard) for (const c of COULEURS_BANNIERE) m[c] = null;
   // Le doré de la récompense garde la priorité (décision 2) : couleur_fond_reward,
   // couleur_texte_reward et logo_reward_url ne sont pas touchés.
-  m._theme = { id: t.id, nom: t.nom, texte_case: t.texte_case || null, empreinte: empreinte(t) };
+  m._theme = { id: t.id, nom: t.nom, texte_case: t.texte_case || null, empreinte: empreinte(t),
+    ...(banniereStandard ? { ficheStandard: marchand } : {}) };
   return m;
+}
+
+// Même condition que la lecture du fond personnalisé (strip-cache, _fetchCustomBg).
+const aBanniereCustom = m => !!m.strip_custom_background_url && m.forfait === 'pro_plus';
+
+// Fiche dont la bannière doit être dessinée : celle du thème, sauf « strip
+// custom » (fiche standard). Appelée par strip-cache après appliquerTheme.
+function ficheBanniere(m) {
+  return m && m._theme && m._theme.ficheStandard ? m._theme.ficheStandard : m;
+}
+
+// ── Gabarits partagés (migration 071) ──────────────────────────────────────
+// {nom} = le nom affiché sur la carte (pass_display_name, sinon nom), remplacé
+// à l'écriture (copie d'un gabarit, création ou modification d'un thème) : le
+// thème du marchand porte le texte final, envoyé tel quel.
+function remplacerNom(texte, marchand) {
+  if (typeof texte !== 'string') return texte;
+  const nom = (marchand && (marchand.pass_display_name || marchand.nom)) || '';
+  return texte.split('{nom}').join(nom);
+}
+
+// Thème (champs de themes_marchand, à valider par validerTheme) tiré d'un
+// gabarit, dans la langue du marchand (fr, sinon en).
+function depuisGabarit(g, marchand) {
+  const fr = marchand && marchand.langue === 'fr';
+  return {
+    nom: g.nom,
+    couleur_fond: g.couleur_fond, couleur_texte: g.couleur_texte || null, couleur_label: g.couleur_label || null,
+    texte_case: remplacerNom((fr ? g.texte_case_fr : g.texte_case_en) || null, marchand),
+    message_ouverture: remplacerNom(fr ? g.message_fr : g.message_en, marchand),
+  };
 }
 
 // Fiche habillée d'un thème donné (aperçu « Ma carte », avant activation).
@@ -491,6 +526,6 @@ function _pourTests({ envoyeurs: e, config: c, attendre: a } = {}) {
 }
 
 module.exports = {
-  appliquerTheme, avecTheme, apercu, preparerApercus, dossierCourant, validerTheme, validerDates, aujourdhui,
+  appliquerTheme, avecTheme, ficheBanniere, remplacerNom, depuisGabarit, apercu, preparerApercus, dossierCourant, validerTheme, validerDates, aujourdhui,
   lancer, ouvrir, fermer, passage, planifierReprise, _pourTests,
 };

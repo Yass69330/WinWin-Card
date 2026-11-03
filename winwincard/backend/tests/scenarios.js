@@ -2850,6 +2850,94 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     fs.rmSync(dossierC, { recursive: true, force: true });
   }
 
+  titre('28. f17, morceau 3 : gabarits de thèmes (migration 071), {nom}, édition, emoji, strip custom (03/11)');
+  {
+    const path = require('path'), fs = require('fs');
+    sql(fs.readFileSync(path.join(__dirname, '..', 'database', 'migration_071_themes_gabarits.sql'), 'utf8'));
+    verifier('migration 071 rejouée : contrôle « true, true, 3, true » ; les 3 préconçus une seule fois',
+      [sql(`SELECT has_table_privilege('service_role', 'public.themes_gabarits', 'INSERT') AND NOT has_table_privilege('anon', 'public.themes_gabarits', 'SELECT'),
+              (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.themes_gabarits'::regclass),
+              (SELECT count(*) FROM themes_gabarits WHERE nom IN ('Ramadan', 'Noël', 'Fête Nationale')),
+              (SELECT texte_case_fr FROM themes_gabarits WHERE nom = 'Ramadan') = 'Ramadan Mubarak 🌙'`), sql(`SELECT count(*) FROM themes_gabarits`)],
+      ['t|t|3|t', '3']);
+    const MFR = 'e3710000-0000-4000-8000-000000000001', MEN = 'e3710000-0000-4000-8000-000000000002';
+    sql(`INSERT INTO marchands (id, nom, slug, langue, forfait, type_programme, max_value, display_max_value, pass_display_name)
+         VALUES ('${MFR}', 'Filet Gabarit SARL', 'filet-gabarit-fr', 'fr', 'pro_plus', 'stamps', 10, 10, 'Café Lune'),
+                ('${MEN}', 'Filet Gabarit EN', 'filet-gabarit-en', 'en', 'pro_plus', 'stamps', 10, 10, NULL)`);
+    const liste = await api('GET', '/api/admin/themes-gabarits', jetonAdmin);
+    const id = nom => liste.corps.find(g => g.nom === nom).id;
+    verifier('GET /api/admin/themes-gabarits : les 3 préconçus, dans l\'ordre ; refusé sans jeton admin',
+      [liste.statut, liste.corps.map(g => g.nom), (await api('GET', '/api/admin/themes-gabarits')).statut],
+      [200, ['Ramadan', 'Noël', 'Fête Nationale'], 401]);
+    const frR = await api('POST', `/api/admin/marchands/${MFR}/themes/gabarit`, jetonAdmin, { gabarit_id: id('Ramadan') });
+    const frN = await api('POST', `/api/admin/marchands/${MFR}/themes/gabarit`, jetonAdmin, { gabarit_id: id('Noël') });
+    const enN = await api('POST', `/api/admin/marchands/${MEN}/themes/gabarit`, jetonAdmin, { gabarit_id: id('Noël') });
+    const enF = await api('POST', `/api/admin/marchands/${MEN}/themes/gabarit`, jetonAdmin, { gabarit_id: id('Fête Nationale') });
+    verifier('« Appliquer un gabarit » : copie dans le marchand, dans SA langue, {nom} = nom affiché sur la carte (sinon nom), couleurs et emoji gardés',
+      [frR.statut, frR.corps.message_ouverture, frR.corps.texte_case, frR.corps.couleur_fond, frR.corps.couleur_label,
+       frN.corps.texte_case, enN.corps.texte_case, enN.corps.message_ouverture, enF.corps.message_ouverture, enF.corps.couleur_fond],
+      [201, 'Café Lune vous souhaite un bon mois de Ramadan 🌙', 'Ramadan Mubarak 🌙', '#F3E9D2', '#1C5D4E',
+       'Joyeuses fêtes 🎄', 'Happy Holidays 🎄', 'Filet Gabarit EN wishes you happy holidays 🎄', 'Filet Gabarit EN wishes you a happy National Day', '#00703C']);
+    verifier('… deux fois le même gabarit : 409 ; gabarit inconnu ou mal formé : 404 ; sans gabarit_id : 400 ; marchand inconnu : 404',
+      [(await api('POST', `/api/admin/marchands/${MFR}/themes/gabarit`, jetonAdmin, { gabarit_id: id('Ramadan') })).statut,
+       (await api('POST', `/api/admin/marchands/${MFR}/themes/gabarit`, jetonAdmin, { gabarit_id: '00000000-0000-4000-8000-000000000000' })).statut,
+       (await api('POST', `/api/admin/marchands/${MFR}/themes/gabarit`, jetonAdmin, { gabarit_id: 'pas-un-uuid' })).statut,
+       (await api('POST', `/api/admin/marchands/${MFR}/themes/gabarit`, jetonAdmin, {})).statut,
+       (await api('POST', `/api/admin/marchands/00000000-0000-4000-8000-000000000000/themes/gabarit`, jetonAdmin, { gabarit_id: id('Noël') })).statut],
+      [409, 404, 404, 400, 404]);
+    // Édition d'un thème existant (sans supprimer + recréer), emoji saisis à la main.
+    const ed = await api('PATCH', `/api/admin/marchands/${MFR}/themes/${frR.corps.id}`, jetonAdmin,
+      { texte_case: 'Eid Mubarak ✨🌙', message_ouverture: '{nom} : Eid Mubarak ✨', couleur_fond: '#102030', couleur_texte: '#FAFAFA', couleur_label: '#C0A060', nom: 'Aïd' });
+    const lu = JSON.parse(sql(`SELECT row_to_json(t) FROM themes_marchand t WHERE id = '${frR.corps.id}'`));
+    verifier('édition d\'un thème : texte de la case, message (avec {nom}), 3 couleurs et nom modifiés en place ; emoji saisis gardés tels quels en base',
+      [ed.statut, lu.texte_case, lu.message_ouverture, lu.couleur_fond, lu.couleur_texte, lu.couleur_label, lu.nom, lu.id === frR.corps.id],
+      [200, 'Eid Mubarak ✨🌙', 'Café Lune : Eid Mubarak ✨', '#102030', '#FAFAFA', '#C0A060', 'Aïd', true]);
+    const creeMain = await api('POST', `/api/admin/marchands/${MFR}/themes`, jetonAdmin,
+      { nom: 'Main', couleur_fond: '#000000', texte_case: 'Ramadan Mubarak 🌙', message_ouverture: 'Bonjour de {nom} 🌙' });
+    verifier('création à la main : emoji et {nom} acceptés ; texte de plus de 40 caractères ou message vide refusés (400)',
+      [creeMain.statut, creeMain.corps.texte_case, creeMain.corps.message_ouverture,
+       (await api('PATCH', `/api/admin/marchands/${MFR}/themes/${creeMain.corps.id}`, jetonAdmin, { texte_case: 'x'.repeat(41) })).statut,
+       (await api('PATCH', `/api/admin/marchands/${MFR}/themes/${creeMain.corps.id}`, jetonAdmin, { message_ouverture: '  ' })).statut],
+      [201, 'Ramadan Mubarak 🌙', 'Bonjour de Café Lune 🌙', 400, 400]);
+    sql(`UPDATE marchands SET theme_actif = (SELECT to_jsonb(t) || '{"etat":"programme","debut":"2099-01-01","fin":"2099-01-02"}' FROM themes_marchand t WHERE id = '${creeMain.corps.id}') WHERE id = '${MFR}'`);
+    verifier('… un thème choisi par le marchand ne se modifie pas (409)',
+      (await api('PATCH', `/api/admin/marchands/${MFR}/themes/${creeMain.corps.id}`, jetonAdmin, { texte_case: 'autre' })).statut, 409);
+    sql(`UPDATE marchands SET theme_actif = NULL WHERE id = '${MFR}'`);
+    // L'emoji part dans la carte Apple (libellé au-dessus du solde).
+    const applePass = require('../src/services/apple-pass');
+    const secretAvant = process.env.JWT_SECRET;
+    process.env.JWT_SECRET = secretJwt;
+    const pj = applePass.buildPassJson({ client: { prenom: 'Sarah', stored_value: 3 }, serialNumber: 's',
+      marchand: { id: MFR, nom: 'Filet', couleur_fond: '#111111', max_value: 10, theme_actif: { ...creeMain.corps, etat: 'en_cours' } } });
+    if (secretAvant === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = secretAvant;
+    verifier('carte Apple : le texte saisi avec emoji part tel quel dans le libellé au-dessus du solde',
+      pj.storeCard.secondaryFields[1].label, 'Ramadan Mubarak 🌙');
+
+    // Strip custom (fond personnalisé Pro+) : sous un thème, la bannière reste celle du marchand.
+    const envS = { SUPABASE_URL: process.env.SUPABASE_URL, SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY };
+    Object.assign(process.env, { SUPABASE_URL: urlSupabase, SUPABASE_SERVICE_KEY: cleService });
+    const T = require('../src/services/themes');
+    const cache = require('../src/services/strip-cache');
+    for (const [k, v] of Object.entries(envS)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    const theme = { id: 'th-strip', nom: 'Noël', couleur_fond: '#8E1420', texte_case: 'Joyeuses fêtes 🎄', etat: 'en_cours' };
+    const fiche = extra => ({ id: 'x', slug: 'filet-strip', forfait: 'pro_plus', strip_mode: 'stamps', strip_config_version: 4, couleur_fond: '#223344',
+      couleur_pastille_fond: '#ABCDEF', max_value: 10, theme_actif: theme, ...extra });
+    const avecFond = fiche({ strip_custom_background_url: 'https://exemple/fond.jpg' });
+    const sansFond = fiche({});
+    const habille = T.appliquerTheme(avecFond);
+    const cleStandard = cache.storageKey({ ...avecFond, theme_actif: null }, 3, 'strip2x');
+    verifier('strip custom sous un thème : la bannière dessinée est celle de la fiche STANDARD (même fichier qu\'hors thème, fond perso et couleurs gardés) ; la carte prend quand même fond et texte du thème',
+      [cache.storageKey(T.ficheBanniere(habille), 3, 'strip2x') === cleStandard, T.ficheBanniere(habille).strip_custom_background_url,
+       T.ficheBanniere(habille).couleur_pastille_fond, habille.couleur_fond, habille._theme.texte_case],
+      [true, 'https://exemple/fond.jpg', '#ABCDEF', '#8E1420', 'Joyeuses fêtes 🎄']);
+    const habilleSans = T.appliquerTheme(sansFond);
+    verifier('… sans fond personnalisé (ou hors Pro+) : bannière du thème, comme avant (dossier du thème, couleurs manuelles remises au calcul auto)',
+      [T.ficheBanniere(habilleSans) === habilleSans, /\/theme\/th-strip\//.test(cache.storageKey(T.ficheBanniere(habilleSans), 3, 'strip2x')),
+       habilleSans.couleur_pastille_fond, T.ficheBanniere(T.appliquerTheme(fiche({ forfait: 'pro', strip_custom_background_url: 'https://exemple/fond.jpg' })))._theme.ficheStandard === undefined],
+      [true, true, null, true]);
+    sql(`DELETE FROM marchands WHERE id IN ('${MFR}', '${MEN}')`);
+  }
+
   titre('API v1, étape 1 : clés d\'API, réglages de conversion, canal (20/10)');
   {
     const sha = x => crypto.createHash('sha256').update(x).digest('hex');

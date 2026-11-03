@@ -1002,10 +1002,22 @@ router.get('/marchands/:id/themes', authAdmin, asyncHandler(async (req, res) => 
   res.json({ themes: liste.map((t, i) => ({ ...t, apercu: apercus[i] })), actif: m.theme_actif || null, bascule: !!m.theme_bascule });
 }));
 
-// POST /api/admin/marchands/:id/themes — nouveau thème
-router.post('/marchands/:id/themes', authAdmin, asyncHandler(async (req, res) => {
-  const { validerTheme } = require('../services/themes');
-  const { theme, erreur } = validerTheme(req.body || {});
+// Nom affiché sur la carte et langue du marchand : {nom} des textes d'un thème
+// (migration 071), langue d'un gabarit.
+async function ficheNom(marchandId) {
+  const { data } = await supabase.from('marchands').select('nom, pass_display_name, langue').eq('id', marchandId).maybeSingle();
+  return data;
+}
+// {nom} remplacé AVANT le contrôle des longueurs : la limite vaut pour le texte envoyé.
+function avecNom(corps, m) {
+  const { remplacerNom } = require('../services/themes');
+  const c = { ...corps };
+  for (const k of ['texte_case', 'message_ouverture']) if (typeof c[k] === 'string') c[k] = remplacerNom(c[k], m);
+  return c;
+}
+async function creerTheme(req, res, corps) {
+  const themes = require('../services/themes');
+  const { theme, erreur } = themes.validerTheme(corps);
   if (erreur) return res.status(400).json({ error: erreur });
   const { data, error } = await supabase.from('themes_marchand')
     .insert({ ...theme, marchand_id: req.params.id }).select(COLONNES_THEME).single();
@@ -1014,14 +1026,47 @@ router.post('/marchands/:id/themes', authAdmin, asyncHandler(async (req, res) =>
     if (error.code === '23503') return res.status(404).json({ error: 'Marchand introuvable' });
     return res.status(500).json({ error: error.message });
   }
-  suivre(require('../services/themes').preparerApercus(req.params.id));   // aperçu « Ma carte » prêt
+  suivre(themes.preparerApercus(req.params.id));   // aperçu « Ma carte » prêt
   res.status(201).json(data);
+}
+
+// POST /api/admin/marchands/:id/themes — nouveau thème
+router.post('/marchands/:id/themes', authAdmin, asyncHandler(async (req, res) => {
+  const m = await ficheNom(req.params.id);
+  if (!m) return res.status(404).json({ error: 'Marchand introuvable' });
+  return creerTheme(req, res, avecNom(req.body || {}, m));
 }));
 
-// PATCH /api/admin/marchands/:id/themes/:themeId — modification
+// GET /api/admin/themes-gabarits — gabarits partagés (migration 071)
+router.get('/themes-gabarits', authAdmin, asyncHandler(async (req, res) => {
+  const { data, error } = await supabase.from('themes_gabarits')
+    .select('id, nom, couleur_fond, couleur_texte, couleur_label, texte_case_fr, texte_case_en, message_fr, message_en')
+    .order('cree_le');
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+}));
+
+// POST /api/admin/marchands/:id/themes/gabarit { gabarit_id } — copie d'un gabarit
+// dans les thèmes du marchand : sa langue, {nom} remplacé. Se modifie ensuite
+// comme tout thème ; le logo s'ajoute à la main.
+router.post('/marchands/:id/themes/gabarit', authAdmin, asyncHandler(async (req, res) => {
+  const gabaritId = req.body && req.body.gabarit_id;
+  if (typeof gabaritId !== 'string') return res.status(400).json({ error: 'gabarit_id requis' });
+  const m = await ficheNom(req.params.id);
+  if (!m) return res.status(404).json({ error: 'Marchand introuvable' });
+  const { data: g, error } = await supabase.from('themes_gabarits').select('*').eq('id', gabaritId).maybeSingle();
+  if (error) return res.status(error.code === '22P02' ? 404 : 500).json({ error: error.code === '22P02' ? 'Gabarit introuvable' : error.message });
+  if (!g) return res.status(404).json({ error: 'Gabarit introuvable' });
+  return creerTheme(req, res, require('../services/themes').depuisGabarit(g, m));
+}));
+
+// PATCH /api/admin/marchands/:id/themes/:themeId — modification (texte de la case,
+// message d'ouverture, couleurs, nom ; les logos ont leur propre envoi)
 router.patch('/marchands/:id/themes/:themeId', authAdmin, asyncHandler(async (req, res) => {
   const { validerTheme } = require('../services/themes');
-  const { theme, erreur } = validerTheme(req.body || {}, { partiel: true });
+  const m = await ficheNom(req.params.id);
+  if (!m) return res.status(404).json({ error: 'Marchand introuvable' });
+  const { theme, erreur } = validerTheme(avecNom(req.body || {}, m), { partiel: true });
   if (erreur) return res.status(400).json({ error: erreur });
   if (await themeChoisi(req.params.id, req.params.themeId)) return res.status(409).json({ error: 'theme_choisi' });
   const { data, error } = await supabase.from('themes_marchand').update(theme)

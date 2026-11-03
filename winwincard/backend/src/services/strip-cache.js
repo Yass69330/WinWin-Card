@@ -198,8 +198,10 @@ function publicUrl(key) {
 // Retourne le Buffer PNG.
 async function getOrGenerate({ marchand, filledCount, variant }) {
   // Point d'entrée 2 de f17 : la bannière d'une carte à thème est peinte sur le
-  // fond du thème (services/themes.js, la seule fonction qui l'applique).
-  marchand = require('./themes').appliquerTheme(marchand);
+  // fond du thème (services/themes.js, la seule fonction qui l'applique) ; sauf
+  // « strip custom » (fond personnalisé) : bannière standard, telle quelle.
+  const T = require('./themes');
+  marchand = T.ficheBanniere(T.appliquerTheme(marchand));
   if (!marchand.strip_mode) throw new Error('strip_mode not set');
 
   const key = storageKey(marchand, filledCount, variant);
@@ -259,7 +261,8 @@ async function getOrGenerate({ marchand, filledCount, variant }) {
 // aucun calcul sur le fil de la caisse. Rend le Buffer, ou null si la bannière
 // n'a pas encore été préparée (en admin).
 async function lireCache({ marchand, filledCount, variant }) {
-  marchand = require('./themes').appliquerTheme(marchand);
+  const T = require('./themes');
+  marchand = T.ficheBanniere(T.appliquerTheme(marchand));
   if (!marchand.strip_mode) return null;
   const key = storageKey(marchand, filledCount, variant);
   const enMemoire = lruGet(key);
@@ -273,7 +276,8 @@ async function lireCache({ marchand, filledCount, variant }) {
 // Retourne l'URL sans attendre la génération si le fichier existe déjà,
 // sinon déclenche la génération et retourne l'URL calculée.
 async function getPublicUrl({ marchand, filledCount, variant = 'hero' }) {
-  marchand = require('./themes').appliquerTheme(marchand);   // f17, point d'entrée 2
+  const T = require('./themes');
+  marchand = T.ficheBanniere(T.appliquerTheme(marchand));   // f17, point d'entrée 2 (strip custom : standard)
   if (!marchand.strip_mode) return null;
   const key = storageKey(marchand, filledCount, variant);
 
