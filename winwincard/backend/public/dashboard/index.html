@@ -363,7 +363,16 @@
   <div class="dash-content">
 
     <!-- ── Aperçu : chiffres, QR code et boutiques dans apercu.js (t42, découpage) ── -->
-    <div id="tab-overview" class="tab-panel active"></div>
+    <div id="tab-overview" class="tab-panel active">
+      <!-- Blocs gris d'attente, remplacés par apercu.js dès qu'il est chargé. -->
+      <div class="stats-grid">
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card" style="grid-column:1/-1"></div>
+      </div>
+    </div>
 
     <!-- ── Réseau (groupe) — visible seulement si ≥ 1 boutique ── -->
     <div id="tab-reseau" class="tab-panel"></div>
@@ -1002,7 +1011,12 @@ function switchTab(tab) {
   document.getElementById('tab-' + tab).classList.add('active');
   if (tab === 'overview') {
     if (window.Apercu) window.Apercu.charger();
-    else {
+    // Au démarrage, le script du cœur passe avant les fichiers d'onglets : l'Aperçu
+    // est rempli dès qu'ils sont chargés (DOMContentLoaded part même si l'un d'eux
+    // ne charge pas : son onglet affiche alors « indisponible »).
+    else if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => { if (S.tab === 'overview') switchTab('overview'); }, { once: true });
+    } else {
       const indisponible = () => { document.getElementById('tab-overview').innerHTML = `<div class="alert alert-info">${esc(_lang === 'fr' ? 'Onglet momentanément indisponible. Rechargez la page.' : 'Tab temporarily unavailable. Reload the page.')}</div>`; };
       indisponible();
       // Aperçu en panne : le reste du dashboard a quand même sa langue, son
@@ -1802,10 +1816,10 @@ document.documentElement.lang = _lang;
 document.title = t('pageTitle');
 applyI18n();
 
-// Après le chargement des fichiers d'onglets (balises plus bas) : l'Aperçu, ouvert
-// d'entrée, vit dans apercu.js (t42). DOMContentLoaded part même si l'un d'eux
-// ne charge pas (son onglet affiche alors « indisponible »).
-document.addEventListener('DOMContentLoaded', () => { if (restoreSession()) showDashboard(); });
+// Tout de suite, comme avant : l'écran du dashboard s'affiche sans passer par la
+// connexion. L'Aperçu (apercu.js, chargé plus bas) se remplit dès que son fichier
+// est là (switchTab attend DOMContentLoaded ; en attendant, les blocs gris).
+if (restoreSession()) showDashboard();
 </script>
 <!-- Onglets à part (t42 ; f17) : versionnés par ?v=, à changer à chaque modification
      du fichier (le service worker sert les JS depuis son cache). -->

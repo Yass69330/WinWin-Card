@@ -249,6 +249,24 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
       [true, 'Onglet momentanément indisponible. Rechargez la page.', 1, true]);
     await rc.contexte.close();
 
+    // 2 septies. Rechargement avec une session (t42, 5/6, retour de Yass du 04/11) :
+    // l'écran de connexion ne s'affiche JAMAIS, même si apercu.js arrive tard
+    // (ici 1,5 s) : le dashboard est là tout de suite, l'Aperçu se remplit ensuite.
+    const lent = await navigateur.newContext({ serviceWorkers: 'block', viewport: { width: 420, height: 1100 } });
+    await lent.addInitScript(m => { for (const [k, v] of Object.entries(m)) localStorage.setItem(k, v); },
+      { ww_dash_token: jeton, ww_dash_id: id, ww_dash_nom: nom, ww_dash_slug: slug, ww_dash_lang: 'fr', ww_dash_forfait: 'pro_plus', ww_dash_themes: '1' });
+    await lent.route('**/dashboard/apercu.js*', async r => { await new Promise(x => setTimeout(x, 1500)); await r.continue(); });
+    const pl = await lent.newPage();
+    await pl.goto(urlServeur + '/dashboard/', { waitUntil: 'commit' });
+    await pl.waitForFunction(() => document.getElementById('screen-login') && typeof S === 'object');
+    await pl.waitForTimeout(700);   // apercu.js toujours en route (1,5 s)
+    const pendant = await pl.evaluate(() => [!window.Apercu, document.getElementById('screen-login').classList.contains('active'),
+      document.getElementById('screen-dashboard').classList.contains('active'), !!document.querySelector('#tab-overview .skeleton')]);
+    await pl.waitForSelector('#stats-grid .stat-card');
+    verifier('navigateur, rechargement avec session : pendant que apercu.js arrive (lent), l\'écran du dashboard est déjà là avec ses blocs gris, jamais celui de connexion ; puis l\'Aperçu se remplit',
+      pendant, [true, false, true, true]);
+    await lent.close();
+
     // 2 sexies. apercu.js cassé (t42, onglet 5/6) : seul « Aperçu » le dit, et le
     // reste du dashboard a QUAND MÊME ce que l'Aperçu chargeait (/me, boutiques) :
     // mémoire de départ en anglais, forfait Pro, sans thèmes → corrigés par le cœur

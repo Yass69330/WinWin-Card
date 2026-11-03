@@ -7928,6 +7928,18 @@ plan : la clé `message` ne servait qu'à cet onglet, elle est partie avec lui.
   « Copier le lien » (l'écart visible ci-dessus).
 - Constat laissé tel quel : la déconnexion ne remet pas `S.pdv` à zéro (relu à l'Aperçu suivant).
 - Retour arrière : `git revert` du commit.
+- **Poussé** (`38d416f`, 04/11). **Retour de Yass** : au rafraîchissement, l'écran de connexion
+  apparaît une fraction de seconde avant le dashboard (régression). **Cause** : le démarrage
+  attendait `DOMContentLoaded`, donc le chargement des fichiers d'onglets, avant d'afficher
+  l'écran du dashboard ; l'écran de connexion (affiché par défaut) restait visible pendant ce
+  temps. **Correctif** (local) : `restoreSession()` / `showDashboard()` de nouveau tout de suite,
+  comme avant ; seul l'Aperçu attend son fichier (`switchTab` attend `DOMContentLoaded` si la page
+  charge encore) ; les blocs gris d'attente reviennent dans le balisage de l'Aperçu (remplacés par
+  `apercu.js`). Test navigateur : `apercu.js` retardé de 1,5 s → dashboard et blocs gris affichés,
+  jamais la connexion ; contre-épreuve sur `38d416f` : l'écran de connexion est actif pendant le
+  chargement (le défaut vu par Yass). Filet 463/463, suite complète 571/571. Les requêtes de
+  l'Aperçu partent toujours après le chargement des fichiers d'onglets (quelques ms, cache du
+  service worker).
 
 ## 15 untriginta sexagies. API CAISSES — CADRAGE (19/10, rien codé)
 
