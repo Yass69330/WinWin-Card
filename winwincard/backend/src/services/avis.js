@@ -80,6 +80,19 @@ function libelleLien(langue) {
   return langue === 'fr' ? 'Laisser un avis Google' : 'Leave a Google review';
 }
 
+// ── Lien « Vos retours et conseils » (f20, migration 073) ────────────────────
+// Canal d'avis PRIVÉ (formulaire du marchand), sans rapport avec l'avis Google
+// ci-dessus : ni notification, ni passage par nous (lien direct, décision du
+// pilotage du 04/11). https seulement ; ni guillemet ni chevron : l'URL entre
+// telle quelle dans la balise <a href='…'> du dos de la carte Apple.
+function lienRetoursValide(brut) {
+  const u = lienValide(brut);
+  return u && /^https:\/\//i.test(u) && !/['"<>]/.test(u) ? u : null;
+}
+function libelleRetours(langue) {
+  return langue === 'fr' ? 'Vos retours et conseils' : 'Feedback & suggestions';
+}
+
 // ── Planification ─────────────────────────────────────────────────────────
 // Synchrone, NE LÈVE JAMAIS, ne lit rien. Appelée après res.json() : rien de ce
 // qui se passe ici ne peut retarder ni faire échouer un scan.
@@ -172,6 +185,6 @@ async function envoyer({ marchandId, langue, prenom, serial }) {
 function enAttenteCount() { return enAttente.size; }
 
 module.exports = {
-  planifier, envoyer, lienValide, urlAvis, libelleLien, enAttenteCount,
+  planifier, envoyer, lienValide, urlAvis, libelleLien, lienRetoursValide, libelleRetours, enAttenteCount,
   DELAI_MS, MAX_EN_ATTENTE,
 };

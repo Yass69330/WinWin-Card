@@ -19,6 +19,8 @@ const {
   lienValide:  lienAvisValide,
   urlAvis,
   libelleLien: libelleLienAvis,
+  lienRetoursValide,
+  libelleRetours,
 } = require('./avis');
 
 const WALLET_API = 'https://walletobjects.googleapis.com/walletobjects/v1';
@@ -208,19 +210,22 @@ async function buildLoyaltyClass(cId, marchand) {
 
 // ── Construction LoyaltyObject ───────────────────────────────
 
-// Bloc de liens de l'OBJET — aujourd'hui le seul lien est celui de l'avis.
-// Sur l'objet et jamais sur la classe : l'URL contient le serial, donc elle est
-// propre à chaque carte, alors qu'une classe est partagée par tous les porteurs
-// du marchand. Rend null quand le marchand n'a pas de lien configuré.
+// Bloc de liens de l'OBJET : l'avis Google et, f20 (migration 073), « Vos
+// retours et conseils ». Sur Google, SEUL ce module rend un lien tappable (un
+// champ texte ne l'est pas de façon sûre). Sur l'objet et jamais sur la classe :
+// l'URL de l'avis contient le serial, propre à chaque carte. Un PATCH remplace
+// la liste ENTIÈRE : les deux liens partent donc toujours ensemble (chaque
+// lecture de la fiche qui alimente une mise à jour lit lien_avis_google ET
+// lien_retours). Rend null quand le marchand n'a aucun lien.
 function blocLiensAvis(marchand, serialNumber) {
-  if (!marchand || !lienAvisValide(marchand.lien_avis_google)) return null;
-  return {
-    uris: [{
-      id:          'avis_google',
-      uri:         urlAvis(serialNumber),
-      description: libelleLienAvis(marchand.langue),
-    }],
-  };
+  if (!marchand) return null;
+  const uris = [];
+  if (lienAvisValide(marchand.lien_avis_google)) {
+    uris.push({ id: 'avis_google', uri: urlAvis(serialNumber), description: libelleLienAvis(marchand.langue) });
+  }
+  const retours = lienRetoursValide(marchand.lien_retours);
+  if (retours) uris.push({ id: 'retours', uri: retours, description: libelleRetours(marchand.langue) });
+  return uris.length ? { uris } : null;
 }
 
 function buildLoyaltyObject(oId, cId, client, marchand, serialNumber) {

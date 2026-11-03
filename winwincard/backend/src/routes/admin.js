@@ -1,5 +1,6 @@
 const express = require('express');
 const router  = express.Router();
+const ERREUR_LIEN_RETOURS = "lien_retours doit être une URL https:// de 500 caractères maximum, sans guillemet ni chevron";
 const jwt     = require('jsonwebtoken');
 const supabase = require('../services/supabase');
 const { clientLong } = supabase;   // 30 s par appel (étape 16) : admin_marchands_stats
@@ -193,6 +194,13 @@ router.post('/marchands', authAdmin, asyncHandler(async (req, res) => {
     }
   }
 
+  // f20 (migration 073) : lien « Vos retours et conseils », même règle qu'au PATCH.
+  let lien_retours = null;
+  if (req.body.lien_retours) {
+    lien_retours = require('../services/avis').lienRetoursValide(String(req.body.lien_retours));
+    if (!lien_retours) return res.status(400).json({ error: ERREUR_LIEN_RETOURS });
+  }
+
   const { data: existing } = await supabase.from('marchands').select('id').eq('slug', slug).single();
   if (existing) return res.status(409).json({ error: 'Ce slug est déjà utilisé' });
 
@@ -214,6 +222,7 @@ router.post('/marchands', authAdmin, asyncHandler(async (req, res) => {
       max_value: max_value || 10,
       display_max_value: display_max_value || null,
       lien_avis_google,
+      lien_retours,
       actif: true,
     })
     .select()
@@ -270,6 +279,9 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
     // n'entre dans aucun strip, donc aucun bump de strip_config_version (un bump
     // invaliderait tout le cache d'images pour rien).
     'lien_avis_google',
+    // f20 (migration 073) : lien « Vos retours et conseils » au dos (formulaire
+    // privé du marchand) ; hors VISUAL_FIELDS pour la même raison. Contrôlé plus bas.
+    'lien_retours',
     // API des caisses (migration 066, 20/10) : conversion montant → points et
     // plafond par vente, en fils. Contrôlés plus bas.
     'fils_par_point', 'plafond_vente_fils',
@@ -385,6 +397,15 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
         });
       }
       updates.lien_avis_google = propre;
+    }
+  }
+  if (updates.lien_retours !== undefined) {
+    const brut = updates.lien_retours === null ? '' : String(updates.lien_retours).trim();
+    if (!brut) updates.lien_retours = null;
+    else {
+      const propre = require('../services/avis').lienRetoursValide(brut);
+      if (!propre) return res.status(400).json({ error: ERREUR_LIEN_RETOURS });
+      updates.lien_retours = propre;
     }
   }
 

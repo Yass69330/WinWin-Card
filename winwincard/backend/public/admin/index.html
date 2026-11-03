@@ -291,6 +291,11 @@
           <input id="f-avis-google" type="url" maxlength="500" placeholder="https://g.page/r/…/review" autocorrect="off" autocapitalize="none">
           <div class="field-hint">Unique interrupteur du workflow d'avis. Rempli → lien au dos de la carte, et demande d'avis envoyée 30 min après chaque récompense remise. Vide → aucun lien, aucune notification. Les cartes déjà installées reçoivent le lien à leur prochaine mise à jour.</div>
         </div>
+        <div class="field">
+          <label for="f-lien-retours">Lien « Vos retours et conseils » <span style="color:var(--muted)">(vide = aucun)</span></label>
+          <input id="f-lien-retours" type="url" maxlength="500" placeholder="https://docs.google.com/forms/…" autocorrect="off" autocapitalize="none">
+          <div class="field-hint">Formulaire privé du marchand, en lien tappable au dos de la carte (iPhone et Android). Aucune notification. Les cartes déjà installées le reçoivent à leur prochaine mise à jour (au prochain scan).</div>
+        </div>
         <div class="field" id="field-password">
           <label for="f-pwd">Mot de passe *</label>
           <input id="f-pwd" type="password" placeholder="Mot de passe du marchand" autocomplete="new-password">
@@ -1510,7 +1515,7 @@ document.getElementById('sheet-backdrop').addEventListener('click', e => {
 // FORM : REMPLIR / VIDER
 // ════════════════════════════════════
 function resetForm() {
-  ['f-nom','f-pass-name','f-slug','f-email','f-telephone','f-adresse','f-avis-google','f-pwd','f-new-pwd','f-quota-override','f-logo','f-logo-reward','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-how-it-works','f-tiers','f-wf-inactive-message','f-wf-near-message','f-wf-birthday-message'].forEach(id => {
+  ['f-nom','f-pass-name','f-slug','f-email','f-telephone','f-adresse','f-avis-google','f-lien-retours','f-pwd','f-new-pwd','f-quota-override','f-logo','f-logo-reward','f-icon','f-strip','f-glogo','f-ghero','f-texte','f-how-it-works','f-tiers','f-wf-inactive-message','f-wf-near-message','f-wf-birthday-message'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   document.getElementById('f-type-programme').value = 'stamps';
@@ -1586,6 +1591,7 @@ function fillForm(m) {
   v('f-telephone', m.telephone);
   v('f-adresse',   m.adresse);
   v('f-avis-google', m.lien_avis_google);
+  v('f-lien-retours', m.lien_retours);
   v('f-texte',  m.texte_landing);
   v('f-logo',        m.logo_url);
   v('f-logo-reward', m.logo_reward_url);
@@ -1890,6 +1896,7 @@ function collectForm() {
     telephone:        document.getElementById('f-telephone').value.trim() || null,
     adresse:          document.getElementById('f-adresse').value.trim()   || null,
     lien_avis_google: document.getElementById('f-avis-google').value.trim() || null,
+    lien_retours: document.getElementById('f-lien-retours').value.trim() || null,
     images_tiers,
   };
 

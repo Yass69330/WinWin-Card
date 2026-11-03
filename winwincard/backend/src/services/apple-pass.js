@@ -18,6 +18,8 @@ const {
   lienValide:  lienAvisValide,
   urlAvis,
   libelleLien: libelleLienAvis,
+  lienRetoursValide,
+  libelleRetours,
 } = require('./avis');
 
 // ── Auth token ───────────────────────────────────────────────
@@ -395,6 +397,17 @@ function buildPassJson({ client, marchand, serialNumber, passNotification }) {
           key:   'avis_google',
           label: libelleLienAvis(marchand.langue),
           value: urlAvis(serialNumber),
+        }] : []),
+        // f20 (migration 073) : lien « Vos retours et conseils » (formulaire privé
+        // du marchand). attributedValue + <a href> : le lien est tappable SANS
+        // dépendre de la détection automatique d'URL d'iOS, avec un texte libre ;
+        // value garde l'URL seule, en secours. Seul le dos rend un lien tappable.
+        // lien_retours vide → le champ n'existe pas (carte inchangée).
+        ...(lienRetoursValide(marchand.lien_retours) ? [{
+          key:            'retours',
+          label:          '',
+          value:          lienRetoursValide(marchand.lien_retours),
+          attributedValue: `<a href='${lienRetoursValide(marchand.lien_retours)}'>${libelleRetours(marchand.langue).replace(/&/g, '&amp;')}</a>`,
         }] : []),
         ...(marchand.referral_enabled ? [{
           key:   'referral',

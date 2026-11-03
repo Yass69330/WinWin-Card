@@ -8634,6 +8634,57 @@ d'ouvrir les thèmes à un 2e marchand (case admin + gabarit + logo). Reportés 
 Google (utile quand plusieurs marchands ouvrent le même jour de fête) ; place exacte du texte
 sur Android au rendu réel. Dette connue inchangée : jetons morts (410).
 
+## 15 sexquinquagies sexagies. f20 : LIEN « VOS RETOURS ET CONSEILS » AU DOS (PIZZ'AMORE, 04/11, local)
+
+Demande sur mesure (phase test) : un lien tappable vers le Google Form de Pizz'amore au dos de
+ses cartes. Pas une fonctionnalité commercialisée.
+
+**Diagnostic** (validé le 04/11) :
+- dos Apple : `buildPassJson` (`apple-pass.js`, `backFields`), en partie par marchand ;
+- Google : textes dans `textModulesData` (posés à la création seulement), liens dans
+  `linksModuleData` (posés à la création ET à chaque mise à jour) ;
+- `lien_avis_google` n'est pas réutilisable : il est aussi l'interrupteur de la notification
+  d'avis Google, avec un libellé imposé et un passage par `/avis/:serial` ;
+- **tappabilité** : Apple ne rend un lien tappable qu'au dos ; aujourd'hui, pas de
+  `dataDetectorTypes` (tous actifs), les liens reposent sur la détection automatique d'iOS
+  (heuristique). Google : seul `linksModuleData` est sûr ; l'URL du parrainage, dans un bloc de
+  texte, ne l'est pas ; une carte créée avant un lien ne le reçoit qu'à sa prochaine mise à
+  jour. D'où « des fois ça marche, des fois non ».
+
+**Décisions du pilotage (04/11)** : libellé FR « Vos retours et conseils » (Pizz'amore est en
+FR ; version EN validée) ; **lien direct** vers le formulaire (pas de comptage) ; **mise à jour
+au prochain scan** pour la démonstration au propriétaire ; mise à jour silencieuse immédiate
+seulement s'il valide.
+
+**Livré** :
+- **Migration 073** : `marchands.lien_retours` (≤ 500 caractères). **À exécuter AVANT le push :
+  le nouveau code lit la colonne au scan, au téléchargement des cartes et à l'inscription.**
+- `avis.js` : `lienRetoursValide` (https seulement, ni guillemet ni chevron), `libelleRetours`
+  (fr : « Vos retours et conseils », en : « Feedback & suggestions »).
+- Apple : backField `retours`, juste après l'avis, `attributedValue` = `<a href='URL'>Vos
+  retours et conseils</a>` (tappable sans détection automatique), `value` = l'URL en secours,
+  libellé vide. Sans lien : dos identique à avant.
+- Google : 2e entrée de `linksModuleData` (`id: retours`). Une mise à jour remplace toute la
+  liste : avis et formulaire partent toujours ensemble, et **les 7 lectures de la fiche** qui
+  alimentent une carte lisent `lien_avis_google` ET `lien_retours` (une colonne de plus, aucune
+  requête de plus, contrôle du filet).
+- Admin : champ « Lien « Vos retours et conseils » » dans la fiche (création et modification).
+- Propagation : au prochain scan (iPhone : push du scan puis nouvelle carte ; Google : la mise à
+  jour du scan). Aucune nouvelle surface d'envoi.
+- **Filet 461/461** (+8, section 30) ; **suite complète 564/564**. **Contre-épreuve** sur
+  `0cdb17f` avec la 073 en base : tout passe jusqu'à la section 30 (fonction absente) — la
+  migration seule ne casse rien, scans compris.
+- **Hypothèses et limites** : iOS rend `attributedValue` avec `<a href>` dans le dos (méthode
+  documentée par Apple ; **à confirmer sur un vrai iPhone**) ; Android : place et rendu du lien
+  à confirmer ; vider le champ retire le lien Apple, mais ne l'efface pas des cartes Google déjà
+  mises à jour quand il n'y a plus aucun lien (même limite que l'avis : `{ uris: [] }` non
+  vérifié, non envoyé) ; si l'avis Google reste, la mise à jour suivante renvoie la liste sans
+  le formulaire, qui disparaît alors.
+- **Reporté** : mise à jour silencieuse immédiate (après validation du propriétaire).
+
+**Décisions hors pilotage** (à valider) : libellé vide au-dessus du lien ; https obligatoire (et
+ni guillemet ni chevron dans l'URL) ; la version EN est codée (aucun marchand EN n'a le champ).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)

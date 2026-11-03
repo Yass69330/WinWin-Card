@@ -3046,6 +3046,76 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     s29.processus.kill();
   }
 
+  titre('30. f20 : lien « Vos retours et conseils » au dos des cartes (migration 073, 04/11)');
+  {
+    const path = require('path'), fs = require('fs');
+    sql(fs.readFileSync(path.join(__dirname, '..', 'database', 'migration_073_lien_retours.sql'), 'utf8'));
+    verifier('migration 073 rejouée : contrôle « true, true, 0 »',
+      sql(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'marchands' AND column_name = 'lien_retours'),
+              EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'marchands_lien_retours_check'),
+              (SELECT count(*) FROM marchands WHERE lien_retours IS NOT NULL)`), 't|t|0');
+    const FORM = 'https://docs.google.com/forms/d/e/1FAIpQLSduuPLwDBvLyLjn5E9ZT3UXfwWwWNKULUCa7bX1uK7y9KxDAQ/viewform';
+    const avis = require('../src/services/avis');
+    verifier('lien accepté : https seulement ; refusés : http, guillemet ou chevron (il entre tel quel dans <a href=\'…\'>), plus de 500 caractères, vide',
+      [avis.lienRetoursValide(` ${FORM} `), avis.lienRetoursValide('http://exemple.com/f'), avis.lienRetoursValide("https://exemple.com/f'x"),
+       avis.lienRetoursValide('https://exemple.com/<b>'), avis.lienRetoursValide('https://exemple.com/' + 'a'.repeat(490)), avis.lienRetoursValide('')],
+      [FORM, null, null, null, null, null]);
+
+    // Apple : le dos de la carte.
+    const applePass = require('../src/services/apple-pass');
+    const secretAvant = process.env.JWT_SECRET;
+    process.env.JWT_SECRET = secretJwt;
+    const base = { id: 'x', nom: 'Pizz', slug: 'pizz', langue: 'fr', couleur_fond: '#111111', max_value: 10, lien_avis_google: 'https://g.page/r/x/review' };
+    const dos = m => applePass.buildPassJson({ client: { prenom: 'Sarah', stored_value: 3 }, marchand: m, serialNumber: 'filet-retours' }).storeCard.backFields;
+    const avec = dos({ ...base, lien_retours: FORM });
+    const sans = dos(base);
+    const enAnglais = dos({ ...base, langue: 'en', lien_retours: FORM });
+    if (secretAvant === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = secretAvant;
+    const champ = avec.find(f => f.key === 'retours');
+    verifier('Apple : au DOS, un champ « retours » en lien <a href> (tappable sans détection automatique), texte « Vos retours et conseils », URL seule en secours ; juste après l\'avis Google',
+      [champ && champ.attributedValue, champ && champ.value, champ && champ.label, avec.map(f => f.key).indexOf('retours') === avec.map(f => f.key).indexOf('avis_google') + 1],
+      [`<a href='${FORM}'>Vos retours et conseils</a>`, FORM, '', true]);
+    verifier('… sans lien : aucun champ, le dos est identique à celui d\'avant ; marchand en anglais : « Feedback & suggestions »',
+      [sans.some(f => f.key === 'retours'), JSON.stringify(avec.filter(f => f.key !== 'retours')) === JSON.stringify(sans),
+       enAnglais.find(f => f.key === 'retours').attributedValue], [false, true, `<a href='${FORM}'>Feedback &amp; suggestions</a>`]);
+
+    // Google : le module de liens (seul endroit où un lien est tappable).
+    const envG = { GOOGLE_WALLET_ISSUER_ID: process.env.GOOGLE_WALLET_ISSUER_ID };
+    process.env.GOOGLE_WALLET_ISSUER_ID = envG.GOOGLE_WALLET_ISSUER_ID || '3388000000000000000';
+    const googlePass = require('../src/services/google-pass');
+    const objet = m => googlePass.buildLoyaltyObject('o', 'c', { prenom: 'Sarah', stored_value: 3 }, m, 'filet-retours');
+    const liens = m => (objet(m).linksModuleData || { uris: [] }).uris.map(u => `${u.id}|${u.description}|${u.uri === FORM ? 'FORM' : 'autre'}`);
+    verifier('Google : linksModuleData porte l\'avis ET le formulaire (envoyés ensemble : une mise à jour remplace toute la liste) ; formulaire seul ; aucun lien → pas de module ; le formulaire n\'est pas dans les textes',
+      [liens({ ...base, lien_retours: FORM }), liens({ ...base, lien_avis_google: null, lien_retours: FORM }), objet({ ...base, lien_avis_google: null }).linksModuleData,
+       JSON.stringify(objet({ ...base, lien_retours: FORM }).textModulesData).includes('docs.google.com')],
+      [['avis_google|Laisser un avis Google|autre', 'retours|Vos retours et conseils|FORM'], ['retours|Vos retours et conseils|FORM'], undefined, false]);
+    if (envG.GOOGLE_WALLET_ISSUER_ID === undefined) delete process.env.GOOGLE_WALLET_ISSUER_ID; else process.env.GOOGLE_WALLET_ISSUER_ID = envG.GOOGLE_WALLET_ISSUER_ID;
+    // Une mise à jour Google remplace TOUS les liens : chaque lecture de la fiche qui lit
+    // lien_avis_google doit lire aussi lien_retours, sinon le scan effacerait le formulaire.
+    const sources = ['services/colonnes-carte.js', 'routes/passes.js', 'routes/google-wallet.js', 'routes/scan.js', 'routes/clients.js']
+      .map(f => fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8'));
+    const lectures = sources.flatMap(t => t.split('\n').filter(l => /lien_avis_google/.test(l) && /select\(|COLONNES_MARCHAND_CARTE =|SELECT_CLIENT =/.test(l)));
+    verifier('chaque lecture de la fiche qui alimente une carte (7) lit lien_avis_google ET lien_retours',
+      [lectures.length, lectures.every(l => /lien_retours/.test(l))], [7, true]);
+
+    // Admin + scan : sur un serveur à part (limiteur global du serveur principal).
+    const s30 = await demarrerServeur('retours');
+    const api = (methode, chemin, jt, corps) => fetch(s30.url + chemin, { method: methode,
+      headers: { 'Content-Type': 'application/json', ...(jt ? { Authorization: `Bearer ${jt}` } : {}) },
+      body: corps === undefined ? undefined : JSON.stringify(corps) })
+      .then(async r => ({ statut: r.status, corps: await r.json().catch(() => ({})) }));
+    const pose = await api('PATCH', `/api/admin/marchands/${M.tampons}`, jetonAdmin, { lien_retours: ` ${FORM} ` });
+    const http = await api('PATCH', `/api/admin/marchands/${M.tampons}`, jetonAdmin, { lien_retours: 'http://exemple.com/f' });
+    const c = client(M.tampons);
+    const sc = await api('POST', '/api/scan', jeton(M.tampons), { serial_number: c.serial, cle_idempotence: crypto.randomUUID() });
+    verifier('admin : lien posé (nettoyé) sur ce marchand seulement ; http refusé (400, rien changé) ; un scan passe normalement (200, +1)',
+      [pose.statut, sql(`SELECT lien_retours FROM marchands WHERE id = '${M.tampons}'`) === FORM, http.statut,
+       sql(`SELECT count(*) FROM marchands WHERE lien_retours IS NOT NULL`), sc.statut, solde(c.id)], [200, true, 400, '1', 200, 1]);
+    const vide = await api('PATCH', `/api/admin/marchands/${M.tampons}`, jetonAdmin, { lien_retours: '' });
+    verifier('admin : champ vidé → aucun lien (null)', [vide.statut, sql(`SELECT lien_retours IS NULL FROM marchands WHERE id = '${M.tampons}'`)], [200, 't']);
+    s30.processus.kill();
+  }
+
   titre('API v1, étape 1 : clés d\'API, réglages de conversion, canal (20/10)');
   {
     const sha = x => crypto.createHash('sha256').update(x).digest('hex');
