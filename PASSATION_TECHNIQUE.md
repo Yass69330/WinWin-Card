@@ -269,8 +269,8 @@ de `85c7887` : `a80621a` code, `ae8039c` passation détaillée de ce lot) :
   `briques/f04-telephone` (`git checkout briques/f04-telephone -- <fichier>`), pas de fusion
   en bloc.
 
-**t42** (découpage du dashboard) : en pause après 3 onglets sur 6 (Notifs, Réseau, Scans) ;
-Clients, Aperçu, Scanner plus tard.
+**t42** (découpage du dashboard) : repris le 04/11 ; Notifs, Réseau, Scans en production, Clients
+(4/6) codé ; puis Aperçu (stats partagées + boutiques), Scanner en dernier.
 
 ### 0.6 Où lire quoi
 
@@ -7868,6 +7868,33 @@ plan : la clé `message` ne servait qu'à cet onglet, elle est partie avec lui.
 - **Découpage en pause après cet onglet** (décision du pilotage) : Clients, Aperçu, puis Scanner
   la semaine suivante. Ensuite (chantier à part) : lieu de chaque scan et annulation depuis
   l'onglet Scans, en réutilisant l'annulation de la fiche client.
+
+**Onglet 4/6 : Clients et fiche client** (04/11, reprise de t42, local) : `clients.js`
+(`window.Clients` : `charger`, `oublier`, `ouvrirFiche`) ; `index.html` −448 lignes (2 375 → 1 927).
+- Déplacé tel quel : liste par pages et recherche serveur (étape 21), export CSV, fiche client
+  (historique scans + ajustements, annulation du dernier mouvement, prénom, points, suppression),
+  style de la liste (préfixé `#tab-clients`), 23 textes FR/EN propres à l'onglet.
+- **Restent au cœur** : le balisage de la fiche et de ses 3 fenêtres (`#modal-client`,
+  `#modal-rename`, `#modal-adjust`, `#modal-delete`) avec leurs textes `data-i18n` et leur style
+  (`cs-*`) ; l'état dans `S` (`S.clients`, `S.clientsTotal`, `S.clientsQ`, `S.clientId`,
+  `S.clientData`, `S.deleteTargetId`) : `scans.js` et la déconnexion le remettent à `null`
+  comme avant ; `applyForfaitGating` règle toujours le bouton CSV s'il existe (même règle
+  recopiée à la construction de l'onglet) ; `renderOverview` (appelé après une suppression),
+  `colorFrom`, `dateLocale` ; les clés partagées (`refresh`, `save`, `confirm`, `errorGeneric`,
+  `annulerPassage`, `scanAnnule`, `annulPassageConfirm`, `annulRefus*`, `deletePermanently`).
+- Déconnexion : `Clients.oublier()` efface la recherche (avant : le champ, au cœur).
+- **Seul écart visible** : après un changement de langue, la ligne « N clients » est redessinée
+  tout de suite dans la nouvelle langue (avant : au rendu suivant). Même règle que les onglets
+  déjà découpés (textes refaits de mémoire, sans requête).
+- Tests : `fiche_annulation.js` ouvre la fiche par `Clients.ouvrirFiche` (avant : `openClientSheet`,
+  global du cœur) ; 2 nouveaux dans `onglets.js` (langue changée après l'ouverture : textes
+  refaits, recherche gardée, aucune requête, fiche ouverte depuis la liste ; `clients.js` cassé :
+  seul Clients le dit) ; syntaxe de `clients.js` dans le filet. **Filet 462/462**, **suite
+  complète 567/567**. **Contre-épreuve** sur `cf6edca` : « Clients cassé » échoue (l'isolation
+  est nouvelle), le contrôle de langue passe (même comportement), la fiche des tests ne s'ouvre
+  pas (`Clients.ouvrirFiche` absent).
+- Code mort repéré, laissé : style `.btn-delete` (aucun élément ne le porte).
+- Retour arrière : `git revert` du commit.
 
 ## 15 untriginta sexagies. API CAISSES — CADRAGE (19/10, rien codé)
 

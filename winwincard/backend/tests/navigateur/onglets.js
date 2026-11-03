@@ -141,6 +141,39 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     verifier('navigateur, Notifications (notifs.js) : langue changée après l\'ouverture → textes refaits (FR → EN → FR), message tapé gardé, aucune requête',
       [avantLangue, apresLangue, await titreNotifs(), requetes, a.erreurs],
       ['Notifications push', ['Push notifications', 'Bonjour', 'Send notification'], 'Notifications push', [], []]);
+
+    // 4 bis. Clients (clients.js, t42, onglet 4/6) : même règle. Recherche tapée,
+    // langue changée → textes refaits, recherche gardée, liste redessinée de
+    // mémoire, aucune requête ; la fiche s'ouvre depuis la liste.
+    await p.click('.nav-btn[data-tab="clients"]');
+    await p.waitForSelector('#tab-clients .client-card, #tab-clients .empty');
+    const etatClients = () => p.evaluate(() => [document.querySelector('#tab-clients .tab-header h2').textContent,
+      document.getElementById('search-clients').placeholder, document.getElementById('search-clients').value,
+      document.getElementById('clients-meta').textContent]);
+    await p.evaluate(() => { document.getElementById('search-clients').value = 'zz'; S.clientsQ = 'zz'; });
+    const requetesC = [];
+    const compterC = r => { if (r.url().includes('/api/')) requetesC.push(r.url()); };
+    p.on('request', compterC);
+    await p.evaluate(() => setLang('en'));
+    const clientsEn = await etatClients();
+    await p.evaluate(() => setLang('fr'));
+    p.off('request', compterC);
+    const clientsFr = await etatClients();
+    const idCl = require('crypto').randomUUID(), serialCl = require('crypto').randomUUID();
+    sql(`INSERT INTO clients (id, marchand_id, prenom, stored_value, pass_serial_number) VALUES ('${idCl}', '${id}', 'Lina', 2, '${serialCl}');
+         UPDATE clients SET visible = true WHERE id = '${idCl}';
+         INSERT INTO passes (client_id, marchand_id, serial_number) VALUES ('${idCl}', '${id}', '${serialCl}')`);
+    await p.evaluate(() => { S.clientsQ = ''; S.clients = null; document.getElementById('search-clients').value = ''; });
+    await p.click('#btn-refresh-clients');
+    await p.waitForSelector('#tab-clients .client-card');
+    await p.click('#tab-clients .client-card');
+    await p.waitForFunction(() => S.clientData && document.getElementById('modal-client').classList.contains('open'));
+    const ficheOuverte = await p.evaluate(() => document.getElementById('cs-name').textContent === S.clientData.client.prenom);
+    await p.click('#cs-close');
+    sql(`DELETE FROM clients WHERE id = '${idCl}'`);
+    verifier('navigateur, Clients (clients.js) : langue changée après l\'ouverture → textes refaits (EN puis FR), recherche gardée, aucune requête ; la fiche s\'ouvre depuis la liste et se ferme',
+      [clientsEn.slice(0, 3), clientsFr.slice(0, 3), requetesC, ficheOuverte, await p.evaluate(() => S.clientId), a.erreurs],
+      [['Clients', 'Search by first name…', 'zz'], ['Clients', 'Rechercher par prénom…', 'zz'], [], true, null, []]);
     await a.contexte.close();
 
     // Largeur de téléphone : la barre d'onglets tient (7 onglets).
@@ -192,6 +225,17 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
        rc.erreurs.length, /Unexpected|SyntaxError|expected/i.test(rc.erreurs[0] || '')],
       [true, 'Onglet momentanément indisponible. Rechargez la page.', 1, true]);
     await rc.contexte.close();
+
+    // 2 quinquies. clients.js cassé (t42, onglet 4/6) : seul « Clients » le dit.
+    const clc = await ouvrir({ casser: 'clients.js' });
+    const casseC = await toutOuvrir(clc.page);
+    await clc.page.click('.nav-btn[data-tab="clients"]');
+    const texteClients = (await clc.page.textContent('#tab-clients')).trim();
+    verifier('navigateur, « Clients » cassé (fichier invalide) : les autres onglets s\'ouvrent ; « Clients » affiche « indisponible » ; seule erreur : celle du fichier cassé',
+      [Object.entries(casseC.etat).filter(([o]) => o !== 'clients').every(([, v]) => v), texteClients,
+       clc.erreurs.length, /Unexpected|SyntaxError|expected/i.test(clc.erreurs[0] || '')],
+      [true, 'Onglet momentanément indisponible. Rechargez la page.', 1, true]);
+    await clc.contexte.close();
 
     // 2 quater. scans.js cassé (t42) : seul « Scans » le dit.
     const scc = await ouvrir({ casser: 'scans.js' });

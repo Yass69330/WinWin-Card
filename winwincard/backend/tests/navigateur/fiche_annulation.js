@@ -42,12 +42,12 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     page.on('request', r => { if (r.url().includes('/api/')) ecran.requetes.push(`${r.method()} ${new URL(r.url()).pathname}`); });
     await page.route('https://cdn.jsdelivr.net/**', r => r.fulfill({ contentType: 'text/javascript', body: 'window.jsQR = () => null;' }));
     await page.goto(urlServeur + '/dashboard/');
-    await page.waitForFunction(() => typeof openClientSheet === 'function' && S.token && S.maxValue);
+    await page.waitForFunction(() => window.Clients && typeof Clients.ouvrirFiche === 'function' && S.token && S.maxValue);
     return ecran;
   }
   async function fiche(ecran, clientId) {
     ecran.requetes.length = 0;
-    await ecran.page.evaluate(id => openClientSheet(id), clientId);
+    await ecran.page.evaluate(id => Clients.ouvrirFiche(id), clientId);
     await ecran.page.waitForFunction(() => S.clientData && document.querySelector('#cs-scans-list .cs-scan-row'));
   }
   const boutons = ecran => ecran.page.evaluate(() => [...document.querySelectorAll('#cs-scans-list .cs-undo')].map(b => b.dataset.id));
@@ -137,7 +137,7 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
 
     const h = client(M.tampons, 2);
     await fiche(e2, h.id).catch(() => {});
-    await e2.page.evaluate(id => openClientSheet(id), h.id);
+    await e2.page.evaluate(id => Clients.ouvrirFiche(id), h.id);
     await e2.page.waitForFunction(id => S.clientData && S.clientData.client.id === id, h.id);
     await api('POST', '/api/scan', tT, { serial_number: h.serial, cle_idempotence: crypto.randomUUID() });       // un scan passe : 2 → 3
     await ajusterDansFiche(e2, 5);
@@ -147,7 +147,7 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     await e2.page.click('#adjust-cancel');
 
     const k = client(M.tampons, 4);
-    await e2.page.evaluate(id => openClientSheet(id), k.id);
+    await e2.page.evaluate(id => Clients.ouvrirFiche(id), k.id);
     await e2.page.waitForFunction(id => S.clientData && S.clientData.client.id === id, k.id);
     await ajusterDansFiche(e2, 11);
     verifier('tampons : au-dessus du seuil refusé, comme avant (plafond inchangé)', [await erreurAjustement(e2), solde(k.id)], ['Valeur entre 0 et 10', 4]);
@@ -156,7 +156,7 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     const ep = await ouvrir(M.points, 'filet-points', { ww_dash_type_programme: 'points' });
     await ep.page.waitForFunction(() => S.typeProgramme === 'points');
     const q = client(M.points, 100);
-    await ep.page.evaluate(id => openClientSheet(id), q.id);
+    await ep.page.evaluate(id => Clients.ouvrirFiche(id), q.id);
     await ep.page.waitForFunction(id => S.clientData && S.clientData.client.id === id, q.id);
     ep.accepter = false; ep.dialogues.length = 0;
     await ajusterDansFiche(ep, 900);
