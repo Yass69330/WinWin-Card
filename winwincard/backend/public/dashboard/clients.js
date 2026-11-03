@@ -4,7 +4,7 @@
 // Fichier à part, sur le modèle de notifs.js / reseau.js / scans.js : une erreur
 // ici n'arrête que cet onglet (et la fiche, qui ne s'ouvre que depuis lui). Il
 // utilise les outils du cœur (api, esc, t, _lang, colorFrom, dateLocale, S,
-// renderOverview, window.Scans) et n'écrit que dans #tab-clients, dans la fiche
+// window.Apercu, window.Scans) et n'écrit que dans #tab-clients, dans la fiche
 // et ses trois fenêtres (#modal-client, #modal-rename, #modal-adjust,
 // #modal-delete, dont le balisage reste au cœur avec ses textes data-i18n) et
 // dans window.Clients.
@@ -527,7 +527,7 @@
       document.getElementById('modal-delete').classList.remove('open');
       if (S.clients) { S.clients = S.clients.filter(c => c.id !== id); S.clientsTotal = Math.max(0, (S.clientsTotal || 1) - 1); }
       renderClients();
-      if (S.stats) { S.stats.porteurs = Math.max(0, (S.stats.porteurs || 1) - 1); renderOverview(); }
+      if (S.stats) { S.stats.porteurs = Math.max(0, (S.stats.porteurs || 1) - 1); if (window.Apercu) window.Apercu.afficher(); }
     } catch (e) {
       alert(e.message);
     } finally {

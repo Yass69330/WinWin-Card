@@ -133,10 +133,7 @@
     .stat-label { font-size: 12px; color: var(--muted); }
 
     .qr-card { background: var(--surface); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
-    .qr-card img { width: 180px; height: 180px; border-radius: 10px; background: #fff; }
-    .qr-url { font-size: 12px; color: var(--muted); word-break: break-all; text-align: center; }
-    .qr-actions { display: flex; gap: 8px; width: 100%; }
-    .qr-actions .btn { flex: 1; }
+    /* QR code de l'Aperçu (img, url, actions) : apercu.js (t42) */
 
     /* ═══════════════ CLIENTS : style de la liste dans clients.js (t42) ═══════════════ */
     .btn-delete { flex-shrink: 0; color: var(--error); background: none; border: none; font-size: 18px; padding: 6px; cursor: pointer; opacity: .6; border-radius: 8px; -webkit-tap-highlight-color: transparent; }
@@ -365,26 +362,8 @@
 
   <div class="dash-content">
 
-    <!-- ── Aperçu ── -->
-    <div id="tab-overview" class="tab-panel active">
-      <div class="stats-grid" id="stats-grid">
-        <div class="skeleton skeleton-card"></div>
-        <div class="skeleton skeleton-card"></div>
-        <div class="skeleton skeleton-card"></div>
-        <div class="skeleton skeleton-card"></div>
-        <div class="skeleton skeleton-card" style="grid-column:1/-1"></div>
-      </div>
-      <p class="section-title" data-i18n="qrSectionTitle">QR code landing page</p>
-      <div class="qr-card" id="qr-section">
-        <div class="skeleton" style="width:180px;height:180px;border-radius:10px"></div>
-        <div class="skeleton" style="width:60%;height:12px;border-radius:6px"></div>
-      </div>
-      <!-- ── Points de vente (visible uniquement si le réseau a ≥ 1 boutique) ── -->
-      <div id="pdv-section" style="display:none">
-        <p class="section-title" data-i18n="pdvSectionTitle">Points de vente</p>
-        <div class="qr-card" id="pdv-card" style="align-items:stretch;gap:6px"></div>
-      </div>
-    </div>
+    <!-- ── Aperçu : chiffres, QR code et boutiques dans apercu.js (t42, découpage) ── -->
+    <div id="tab-overview" class="tab-panel active"></div>
 
     <!-- ── Réseau (groupe) — visible seulement si ≥ 1 boutique ── -->
     <div id="tab-reseau" class="tab-panel"></div>
@@ -673,20 +652,12 @@ const I18N = {
     pageTitle:'WinWin Dashboard', loginSub:'Manage your loyalty program',
     merchantId:'Merchant ID (slug)', password:'Password', signIn:'Sign in', signOut:'Sign out',
     rememberMe:'Stay signed in on this device', rememberMeHint:'Uncheck on a shared computer.',
-    qrSectionTitle:'QR code landing page',
-    pdvSectionTitle:'Points of sale', pdvRename:'Rename',
-    pdvAddHint:'To add a point of sale, contact us.',
-    pdvRenamePrompt:'New name for this point of sale:',
-    pdvCut:'Cut access', pdvRestore:'Restore', pdvCutStatus:'cut off',
-    pdvConfirmCut:'Cut scanner access for "{nom}"? Scanning stops immediately at this store.',
-    pdvConfirmRestore:'Restore scanner access for "{nom}"?',
     statTotalClients:'Total clients', statScansToday:'Scans today', statActive30d:'Active (30 days)',
     statRetention:'Retention rate', statAvgVisits:'Avg visits / active client (30d)',
     statRetentionHint:'signed up more than 30 days ago, came back at least twice in the last 30 days',
     statRetentionWait:'available after 30 days', statNew:'New this month', statNewCompare:'same days last month: {n}',
     statsUnavailable:'Statistics unavailable right now.',
     loginUnavailable:'Service temporarily unavailable. Please try again in a moment.',
-    copyLink:'📋 Copy link', copied:'✓ Copied', share:'↗ Share', qrShareTitle:'Loyalty program',
     refresh:'Refresh',
     historyTitle:'History',
     scanHint:"Point at the client's pass QR code", manualEntry:'Manual entry', points:'Points',
@@ -764,20 +735,12 @@ const I18N = {
     pageTitle:'WinWin — Tableau de bord', loginSub:'Gérez votre programme de fidélité',
     merchantId:'Identifiant marchand (slug)', password:'Mot de passe', signIn:'Se connecter', signOut:'Se déconnecter',
     rememberMe:'Rester connecté sur cet appareil', rememberMeHint:'À décocher sur un ordinateur partagé.',
-    qrSectionTitle:"QR code de la page d'accueil",
-    pdvSectionTitle:'Points de vente', pdvRename:'Renommer',
-    pdvAddHint:'Pour ajouter un point de vente, contactez-nous.',
-    pdvRenamePrompt:'Nouveau nom de ce point de vente :',
-    pdvCut:"Couper l'accès", pdvRestore:'Rétablir', pdvCutStatus:'coupée',
-    pdvConfirmCut:"Couper l'accès scanner de « {nom} » ? Le scan s'arrête immédiatement dans cette boutique.",
-    pdvConfirmRestore:"Rétablir l'accès scanner de « {nom} » ?",
     statTotalClients:'Clients au total', statScansToday:"Scans aujourd'hui", statActive30d:'Actifs (30 jours)',
     statRetention:'Taux de rétention', statAvgVisits:'Visites moy. / client actif (30j)',
     statRetentionHint:'inscrits depuis plus de 30 jours, revenus au moins 2 fois sur les 30 derniers jours',
     statRetentionWait:'disponible après 30 jours', statNew:'Nouveaux ce mois', statNewCompare:'aux mêmes jours du mois préc. : {n}',
     statsUnavailable:'Statistiques indisponibles pour le moment.',
     loginUnavailable:'Service momentanément indisponible. Réessayez dans un instant.',
-    copyLink:'📋 Copier le lien', copied:'✓ Copié', share:'↗ Partager', qrShareTitle:'Programme de fidélité',
     refresh:'Actualiser',
     historyTitle:'Historique',
     scanHint:'Visez le QR code du pass du client', manualEntry:'Saisie manuelle', points:'Points',
@@ -1037,7 +1000,16 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.getElementById('tab-' + tab).classList.add('active');
-  if (tab === 'overview') loadOverview();
+  if (tab === 'overview') {
+    if (window.Apercu) window.Apercu.charger();
+    else {
+      const indisponible = () => { document.getElementById('tab-overview').innerHTML = `<div class="alert alert-info">${esc(_lang === 'fr' ? 'Onglet momentanément indisponible. Rechargez la page.' : 'Tab temporarily unavailable. Reload the page.')}</div>`; };
+      indisponible();
+      // Aperçu en panne : le reste du dashboard a quand même sa langue, son
+      // forfait, son seuil et ses boutiques (puis le message dans la bonne langue).
+      lireContexte().then(appliquerContexte).then(indisponible).catch(() => {});
+    }
+  }
   if (tab === 'reseau') {
     if (window.Reseau) window.Reseau.charger();
     else document.getElementById('tab-reseau').innerHTML = `<div class="alert alert-info">${esc(_lang === 'fr' ? 'Onglet momentanément indisponible. Rechargez la page.' : 'Tab temporarily unavailable. Reload the page.')}</div>`;
@@ -1051,7 +1023,7 @@ function switchTab(tab) {
     else document.getElementById('tab-scans').innerHTML = `<div class="alert alert-info">${esc(_lang === 'fr' ? 'Onglet momentanément indisponible. Rechargez la page.' : 'Tab temporarily unavailable. Reload the page.')}</div>`;
   }
   if (tab === 'scanner')  startScannerTab();
-  // « Réseau » (reseau.js), « Clients » (clients.js), « Scans » (scans.js), « Notifications » (notifs.js) et « Ma carte » (ma-carte.js) vivent dans leur
+  // « Aperçu » (apercu.js), « Réseau » (reseau.js), « Clients » (clients.js), « Scans » (scans.js), « Notifications » (notifs.js) et « Ma carte » (ma-carte.js) vivent dans leur
   // fichier : s'il ne charge pas, seul cet onglet l'affiche, les autres continuent.
   if (tab === 'notifs') {
     if (window.Notifs) window.Notifs.charger();
@@ -1064,23 +1036,18 @@ function switchTab(tab) {
 }
 
 // ════════════════════════════════════════════════
-// TAB: APERÇU
+// TAB: APERÇU — chiffres, QR code, boutiques : apercu.js (t42). Restent ici,
+// parce que d'autres onglets en dépendent : la lecture de /me et des boutiques
+// (langue, forfait, seuil, S.pdv, onglet Réseau) et le bloc de chiffres partagé
+// avec l'onglet Réseau.
 // ════════════════════════════════════════════════
-async function loadOverview(force = false) {
-  if (!force && S.stats && S.qr) { renderOverview(); return; }
-  // /me est relu à chaque chargement (en parallèle, sans attente de plus) : le
-  // forfait et le droit aux coordonnées changent depuis l'admin, et une valeur
-  // gardée d'une session à l'autre laissait un bouton d'export faux.
-  const [statsRes, qrRes, meRes, pdvRes] = await Promise.all([
-    api('/api/merchants/me/stats').catch(() => null),
-    api('/api/merchants/me/qrcode'),
-    api('/api/merchants/me'),
-    api('/api/merchants/me/points-de-vente'),
-  ]);
-  // Statistiques en panne (503) ou injoignables : rien n'est gardé, l'écran le
-  // dit et le prochain affichage redemande (étape 26).
-  S.stats = statsRes && statsRes.ok ? await statsRes.json().catch(() => null) : null;
-  S.qr    = await qrRes.json();
+// /me est relu à chaque chargement de l'Aperçu (en parallèle, sans attente de
+// plus) : le forfait et le droit aux coordonnées changent depuis l'admin, et une
+// valeur gardée d'une session à l'autre laissait un bouton d'export faux.
+function lireContexte() {
+  return Promise.all([api('/api/merchants/me'), api('/api/merchants/me/points-de-vente')]);
+}
+async function appliquerContexte([meRes, pdvRes]) {
   S.pdv   = await pdvRes.json().catch(() => []);
   if (meRes.ok) {
     const me = await meRes.json();
@@ -1099,64 +1066,13 @@ async function loadOverview(force = false) {
     setLang(me.langue);
     applyForfaitGating();
   }
-  renderOverview();
+  majNavReseau();
 }
-
-// Points de vente — visible uniquement si le réseau a ≥ 1 boutique (mono-site : masqué)
-function renderPdv() {
-  const section = document.getElementById('pdv-section');
-  const card    = document.getElementById('pdv-card');
+// Onglet Réseau visible uniquement pour un réseau (≥ 1 boutique) → mono-site intact.
+function majNavReseau() {
   const list = Array.isArray(S.pdv) ? S.pdv : [];
-  // Onglet Réseau visible uniquement pour un réseau (≥ 1 boutique) → mono-site intact.
   const navR = document.getElementById('nav-reseau');
   if (navR) navR.style.display = list.length ? '' : 'none';
-  if (!section || !card) return;
-  if (list.length === 0) { section.style.display = 'none'; return; }
-  section.style.display = '';
-  card.innerHTML = list.map(b => {
-    const cut = b.actif === false;
-    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid rgba(0,0,0,.06)">
-      <span style="font-weight:600">${esc(b.nom)}${cut ? ` <span style="color:var(--error,#ef4444);font-size:12px;font-weight:600">• ${t('pdvCutStatus')}</span>` : ''}</span>
-      <span style="display:flex;gap:6px;flex-shrink:0">
-        <button class="btn btn-outline btn-sm btn-pdv-rename" data-id="${esc(b.id)}" data-nom="${esc(b.nom)}">${t('pdvRename')}</button>
-        <button class="btn btn-outline btn-sm btn-pdv-actif" data-id="${esc(b.id)}" data-nom="${esc(b.nom)}" data-actif="${b.actif !== false}">${cut ? t('pdvRestore') : t('pdvCut')}</button>
-      </span>
-    </div>`;
-  }).join('') +
-    `<div class="field-hint" style="margin-top:10px;opacity:.75">${t('pdvAddHint')}</div>`;
-  card.querySelectorAll('.btn-pdv-rename').forEach(btn =>
-    btn.addEventListener('click', () => renamePdv(btn.dataset.id, btn.dataset.nom)));
-  card.querySelectorAll('.btn-pdv-actif').forEach(btn =>
-    btn.addEventListener('click', () => toggleActif(btn.dataset.id, btn.dataset.nom, btn.dataset.actif === 'true')));
-}
-
-// Couper / rétablir l'accès scanner d'une boutique (levier franchiseur, 3d).
-async function toggleActif(id, nom, currentlyActif) {
-  const msg = (currentlyActif ? t('pdvConfirmCut') : t('pdvConfirmRestore')).replace('{nom}', nom);
-  if (!confirm(msg)) return;
-  const res  = await api(`/api/merchants/me/points-de-vente/${id}/actif`, {
-    method: 'PATCH', body: JSON.stringify({ actif: !currentlyActif }),
-  });
-  const data = await res.json();
-  if (!res.ok) { alert(data.error || 'Erreur'); return; }
-  const b = (S.pdv || []).find(x => x.id === id);
-  if (b) b.actif = data.actif;
-  renderPdv();
-}
-
-async function renamePdv(id, currentNom) {
-  const saisi = prompt(t('pdvRenamePrompt'), currentNom);
-  if (saisi === null) return;
-  const nom = saisi.trim();
-  if (!nom || nom === currentNom) return;
-  const res  = await api(`/api/merchants/me/points-de-vente/${id}`, {
-    method: 'PATCH', body: JSON.stringify({ nom }),
-  });
-  const data = await res.json();
-  if (!res.ok) { alert(data.error || 'Erreur'); return; }
-  const b = (S.pdv || []).find(x => x.id === id);
-  if (b) b.nom = data.nom;
-  renderPdv();
 }
 
 // Bloc commun de l'Aperçu et de l'onglet Réseau (étape 26) : les chiffres
@@ -1199,34 +1115,6 @@ function statsPanneHtml(idBouton) {
   return `<div class="qr-card" style="grid-column:1/-1;align-items:center;text-align:center">
       <p style="margin:0 0 10px">${t('statsUnavailable')}</p>
       <button class="btn btn-outline btn-sm" id="${idBouton}">${t('reessayer')}</button></div>`;
-}
-
-function renderOverview() {
-  const grille = document.getElementById('stats-grid');
-  if (S.stats) {
-    grille.innerHTML = statsBlocHtml(S.stats);
-  } else {
-    grille.innerHTML = statsPanneHtml('btn-stats-retry');
-    document.getElementById('btn-stats-retry').addEventListener('click', () => loadOverview(true));
-  }
-  renderPdv();
-  const qrSection = document.getElementById('qr-section');
-  qrSection.innerHTML = `
-    <img src="${S.qr.qrcode}" alt="QR code">
-    <div class="qr-url">${S.qr.url}</div>
-    <div class="qr-actions">
-      <button class="btn btn-outline btn-sm" id="btn-copy-url">${t('copyLink')}</button>
-      ${navigator.share ? `<button class="btn btn-outline btn-sm" id="btn-share-url">${t('share')}</button>` : ''}
-    </div>`;
-  document.getElementById('btn-copy-url')?.addEventListener('click', () => {
-    navigator.clipboard.writeText(S.qr.url).then(() => {
-      const b = document.getElementById('btn-copy-url');
-      b.textContent = t('copied'); setTimeout(() => b.textContent = t('copyLink'), 2000);
-    });
-  });
-  document.getElementById('btn-share-url')?.addEventListener('click', () => {
-    navigator.share({ url: S.qr.url, title: t('qrShareTitle') }).catch(() => {});
-  });
 }
 
 // ════════════════════════════════════════════════
@@ -1914,13 +1802,17 @@ document.documentElement.lang = _lang;
 document.title = t('pageTitle');
 applyI18n();
 
-if (restoreSession()) showDashboard();
+// Après le chargement des fichiers d'onglets (balises plus bas) : l'Aperçu, ouvert
+// d'entrée, vit dans apercu.js (t42). DOMContentLoaded part même si l'un d'eux
+// ne charge pas (son onglet affiche alors « indisponible »).
+document.addEventListener('DOMContentLoaded', () => { if (restoreSession()) showDashboard(); });
 </script>
 <!-- Onglets à part (t42 ; f17) : versionnés par ?v=, à changer à chaque modification
      du fichier (le service worker sert les JS depuis son cache). -->
+<script src="/dashboard/apercu.js?v=1"></script>
 <script src="/dashboard/notifs.js?v=1"></script>
 <script src="/dashboard/reseau.js?v=1"></script>
-<script src="/dashboard/clients.js?v=1"></script>
+<script src="/dashboard/clients.js?v=2"></script>
 <script src="/dashboard/scans.js?v=2"></script>
 <script src="/dashboard/ma-carte.js?v=3"></script>
 </body>

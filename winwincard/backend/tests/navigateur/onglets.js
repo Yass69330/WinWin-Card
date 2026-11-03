@@ -47,10 +47,10 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     'ramadan.png': await logo(`<svg xmlns="http://www.w3.org/2000/svg" width="320" height="100"><circle cx="48" cy="50" r="34" fill="#d4af37"/><circle cx="62" cy="42" r="30" fill="#0b3d2e"/><text x="96" y="64" font-family="Georgia, serif" font-weight="700" font-size="40" fill="#d4af37">Ramadan</text></svg>`),
   };
   const navigateur = await chromium.launch();
-  async function ouvrir({ largeur = 420, hauteur = 1100, casser = false } = {}) {
+  async function ouvrir({ largeur = 420, hauteur = 1100, casser = false, memoire = {}, attendre = '#stats-grid .stat-card' } = {}) {
     const contexte = await navigateur.newContext({ serviceWorkers: 'block', viewport: { width: largeur, height: hauteur } });
     await contexte.addInitScript(s => { for (const [k, v] of Object.entries(s)) localStorage.setItem(k, v); },
-      { ww_dash_token: jeton, ww_dash_id: id, ww_dash_nom: nom, ww_dash_slug: slug, ww_dash_lang: 'fr', ww_dash_forfait: 'pro_plus', ww_dash_themes: '1' });
+      { ww_dash_token: jeton, ww_dash_id: id, ww_dash_nom: nom, ww_dash_slug: slug, ww_dash_lang: 'fr', ww_dash_forfait: 'pro_plus', ww_dash_themes: '1', ...memoire });
     // Logos préfabriqués : servis ici comme le ferait Storage (le filet n'a pas de Storage).
     await contexte.route('https://logos.exemple/**', r => r.fulfill({ contentType: 'image/png', body: logos[r.request().url().split('/').pop()] || logos['standard.png'] }));
     // casser : nom du fichier d'onglet remplacé par un fichier invalide.
@@ -61,7 +61,7 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     page.on('console', m => { if (m.type() === 'error' && !BRUIT.test(m.text())) erreurs.push(`console : ${m.text()}`); });
     page.on('dialog', d => d.accept().catch(() => {}));
     await page.goto(urlServeur + '/dashboard/');
-    await page.waitForSelector('#stats-grid .stat-card');
+    await page.waitForSelector(attendre);
     return { contexte, page, erreurs };
   }
   async function toutOuvrir(page) {
@@ -141,6 +141,29 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     verifier('navigateur, Notifications (notifs.js) : langue changée après l\'ouverture → textes refaits (FR → EN → FR), message tapé gardé, aucune requête',
       [avantLangue, apresLangue, await titreNotifs(), requetes, a.erreurs],
       ['Notifications push', ['Push notifications', 'Bonjour', 'Send notification'], 'Notifications push', [], []]);
+
+    // 4 ter. Aperçu (apercu.js, t42, onglet 5/6) : langue changée → titres refaits,
+    // chiffres et QR redessinés de mémoire, aucune requête ; boutiques : « Couper
+    // l'accès » puis « Rétablir » (confirmations acceptées), une requête chacun.
+    await p.click('.nav-btn[data-tab="overview"]');
+    await p.waitForSelector('#tab-overview #pdv-card .btn-pdv-actif');
+    const titresApercu = () => p.$$eval('#tab-overview .section-title', ts => ts.map(x => x.textContent));
+    const requetesA = [];
+    const compterA = r => { if (r.url().includes('/api/')) requetesA.push(r.url()); };
+    p.on('request', compterA);
+    await p.evaluate(() => setLang('en'));
+    const apercuEn = [await titresApercu(), await p.textContent('#btn-copy-url'), await p.locator('#stats-grid .stat-card').count() > 0];
+    await p.evaluate(() => setLang('fr'));
+    p.off('request', compterA);
+    const apercuFr = [await titresApercu(), await p.textContent('#btn-copy-url')];
+    await p.click('#pdv-card .btn-pdv-actif');
+    await p.waitForFunction(() => /coupée/.test(document.getElementById('pdv-card').textContent));
+    const coupee = sql(`SELECT actif FROM points_de_vente WHERE marchand_id = '${id}' AND nom = 'Boutique Thème'`);
+    await p.click('#pdv-card .btn-pdv-actif');
+    await p.waitForFunction(() => !/coupée/.test(document.getElementById('pdv-card').textContent));
+    verifier('navigateur, Aperçu (apercu.js) : langue changée → titres et boutons refaits (EN puis FR), chiffres gardés, aucune requête ; boutique coupée puis rétablie depuis l\'Aperçu',
+      [apercuEn, apercuFr, requetesA, coupee, sql(`SELECT actif FROM points_de_vente WHERE marchand_id = '${id}' AND nom = 'Boutique Thème'`), a.erreurs],
+      [[['QR code landing page', 'Points of sale'], '📋 Copy link', true], [["QR code de la page d'accueil", 'Points de vente'], '📋 Copier le lien'], [], 'f', 't', []]);
 
     // 4 bis. Clients (clients.js, t42, onglet 4/6) : même règle. Recherche tapée,
     // langue changée → textes refaits, recherche gardée, liste redessinée de
@@ -225,6 +248,22 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
        rc.erreurs.length, /Unexpected|SyntaxError|expected/i.test(rc.erreurs[0] || '')],
       [true, 'Onglet momentanément indisponible. Rechargez la page.', 1, true]);
     await rc.contexte.close();
+
+    // 2 sexies. apercu.js cassé (t42, onglet 5/6) : seul « Aperçu » le dit, et le
+    // reste du dashboard a QUAND MÊME ce que l'Aperçu chargeait (/me, boutiques) :
+    // mémoire de départ en anglais, forfait Pro, sans thèmes → corrigés par le cœur
+    // (français, Pro+, « Ma carte » et « Réseau » visibles).
+    const apc = await ouvrir({ casser: 'apercu.js', attendre: '#tab-overview .alert',
+      memoire: { ww_dash_lang: 'en', ww_dash_forfait: 'pro', ww_dash_themes: '0' } });
+    await apc.page.waitForFunction(() => S.forfait === 'pro_plus' && _lang === 'fr');
+    const visibles = await apc.page.$$eval('.nav-btn', bs => bs.filter(b => b.style.display !== 'none').map(b => b.dataset.tab));
+    const texteApercu = (await apc.page.textContent('#tab-overview')).trim();
+    const casseA = await toutOuvrir(apc.page);
+    verifier('navigateur, « Aperçu » cassé (fichier invalide) : il affiche « indisponible » ; le cœur lit quand même /me et les boutiques (français, Pro+, « Ma carte » et « Réseau » visibles) ; les autres onglets s\'ouvrent ; seule erreur : celle du fichier cassé',
+      [texteApercu, visibles.join(','), Object.entries(casseA.etat).filter(([o]) => o !== 'overview').every(([, v]) => v),
+       apc.erreurs.length, /Unexpected|SyntaxError|expected/i.test(apc.erreurs[0] || '')],
+      ['Onglet momentanément indisponible. Rechargez la page.', 'overview,reseau,clients,scans,scanner,notifs,carte', true, 1, true]);
+    await apc.contexte.close();
 
     // 2 quinquies. clients.js cassé (t42, onglet 4/6) : seul « Clients » le dit.
     const clc = await ouvrir({ casser: 'clients.js' });

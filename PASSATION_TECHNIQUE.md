@@ -269,8 +269,8 @@ de `85c7887` : `a80621a` code, `ae8039c` passation détaillée de ce lot) :
   `briques/f04-telephone` (`git checkout briques/f04-telephone -- <fichier>`), pas de fusion
   en bloc.
 
-**t42** (découpage du dashboard) : repris le 04/11 ; Notifs, Réseau, Scans en production, Clients
-(4/6) codé ; puis Aperçu (stats partagées + boutiques), Scanner en dernier.
+**t42** (découpage du dashboard) : repris le 04/11 ; Notifs, Réseau, Scans, Clients en production,
+Aperçu (5/6) codé ; Scanner en dernier.
 
 ### 0.6 Où lire quoi
 
@@ -7894,6 +7894,39 @@ plan : la clé `message` ne servait qu'à cet onglet, elle est partie avec lui.
   est nouvelle), le contrôle de langue passe (même comportement), la fiche des tests ne s'ouvre
   pas (`Clients.ouvrirFiche` absent).
 - Code mort repéré, laissé : style `.btn-delete` (aucun élément ne le porte).
+- Retour arrière : `git revert` du commit.
+- **En production** (`a02df70`, 04/11) ; contrôle de Yass : déploiement vert, onglet Clients ok.
+
+**Onglet 5/6 : Aperçu** (04/11, local) : `apercu.js` (`window.Apercu` : `charger`, `afficher`) ;
+`index.html` −109 lignes (1 927 → 1 818).
+- Déplacé tel quel : le squelette de l'onglet, les chiffres (`/me/stats`), le QR code (copier,
+  partager), la **gestion des boutiques** (renommer, couper, rétablir), le style du QR, 14 textes
+  FR/EN.
+- **Restent au cœur, parce que d'autres onglets en dépendent** (un Aperçu en panne ne fait tomber
+  que lui) :
+  - la lecture de `/me` et des boutiques : `lireContexte()` (les 2 requêtes) et
+    `appliquerContexte()` (seuil, forfait, coordonnées, thèmes, type, langue, `applyForfaitGating`,
+    `S.pdv` — aussi lu par Notifications —, `majNavReseau()` : onglet Réseau pour un réseau
+    seulement). L'Aperçu les appelle dans le même `Promise.all` que les chiffres et le QR : **mêmes
+    4 requêtes, au même moment, appliquées dans le même ordre** ;
+  - le bloc de chiffres partagé avec l'onglet Réseau (`statsBlocHtml`, `statsPanneHtml`), ses
+    textes et le style des cartes de chiffres.
+- Aperçu en panne : le cœur affiche « indisponible » et lit quand même `/me` et les boutiques.
+- **Démarrage** : `restoreSession()` / `showDashboard()` passent dans `DOMContentLoaded` (l'Aperçu,
+  ouvert d'entrée, vit maintenant dans un fichier chargé après le script du cœur). Les requêtes
+  de l'Aperçu partent donc après le chargement des fichiers d'onglets (servis par le service
+  worker), et non plus pendant. `DOMContentLoaded` part même si un fichier ne charge pas.
+- `clients.js` (`?v=2`) : après une suppression, `Apercu.afficher()` au lieu de `renderOverview()`.
+- **Seul écart visible** : après un changement de langue, les boutons du QR (« Copier le lien »,
+  « Partager ») et la liste des boutiques sont redessinés tout de suite dans la nouvelle langue
+  (avant : au rendu suivant). Même règle que les autres onglets.
+- Tests : 3 nouveaux dans `onglets.js` (Aperçu cassé : seul lui tombe, langue / forfait / Ma carte
+  / Réseau quand même corrects ; langue changée après l'ouverture : textes refaits, aucune
+  requête ; boutique coupée puis rétablie depuis l'Aperçu) ; syntaxe d'`apercu.js` dans le filet.
+  **Filet 463/463**, **suite complète 570/570**. **Contre-épreuve** sur `a02df70` : « Aperçu
+  cassé » ne se produit pas (isolation nouvelle) ; le contrôle de langue échoue sur le seul bouton
+  « Copier le lien » (l'écart visible ci-dessus).
+- Constat laissé tel quel : la déconnexion ne remet pas `S.pdv` à zéro (relu à l'Aperçu suivant).
 - Retour arrière : `git revert` du commit.
 
 ## 15 untriginta sexagies. API CAISSES — CADRAGE (19/10, rien codé)
