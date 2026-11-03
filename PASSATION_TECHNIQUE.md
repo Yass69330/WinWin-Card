@@ -92,7 +92,10 @@ indiquée.
   - Test du créneau `00:00-24:00` sur 2 appareils : résultat non noté ici.
   - Ouverture aux vrais marchands et volet Android : décisions à prendre.
   - Détail au §15 quinquinquagies.
-- **f17** (cartes à thème) : en production **dormant** le 15/10 (`495ed40`,
+- **f17** (cartes à thème) : finition livrée le 03/11 (texte sur PROGRESS, logos en cache,
+  gabarits Ramadan / Noël / Fête Nationale, édition admin, verrou de bascule, 24 h entre deux
+  ouvertures ; migrations 071, 072), §15 quinquadragies sexagies. Ouverture à un 2e marchand :
+  à décider. Historique : en production **dormant** le 15/10 (`495ed40`,
   migration 063).
   - L'interrupteur admin `themes_actifs` est à false partout et aucun thème n'est
     préparé. Mécanisme testé par Yass : il fonctionne.
@@ -8621,6 +8624,15 @@ déploiement vert, gabarit appliqué et thème modifié depuis l'admin : **ok**.
   thème programmé librement tant qu'il ne s'ouvre pas.
 - **Reporté** (pilotage, 03/11) : plafond global Google. **Abandonné** : fermeture si le Pro+
   est perdu.
+
+**Morceau 4 poussé** (`0cdb17f`, migration 072 exécutée avant : true, true, true) ; contrôlé
+par Yass (03/11) : déploiement vert, réouverture sous 24 h refusée, début dans 2 jours programmé :
+**ok**.
+
+**f17 : finition livrée (4 morceaux en production, 03/11).** Reste, hors code : décision
+d'ouvrir les thèmes à un 2e marchand (case admin + gabarit + logo). Reportés : plafond global
+Google (utile quand plusieurs marchands ouvrent le même jour de fête) ; place exacte du texte
+sur Android au rendu réel. Dette connue inchangée : jetons morts (410).
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
