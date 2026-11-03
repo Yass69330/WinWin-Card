@@ -8682,6 +8682,12 @@ seulement s'il valide.
   le formulaire, qui disparaît alors.
 - **Reporté** : mise à jour silencieuse immédiate (après validation du propriétaire).
 
+**En production** (`cf6edca`, 04/11, migration 073 exécutée avant : true, true, 0) ; contrôlé par
+Yass : déploiement vert, scan ok, lien posé sur Pizz'amore, **tappable et ouvre le formulaire sur
+iPhone et Android**. Prochaine étape (hors code) : démonstration au propriétaire ; s'il valide,
+mise à jour silencieuse immédiate des cartes déjà installées (à chiffrer : réutiliser
+`geo.rafraichir` côté iPhone + mise à jour Google par lots, source à ajouter au registre).
+
 **Décisions hors pilotage** (à valider) : libellé vide au-dessus du lien ; https obligatoire (et
 ni guillemet ni chevron dans l'URL) ; la version EN est codée (aucun marchand EN n'a le champ).
 
