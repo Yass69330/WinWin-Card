@@ -107,6 +107,8 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     const message = (await p.textContent('#tab-carte .mc-msg')).trim();
     await p.locator('#tab-carte .mc-form').screenshot({ path: path.join(captures, 'f17-2-choix.png') });
     await p.fill('#tab-carte .mc-form input[name="fin"]', await p.inputValue('#tab-carte .mc-form input[name="debut"]'));
+    // 24 h entre deux ouvertures (migration 072) : les scénarios viennent d'ouvrir un thème ici.
+    sql(`UPDATE marchands SET theme_ouvert_le = now() - interval '25 hours' WHERE id = '${id}'`);
     await p.click('#tab-carte .mc-form button[type="submit"]');
     await p.waitForSelector('#tab-carte .mc-etat #mc-arreter');
     const etat = (await p.textContent('#tab-carte .mc-etat')).replace(/\s+/g, ' ').trim();

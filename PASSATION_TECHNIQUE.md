@@ -8584,6 +8584,44 @@ custom gardée telle quelle sous un thème**.
 **Décision hors pilotage** (à valider) : le libellé de la notif dans l'admin accepte `{nom}` à
 la création et à la modification à la main, pas seulement à la copie d'un gabarit.
 
+**Morceau 3 poussé** (`10ed1a1`, migration 071 exécutée par Yass avant) ; contrôlé (03/11) :
+déploiement vert, gabarit appliqué et thème modifié depuis l'admin : **ok**.
+
+### Morceau 4 : verrou en base sur la bascule, 24 h entre deux ouvertures (local)
+
+- **Migration 072** (`database/migration_072_themes_verrou.sql`) : `marchands.theme_ouvert_le`
+  (dernière ouverture) ; `prendre_bascule_theme(marchand, instance, inactif)` (prise atomique :
+  libre, déjà à soi, ou sans avancement depuis `inactif`) ; `ouvrir_theme(...)` (ouvre en un
+  seul coup si le thème est toujours le programmé ET la dernière ouverture date de plus de
+  24 h ; rend `ok`, `trop_tot` ou `change`). **À exécuter AVANT le push.**
+- **`themes.js`** :
+  - la bascule porte `instance` (même identité que les campagnes : `RAILWAY_REPLICA_ID`, sinon
+    le nom de la machine) et `maj_le` ; `executer` la prend d'abord (sinon `{ occupe: true }`,
+    rien n'est envoyé) ; chaque `avancer` exige d'en être encore le propriétaire et renouvelle
+    `maj_le` ;
+  - reprise : une bascule sans avancement depuis **10 min** est reprise par un autre serveur ;
+    au démarrage, nouvel essai toutes les 10 min (6 fois au plus) tant qu'une bascule est tenue
+    ailleurs (avant : seulement au cron du lendemain) ;
+  - `ouvrir` passe par `ouvrir_theme` ; ouverture refusée → le thème reste programmé, le passage
+    suivant réessaie ; une ouverture reportée n'empêche plus la reprise d'une bascule inachevée
+    du même marchand.
+- **Route `POST /me/theme`** : après « un seul thème à la fois », refus **409
+  `ouverture_trop_recente`** (+ `possible_le`) si l'ouverture prévue (tout de suite, ou 08:00
+  UTC le jour du début) tombe moins de 24 h après la dernière : jamais de report silencieux.
+  L'arrêt (`DELETE`) reste libre. `ma-carte.js` (`?v=3`) affiche le message FR / EN.
+- **Filet 453/453** (+8, section 29 ; sections 28 et 29 sur leur propre serveur, pour ne pas
+  épuiser le limiteur global de 300 requêtes du serveur principal) ; **suite complète 556/556**.
+  **Contre-épreuve** sur `10ed1a1` avec la 072 en base : sections 1 à 28 vertes, seuls les 6
+  nouveaux contrôles de la section 29 échouent — la migration seule ne casse rien.
+- **Hypothèses et limites** : 10 min sans avancement = serveur arrêté (un lot très ralenti par
+  la file Apple commune, plusieurs marchands le même jour, pourrait dépasser : la bascule serait
+  alors reprise par l'autre serveur, au pire quelques envois en double, comme avant) ; horloges
+  du serveur et de la base supposées proches ; le délai compte les **ouvertures** seulement
+  (changer de thème = arrêt libre + ouverture, donc soumis au délai) ; le marchand change un
+  thème programmé librement tant qu'il ne s'ouvre pas.
+- **Reporté** (pilotage, 03/11) : plafond global Google. **Abandonné** : fermeture si le Pro+
+  est perdu.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)

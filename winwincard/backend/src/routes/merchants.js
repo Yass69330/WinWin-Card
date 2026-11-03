@@ -344,7 +344,7 @@ router.get('/me/themes', authMarchand, asyncHandler(async (req, res) => {
 router.post('/me/theme', authMarchand, asyncHandler(async (req, res) => {
   const themes = require('../services/themes');
   const { theme_id: themeId, debut, fin } = req.body || {};
-  const { data: m, error } = await supabase.from('marchands').select('forfait, theme_actif, themes_actifs').eq('id', req.marchandId).single();
+  const { data: m, error } = await supabase.from('marchands').select('forfait, theme_actif, themes_actifs, theme_ouvert_le').eq('id', req.marchandId).single();
   if (error || !m) return statsIndisponibles(res, 'theme', error || new Error('marchand introuvable'));
   if (!themesOuverts(m)) return res.status(403).json({ error: 'plan_not_eligible' });
   const erreurDates = themes.validerDates(debut, fin);
@@ -352,6 +352,10 @@ router.post('/me/theme', authMarchand, asyncHandler(async (req, res) => {
   // Un seul thème à la fois : celui en cours s'arrête d'abord (retour à la carte
   // standard). Un thème seulement programmé est remplacé.
   if (m.theme_actif && m.theme_actif.etat === 'en_cours') return res.status(409).json({ error: 'theme_en_cours' });
+  // 24 h au moins entre deux ouvertures (migration 072) : refusé dès le choix,
+  // jamais reporté en silence. La base le vérifie aussi à l'ouverture.
+  const possibleLe = themes.ouvertureTropProche(m.theme_ouvert_le, debut);
+  if (possibleLe) return res.status(409).json({ error: 'ouverture_trop_recente', possible_le: possibleLe });
   if (typeof themeId !== 'string') return res.status(400).json({ error: 'theme_id requis' });
   const { data: t, error: errT } = await supabase.from('themes_marchand').select(COLONNES_THEME_MARCHAND)
     .eq('id', themeId).eq('marchand_id', req.marchandId).maybeSingle();

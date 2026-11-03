@@ -2677,6 +2677,8 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       verifier('arrêt par le marchand : retour à la carte standard (fiche sans thème) ; bascule silencieuse lancée et terminée',
         [arret.statut, sql(`SELECT theme_actif IS NULL FROM marchands WHERE id = '${MT}'`),
          await attendre(async () => sql(`SELECT theme_bascule IS NULL FROM marchands WHERE id = '${MT}'`) === 't')], [200, 't', true]);
+      // Morceau 4 (migration 072) : 24 h entre deux ouvertures ; ici, la dernière date d'hier.
+      sql(`UPDATE marchands SET theme_ouvert_le = now() - interval '25 hours' WHERE id = '${MT}'`);
       const rouvert = await api('POST', '/api/merchants/me/theme', tMT, { theme_id: idT, debut: jour, fin: jour });
       const coupe = await api('PATCH', `/api/admin/marchands/${MT}`, jetonAdmin, { themes_actifs: false });
       const ferme2 = await attendre(async () => sql(`SELECT theme_actif IS NULL AND theme_bascule IS NULL FROM marchands WHERE id = '${MT}'`) === 't');
@@ -2860,6 +2862,12 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
               (SELECT count(*) FROM themes_gabarits WHERE nom IN ('Ramadan', 'Noël', 'Fête Nationale')),
               (SELECT texte_case_fr FROM themes_gabarits WHERE nom = 'Ramadan') = 'Ramadan Mubarak 🌙'`), sql(`SELECT count(*) FROM themes_gabarits`)],
       ['t|t|3|t', '3']);
+    // Serveur à part : le limiteur global (300 requêtes par 15 min) du serveur principal est déjà bien entamé.
+    const s28 = await demarrerServeur('gabarits');
+    const api = (methode, chemin, jt, corps) => fetch(s28.url + chemin, { method: methode,
+      headers: { 'Content-Type': 'application/json', ...(jt ? { Authorization: `Bearer ${jt}` } : {}) },
+      body: corps === undefined ? undefined : JSON.stringify(corps) })
+      .then(async r => ({ statut: r.status, corps: await r.json().catch(() => ({})) }));
     const MFR = 'e3710000-0000-4000-8000-000000000001', MEN = 'e3710000-0000-4000-8000-000000000002';
     sql(`INSERT INTO marchands (id, nom, slug, langue, forfait, type_programme, max_value, display_max_value, pass_display_name)
          VALUES ('${MFR}', 'Filet Gabarit SARL', 'filet-gabarit-fr', 'fr', 'pro_plus', 'stamps', 10, 10, 'Café Lune'),
@@ -2936,6 +2944,106 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
        habilleSans.couleur_pastille_fond, T.ficheBanniere(T.appliquerTheme(fiche({ forfait: 'pro', strip_custom_background_url: 'https://exemple/fond.jpg' })))._theme.ficheStandard === undefined],
       [true, true, null, true]);
     sql(`DELETE FROM marchands WHERE id IN ('${MFR}', '${MEN}')`);
+    s28.processus.kill();
+  }
+
+  titre('29. f17, morceau 4 : verrou en base sur la bascule, 24 h entre deux ouvertures (migration 072, 03/11)');
+  {
+    const path = require('path'), fs = require('fs');
+    sql(fs.readFileSync(path.join(__dirname, '..', 'database', 'migration_072_themes_verrou.sql'), 'utf8'));
+    verifier('migration 072 rejouée : contrôle « true, true, true »',
+      sql(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'marchands' AND column_name = 'theme_ouvert_le'),
+              has_function_privilege('service_role', 'public.prendre_bascule_theme(uuid,text,interval)', 'EXECUTE')
+                AND NOT has_function_privilege('anon', 'public.prendre_bascule_theme(uuid,text,interval)', 'EXECUTE'),
+              has_function_privilege('service_role', 'public.ouvrir_theme(uuid,text,jsonb,jsonb,interval)', 'EXECUTE')
+                AND NOT has_function_privilege('anon', 'public.ouvrir_theme(uuid,text,jsonb,jsonb,interval)', 'EXECUTE')`), 't|t|t');
+    const s29 = await demarrerServeur('verrou');
+    const api = (methode, chemin, jt, corps) => fetch(s29.url + chemin, { method: methode,
+      headers: { 'Content-Type': 'application/json', ...(jt ? { Authorization: `Bearer ${jt}` } : {}) },
+      body: corps === undefined ? undefined : JSON.stringify(corps) })
+      .then(async r => ({ statut: r.status, corps: await r.json().catch(() => ({})) }));
+    const MV = 'e3720000-0000-4000-8000-000000000001';
+    sql(`INSERT INTO marchands (id, nom, slug, langue, forfait, type_programme, max_value, display_max_value, themes_actifs)
+         VALUES ('${MV}', 'Filet Verrou', 'filet-verrou', 'fr', 'pro_plus', 'stamps', 10, 10, true)`);
+    const idV = sql(`INSERT INTO themes_marchand (marchand_id, nom, couleur_fond, texte_case, message_ouverture)
+                     VALUES ('${MV}', 'Noël', '#8E1420', 'Joyeuses fêtes 🎄', 'Bonnes fêtes !') RETURNING id`);
+    const tMV = jeton(MV);
+    const auj = new Date().toISOString().slice(0, 10);
+    const dans = n => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+    const choisir = debut => api('POST', '/api/merchants/me/theme', tMV, { theme_id: idV, debut, fin: dans(5) });
+    const bascule = () => attendre(async () => sql(`SELECT theme_bascule IS NULL FROM marchands WHERE id = '${MV}'`) === 't');
+
+    // ── 24 h entre deux ouvertures ──
+    const o1 = await choisir(auj);
+    const ouvertLe = sql(`SELECT theme_ouvert_le IS NOT NULL AND theme_ouvert_le > now() - interval '1 minute' FROM marchands WHERE id = '${MV}'`);
+    await bascule();
+    const stop = await api('DELETE', '/api/merchants/me/theme', tMV);
+    await bascule();
+    const o2 = await choisir(auj);
+    const o3 = await choisir(dans(1));
+    const o4 = await choisir(dans(2));
+    verifier('ouverture : 1re ouverture tout de suite (date notée) ; arrêt toujours libre ; rouvrir aujourd\'hui ou demain à 08:00 UTC (< 24 h) → 409 « ouverture_trop_recente » avec la date possible, rien changé ; après-demain → programmé',
+      [o1.corps.etat, ouvertLe, stop.statut, o2.statut, o2.corps.error, Math.abs(Date.parse(o2.corps.possible_le) - Date.now() - 864e5) < 120e3,
+       o3.statut, o4.statut, o4.corps.etat],
+      ['en_cours', 't', 200, 409, 'ouverture_trop_recente', true, 409, 200, 'programme']);
+    sql(`UPDATE marchands SET theme_ouvert_le = now() - interval '25 hours' WHERE id = '${MV}'`);
+    const o5 = await choisir(auj);
+    await bascule();
+    verifier('… dernière ouverture il y a plus de 24 h : ouvert tout de suite (le programmé est remplacé), date d\'ouverture renouvelée',
+      [o5.corps.etat, sql(`SELECT theme_ouvert_le > now() - interval '1 minute' FROM marchands WHERE id = '${MV}'`)], ['en_cours', 't']);
+
+    // ouvrir_theme en base : atomique ; « trop_tot » ne change rien ; un 2e appel voit « change ».
+    sql(`UPDATE marchands SET theme_actif = (SELECT to_jsonb(t) || jsonb_build_object('etat', 'programme', 'debut', '${auj}', 'fin', '${dans(5)}') FROM themes_marchand t WHERE id = '${idV}'), theme_bascule = NULL WHERE id = '${MV}'`);
+    const appel = () => sql(`SELECT public.ouvrir_theme('${MV}', '${idV}', '{"id":"${idV}","etat":"en_cours"}'::jsonb, '{"sens":"ouverture","cree_le":"x"}'::jsonb, '24 hours')`);
+    const tropTot = appel();
+    const etatApres = sql(`SELECT theme_actif->>'etat' FROM marchands WHERE id = '${MV}'`);
+    sql(`UPDATE marchands SET theme_ouvert_le = now() - interval '25 hours' WHERE id = '${MV}'`);
+    verifier('ouvrir_theme (base) : moins de 24 h → « trop_tot », thème toujours programmé ; sinon « ok » une seule fois, puis « change »',
+      [tropTot, etatApres, appel(), appel()], ['trop_tot', 'programme', 'ok', 'change']);
+
+    // Le passage du cron n'ouvre pas avant 24 h : le thème reste programmé.
+    sql(`UPDATE marchands SET theme_actif = (SELECT to_jsonb(t) || jsonb_build_object('etat', 'programme', 'debut', '${auj}', 'fin', '${dans(5)}') FROM themes_marchand t WHERE id = '${idV}'),
+         theme_bascule = NULL, theme_ouvert_le = now() - interval '2 hours' WHERE id = '${MV}'`);
+    const envT = { SUPABASE_URL: process.env.SUPABASE_URL, SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY };
+    Object.assign(process.env, { SUPABASE_URL: urlSupabase, SUPABASE_SERVICE_KEY: cleService });
+    const T = require('../src/services/themes');
+    const bilanCron = await T.passage();
+    verifier('passage du cron, dernière ouverture il y a 2 h : rien n\'est ouvert, le thème reste programmé (réessayé au passage suivant)',
+      [bilanCron.ouverts, sql(`SELECT theme_actif->>'etat' FROM marchands WHERE id = '${MV}'`)], [0, 'programme']);
+    sql(`UPDATE marchands SET theme_bascule = jsonb_build_object('sens', 'fin', 'theme_id', '${idV}', 'cree_le', '2026-01-02T00:00:00Z',
+         'apple_fini', true, 'google_fini', true, 'classe_ok', true) WHERE id = '${MV}'`);
+    const bilanCron2 = await T.passage();
+    verifier('… et une bascule inachevée du même marchand est quand même reprise par ce passage (ouverture reportée ne bloque rien)',
+      [bilanCron2.ouverts, bilanCron2.reprises, await attendre(async () => sql(`SELECT theme_bascule IS NULL FROM marchands WHERE id = '${MV}'`) === 't'),
+       sql(`SELECT theme_actif->>'etat' FROM marchands WHERE id = '${MV}'`)], [0, 1, true, 'programme']);
+
+    // ── Verrou de la bascule ──
+    const prendre = (instance, inactif = '600 seconds') => sql(`SELECT coalesce(public.prendre_bascule_theme('${MV}', '${instance}', '${inactif}')->>'instance', 'refus')`);
+    const poser = (instance, ilYa) => sql(`UPDATE marchands SET theme_bascule = jsonb_build_object('sens', 'fin', 'theme_id', '${idV}', 'cree_le', '2026-01-01T00:00:00Z',
+      'apple_fini', true, 'google_fini', true, 'classe_ok', true, 'instance', '${instance}', 'maj_le', now() - interval '${ilYa}') WHERE id = '${MV}'`);
+    poser('serveur-A', '30 seconds');
+    const refus = prendre('serveur-B');
+    const memeServeur = prendre('serveur-A');
+    poser('serveur-A', '11 minutes');
+    const reprise = prendre('serveur-B');
+    sql(`UPDATE marchands SET theme_bascule = NULL WHERE id = '${MV}'`);
+    verifier('prendre_bascule_theme : tenue par un autre serveur qui avance → refus ; le même serveur la reprend ; sans avancement depuis plus de 10 min → reprise par l\'autre ; aucune bascule → refus',
+      [refus, memeServeur, reprise, prendre('serveur-B')], ['refus', 'serveur-A', 'serveur-B', 'refus']);
+    const appelsApple = [];
+    T._pourTests({ envoyeurs: { appleActif: () => true, apple: async j => { appelsApple.push(j); }, googleActif: () => false } });
+    sql(`UPDATE marchands SET theme_actif = NULL WHERE id = '${MV}'`);
+    poser('autre-serveur', '30 seconds');
+    const occupe = await T.lancer(MV);
+    const passageOccupe = await T.passage();
+    const toujoursAutre = sql(`SELECT theme_bascule->>'instance' FROM marchands WHERE id = '${MV}'`);
+    poser('autre-serveur', '11 minutes');
+    const repris = await T.lancer(MV);
+    verifier('bascule tenue par un autre serveur (redéploiement) : ce serveur ne l\'exécute pas (aucun envoi), le passage la laisse ; arrêtée depuis plus de 10 min → reprise et terminée ici',
+      [occupe.occupe, passageOccupe.occupees, toujoursAutre, appelsApple.length, repris.sens, sql(`SELECT theme_bascule IS NULL FROM marchands WHERE id = '${MV}'`)],
+      [true, 1, 'autre-serveur', 0, 'fin', 't']);
+    for (const [k, v] of Object.entries(envT)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    sql(`DELETE FROM marchands WHERE id = '${MV}'`);
+    s29.processus.kill();
   }
 
   titre('API v1, étape 1 : clés d\'API, réglages de conversion, canal (20/10)');

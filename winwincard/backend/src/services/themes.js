@@ -316,7 +316,15 @@ function validerDates(debut, fin, maintenant = new Date()) {
 }
 
 // ── Bascule ────────────────────────────────────────────────────────────────
-const config = { iphoneParLot: 30, googleParLot: 50, googleSimultanes: 5, lotMs: 10000, repriseDelaiMs: 60000 };
+const config = { iphoneParLot: 30, googleParLot: 50, googleSimultanes: 5, lotMs: 10000, repriseDelaiMs: 60000,
+  // Morceau 4 (migration 072) : une bascule sans avancement depuis inactifMs est
+  // reprise par un autre serveur ; au démarrage, reprises retentées repriseEssais
+  // fois (toutes les inactifMs) tant qu'une bascule est tenue ailleurs.
+  inactifMs: 10 * 60e3, repriseEssais: 6,
+  // 24 h au moins entre deux ouvertures (message à toutes les cartes). L'arrêt reste libre.
+  delaiOuvertureMs: 24 * 3600e3 };
+const INSTANCE = process.env.RAILWAY_REPLICA_ID || require('os').hostname();
+const intervalle = ms => `${Math.round(ms / 1000)} seconds`;
 let envoyeurs = {
   appleActif:  () => require('./apns').isApnsConfigured(),
   apple:       jeton => require('./apns').sendPushUpdate(jeton),
@@ -351,11 +359,13 @@ function lancer(marchandId) {
   return e.promesse;
 }
 
-// Écrit l'avancement, seulement si la bascule n'a pas été remplacée entre-temps.
+// Écrit l'avancement, seulement si la bascule n'a pas été remplacée entre-temps
+// ET si ce serveur la tient toujours (migration 072) ; chaque écriture renouvelle
+// maj_le (un autre serveur ne la reprend qu'après inactifMs sans avancement).
 async function avancer(supabase, marchandId, b, champs) {
-  const suivant = champs === null ? null : { ...b, ...champs };
+  const suivant = champs === null ? null : { ...b, ...champs, instance: INSTANCE, maj_le: new Date().toISOString() };
   const { data, error } = await supabase.from('marchands').update({ theme_bascule: suivant })
-    .eq('id', marchandId).eq('theme_bascule->>cree_le', b.cree_le).select('id');
+    .eq('id', marchandId).eq('theme_bascule->>cree_le', b.cree_le).eq('theme_bascule->>instance', INSTANCE).select('id');
   if (error) throw new Error(`avancement : ${error.message}`);
   if (!data || !data.length) return false;   // remplacée : la plus récente reprendra
   if (suivant) Object.assign(b, champs);
@@ -371,7 +381,12 @@ async function executer(marchandId) {
     .select(`${COLONNES_BASCULE}, theme_bascule`).eq('id', marchandId).maybeSingle();
   if (error) throw new Error(`lecture : ${error.message}`);
   if (!m || !m.theme_bascule) return { rien: true };
-  const b = m.theme_bascule;
+  // Propriétaire en base (migration 072) : un seul serveur fait avancer la bascule.
+  const { data: prise, error: errPrise } = await supabase.rpc('prendre_bascule_theme', {
+    p_marchand_id: marchandId, p_instance: INSTANCE, p_inactif: intervalle(config.inactifMs) });
+  if (errPrise) throw new Error(`prise : ${errPrise.message}`);
+  if (!prise) return { occupe: true };   // tenue par un autre serveur qui avance encore
+  const b = prise;
   const message = b.sens === 'ouverture' ? b.message || null : null;
   const bilan = { sens: b.sens, iphones: 0, google: 0, erreurs: 0 };
 
@@ -455,17 +470,32 @@ function nouvelleBascule(sens, theme) {
 }
 
 // Ouverture : le thème programmé passe « en cours », puis bascule avec message.
-// Rend true si c'est cet appel qui a ouvert.
+// Rend true si c'est cet appel qui a ouvert. En base, d'un seul coup
+// (ouvrir_theme, migration 072) : thème toujours programmé ET dernière
+// ouverture il y a plus de 24 h ; sinon rien ne change (le thème reste
+// programmé : le passage suivant du cron réessaie).
 async function ouvrir(marchandId, theme) {
   const supabase = require('./supabase');
-  const { data, error } = await supabase.from('marchands')
-    .update({ theme_actif: { ...theme, etat: 'en_cours' }, theme_bascule: nouvelleBascule('ouverture', theme) })
-    .eq('id', marchandId).eq('theme_actif->>id', theme.id).eq('theme_actif->>etat', 'programme')
-    .select('id');
+  const { data, error } = await supabase.rpc('ouvrir_theme', {
+    p_marchand_id: marchandId, p_theme_id: theme.id, p_theme: { ...theme, etat: 'en_cours' },
+    p_bascule: nouvelleBascule('ouverture', theme), p_delai: intervalle(config.delaiOuvertureMs) });
   if (error) throw new Error(error.message);
-  if (!data || !data.length) return false;
+  if (data === 'trop_tot') console.log(`[theme] ouverture reportée, marchand ${marchandId} : dernière ouverture il y a moins de 24 h`);
+  if (data !== 'ok') return false;
   lancer(marchandId);
   return true;
+}
+
+// Date à laquelle un thème choisi maintenant s'ouvrirait : tout de suite si le
+// début est aujourd'hui (ou passé), sinon au passage du cron (08:00 UTC) du jour
+// de début. Rend la date à partir de laquelle une ouverture est possible si
+// celle-ci tombe moins de 24 h après la dernière ouverture, sinon null.
+const HEURE_PASSAGE = 'T08:00:00Z';
+function ouvertureTropProche(dernierOuvert, debut, maintenant = new Date()) {
+  if (!dernierOuvert) return null;
+  const possible = Date.parse(dernierOuvert) + config.delaiOuvertureMs;
+  const prevue = debut <= aujourdhui(maintenant) ? maintenant.getTime() : Date.parse(`${debut}${HEURE_PASSAGE}`);
+  return prevue < possible ? new Date(possible).toISOString() : null;
 }
 
 // Fin (date passée ou arrêt par le marchand) : retour à la carte standard,
@@ -493,28 +523,40 @@ async function passage(maintenant = new Date()) {
     .or('theme_actif.not.is.null,theme_bascule.not.is.null');
   if (error) throw new Error(error.message);
   const jour = aujourdhui(maintenant);
-  const bilan = { ouverts: 0, fermes: 0, reprises: 0 };
+  const bilan = { ouverts: 0, fermes: 0, reprises: 0, occupees: 0 };
   for (const m of data || []) {
     const t = m.theme_actif;
     try {
       // Fin passée, ou cartes à thème refermées par l'admin : retour au standard.
       if (t && (t.fin < jour || m.themes_actifs !== true)) { if (await fermer(m.id, t)) bilan.fermes++; continue; }
-      if (t && t.etat === 'programme' && t.debut <= jour) { if (await ouvrir(m.id, t)) bilan.ouverts++; continue; }
-      if (m.theme_bascule && !enCours.has(m.id)) { lancer(m.id); bilan.reprises++; }
+      // Ouverture reportée (24 h, migration 072) : on passe quand même à la reprise
+      // d'une bascule inachevée (une fin de thème précédente, par exemple).
+      if (t && t.etat === 'programme' && t.debut <= jour && await ouvrir(m.id, t)) { bilan.ouverts++; continue; }
+      if (m.theme_bascule && !enCours.has(m.id)) {
+        // Tenue par un autre serveur qui avance encore : on la laisse (morceau 4).
+        if (m.theme_bascule.instance && m.theme_bascule.instance !== INSTANCE && m.theme_bascule.maj_le
+            && Date.parse(m.theme_bascule.maj_le) > maintenant.getTime() - config.inactifMs) { bilan.occupees++; continue; }
+        lancer(m.id); bilan.reprises++;
+      }
     } catch (e) {
       console.error(`[theme] passage marchand ${m.id} :`, e.message);
     }
   }
-  if (bilan.ouverts || bilan.fermes || bilan.reprises) console.log('[theme] passage :', JSON.stringify(bilan));
+  if (bilan.ouverts || bilan.fermes || bilan.reprises || bilan.occupees) console.log('[theme] passage :', JSON.stringify(bilan));
   return bilan;
 }
 
 // Au démarrage du serveur : une reprise différée (l'ancien serveur finit son
-// lot pendant un redéploiement), puis plus rien jusqu'au cron.
-function planifierReprise() {
+// lot pendant un redéploiement). Si une bascule est encore tenue par un autre
+// serveur, nouvel essai toutes les inactifMs (repriseEssais fois au plus) : si
+// l'ancien serveur s'est arrêté en route, ce serveur-ci la reprend sans
+// attendre le cron du lendemain.
+function planifierReprise(essai = 1, delai = config.repriseDelaiMs) {
   const t = setTimeout(() => {
-    require('./arret').suivre(passage().catch(e => console.error('[theme] reprise :', e.message)));
-  }, config.repriseDelaiMs);
+    require('./arret').suivre(passage()
+      .then(b => { if (b.occupees && essai < config.repriseEssais) planifierReprise(essai + 1, config.inactifMs); })
+      .catch(e => console.error('[theme] reprise :', e.message)));
+  }, delai);
   t.unref();
 }
 
@@ -527,5 +569,5 @@ function _pourTests({ envoyeurs: e, config: c, attendre: a } = {}) {
 
 module.exports = {
   appliquerTheme, avecTheme, ficheBanniere, remplacerNom, depuisGabarit, apercu, preparerApercus, dossierCourant, validerTheme, validerDates, aujourdhui,
-  lancer, ouvrir, fermer, passage, planifierReprise, _pourTests,
+  lancer, ouvrir, fermer, passage, planifierReprise, ouvertureTropProche, INSTANCE, _pourTests,
 };
