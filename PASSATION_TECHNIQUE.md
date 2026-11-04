@@ -280,8 +280,7 @@ de `85c7887` : `a80621a` code, `ae8039c` passation détaillée de ce lot) :
   `briques/f04-telephone` (`git checkout briques/f04-telephone -- <fichier>`), pas de fusion
   en bloc.
 
-**t42** (découpage du dashboard) : repris le 04/11 ; Notifs, Réseau, Scans, Clients, Aperçu en
-production ; Scanner (6/6, dernier) codé.
+**t42** (découpage du dashboard) : **clos le 04/11**, 6 onglets sur 6 en production.
 
 ### 0.6 Où lire quoi
 
@@ -8000,6 +7999,15 @@ du dashboard terminé** (6/6).
   cassé » ne s'isole pas (l'onglet marche toujours : isolation nouvelle) ; `Scanner` absent.
 - Constat du test : un marchand **réseau** ne scanne pas depuis le dashboard (403
   `use_boutique_login`, règle existante) ; le test de scan passe donc par un mono-site.
+- **En production** (`ae7b367`, 04/11) ; contrôle de Yass : déploiement vert, les 4 scans réels
+  depuis l'onglet (caméra, saisie manuelle, double scan bloqué, coupure réseau → un seul crédit)
+  ok, caisse ok ; contrôle partiel de son propre aveu (« pas pu faire tous les tests, ça me
+  semble bon »). **t42 (découpage du dashboard) : CLOS, 6/6.** `index.html` : 2 790 lignes au
+  départ (18/10) → 1 126 ; 7 fichiers d'onglets, chacun isolé (test « fichier cassé » par onglet).
+- **Reste de t42, hors découpage** (non programmé) : `jsQR` chargé à l'ouverture du Scanner ;
+  clé d'idempotence en commun caisse / dashboard (dette consciente) ; lot de code mort sans
+  condition (≈ 55 lignes, §15 Volet 3) ; `admin.js` et `strip-generator.js` (aucun gain
+  marchand) ; `S.pdv` non remis à zéro à la déconnexion ; flash de l'écran de connexion.
 
 ## 15 untriginta sexagies. API CAISSES — CADRAGE (19/10, rien codé)
 
