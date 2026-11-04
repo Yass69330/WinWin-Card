@@ -181,7 +181,7 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     // ── Dashboard, onglet scanner ───────────────────────────────────────────
     titre('Navigateur : onglet scanner du dashboard');
     const db = await ouvrir('/dashboard/', { ww_dash_token: jeton(M.tampons), ww_dash_id: M.tampons, ww_dash_nom: 'Filet Tampons', ww_dash_slug: 'filet-tampons', ww_dash_lang: 'fr' });
-    await db.page.waitForFunction(() => typeof submitScanDashboard === 'function' && S.token);
+    await db.page.waitForFunction(() => window.Scanner && typeof Scanner.soumettre === 'function' && S.token);
     // Onglet Scans ouvert une première fois (historique lu et gardé en mémoire) :
     // le scan fait ensuite depuis l'onglet Scanner doit faire relire l'historique
     // (Scans.oublier, scans.js, t42).
@@ -191,7 +191,7 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
     await db.page.click('.nav-btn[data-tab="scanner"]');
     const k = client(M.tampons);
     couper(db, 'perdre', 2);
-    await db.page.evaluate(s => submitScanDashboard(s), k.serial);
+    await db.page.evaluate(s => Scanner.soumettre(s), k.serial);
     const panneauDashboard = await panneauOuvert(db.page, 'modal-sc-incident');
     await db.page.click('#sc-incident-principal');
     await db.page.waitForFunction(() => document.getElementById('sc-deja').style.display === 'block');

@@ -278,10 +278,10 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
       page.on('dialog', d => d.dismiss().catch(() => {}));
       await page.route('https://cdn.jsdelivr.net/**', r => r.fulfill({ contentType: 'text/javascript', body: 'window.jsQR = () => null;' }));
       await page.goto(urlServeur + '/dashboard/');
-      await page.waitForFunction(() => typeof submitScanDashboard === 'function' && S.token);
+      await page.waitForFunction(() => window.Scanner && typeof Scanner.soumettre === 'function' && S.token);
       const expire = jwt.sign({ role: 'marchand', marchand_id: M.tampons, tv: 1, exp: maintenant() - 60 }, secretJwt);
       await page.evaluate(t => { S.token = t; }, expire);
-      await page.evaluate(s => submitScanDashboard(s), client(M.tampons).serial);
+      await page.evaluate(s => Scanner.soumettre(s), client(M.tampons).serial);
       const panneauDb = await page.evaluate(() => document.getElementById('modal-sc-incident').classList.contains('open')
         && document.getElementById('sc-incident-titre').textContent);
       await page.click('#sc-incident-principal');

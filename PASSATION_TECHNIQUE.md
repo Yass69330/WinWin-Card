@@ -269,8 +269,8 @@ de `85c7887` : `a80621a` code, `ae8039c` passation détaillée de ce lot) :
   `briques/f04-telephone` (`git checkout briques/f04-telephone -- <fichier>`), pas de fusion
   en bloc.
 
-**t42** (découpage du dashboard) : repris le 04/11 ; Notifs, Réseau, Scans, Clients en production,
-Aperçu (5/6) codé ; Scanner en dernier.
+**t42** (découpage du dashboard) : repris le 04/11 ; Notifs, Réseau, Scans, Clients, Aperçu en
+production ; Scanner (6/6, dernier) codé.
 
 ### 0.6 Où lire quoi
 
@@ -7940,6 +7940,50 @@ plan : la clé `message` ne servait qu'à cet onglet, elle est partie avec lui.
   chargement (le défaut vu par Yass). Filet 463/463, suite complète 571/571. Les requêtes de
   l'Aperçu partent toujours après le chargement des fichiers d'onglets (quelques ms, cache du
   service worker).
+- **Correctif poussé** (`6f0f2cb`, 04/11) ; contrôle de Yass : déploiement vert ; un flash de
+  l'écran de connexion reste perceptible au rafraîchissement, « limite invisible », jugé non
+  gênant (chantier technique, le cosmétique n'est pas la priorité). **Constat laissé tel quel** :
+  l'écran de connexion est l'écran actif du balisage ; il peut être peint avant que le script du
+  cœur bascule sur le dashboard (page longue). Piste si besoin un jour : écran de connexion
+  masqué par défaut quand un jeton est en mémoire (une ligne de script en tête de page).
+
+**Onglet 6/6 : Scanner** (04/11, local) : `scanner.js` (`window.Scanner` : `demarrer`, `arreter`,
+`soumettre`, `lireQR`) ; `index.html` −692 lignes (1 818 → 1 126). **Dernier onglet : découpage
+du dashboard terminé** (6/6).
+- **Balayage exhaustif des références avant le code** (demande du pilotage) : 39 fonctions et
+  variables définies dans la zone ; hors zone, seules `startScannerTab` (ouverture de l'onglet) et
+  `stopScannerTab` (changement d'onglet, `showLogin`) étaient appelées ; la zone utilise du cœur
+  `api`, `t`, `showLogin`, `clearSession`, `showErr`, `S` (lit `displayMax`, `marchandSlug`,
+  `token`, `typeProgramme` ; **écrit `S.token`** au renouvellement de session), `SC` et
+  `SC_LOCK_CLEAR_MS` (état, déplacés avec elle), `window.Scans`, `jsQR` (chargé en tête par le
+  cœur) ; 16 écouteurs posés au chargement sur le balisage ; aucun écouteur sur `document` ou
+  `window` ; 48 éléments, tous présents dans le balisage ; stockage local :
+  `ww_dashboard_cle_en_attente` (sa clé en attente, **même nom**) et `ww_dash_token` (session
+  renouvelée). **La clé de la caisse `ww_scanner_cle_en_attente` n'apparaît nulle part dans le
+  dashboard** (seulement dans un commentaire de `scanner.js` qui le dit). 39 textes : 36 propres
+  au scanner (déplacés, extraits clé par clé), 3 partagés (`cancel`, `reessayer`, `signOut`).
+- Déplacé tel quel : caméra et lecture du QR, verrou de carte, confirmation avant écriture,
+  pavé de points, saisie manuelle, clé d'idempotence, panneau d'incident et nouvel essai,
+  renouvellement de session, résultat.
+- **Restent au cœur** : le balisage de l'onglet et de ses 4 fenêtres (saisie manuelle,
+  confirmation, incident, pavé), leur style (`sc-*`), leurs textes `data-i18n`, `jsQR` en tête de
+  page. `switchTab` et `showLogin` n'arrêtent la caméra que si `scanner.js` est là.
+- **Caisse intacte** : aucune ligne de `public/scanner/index.html` ne change.
+- **Hors push, validé comme tel** : clé d'idempotence en commun entre caisse et dashboard (dette
+  consciente : 2 copies identiques de ≈ 40 lignes, couvertes par les tests des deux écrans) ;
+  `jsQR` chargé seulement à l'ouverture du Scanner (gain de chargement, changement de
+  comportement).
+- Tests : `cle_ecrans.js` et `caisse_erreurs.js` appellent `Scanner.soumettre` (avant :
+  `submitScanDashboard`, global du cœur) ; 2 nouveaux dans `onglets.js` : `scanner.js` cassé (seul
+  le Scanner tombe ; changer d'onglet et revenir à la connexion sans erreur) ; **scans réels par
+  l'écran** : saisie manuelle → « Valider ce scan ? » → crédité une fois ; la même carte relue par
+  la caméra après « Scan suivant » → verrou, rien de plus ; une autre carte → confirmation ;
+  quitter l'onglet → caméra arrêtée. Les tests existants couvrent toujours, depuis le dashboard,
+  « Connexion perdue » → « Réessayer » : même clé, crédité une fois, et la session expirée.
+  **Filet 464/464**, **suite complète 574/574**. **Contre-épreuve** sur `6f0f2cb` : « Scanner
+  cassé » ne s'isole pas (l'onglet marche toujours : isolation nouvelle) ; `Scanner` absent.
+- Constat du test : un marchand **réseau** ne scanne pas depuis le dashboard (403
+  `use_boutique_login`, règle existante) ; le test de scan passe donc par un mono-site.
 
 ## 15 untriginta sexagies. API CAISSES — CADRAGE (19/10, rien codé)
 

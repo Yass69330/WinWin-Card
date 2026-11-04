@@ -267,6 +267,66 @@ module.exports = async function ({ sql, verifier, secretJwt, urlServeur, api }) 
       pendant, [true, false, true, true]);
     await lent.close();
 
+    // 2 octies. scanner.js cassé (t42, onglet 6/6) : seul « Scanner » le dit ; changer
+    // d'onglet et se déconnecter ne lèvent rien (le cœur n'arrête la caméra que si
+    // scanner.js est là).
+    const scK = await ouvrir({ casser: 'scanner.js' });
+    const casseSc = await toutOuvrir(scK.page);
+    await scK.page.click('.nav-btn[data-tab="scanner"]');
+    const texteScanner = (await scK.page.textContent('#tab-scanner')).trim();
+    await scK.page.click('.nav-btn[data-tab="clients"]');
+    await scK.page.evaluate(() => showLogin());
+    verifier('navigateur, « Scanner » cassé (fichier invalide) : les autres onglets s\'ouvrent ; « Scanner » affiche « indisponible » ; changer d\'onglet et revenir à la connexion sans erreur ; seule erreur : celle du fichier cassé',
+      [Object.entries(casseSc.etat).filter(([o]) => o !== 'scanner').every(([, v]) => v), texteScanner,
+       await scK.page.evaluate(() => document.getElementById('screen-login').classList.contains('active')),
+       scK.erreurs.length, /Unexpected|SyntaxError|expected/i.test(scK.erreurs[0] || '')],
+      [true, 'Onglet momentanément indisponible. Rechargez la page.', true, 1, true]);
+    await scK.contexte.close();
+
+    // 2 novies. Scanner du dashboard (scanner.js) par l'écran : saisie manuelle →
+    // « Valider ce scan ? » → crédité une fois ; la même carte relue par la caméra
+    // juste après → verrou (« déjà scanné »), rien de plus ; une autre carte passe ;
+    // quitter l'onglet arrête la caméra (Scanner.arreter appelé).
+    // Mono-site pour ce test : un réseau scanne avec l'identifiant de sa boutique
+    // (403 use_boutique_login, règle existante) ; la boutique revient après.
+    sql(`DELETE FROM points_de_vente WHERE marchand_id = '${id}'`);
+    const sk = await ouvrir();
+    const P = sk.page;
+    const crypto = require('crypto');
+    const carte = () => { const i = crypto.randomUUID(), sr = crypto.randomUUID();
+      sql(`INSERT INTO clients (id, marchand_id, prenom, stored_value, pass_serial_number) VALUES ('${i}', '${id}', 'Nora', 0, '${sr}');
+           INSERT INTO passes (client_id, marchand_id, serial_number) VALUES ('${i}', '${id}', '${sr}')`);
+      return { i, sr }; };
+    const k1 = carte(), k2 = carte();
+    const soldeDe = c => sql(`SELECT stored_value || '|' || (SELECT count(*) FROM scans WHERE client_id = '${c.i}') FROM clients WHERE id = '${c.i}'`);
+    await P.click('.nav-btn[data-tab="scanner"]');
+    // Banc sans caméra : le panneau « erreur caméra » s'ouvre ; le caissier passe
+    // par son bouton « Saisie manuelle » (celui de l'écran caméra est dessous).
+    await P.waitForSelector('#sc-result-sheet.visible');
+    await P.click('#sc-btn-manual-after');
+    await P.fill('#sc-manual-input', k1.sr);
+    await P.click('#sc-manual-submit');
+    await P.waitForSelector('#modal-sc-confirm.open');
+    await P.click('#sc-confirm-btn');
+    await P.waitForFunction(() => document.getElementById('sc-name').textContent === 'Nora'
+      && document.getElementById('sc-result-sheet').classList.contains('visible'));
+    const apresManuel = soldeDe(k1);
+    await P.click('#sc-btn-rescan');   // « Scan suivant » : la caméra reprend, le client garde sa carte levée
+    await P.evaluate(s => Scanner.lireQR(s), k1.sr);
+    await P.waitForSelector('#sc-locked.open');
+    const verrou = [await P.evaluate(() => document.getElementById('modal-sc-confirm').classList.contains('open')), soldeDe(k1)];
+    await P.evaluate(s => Scanner.lireQR(s), k2.sr);
+    const autreCarte = await P.evaluate(() => document.getElementById('modal-sc-confirm').classList.contains('open'));
+    await P.click('#sc-confirm-cancel');
+    await P.evaluate(() => { const f = Scanner.arreter; window.__arrets = 0; Scanner.arreter = () => { window.__arrets++; f(); }; });
+    await P.click('.nav-btn[data-tab="clients"]');
+    verifier('navigateur, Scanner du dashboard : saisie manuelle → confirmation → crédité une fois ; même carte relue → verrou, rien de plus ; autre carte → confirmation ; quitter l\'onglet → caméra arrêtée ; aucune erreur',
+      [apresManuel, verrou, autreCarte, soldeDe(k2), await P.evaluate(() => window.__arrets), sk.erreurs.filter(e => !/camera|caméra|getUserMedia|NotFound|NotAllowed/i.test(e))],
+      ['1|1', [false, '1|1'], true, '0|0', 1, []]);
+    sql(`DELETE FROM clients WHERE id IN ('${k1.i}', '${k2.i}')`);
+    sql(`INSERT INTO points_de_vente (marchand_id, nom, actif, scanner_login) VALUES ('${id}', 'Boutique Thème', true, 'filet-theme-b1') ON CONFLICT DO NOTHING`);
+    await sk.contexte.close();
+
     // 2 sexies. apercu.js cassé (t42, onglet 5/6) : seul « Aperçu » le dit, et le
     // reste du dashboard a QUAND MÊME ce que l'Aperçu chargeait (/me, boutiques) :
     // mémoire de départ en anglais, forfait Pro, sans thèmes → corrigés par le cœur
