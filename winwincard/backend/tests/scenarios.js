@@ -3668,6 +3668,176 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       (await appel(`/api/v1/ventes/${r2}/annulation`, kT)).statut, 404);
     s5.processus.kill();
   }
+
+  // ── 31. H0 : le téléphone selon le pays du marchand (migration 074, 05/11) ──
+  titre('31. H0 : téléphone selon le pays du marchand, Émirats inchangés (migration 074, 05/11)');
+  {
+    const path = require('path'), fs = require('fs');
+    const dossier = path.join(__dirname, '..', 'database');
+    const m074 = fs.readFileSync(path.join(dossier, 'migration_074_telephone_pays.sql'), 'utf8');
+    const lit = (fn, b, pays) => sql(`SELECT coalesce(${fn}('${b}'${pays === undefined ? '' : `, ${pays === null ? 'NULL' : `'${pays}'`}`}), 'null')`);
+
+    // ── A. Émirats : octet pour octet ───────────────────────────────────────
+    verifier('la migration 074 ne définit PAS normaliser_telephone (la règle de la 068 n\'est ni redéfinie ni recréée)',
+      /FUNCTION\s+public\.normaliser_telephone\s*\(/i.test(m074), false);
+    // 3 000 saisies tirées au hasard (graine fixe) dans les formes réelles : préfixes
+    // Émirats, France, étrangers, séparateurs, longueurs de 0 à 16 chiffres.
+    let graine = 74;
+    const hasard = n => { graine = (graine * 1103515245 + 12345) % 2147483648; return graine % n; };
+    const prefixes = ['', '0', '00', '+', '05', '5', '971', '+971', '+9710', '00971', '04', '06', '07', '33', '+33', '+330', '0033', '+44', '1', '+0', '012'];
+    const seps = ['', ' ', '-', '.', '/', '(', ')'];
+    const saisies = [];
+    for (let i = 0; i < 3000; i++) {
+      let s = prefixes[hasard(prefixes.length)];
+      const n = hasard(17);
+      for (let k = 0; k < n; k++) { if (hasard(4) === 0) s += seps[hasard(seps.length)]; s += String(hasard(10)); }
+      saisies.push(s);
+    }
+    saisies.push('', 'abc', '050 123 4567', '+971 50 123 4567', '06 12 34 56 78', '05 56 12 34 56', '+33 (0)6 12 34 56 78');
+    const tableau = `ARRAY[${saisies.map(s => `'${s}'`).join(',')}]::text[]`;
+    verifier('3 007 saisies : normaliser_telephone_pays(x, \'AE\') et (x, NULL) = normaliser_telephone(x), sans exception (0 écart)',
+      sql(`SELECT count(*) FILTER (WHERE normaliser_telephone_pays(x, 'AE') IS DISTINCT FROM normaliser_telephone(x)) || '|'
+              || count(*) FILTER (WHERE normaliser_telephone_pays(x, NULL) IS DISTINCT FROM normaliser_telephone(x)) || '|' || count(*)
+             FROM unnest(${tableau}) x`), `0|0|${saisies.length}`);
+    const casAE = [['050 123 4567', '+971501234567'], ['0501234567', '+971501234567'], ['+971 50 123 4567', '+971501234567'],
+      ['00971501234567', '+971501234567'], ['501234567', '+971501234567'], ['04 123 4567', '+97141234567'],
+      ['+33 6 12 34 56 78', '+33612345678'], ['06 12 34 56 78', null], ['05 56 12 34 56', '+971556123456'], ['abc', null]];
+    verifier('marchand AE : mêmes résultats qu\'avant H0, y compris les défauts connus (« 06… » illisible, « 05 56… » lu comme les Émirats)',
+      casAE.map(([b]) => lit('normaliser_telephone_pays', b, 'AE')), casAE.map(([, x]) => x || 'null'));
+
+    // ── B. France : la branche neuve ────────────────────────────────────────
+    const casFR = [['06 12 34 56 78', '+33612345678'], ['0612345678', '+33612345678'], ['06.12.34.56.78', '+33612345678'],
+      ['07-11-22-33-44', '+33711223344'], ['+33 6 12 34 56 78', '+33612345678'], ['+33 (0)6 12 34 56 78', '+33612345678'],
+      ['0033 6 12 34 56 78', '+33612345678'], ['33612345678', '+33612345678'], ['05 56 12 34 56', '+33556123456'],
+      ['01 23 45 67 89', '+33123456789'], ['+971 50 123 4567', '+971501234567'], ['+44 7700 900123', '+447700900123'],
+      ['612345678', null], ['00 00 00 00 00', null], ['0 612345678', '+33612345678'], ['abc', null], ['', null]];
+    verifier('marchand FR : 06/07, points ou tirets, +33, +33 (0), 0033, 33, fixe 05 et 01, étranger avec « + » ; 9 chiffres sans le 0 et le reste → null',
+      casFR.map(([b]) => lit('normaliser_telephone_pays', b, 'FR')), casFR.map(([, x]) => x || 'null'));
+
+    // ── C. La migration sur une base qui a déjà des numéros ─────────────────
+    const banc = require('./lancer');
+    const base = 'winwin_m074';
+    banc.psqlSocket(`DROP DATABASE IF EXISTS ${base}`, 'postgres');
+    banc.psqlSocket(`CREATE DATABASE ${base}`, 'postgres');
+    banc.psqlSocket(`ALTER DATABASE ${base} SET search_path = "$user", public, extensions`, 'postgres');
+    banc.psqlSocket('CREATE SCHEMA extensions; CREATE EXTENSION "uuid-ossp" SCHEMA extensions; CREATE EXTENSION pgcrypto SCHEMA extensions;', base);
+    const avant = fs.readdirSync(dossier).filter(f => /^migration_\d+.*\.sql$/.test(f) && f < 'migration_074').sort();
+    for (const f of ['schema.sql', ...avant]) banc.psqlSocket(fs.readFileSync(path.join(dossier, f), 'utf8'), base);
+    const g = q => banc.psqlSocket(q, base);
+    const AE = M.tampons, FR = M.points;
+    g(`INSERT INTO marchands (id, nom, slug, forfait, type_programme, max_value, langue) VALUES
+         ('${AE}', 'Dubaï', 'dxb', 'pro', 'stamps', 10, 'en'), ('${FR}', 'Paris', 'paris', 'pro', 'stamps', 10, 'fr');
+       INSERT INTO clients (marchand_id, prenom, pass_serial_number, telephone, telephone_source) VALUES
+         ('${AE}', 'A1', 'ae-1', '0501112222', 'inscription'), ('${AE}', 'A2', 'ae-2', '+971 50 333 4444', 'inscription'),
+         ('${AE}', 'A3', 'ae-3', 'pas un numéro', 'inscription'), ('${AE}', 'A4', 'ae-4', '06 12 34 56 78', 'inscription'),
+         ('${AE}', 'A5', 'ae-5', '05 56 12 34 56', 'inscription'), ('${AE}', 'A6', 'ae-6', NULL, NULL),
+         ('${FR}', 'F1', 'fr-1', '06 12 34 56 78', 'inscription'), ('${FR}', 'F2', 'fr-2', '05 56 12 34 56', 'inscription'),
+         ('${FR}', 'F3', 'fr-3', '+33 7 11 22 33 44', 'inscription'), ('${FR}', 'F4', 'fr-4', 'abc', 'inscription'),
+         ('${FR}', 'F5', 'fr-5', '+971556999999', 'caisse'), ('${FR}', 'F6', 'fr-6', '+33 6 12 34 56 78', 'inscription');`);
+    const photo = m => g(`SELECT string_agg(pass_serial_number || '=' || coalesce(telephone_normalise, '-'), ' ' ORDER BY pass_serial_number) FROM clients WHERE marchand_id = '${m}'`);
+    const aeAvant = photo(AE), frAvant = photo(FR);
+    let erreur = '';
+    try { g(m074); } catch (e) { erreur = e.message; }
+    verifier('migration 074, deux clients FR au même numéro une fois lu en français (« 06 12… » et « +33 6 12… », distincts avant) : arrêt, RIEN changé',
+      [/migration 074 arrêtée : 1 numéro\(s\) en double/.test(erreur), g(`SELECT count(*) FROM information_schema.columns WHERE table_name IN ('clients', 'marchands') AND column_name IN ('pays', 'pays_telephone')`),
+       photo(AE) === aeAvant, photo(FR) === frAvant], [true, '0', true, true]);
+    g(`DELETE FROM clients WHERE pass_serial_number = 'fr-6'`);
+    const frAvant2 = photo(FR);
+    g(m074); g(m074);
+    verifier('… doublon réglé : migration passée (rejouée deux fois) ; pays posé par la langue (en → AE, fr → FR), copié sur chaque client',
+      g(`SELECT string_agg(slug || ':' || pays, ' ' ORDER BY slug) || '|' || (SELECT string_agg(DISTINCT pays_telephone, ',') FROM clients WHERE marchand_id = '${AE}')
+            || '|' || (SELECT string_agg(DISTINCT pays_telephone, ',') FROM clients WHERE marchand_id = '${FR}') FROM marchands`), 'dxb:AE paris:FR|AE|FR');
+    verifier('marchand AE : CHAQUE forme normalisée identique, octet pour octet (y compris « 06… » → null et « 05 56… » → +971)',
+      [photo(AE) === aeAvant, photo(AE)], [true, 'ae-1=+971501112222 ae-2=+971503334444 ae-3=- ae-4=- ae-5=+971556123456 ae-6=-']);
+    verifier('marchand FR : AVANT, « 06… » illisible et « 05 56… » faux (+971) ; APRÈS, réparés depuis la valeur brute ; brute écrasée en +971 par la caisse : NON réparable ; illisible : reste illisible',
+      [frAvant2, photo(FR)],
+      ['fr-1=- fr-2=+971556123456 fr-3=+33711223344 fr-4=- fr-5=+971556999999',
+       'fr-1=+33612345678 fr-2=+33556123456 fr-3=+33711223344 fr-4=- fr-5=+971556999999']);
+    verifier('valeurs brutes jamais touchées par la migration', g(`SELECT string_agg(coalesce(telephone, '-'), '|' ORDER BY pass_serial_number) FROM clients WHERE marchand_id = '${FR}'`),
+      '06 12 34 56 78|05 56 12 34 56|+33 7 11 22 33 44|abc|+971556999999');
+    g(`SELECT regler_pays_marchand('${FR}', 'AE', true)`);
+    g(m074);
+    verifier('pays réglé ensuite (FR → AE) : un rejeu de la 074 ne le remet pas selon la langue ; retour à AE = exactement la règle 068',
+      [g(`SELECT pays FROM marchands WHERE id = '${FR}'`), g(`SELECT count(*) FROM clients WHERE telephone_normalise IS DISTINCT FROM normaliser_telephone(telephone)`)], ['AE', '0']);
+    g(`INSERT INTO clients (marchand_id, prenom, pass_serial_number, telephone) VALUES ('${AE}', 'N', 'ae-n', '0612345679')`);
+    verifier('contrôle de la migration (bloc VÉRIFICATION) : colonne, index, déclencheur, 0 écart AE, 0 pays en désaccord',
+      g(`SELECT (SELECT pg_get_expr(d.adbin, d.adrelid) LIKE '%normaliser_telephone_pays%' FROM pg_attrdef d JOIN pg_attribute a ON a.attrelid = d.adrelid AND a.attnum = d.adnum
+                   WHERE d.adrelid = 'public.clients'::regclass AND a.attname = 'telephone_normalise'),
+                 (SELECT count(*) = 1 FROM pg_indexes WHERE indexname = 'clients_telephone_unique'),
+                 (SELECT count(*) = 1 FROM pg_trigger WHERE tgname = 'clients_pays_telephone'),
+                 (SELECT count(*) FROM clients WHERE pays_telephone = 'AE' AND telephone_normalise IS DISTINCT FROM normaliser_telephone(telephone)),
+                 (SELECT count(*) FROM clients c JOIN marchands m ON m.id = c.marchand_id WHERE c.pays_telephone <> m.pays)`), 't|t|t|0|0');
+    // Les requêtes livrées à Yass tournent (lecture seule) : blocs A et B avant, C après.
+    const requetes = fs.readFileSync(path.join(dossier, 'requetes', 'h0_telephone_pays.sql'), 'utf8');
+    let requetesOk = true;
+    for (const bloc of requetes.split(/^-- ═+ BLOC /m).slice(1)) {
+      try { g(`BEGIN READ ONLY; ${bloc.replace(/^[^\n]*\n/, '')}; ROLLBACK;`); } catch (e) { requetesOk = e.message; }
+    }
+    verifier('requêtes de H0 (aperçu, couverture, écarts) : exécutées en lecture seule sans erreur', requetesOk, true);
+    banc.psqlSocket(`DROP DATABASE IF EXISTS ${base}`, 'postgres');
+
+    // ── D. Le vrai serveur ──────────────────────────────────────────────────
+    sql(m074);   // rejeu sur la base du filet : rien ne bouge
+    const MFR = '60000000-0000-4000-8000-000000000006';
+    sql(`INSERT INTO marchands (id, nom, slug, forfait, type_programme, max_value, display_max_value, langue, pays, landing_premium)
+         VALUES ('${MFR}', 'Filet France', 'filet-france', 'pro', 'points', 500, 500, 'fr', 'FR', true)`);
+    const s31 = await demarrerServeur('h0-pays', urlSupabase, { API_V1_MAX_PAR_MINUTE: '5000' });
+    const appel = (methode, chemin, auth, corps) => fetch(s31.url + chemin, { method: methode,
+      headers: { 'Content-Type': 'application/json', ...(auth ? { Authorization: auth } : {}) },
+      body: corps === undefined ? undefined : JSON.stringify(corps) })
+      .then(async r => ({ statut: r.status, corps: await r.json().catch(() => ({})) }));
+    const adm = (methode, chemin, corps) => appel(methode, chemin, `Bearer ${jetonAdmin}`, corps);
+    const fiche = id => sql(`SELECT coalesce(telephone, '-') || '|' || coalesce(telephone_normalise, '-') || '|' || pays_telephone FROM clients WHERE id = '${id}'`);
+
+    const ins = await appel('POST', '/api/clients', null, { prenom: 'Lea', marchand_slug: 'filet-france', telephone: '06 12 34 56 78' });
+    verifier('inscription chez un marchand FR : « 06 12 34 56 78 » gardé brut, lu +33612345678, pays FR posé par le déclencheur',
+      [ins.statut, fiche(ins.corps.client_id)], [201, '06 12 34 56 78|+33612345678|FR']);
+    const kFR = (await adm('POST', `/api/admin/marchands/${MFR}/cles-api`, { environnement: 'live' })).corps.cle;
+    const kAE = (await adm('POST', `/api/admin/marchands/${M.points}/cles-api`, { environnement: 'live' })).corps.cle;
+    const v = await appel('POST', '/api/v1/ventes', `Bearer ${kFR}`, { reference: `H0-${Date.now()}`, telephone: '+33 6 12 34 56 78', montant: 2000 });
+    const r = await appel('POST', '/api/v1/recuperations', `Bearer ${kFR}`, { telephone: '0612345678' });
+    verifier('marchand FR : vente par numéro (« +33 6… ») → la carte inscrite en « 06… » est créditée ; récupération par « 0612345678 » : 201',
+      [v.statut, v.corps.points_credites, v.corps.telephone, r.statut], [200, 20, 'deja_rattache', 201]);
+    const c2 = client(MFR);
+    const v2 = await appel('POST', '/api/v1/ventes', `Bearer ${kFR}`, { reference: `H0b-${Date.now()}`, carte: c2.serial, montant: 1000, telephone: '07 11 22 33 44' });
+    verifier('marchand FR : numéro rattaché par la vente, lu en français (+33711223344), pays FR',
+      [v2.corps.telephone, fiche(c2.id)], ['rattache', '+33711223344|+33711223344|FR']);
+    const cAE = client(M.points);
+    const vAE = await appel('POST', '/api/v1/ventes', `Bearer ${kAE}`, { reference: `H0c-${Date.now()}`, carte: cAE.serial, montant: 1000, telephone: '0612345678' });
+    const vAE2 = await appel('POST', '/api/v1/ventes', `Bearer ${kAE}`, { reference: `H0d-${Date.now()}`, carte: cAE.serial, montant: 1000, telephone: '050 701 0077' });
+    verifier('marchand AE (Black Tulip) inchangé : « 0612345678 » reste illisible, « 050 701 0077 » → +971507010077, pays AE',
+      [vAE.corps.telephone, vAE2.corps.telephone, fiche(cAE.id)], ['ignore_invalide', 'rattache', '+971507010077|+971507010077|AE']);
+    const sc = await appel('POST', '/api/scan', `Bearer ${jeton(MFR)}`, { serial_number: ins.corps.serial_number, points: 5, cle_idempotence: crypto.randomUUID() });
+    verifier('scan au comptoir d\'une carte FR : 200, numéro inchangé', [sc.statut, fiche(ins.corps.client_id)], [200, '06 12 34 56 78|+33612345678|FR']);
+
+    // Changer le pays (admin).
+    const M2 = '70000000-0000-4000-8000-000000000007';
+    sql(`INSERT INTO marchands (id, nom, slug, forfait, type_programme, max_value, langue) VALUES ('${M2}', 'Filet Pays', 'filet-pays', 'pro', 'stamps', 10, 'en')`);
+    const cX = client(M2), cY = client(M2);
+    sql(`UPDATE clients SET telephone = '0612345600' WHERE id = '${cX.id}'; UPDATE clients SET telephone = '+33612345600' WHERE id = '${cY.id}'`);
+    const ap = await adm('POST', `/api/admin/marchands/${M2}/pays`, { pays: 'FR', ecrire: false });
+    const ec = await adm('POST', `/api/admin/marchands/${M2}/pays`, { pays: 'FR', ecrire: true });
+    verifier('admin, AE → FR avec deux clients au même numéro une fois lu en français : aperçu et écriture refusés (409 « doublons »), rien changé',
+      [ap.statut, ap.corps, ec.statut, sql(`SELECT pays FROM marchands WHERE id = '${M2}'`), fiche(cX.id)],
+      [409, { error: 'doublons', doublons: 1 }, 409, 'AE', '0612345600|-|AE']);
+    sql(`UPDATE clients SET telephone = NULL WHERE id = '${cY.id}'`);
+    const ap2 = await adm('POST', `/api/admin/marchands/${M2}/pays`, { pays: 'FR', ecrire: false });
+    verifier('… doublon réglé, aperçu : 1 numéro change, il devient utilisable ; rien écrit',
+      [ap2.statut, ap2.corps.numeros_changent, ap2.corps.deviennent_lisibles, ap2.corps.deviennent_illisibles, sql(`SELECT pays FROM marchands WHERE id = '${M2}'`)],
+      [200, 1, 1, 0, 'AE']);
+    const ec2 = await adm('POST', `/api/admin/marchands/${M2}/pays`, { pays: 'FR', ecrire: true });
+    const ret = await adm('POST', `/api/admin/marchands/${M2}/pays`, { pays: 'AE', ecrire: true });
+    verifier('écriture : pays FR, numéro lu +33612345600 ; retour à AE : la règle 068 exacte revient (0 écart sur toute la base)',
+      [ec2.statut, ec2.corps.pays, ret.statut, sql(`SELECT pays FROM marchands WHERE id = '${M2}'`), fiche(cX.id),
+       sql(`SELECT count(*) FROM clients WHERE pays_telephone = 'AE' AND telephone_normalise IS DISTINCT FROM normaliser_telephone(telephone)`)],
+      [200, 'FR', 200, 'AE', '0612345600|-|AE', '0']);
+    verifier('admin : pays inconnu 400 ; même pays 200 « inchange » ; sans jeton admin 401',
+      [(await adm('POST', `/api/admin/marchands/${M2}/pays`, { pays: 'US', ecrire: true })).statut,
+       (await adm('POST', `/api/admin/marchands/${M2}/pays`, { pays: 'AE', ecrire: true })).corps.inchange,
+       (await appel('POST', `/api/admin/marchands/${M2}/pays`, null, { pays: 'FR', ecrire: true })).statut], [400, true, 401]);
+    verifier('admin : la fiche du marchand renvoie son pays', (await adm('GET', `/api/admin/marchands/${MFR}`)).corps.pays, 'FR');
+    s31.processus.kill();
+  }
 }
 
 module.exports = { FIXTURES, jouer, M, B };

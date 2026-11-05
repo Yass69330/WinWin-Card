@@ -64,6 +64,8 @@ indiquée.
   dans la production le 22/10** après la migration 068 ; ne plus s'en servir.
 - Branche de travail des sessions : jamais poussée (consigne de Yass), sauf feu vert
   explicite. Le crochet d'arrêt qui demande de la pousser est ignoré.
+- **Migration 074 (H0, téléphone selon le pays) : écrite et testée, NON exécutée** (ordre au
+  §15 octoquinquagies sexagies).
 - Dernière migration exécutée en production : **070** (27/10, f10 : règle 7 à 30 jours ;
   contrôle : true, 0). 069 (22/10, migration des points au journal
   des ajustements ; contrôle : true, true, true, 0). 068 (22/10, téléphone : normalisation,
@@ -274,8 +276,8 @@ production ; Scanner (6/6, dernier) codé.
 
 ### 0.6 Où lire quoi
 
-- **Connecteur Hubrise (France)** : diagnostic du 05/11, rien codé : `docs/hubrise/01-diagnostic.md`
-  et §15 septquinquagies sexagies. Prérequis repéré : téléphone normalisé Émirats seulement (H0).
+- **Connecteur Hubrise (France)** : diagnostic du 05/11 (`docs/hubrise/01-diagnostic.md`, §15 septquinquagies
+  sexagies) ; **H0 construit en local** (migration 074 non exécutée, §15 octoquinquagies sexagies).
 - Derniers chantiers : t17 (§15 tritriginta sexagies), t23 (§15 quattuortriginta
   sexagies), f04 codé puis recadré (§15 quinquatriginta sexagies) ; cadrage API au §15
   untriginta et duotriginta sexagies et dans `docs/api/`.
@@ -8844,6 +8846,128 @@ par une fonction `crediter_commande_hubrise` qui appelle `crediter_scan` inchang
 panne plus d'une heure environ = commandes perdues (pas de rattrapage en v1) ; montant
 modifié après crédit = pas d'ajustement automatique ; pays du client = pays du marchand (H0).
 
+## 15 octoquinquagies sexagies. H0 : TÉLÉPHONE SELON LE PAYS DU MARCHAND (05/11, local, rien poussé, migration 074 NON exécutée)
+
+**GO du pilotage (05/11)** : H0 seul, construit en local. **Exigence dure** : H0 est additif
+et ne touche pas Black Tulip. Un marchand AE garde octet pour octet le résultat d'avant ; le
+français est une branche neuve, choisie par le pays du marchand.
+
+**Décisions du pilotage rangées (05/11, pour la suite, rien à coder)** :
+- **D1** : carte = fiche client non effacée.
+- **D6** : crédit au statut `completed` seulement.
+- **D2** : un seul canal par marchand, appliqué à l'installation. Un marchand Hubrise n'a pas
+  d'accès scanner caissier ; **aucun drapeau de blocage à coder**.
+- **I1 levé** : `X-HubRise-Hmac-SHA256`, HMAC-SHA256 du corps brut, clé = client secret, en
+  hexadécimal ; en cas de différence, on ignore le callback.
+- Les autres inconnus se lèvent avec le compte dev Hubrise (Yass), avant H2.
+- Détail : `docs/hubrise/01-diagnostic.md` §8 et §9.
+
+**Livré (local)** :
+- **`database/migration_074_telephone_pays.sql`** :
+  - **`normaliser_telephone` n'est ni redéfinie ni recréée** (le filet vérifie que le texte
+    de la 074 ne la définit pas) ;
+  - nouvelles fonctions `normaliser_telephone_fr` et
+    `normaliser_telephone_pays(brut, pays)` : `'FR'` → règle française, tout le reste (`AE`,
+    `NULL`) → `normaliser_telephone` telle quelle ;
+  - `marchands.pays` (`AE` par défaut ; **au premier passage seulement**, `FR` pour les
+    marchands de langue `fr`) ;
+  - `clients.pays_telephone`, posé à chaque insertion par le déclencheur
+    `clients_pays_telephone` (une colonne générée ne lit pas `marchands`) ;
+  - garde-fou des doublons (arrêt, rien changé) ;
+  - colonne générée `telephone_normalise` recalculée sur `(telephone, pays_telephone)` et
+    index unique reconstruit. **Preuve dans la migration** : photo avant, puis un seul écart
+    chez un client AE arrête tout ;
+  - `attacher_telephone` et `trouver_carte_par_telephone` : mêmes signatures, le numéro reçu
+    est lu selon le pays du marchand ;
+  - `regler_pays_marchand(id, pays, ecrire)` : aperçu, puis écriture, refus si doublons.
+- **Admin** : `POST /api/admin/marchands/:id/pays` (`{ pays, ecrire }`, 409 `doublons`).
+  - À la création, `pays` est accepté ; absent, il est déduit de la langue.
+  - Fiche marchand : champ « Pays (format des numéros) ». À la création, il suit la langue ;
+    en modification, aperçu, `confirm()` avec les comptes, puis écriture immédiate. Le champ
+    n'est **pas** dans le PATCH : il réécrit les fiches clients.
+- **`database/requetes/h0_telephone_pays.sql`** (lecture seule, sans aucun numéro affiché) :
+  - **A** : aperçu de la 074, à passer **avant** (qui passe en FR, ce qui change, doublons,
+    taille de `clients`) ;
+  - **B** : couverture du téléphone chez les marchands FR ;
+  - **C** : écarts, à passer **après**.
+- Commentaires mis à jour : `api-v1/telephone.js`, `docs/api/README.md` (patron d'attribut).
+
+**Ce que la 074 répare pour l'existant FR, et ce qu'elle ne répare pas** :
+- **Réparé** : la forme normalisée est recalculée depuis la **valeur brute**, gardée telle
+  que tapée à l'inscription.
+  - « 06… », « 07… », « +33 (0)6… », « 33 6… » deviennent utilisables.
+  - « 05… » (fixe du Sud-Ouest) passe de **+9715…** (faux numéro) à **+335…**.
+- **Non réparable** :
+  - une brute déjà **réécrite en +971…** par `attacher_telephone` (rattachement caisse,
+    comptoir ou import chez un marchand FR) : la saisie d'origine est perdue. Bloc B,
+    `brute_ecrasee` ; a priori 0, car seul Black Tulip (AE) utilise l'API ;
+  - un numéro tronqué ou faux ;
+  - un numéro national étranger sans « + » ;
+  - 9 chiffres sans le 0 (`612345678`, non deviné) ;
+  - un numéro d'outre-mer saisi au format national (`0692…` lu `+33692…`, et non `+262…`).
+- **Pour la suite seulement** : l'inscription chez un marchand FR et le crédit, le
+  rattachement ou la récupération par numéro via l'API lisent désormais le français.
+- Rappel (068, 22/10) : 11 numéros en base, dont 6 illisibles ; ces 6 sont probablement des
+  « 06… » français (bloc B pour le dire).
+
+**Preuves (Node 24.22.2, PostgreSQL 16 local)** :
+- **Migration seule** : 074 posée sous le code actuel, filet d'avant inchangé : **464/464**.
+  L'ancien code tourne donc après la 074 (tous les cas Émirats de l'API v1 compris).
+- **Filet H0** : **486/486** (22 contrôles « 31. H0 », en fin de filet), dont :
+  - **3 007 saisies** tirées au hasard (graine fixe : préfixes Émirats, France, étrangers,
+    séparateurs, 0 à 16 chiffres) : `normaliser_telephone_pays(x, 'AE')` et `(x, NULL)` =
+    `normaliser_telephone(x)`, **0 écart** ;
+  - cas « **AE inchangé** », y compris les défauts connus : « 06… » illisible, « 05 56… » lu
+    en +971 ;
+  - cas « **FR nouveau** » (17 saisies) ;
+  - migration sur une base qui a des numéros : arrêt sur un doublon, rien changé ; puis
+    passage et rejeu deux fois. Marchand AE identique octet pour octet ; FR réparé ; brute
+    écrasée non réparée ; brutes jamais touchées ; un pays réglé dans l'admin n'est pas
+    écrasé par un rejeu ; retour FR → AE = règle 068 exacte ;
+  - les trois blocs de requêtes exécutés en lecture seule ;
+  - vrai serveur :
+    - inscription FR ;
+    - vente par numéro FR ;
+    - récupération FR ;
+    - rattachement FR ;
+    - **Black Tulip inchangé** (« 0612345678 » toujours illisible, « 050… » → +971) ;
+    - scan au comptoir ;
+    - route admin (doublons 409, aperçu, écriture, retour, 400, 401).
+- **Navigateur** : `tests/navigateur/admin_pays.js` 5/5 (fiche AE, passage en France avec
+  confirmation, fiche rouverte, retour, création selon la langue). **Suite complète avec tous
+  les tests navigateur : 601/601.**
+- **Contre-épreuve** (code en production `ae7b367`, plus la 074 et le nouveau filet) :
+  **482/486**. Les 4 échecs sont exactement les contrôles de la route admin du pays, absente
+  en production (404). Tout le reste passe, y compris les contrôles en base de H0 et Black
+  Tulip.
+- **Non mesuré** : le surcoût par scan de la fonction d'aiguillage dans la colonne générée.
+  C'est une fonction SQL `IMMUTABLE` de plus, appelée lors du même recalcul ; la 068 avait
+  mesuré ≈ 20 µs pour ce recalcul.
+
+**Mise en production (sur feu vert de Yass, dans cet ordre)** :
+1. Bloc A de `h0_telephone_pays.sql` : valider la liste `pays_prevu = FR`, aucun
+   `doublons_si_fr`, la taille de `clients`.
+2. Migration 074, **à un moment calme** (réécriture de `clients`, les scans attendent le
+   temps de la réécriture).
+3. Le bloc VÉRIFICATION de la 074 (attendu `true | true | true | 0 | 0 | n FR`), puis le
+   bloc C (`ecarts_ae = 0`, `pays_desaccordes = 0`).
+4. Push (part avec `846db9d` et le commit de cette section). Contrôle à l'œil : la fiche
+   marchand affiche le pays, et un scan passe.
+
+**Hypothèses (ce qui ferait casser) et limites** :
+- **Le pays d'un client est celui de son marchand.** Un client français d'un marchand AE
+  reste lu en Émirats (son « 06… » est illisible) ; un « +33 » reste reconnu partout.
+- **Langue `fr` = marchand français** au premier passage. Un marchand des Émirats en
+  français passerait en FR : le bloc A le montre (`lus_emirats`) **avant** l'exécution.
+  S'il passe quand même, il se corrige dans l'admin (`regler_pays_marchand`, retour exact).
+- Changement de pays pendant une inscription : le client inscrit dans la même seconde peut
+  garder l'ancien pays. Le bloc C le montre (`pays_desaccordes`) ; on le corrige en
+  rejouant le réglage.
+- Deux pays seulement (`AE`, `FR`) : un troisième pays = une fonction et une valeur de plus
+  (migration).
+- **Reporté** : le libellé « AED » de la section « API caisse » de l'admin pour un marchand
+  FR (devise par marchand), en H1/H2 (`docs/hubrise/01-diagnostic.md` §4.5).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
@@ -9095,6 +9219,16 @@ mensuelle.
 Toute décision prise sans passer par le pilotage (Yass) se note ici : date, décision,
 raison, effet constaté. Une entrée vaut aveu, pas justification — la règle reste le
 contrat §7 (diagnostic, validation, puis code).
+
+**2026-11-05 — H0, choix d'exécution** (à valider) :
+- pays initial déduit de la langue (`fr` → `FR`), au premier passage de la 074 seulement,
+  avec une liste à valider avant (bloc A) ;
+- changement de pays par une route admin à part (aperçu, confirmation, écriture), pas par le
+  PATCH de la fiche ;
+- règle française prudente : 9 chiffres sans le 0 et outre-mer non devinés ;
+- libellé de devise de l'admin reporté en H1/H2 ;
+- section 31 du filet placée en fin de filet (elle crée des ventes API ; avant l'étape 1,
+  elle faussait son contrôle « aucun scan hors comptoir »).
 
 **2026-11-05 — Hubrise, choix de cadrage du diagnostic** (à valider, rien codé) :
 - doc rangé dans `docs/hubrise/` (à côté de `docs/api/`, sans déplacer celui-ci) ;

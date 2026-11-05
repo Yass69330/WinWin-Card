@@ -96,7 +96,7 @@ même chemin**, sans réécriture. **Rien n'est codé pour eux** tant qu'ils ne 
 | Étape | Où | Téléphone |
 |---|---|---|
 | valeur reçue | `clients.<attr>` | `telephone` |
-| règle de format, une seule fois | fonction SQL `IMMUTABLE` `normaliser_<attr>` | `normaliser_telephone` (Émirats par défaut) |
+| règle de format, une seule fois | fonction SQL `IMMUTABLE` `normaliser_<attr>` | `normaliser_telephone_pays(brut, pays)` (migration 074) : `normaliser_telephone` (068, Émirats, inchangée) ou `normaliser_telephone_fr` selon `marchands.pays`, copié dans `clients.pays_telephone` |
 | forme comparable | colonne **générée** `clients.<attr>_normalise` | `telephone_normalise` |
 | une valeur = une carte par commerçant | index unique partiel (clients non effacés) | `clients_telephone_unique` |
 | d'où, quand | `clients.<attr>_source` (liste fermée), `<attr>_lie_le` | `inscription`, `comptoir`, `caisse`, `import` |

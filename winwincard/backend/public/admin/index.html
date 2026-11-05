@@ -347,6 +347,15 @@
             <div class="field-hint">Langue de l'interface, des notifs et du label du strip. Définie à la création.</div>
           </div>
           <div class="field">
+            <label for="f-pays">Pays (format des numéros)</label>
+            <select id="f-pays">
+              <option value="AE">Émirats</option>
+              <option value="FR">France</option>
+            </select>
+            <div class="field-hint">Règle de lecture des numéros de téléphone des clients (« 06… » en France, « 05… » aux Émirats). En modification, le changement s'applique tout de suite, après confirmation.</div>
+            <div class="field-hint" id="pays-statut"></div>
+          </div>
+          <div class="field">
             <label for="f-quota-override">Quota notifs/mois (admin override)</label>
             <input id="f-quota-override" type="number" min="0" max="1000" placeholder="défaut forfait">
             <div class="field-hint">Si vide → quota du forfait (Basic 0, Pro 5, Pro+ 20). 0 = aucune notification.</div>
@@ -1205,6 +1214,34 @@ function lireLieuxGeo() {
 }
 document.getElementById('btn-geo-ajouter').addEventListener('click', () => ajouterLieuGeo());
 
+// ════════════════════════════════════
+// PAYS DU MARCHAND (migration 074, H0) : règle de format des numéros.
+// Création : suit la langue tant qu'on n'y touche pas. Modification : aperçu
+// (combien de numéros changent), confirmation, écriture immédiate.
+// ════════════════════════════════════
+document.getElementById('f-langue').addEventListener('change', e => {
+  if (!S.editId) document.getElementById('f-pays').value = e.target.value === 'fr' ? 'FR' : 'AE';
+});
+document.getElementById('f-pays').addEventListener('change', async e => {
+  if (!S.editId) return;
+  const pays = e.target.value, sel = e.target;
+  const revenir = msg => { sel.value = S.paysCharge || 'AE'; if (msg) alert(msg); };
+  try {
+    const ap = await api(`/api/admin/marchands/${S.editId}/pays`, { method: 'POST', body: JSON.stringify({ pays, ecrire: false }) });
+    const a = await ap.json();
+    if (!ap.ok) return revenir(a.error === 'doublons'
+      ? `Impossible : ${a.doublons} numéro(s) en double une fois lus selon ce pays. Corrigez-les d'abord.` : `Impossible : ${a.error || ap.status}`);
+    if (a.inchange) return;
+    const nom = pays === 'FR' ? 'France' : 'Émirats';
+    if (!confirm(`Passer ce marchand en ${nom} ?\n\n${a.numeros_changent} numéro(s) de client lus autrement, dont ${a.deviennent_lisibles} qui deviennent utilisables et ${a.deviennent_illisibles} qui deviennent illisibles.`)) return revenir();
+    const ec = await api(`/api/admin/marchands/${S.editId}/pays`, { method: 'POST', body: JSON.stringify({ pays, ecrire: true }) });
+    const d = await ec.json();
+    if (!ec.ok) return revenir(`Impossible : ${d.error || ec.status}`);
+    S.paysCharge = pays;
+    document.getElementById('pays-statut').textContent = `Enregistré : ${nom}.`;
+  } catch (err) { revenir('Impossible : ' + err.message); }
+});
+
 // ── f17 : thèmes de carte ───────────────────────────────────────────────────
 // ════════════════════════════════════
 // CLÉS D'API DES CAISSES (20/10) — src/integration/api-v1/admin-cles.js
@@ -1554,6 +1591,9 @@ function resetForm() {
   document.getElementById('f-displaymax').value = '';
   document.getElementById('f-forfait').value    = 'pro';
   document.getElementById('f-langue').value      = 'en';
+  document.getElementById('f-pays').value        = 'AE';
+  S.paysCharge = null;
+  document.getElementById('pays-statut').textContent = '';
   document.getElementById('slug-preview').textContent = '…';
   document.getElementById('sheet-err').style.display = 'none';
   document.getElementById('section-strip-tiers').style.display = 'none';
@@ -1603,6 +1643,7 @@ function fillForm(m) {
   v('f-displaymax', m.display_max_value);
   if (['basic','pro','pro_plus'].includes(m.forfait)) document.getElementById('f-forfait').value = m.forfait;
   if (['fr','en'].includes(m.langue)) document.getElementById('f-langue').value = m.langue;
+  if (['AE','FR'].includes(m.pays)) { document.getElementById('f-pays').value = m.pays; S.paysCharge = m.pays; }
   if (['stamps','points'].includes(m.type_programme)) document.getElementById('f-type-programme').value = m.type_programme;
   v('f-quota-override', m.notification_quota_override);
   v('f-freq-bas',  m.freq_seuil_bas);
@@ -1878,6 +1919,9 @@ function collectForm() {
     display_max_value: parseInt(document.getElementById('f-displaymax').value) || undefined,
     forfait:         document.getElementById('f-forfait').value,
     langue:          document.getElementById('f-langue').value,
+    // Pays (migration 074) : envoyé à la création seulement ; en modification, il
+    // passe par POST /marchands/:id/pays (aperçu, confirmation, écriture).
+    pays:            S.editId ? undefined : document.getElementById('f-pays').value,
     type_programme:  document.getElementById('f-type-programme').value,
     // Vide → quota du forfait (null). 0 est un quota valable : « || null » le
     // transformait en « quota du forfait ».

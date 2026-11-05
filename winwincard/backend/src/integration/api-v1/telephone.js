@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 // Le numéro de téléphone du client dans l'API (contrat v1 §3.1, §4.4 ; étape 3)
 //
-// Toute la règle est en base (migration 068) : format (Émirats par défaut), un
+// Toute la règle est en base (068, 074) : format selon le pays du marchand, un
 // numéro = une carte par commerçant, jamais d'écrasement. Ici, seulement la
 // traduction des réponses SQL en statuts du contrat.
 // Le numéro n'est jamais écrit dans les journaux.

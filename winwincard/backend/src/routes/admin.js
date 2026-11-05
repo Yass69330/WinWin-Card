@@ -213,6 +213,10 @@ router.post('/marchands', authAdmin, asyncHandler(async (req, res) => {
       nom, slug, email_contact, password_hash,
       forfait:       ['basic', 'pro', 'pro_plus'].includes(forfait) ? forfait : 'pro',
       langue:        ['fr', 'en'].includes(langue) ? langue : 'en',
+      // Pays : règle de format des numéros des clients (migration 074, H0).
+      // Absent → déduit de la langue (fr → FR), réglable ensuite par
+      // POST /marchands/:id/pays (aperçu puis écriture).
+      pays:          ['AE', 'FR'].includes(req.body.pays) ? req.body.pays : (langue === 'fr' ? 'FR' : 'AE'),
       type_programme: ['stamps', 'points'].includes(type_programme) ? type_programme : 'stamps',
       couleur_fond:  couleur_fond  || '#ffffff',
       couleur_texte: couleur_texte || '#000000',
@@ -234,6 +238,25 @@ router.post('/marchands', authAdmin, asyncHandler(async (req, res) => {
   suivre(createOrUpdateLoyaltyClass(data).catch(e => console.error('[Google Wallet] classe:', e.message)));
 
   res.status(201).json(data);
+}));
+
+// POST /api/admin/marchands/:id/pays — pays du marchand = règle de format des
+// numéros de ses clients (migration 074, H0). { pays: 'AE' | 'FR', ecrire }.
+// ecrire = false : aperçu (numeros_changent, deviennent_lisibles,
+// deviennent_illisibles) ; true : écriture. Toute la règle est en base
+// (regler_pays_marchand) ; deux clients au même numéro une fois normalisé →
+// 409, rien n'est changé. Hors du PATCH : changer le pays réécrit les fiches des
+// clients, ce n'est pas un champ comme un autre de la fiche.
+router.post('/marchands/:id/pays', authAdmin, asyncHandler(async (req, res) => {
+  const { data, error } = await supabase.rpc('regler_pays_marchand', {
+    p_marchand_id: req.params.id, p_pays: req.body.pays, p_ecrire: req.body.ecrire === true,
+  });
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data.ok) {
+    const statut = { pays_invalide: 400, marchand_introuvable: 404, doublons: 409 }[data.reason] || 400;
+    return res.status(statut).json({ error: data.reason, doublons: data.doublons });
+  }
+  res.json(data);
 }));
 
 // PATCH /api/admin/marchands/:id — modifier un marchand
