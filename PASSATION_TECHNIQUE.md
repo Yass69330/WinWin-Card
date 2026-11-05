@@ -274,6 +274,8 @@ production ; Scanner (6/6, dernier) codé.
 
 ### 0.6 Où lire quoi
 
+- **Connecteur Hubrise (France)** : diagnostic du 05/11, rien codé : `docs/hubrise/01-diagnostic.md`
+  et §15 septquinquagies sexagies. Prérequis repéré : téléphone normalisé Émirats seulement (H0).
 - Derniers chantiers : t17 (§15 tritriginta sexagies), t23 (§15 quattuortriginta
   sexagies), f04 codé puis recadré (§15 quinquatriginta sexagies) ; cadrage API au §15
   untriginta et duotriginta sexagies et dans `docs/api/`.
@@ -8807,6 +8809,41 @@ mise à jour silencieuse immédiate des cartes déjà installées (à chiffrer :
 **Décisions hors pilotage** (à valider) : libellé vide au-dessus du lien ; https obligatoire (et
 ni guillemet ni chevron dans l'URL) ; la version EN est codée (aucun marchand EN n'a le champ).
 
+## 15 septquinquagies sexagies. CONNECTEUR HUBRISE (FRANCE) : DIAGNOSTIC (05/11, rien codé)
+
+**Demande du pilotage (05/11)** : brancher WinWin comme app consommatrice de Hubrise
+(callbacks `order.create` / `order.update`, OAuth par location) pour la France et l'UE ;
+Dubaï reste sur l'API directe. Diagnostic seul : **zéro code, zéro migration, rien poussé.**
+Livrable : **`docs/hubrise/01-diagnostic.md`** (structure du module, idempotence, mapping,
+crédit, OAuth, base, morceaux H0 à H4, décisions D1 à D7, inconnus I1 à I10).
+
+**Proposé** : module `src/integration/hubrise/` (monté par la zone) ; route entrante
+`/integrations/hubrise/callback` vérifiée par HMAC du corps brut, puis connexion active ;
+clé t43 = UUID v5 de `hubrise:<location>:<commande>` dans un espace neuf et figé ; carte
+par `trouver_carte_par_telephone` seulement (pas de rattachement, pas de création) ; crédit
+par une fonction `crediter_commande_hubrise` qui appelle `crediter_scan` inchangée, `canal =
+'hubrise'` ; étapes 4 à 6 de `/ventes` extraites dans `credit-vente.js` ; jeton chiffré
+(AES-256-GCM, clé dans Railway) ; connexion lancée depuis l'admin.
+
+**Dette découverte (vérifiée dans le code)** :
+- **`normaliser_telephone` (068) est Émirats seulement** : en France, « 06 12 34 56 78 »
+  donne `NULL` (aucun crédit par numéro, aucune récupération) et **« 05 … » devient
+  +971 5… (faux numéro)**. Cela vaut pour tout marchand français, Hubrise ou non. Correctif
+  proposé : morceau H0 (pays du marchand, migration qui réécrit `clients`).
+- Le numéro n'est demandé à l'inscription que sur la **landing premium**
+  (`public/landing.html:880-887`) : le taux de réussite du connecteur en dépend.
+- `express.json` global consomme le corps avant la zone (`src/index.js:44`) : il faut le
+  garder (option `verify`) pour vérifier une signature. Le limiteur global par adresse
+  freinerait les callbacks : à en sortir, comme `/api/v1`.
+- **Double crédit possible** comptoir + Hubrise pour une même vente (aucun lien entre les
+  deux) : règle produit à poser (D2).
+- Aucun chiffrement au repos dans le code aujourd'hui : le jeton Hubrise en serait le
+  premier usage.
+
+**Hypothèses et limites** : une seule instance ; le secret de l'app ne fuit pas ; base en
+panne plus d'une heure environ = commandes perdues (pas de rattrapage en v1) ; montant
+modifié après crédit = pas d'ajustement automatique ; pays du client = pays du marchand (H0).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
@@ -9058,6 +9095,14 @@ mensuelle.
 Toute décision prise sans passer par le pilotage (Yass) se note ici : date, décision,
 raison, effet constaté. Une entrée vaut aveu, pas justification — la règle reste le
 contrat §7 (diagnostic, validation, puis code).
+
+**2026-11-05 — Hubrise, choix de cadrage du diagnostic** (à valider, rien codé) :
+- doc rangé dans `docs/hubrise/` (à côté de `docs/api/`, sans déplacer celui-ci) ;
+- route entrante `/integrations/hubrise/*`, hors de `/api/v1` (autre authentification) ;
+- espace UUID neuf pour les clés Hubrise, plutôt que `ESPACE_VENTES` ;
+- pas de source `hubrise` dans `notification_envois` (la carte est mise à jour par le chemin
+  déjà tracé sous `scan`) ;
+- pas de relecture de la commande auprès de Hubrise en v1 (signature + connexion active).
 
 **2026-10-17 — t43, choix d'exécution** :
 - une clé vide (`''`) ou `null` est traitée comme absente : 400 et alerte ;
