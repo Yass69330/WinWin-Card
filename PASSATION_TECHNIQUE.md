@@ -281,7 +281,8 @@ production ; Scanner (6/6, dernier) codé.
 
 - **Connecteur Hubrise (France)** : diagnostic du 05/11 (`docs/hubrise/01-diagnostic.md`, §15 septquinquagies
   sexagies) ; **axe id-carte retenu le 06/11, H0 gelé en local, chantier en attente du compte dev
-  et d'une commande de test Hubrise** (§15 novoquinquagies sexagies).
+  et d'une commande de test Hubrise** (§15 novoquinquagies sexagies) ; **H1 (connexion) cadré le 06/11**
+  (`docs/hubrise/02-h1-connexion.md`, §15 decies septuagies).
 - Derniers chantiers : t17 (§15 tritriginta sexagies), t23 (§15 quattuortriginta
   sexagies), f04 codé puis recadré (§15 quinquatriginta sexagies) ; cadrage API au §15
   untriginta et duotriginta sexagies et dans `docs/api/`.
@@ -9157,6 +9158,49 @@ français est une branche neuve, choisie par le pays du marchand.
 
 **Rappel** : t30 phase 2 (« Wait for CI ») doit être en place avant tout push de code de
 crédit (H2).
+
+## 15 decies septuagies. HUBRISE H1 : CONNEXION D'UN MARCHAND — CADRAGE (06/11, rien codé)
+
+**Demande du pilotage (06/11)** : cadrer le flux « Connecter » lancé depuis l'admin
+(OAuth Hubrise, jeton chiffré, réception des ventes), sans attendre le compte dev. Scope
+`orders.read` + `customer_list.read`. Invariants : le jeton n'est jamais en clair ; un
+marchand ne voit que ses données.
+
+**Livrable** : **`docs/hubrise/02-h1-connexion.md`**.
+- **Parcours** : l'admin crée un **lien de connexion signé** (usage unique, 30 min), ouvert
+  sur place ou envoyé au marchand. Le marchand autorise sur Hubrise, puis vient le retour
+  OAuth.
+- **Rattachement** : le marchand vient seulement du `state` signé (secret dédié
+  `HUBRISE_LIEN_SECRET`).
+- **Jeton** : chiffré en AES-256-GCM avec la clé `HUBRISE_JETON_CLE`, dans Railway seulement.
+  Les données associées `marchand_id:location_id` le lient à sa ligne. Format
+  `v1:iv:tag:texte`.
+- **Tables** (migration **074**, H0 renuméroté à sa reprise) : `hubrise_connexions` (index
+  unique « une location active = un marchand »), `hubrise_liens_utilises` et
+  `hubrise_evenements` (sans donnée personnelle).
+- **Découpe** :
+  - H1a : connexion, admin, faux serveur Hubrise au filet ;
+  - H1b : abonnement aux commandes et récepteur minimal (signature, journal, 200), **sans
+    crédit**.
+- **À fournir par Yass** :
+  - l'app Hubrise déclarée, avec l'URL de retour
+    `https://app.winwin-card.com/integrations/hubrise/retour` ;
+  - `client_id` et `client_secret` dans Railway ;
+  - une location de test ;
+  - deux secrets générés.
+- **Points Hubrise à confirmer** (doc §7) : adresses, syntaxe du scope, abonnement aux
+  commandes, révocation.
+
+**Décisions demandées** (doc §8) :
+1. lien de connexion plutôt qu'un clic direct ;
+2. n° 074 pour H1 ;
+3. H1b inclus dans H1 ;
+4. `customer_list.read` à trancher à la lecture du JSON de test.
+
+**Décision hors pilotage (à valider)** : le cadrage propose un secret de signature dédié
+(`HUBRISE_LIEN_SECRET`) plutôt que `JWT_SECRET`, et un lien plutôt qu'une redirection
+directe depuis l'admin (l'admin s'authentifie par un jeton `Bearer`, qu'une redirection ne
+peut pas porter).
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 

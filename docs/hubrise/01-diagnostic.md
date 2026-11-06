@@ -18,6 +18,7 @@
 >     carte → compte client), pas pour Hubrise.
 >   - Rien n'est cassé aujourd'hui : en France, le numéro collecté est une note de contact
 >     libre, jamais interrogée comme identifiant.
+> - **H1 (connexion) cadré le 06/11 : `02-h1-connexion.md`.**
 > - **Le chantier attend des éléments Hubrise réels** : le compte dev (Yass) et le **JSON
 >   d'une commande de test**, pour voir **quel champ porte la référence de la carte de
 >   fidélité**. Candidats, à vérifier sur pièce, sans en supposer aucun :
