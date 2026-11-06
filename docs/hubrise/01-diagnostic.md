@@ -1,6 +1,41 @@
 # Connecteur Hubrise — diagnostic et proposition (05/11/2026, rien codé)
 
-> **Statut** : diagnostic seul. Zéro code, zéro migration, rien poussé. Tout ce qui suit
+> **ÉTAT AU 06/11 — décision du pilotage : AXE ID-CARTE, H0 GELÉ, CHANTIER EN ATTENTE.**
+> - **Axe retenu : l'identifiant de la carte, pas le téléphone.** En France, la commande
+>   Hubrise sera rattachée à une carte par **scan de la carte WinWin à la caisse** : le
+>   contenu du QR (numéro de série) ou le code court de 6 caractères.
+>   - Le §3 (mapping par téléphone) et le §4.2 (prérequis H0) sont **caducs pour Hubrise**.
+>     Ils restent comme trace.
+>   - Brique déjà en production, réutilisable telle quelle : `api-v1/identification.js`
+>     (QR ou code court ; 409 si ambigu ; 404 si inconnue).
+> - **H0 gelé** sur la branche `briques/h0-telephone-pays` (`14c5405` : code et migration 074), hors de la branche de production.
+>   - Rien n'est poussé, la migration 074 n'est pas exécutée, et les blocs A/B/C ne sont pas
+>     à passer. L'aperçu (bloc A, 06/11) avait été passé par Yass avant le gel : aucun
+>     doublon, 3 312 clients.
+>   - H0 reste valable et prouvé (filet 486/486, 601/601 avec les tests navigateur ;
+>     contre-épreuve 482/486).
+>   - Il ressortira **tel quel** pour le pendant français de f04 (attribution téléphone +
+>     carte → compte client), pas pour Hubrise.
+>   - Rien n'est cassé aujourd'hui : en France, le numéro collecté est une note de contact
+>     libre, jamais interrogée comme identifiant.
+> - **Le chantier attend des éléments Hubrise réels** : le compte dev (Yass) et le **JSON
+>   d'une commande de test**, pour voir **quel champ porte la référence de la carte de
+>   fidélité**. Candidats, à vérifier sur pièce, sans en supposer aucun :
+>   - `customer.loyalty_cards[]` ;
+>   - un `custom_field` ;
+>   - une note de commande ;
+>   - un code de remise.
+> - H1 et H2 seront **re-spécifiés sur l'id de carte**, à partir de ces éléments, et non sur
+>   la doc. **Aucun code d'ici là.**
+> - **Avant tout push de code de crédit (H2)** : t30 phase 2 (« Wait for CI ») doit être en
+>   place.
+>
+> **Mise à jour du 05/11 (soir)** : H0 construit en local (migration 074, rien poussé) ;
+> D1, D2, D6 tranchés et I1 levé par le pilotage : voir §8 et §9. Le reste du connecteur
+> (H1 à H4) n'est pas codé ; les autres inconnus se lèvent avec le compte dev Hubrise,
+> avant H2.
+>
+> **Statut d'origine** : diagnostic seul. Zéro code, zéro migration, rien poussé. Tout ce qui suit
 > attend le feu vert de Yass. Les affirmations sur notre code citent le fichier ; celles sur
 > Hubrise reprennent le modèle donné par le pilotage, et les points que je n'ai pas vérifiés
 > moi-même sont listés au §9 (« inconnus »).
@@ -162,6 +197,8 @@ C'est hors v1, et noté.
 ---
 
 ## 3. Mapping commande → carte par le téléphone
+
+> **Caduc pour Hubrise (06/11)** : l'axe retenu est l'id de carte scanné à la caisse (voir l'état en tête). Section gardée comme trace ; elle vaut pour le futur pendant FR de f04.
 
 ### 3.1 Ce qui existe (vérifié)
 
@@ -397,7 +434,7 @@ personnelle) ; `scan_id` suit la règle des scans (anonymes).
 
 | # | Morceau | Migration | Touche la caisse ? |
 |---|---|---|---|
-| **H0** | Téléphone selon le pays du marchand ; `pays` / `devise` en admin ; libellé de devise | oui (réécrit `clients`) | oui, ≈ 20 µs par scan déjà payés (colonne générée) ; à prouver au filet |
+| **H0** (construit en local, 05/11) | Téléphone selon le pays du marchand (`pays` en admin). Libellé de devise **reporté** en H1/H2 | oui (réécrit `clients`) | oui, ≈ 20 µs par scan déjà payés (colonne générée) ; à prouver au filet |
 | **H1** | Connexion : app Hubrise déclarée (Yass), OAuth, `state` signé, jeton chiffré, enregistrement du callback, section admin | oui (`hubrise_connexions`, `hubrise_evenements`) | non |
 | **H2** | Récepteur : corps brut, signature, sortie du limiteur global, `commande.js` pur, décision et journal ; extraction `credit-vente.js` (ventes prouvées inchangées) ; `crediter_commande_hubrise`, canal | oui (canal, fonction) | non (ligne `express.json` : prouvée sans effet) |
 | **H3** | Pilote chez un marchand : connexion réelle, 1 à 2 semaines de journal, décision D2 (double crédit) et I4 (statuts) sur données | non | non |
@@ -422,62 +459,63 @@ production sans H1** (pas de connexion, aucun callback ne passe le contrôle 2).
 
 ---
 
-## 8. Décisions demandées au pilotage
+## 8. Décisions
 
-- **D1** — « Carte » = fiche client non effacée chez ce marchand (comme l'API v1), **ou**
-  carte prouvée installée (Apple : jeton ; Google : non prouvable) ? *Proposition : fiche non
-  effacée.*
-- **D2** — Double crédit comptoir + Hubrise : (a) / (b) / (c) du §4.6 ? *Proposition : (b)
-  au pilote, puis décision sur mesure.*
-- **D3** — Faire H0 (téléphone par pays) **avant** Hubrise ? *Proposition : oui, sinon le
-  connecteur est quasi muet en France.*
-- **D4** — Connexion lancée depuis l'**admin WinWin** seulement en v1 ? *Proposition : oui.*
-- **D5** — Avis Google après une remise venue de Hubrise : oui (comme l'API) ? Parrainage :
-  non ? *Proposition : oui / non.*
-- **D6** — Crédit au statut `completed` seulement, réglable par connexion ? *Proposition :
-  oui, à revoir avec les données du pilote.*
-- **D7** — Landing premium (seule à demander le numéro) : obligatoire pour un marchand
-  Hubrise ? Sinon, presque aucune carte n'a de numéro.
+**Tranchées par le pilotage (05/11)** :
+- **D1 — validé** : une carte = une fiche client non effacée chez ce marchand (comme l'API v1).
+- **D2 — tranché autrement que proposé** : **un seul canal par marchand**, appliqué à
+  l'installation. Un marchand Hubrise n'a pas d'accès scanner caissier. **Aucun drapeau de
+  blocage à coder** : c'est une règle d'installation, pas un garde-fou du code.
+  - Limite : rien n'empêche techniquement de recréer un accès scanner chez un marchand
+    Hubrise (admin). La règle tient par la procédure d'installation.
+- **D6 — validé** : créditer au statut `completed` seulement.
+
+**Encore ouvertes (reco par défaut, qui fait foi sans autre décision)** :
+- **D3** — Faire H0 avant Hubrise. *Reco : oui.* De fait, H0 est construit (migration 074,
+  local) : sans lui, le connecteur ne retrouve en France que les numéros tapés en « +33 ».
+- **D4** — Connexion lancée depuis l'**admin WinWin** seulement en v1. *Reco : oui.* On
+  installe nous-mêmes chaque marchand, ce qui va avec D2 (canal choisi à l'installation).
+  Le bouton du dashboard et le départ depuis le catalogue Hubrise viennent plus tard.
+- **D5** — Après une remise venue de Hubrise : avis Google **oui** (même chemin que l'API et
+  le comptoir) ; parrainage **non** (propre au comptoir, comme l'API). *Reco : oui / non.*
+- **D7** — Landing premium obligatoire pour un marchand Hubrise ? *Reco : oui.* C'est la
+  seule surface qui demande le numéro, et le numéro est la seule clé du connecteur. Le
+  bloc B de `database/requetes/h0_telephone_pays.sql` en donne le plafond par marchand.
 
 ## 9. Inconnus à confirmer (Hubrise, doc ou compte de test)
 
-- **I1** — Nom exact de l'en-tête de signature et algorithme (a priori
-  `X-HubRise-Hmac-SHA256`, HMAC-SHA256 du corps avec le `client_secret`).
-- **I2** — Forme exacte du corps du callback : où sont `location_id`, `order_id` et
-  `new_state.customer` ? Le `customer` complet est-il présent, ou seulement un
-  `customer_id` à relire avec `customer_list.read` ?
-- **I3** — Unicité de l'`order_id` (globale ou par location) ; un `update` peut-il changer
-  le client attaché ?
-- **I4** — Statuts réellement envoyés par la caisse du premier marchand (une commande de
-  caisse arrive-t-elle directement en `completed` ?).
-- **I5** — Montant à retenir : `total` contient-il livraison, pourboire, remises ? Comment
-  apparaît une part payée en fidélité ?
-- **I6** — Format de `customer.phone` selon les caisses (E.164 garanti ou texte libre ?).
-- **I7** — Syntaxe exacte du scope location et comportement si le marchand coche plusieurs
-  locations (une connexion par location ?).
-- **I8** — Enregistrement du callback : par connexion via l'API, ou fixé dans la fiche de
-  l'app ? Les adresses d'origine de Hubrise sont-elles fixes (liste d'adresses en plus de la
-  signature) ?
-- **I9** — Compte et app de test (bac à sable ?), conditions pour être listé au catalogue,
-  coût éventuel pour WinWin ou pour le marchand.
-- **I10** — Côté données : contrat de sous-traitance (on reçoit des données client de la
-  caisse) et mention dans nos conditions marchand.
+- **I1 — levé (pilotage, 05/11)** : Hubrise signe ses callbacks avec l'en-tête
+  `X-HubRise-Hmac-SHA256`. C'est un HMAC-SHA256 du **corps brut**, calculé avec notre
+  `client_secret` et écrit en hexadécimal. En cas de différence, on ignore le callback.
+  - **Corps brut avant le parsing JSON : confirmé dans notre code.** `express.json` global
+    (`src/index.js:44`) lit et analyse le corps avant toute route. Le récepteur doit donc
+    récupérer les octets reçus par l'option `verify` de ce même parseur (§1.3). Il ne faut
+    jamais recalculer la signature sur un `JSON.stringify(req.body)`, qui ne rend pas les
+    mêmes octets (espaces, ordre, échappements).
+  - Comparaison : `crypto.timingSafeEqual` sur les deux valeurs hexadécimales de même
+    longueur ; une longueur différente vaut un refus.
+  - « Ignorer » : réponse **200** sans rien faire (Hubrise ne renvoie pas), plutôt qu'un
+    401, à trancher en H2. Le §1.4 proposait 401. Avec 200, un faux appel ne déclenche pas
+    6 renvois ; avec 401, un vrai callback mal vérifié (un bug chez nous) serait renvoyé et
+    visible. *Reco : 401* (vrai bug chez nous = renvois visibles dans le journal).
+- **I2 à I9** : à lever avec le **compte dev Hubrise** (en cours côté Yass), **avant H2** :
+  - **I2** — corps du callback ;
+  - **I3** — unicité de l'`order_id` ;
+  - **I4** — statuts réels ;
+  - **I5** — contenu du `total` ;
+  - **I6** — format du téléphone ;
+  - **I7** — syntaxe du scope ;
+  - **I8** — enregistrement du callback ;
+  - **I9** — compte de test et catalogue.
+- **I10** — Contrat de sous-traitance et conditions marchand (hors code).
 
-**Requêtes à passer avant de chiffrer le gain (lecture seule, par Yass dans Supabase)** :
+**Requêtes en lecture seule (Supabase)** : elles sont toutes dans
+`winwincard/backend/database/requetes/h0_telephone_pays.sql`.
+- Bloc A : aperçu de la 074, à passer avant.
+- Bloc B : couverture du téléphone chez les marchands français.
+- Bloc C : écarts, à passer après la 074.
 
-```sql
--- Part des cartes avec un numéro utilisable, et numéros « perdus » (non normalisés), par langue du marchand
-SELECT m.langue,
-       count(*)                                                        AS cartes,
-       count(*) FILTER (WHERE c.telephone_normalise IS NOT NULL)       AS numero_utilisable,
-       count(*) FILTER (WHERE coalesce(trim(c.telephone), '') <> ''
-                          AND c.telephone_normalise IS NULL)           AS numero_illisible,
-       count(*) FILTER (WHERE c.telephone_normalise LIKE '+9715%'
-                          AND m.langue = 'fr')                         AS fr_converti_en_emirats
-  FROM clients c JOIN marchands m ON m.id = c.marchand_id
- WHERE c.deleted_at IS NULL
- GROUP BY m.langue ORDER BY 1;
-```
+Le filet les exécute à chaque passage.
 
 ## 10. Hypothèses (ce qui ferait casser) et limites
 
