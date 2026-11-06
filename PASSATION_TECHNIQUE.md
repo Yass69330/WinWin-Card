@@ -65,10 +65,15 @@ indiquée.
 - Branche de travail des sessions : jamais poussée (consigne de Yass), sauf feu vert
   explicite. Le crochet d'arrêt qui demande de la pousser est ignoré.
 - **Migration 074 (D2 sur les envois groupés, incident Pizz'Amore) : EXÉCUTÉE le 07/11** (contrôles
-  bons). Le code correspondant attend le push n°1 (§15 duodecies septuagies).
-- **Migration 074 (H0, téléphone selon le pays) : écrite et testée, NON exécutée, GELÉE le 06/11**,
-  rangée sur la branche `briques/h0-telephone-pays`, absente de la branche de production (§15
-  novoquinquagies sexagies).
+  bons). Code poussé le 07/11 (**`6d6c569`**, seul), déploiement vert, contrôle terrain bon
+  (§15 duodecies septuagies). **Chantier clos.**
+- **Migration 075 (Hubrise H1a, connexion) : EXÉCUTÉE le 08/11** (contrôle : true, true, true,
+  true, 0) ; code en local, push après les variables Railway (§15 undecies septuagies). Écrite
+  sous le n° 074, renumérotée le 07/11.
+- **Migration « 074 » de H0 (téléphone selon le pays) : écrite et testée, NON exécutée, GELÉE le
+  06/11**, rangée sur la branche `briques/h0-telephone-pays`, absente de la branche de production
+  (§15 novoquinquagies sexagies). **Le n° 074 est pris (D2) et le 075 aussi (H1a)** : à sa reprise,
+  elle prend le premier numéro libre.
 - Dernière migration exécutée en production : **070** (27/10, f10 : règle 7 à 30 jours ;
   contrôle : true, 0). 069 (22/10, migration des points au journal
   des ajustements ; contrôle : true, true, true, 0). 068 (22/10, téléphone : normalisation,
@@ -282,7 +287,8 @@ production ; Scanner (6/6, dernier) codé.
 - **Connecteur Hubrise (France)** : diagnostic du 05/11 (`docs/hubrise/01-diagnostic.md`, §15 septquinquagies
   sexagies) ; **axe id-carte retenu le 06/11, H0 gelé en local, chantier en attente du compte dev
   et d'une commande de test Hubrise** (§15 novoquinquagies sexagies) ; **H1 (connexion) cadré le 06/11**
-  (`docs/hubrise/02-h1-connexion.md`, §15 decies septuagies).
+  (`docs/hubrise/02-h1-connexion.md`, §15 decies septuagies) ; **H1a codé en local le 06/11** (migration 075
+  non exécutée, §15 undecies septuagies).
 - Derniers chantiers : t17 (§15 tritriginta sexagies), t23 (§15 quattuortriginta
   sexagies), f04 codé puis recadré (§15 quinquatriginta sexagies) ; cadrage API au §15
   untriginta et duotriginta sexagies et dans `docs/api/`.
@@ -8816,7 +8822,7 @@ mise à jour silencieuse immédiate des cartes déjà installées (à chiffrer :
 **Décisions hors pilotage** (à valider) : libellé vide au-dessus du lien ; https obligatoire (et
 ni guillemet ni chevron dans l'URL) ; la version EN est codée (aucun marchand EN n'a le champ).
 
-## 15 duodecies septuagies. INCIDENT PIZZ'AMORE (07/11) : RÈGLE D2 SUR LES ENVOIS GROUPÉS SEULEMENT (migration 074 EXÉCUTÉE le 07/11, code non poussé)
+## 15 duodecies septuagies. INCIDENT PIZZ'AMORE (07/11) : RÈGLE D2 SUR LES ENVOIS GROUPÉS SEULEMENT (migration 074 EXÉCUTÉE le 07/11, code `6d6c569` poussé et vérifié — CLOS)
 
 **Incident (07/11, caisse Pizz'Amore)** :
 - Le client Zakaria (carte `…d263fcfe3`, mode points, seuil 200) présente sa carte Google
@@ -8942,6 +8948,21 @@ Ensuite vient le contrôle terrain : un scan d'une carte à jeton Apple doit éc
 `apple` et 2 lignes `google`, avec `ok`. Hubrise est rebasé ensuite, en local, avec H1a
 renuméroté en 075.
 
+**Push n°1 (07/11, sur « go push correctif »)** : `correctif/d2-groupes` poussé **seul**, en
+avance rapide (`ae7b367..6d6c569`), sans les commits Hubrise ; déploiement vert.
+**Contrôle terrain (Yass, 07/11, 23:03 UTC)** : hamza-salon, carte de test « Tuma » (1 jeton
+Apple, aucun signal Google).
+- Scan : 1 ligne `apple` et **2 lignes `google`** (mise à jour + message), toutes `200 ok`.
+- Ajustement : pareil.
+
+Avant le correctif, cette carte n'aurait eu **aucune** ligne `google`. Zakaria se règle à son
+prochain passage.
+
+**Décision du pilotage (07/11) : les messages Google unitaires restent.** Leur suppression (pas
+de notification Android sur la progression, message gardé sur les moments forts, Apple
+intact) est **reportée à l'audit scalabilité de la roadmap**, comme décision produit. Gain de
+charge quasi nul : ces appels ne touchent ni la base ni le serveur, qui sont le goulot.
+
 **Hypothèses (ce qui ferait casser) et limites** :
 - **Angle mort accepté** : un porteur à deux cartes sans signal ne reçoit pas les envois
   **groupés** sur Google. Il les reçoit sur son iPhone si son jeton Apple est vivant ; son
@@ -8957,6 +8978,7 @@ renuméroté en 075.
 - Pistes sans trafic Google, **non faites** : réécrire, sur la landing, l'ancien lien Google
   gardé en mémoire vers la route de suivi (`landing.html:1060-1061`) ; purger les jetons
   Apple sur un refus 410 (dette).
+
 ## 15 septquinquagies sexagies. CONNECTEUR HUBRISE (FRANCE) : DIAGNOSTIC (05/11, rien codé)
 
 **Demande du pilotage (05/11)** : brancher WinWin comme app consommatrice de Hubrise
@@ -9175,7 +9197,7 @@ marchand ne voit que ses données.
 - **Jeton** : chiffré en AES-256-GCM avec la clé `HUBRISE_JETON_CLE`, dans Railway seulement.
   Les données associées `marchand_id:location_id` le lient à sa ligne. Format
   `v1:iv:tag:texte`.
-- **Tables** (migration **074**, H0 renuméroté à sa reprise) : `hubrise_connexions` (index
+- **Tables** (migration **074** au cadrage, **devenue 075** le 07/11 ; H0 renuméroté à sa reprise) : `hubrise_connexions` (index
   unique « une location active = un marchand »), `hubrise_liens_utilises` et
   `hubrise_evenements` (sans donnée personnelle).
 - **Découpe** :
@@ -9193,7 +9215,7 @@ marchand ne voit que ses données.
 
 **Décisions demandées** (doc §8) :
 1. lien de connexion plutôt qu'un clic direct ;
-2. n° 074 pour H1 ;
+2. n° 074 pour H1 (devenu 075 le 07/11 : le 074 est le correctif D2) ;
 3. H1b inclus dans H1 ;
 4. `customer_list.read` à trancher à la lecture du JSON de test.
 
@@ -9201,6 +9223,120 @@ marchand ne voit que ses données.
 (`HUBRISE_LIEN_SECRET`) plutôt que `JWT_SECRET`, et un lien plutôt qu'une redirection
 directe depuis l'admin (l'admin s'authentifie par un jeton `Bearer`, qu'une redirection ne
 peut pas porter).
+
+## 15 undecies septuagies. HUBRISE H1a : CONNEXION D'UN MARCHAND, CODÉE EN LOCAL (06/11 ; migration 075 EXÉCUTÉE le 08/11, code non poussé)
+
+**Décisions du pilotage (06/11)** :
+- lien signé : oui ;
+- migration **074** pour H1 (H0 renuméroté à sa reprise) ; **devenue 075 le 07/11** (le 074 est le
+  correctif D2 de l'incident Pizz'Amore, exécuté le 07/11) ;
+- H1b inclus dans H1 ;
+- scope `location[orders.read,customer_list.read]` gardé pour le test, tranché sur le JSON
+  réel ;
+- `briques/h0-telephone-pays` **poussée** (`14c5405`, jamais déployée).
+
+**Adresses Hubrise données par le pilotage** :
+- autorisation : `GET manager.hubrise.com/oauth2/v1/authorize` ;
+- échange du code : `POST …/oauth2/v1/token`, en Basic, corps `code=` en formulaire ;
+- révocation : `POST …/oauth2/v1/revoke`, en Basic, corps `token=` ;
+- API : `api.hubrise.com/v1` avec l'en-tête `X-Access-Token` ;
+- abonnement : `POST/GET/DELETE /callback`, un seul par connexion ;
+- retrait de l'app par le marchand : aucun webhook, on le détecte au 401 ;
+- un jeton de location = une location (réseau multi-PDV : plus tard).
+
+**Livré (local)** :
+- **`database/migration_075_hubrise_connexions.sql`** (écrite en 074) :
+  - tables `hubrise_connexions` (index unique « location active = un marchand », CHECK :
+    forme `v1:…` du jeton, une connexion active a un jeton, une coupure a un auteur),
+    `hubrise_liens_utilises` (usage unique) et `hubrise_evenements` (pour H1b, vide) ;
+  - RLS active, droits à `service_role` seul ;
+  - fonctions `hubrise_enregistrer_connexion` (verrou par location ; refus « location_prise » ;
+    reconnexion du même marchand = l'ancienne coupée, jeton effacé) et
+    `hubrise_couper_connexion`.
+- **`src/integration/hubrise/`** :
+  - `config.js` : variables `HUBRISE_*` ; si elles manquent → 503 « non configuré », le reste
+    intact ;
+  - `coffre.js` : AES-256-GCM, données associées `marchand:location` ;
+  - `lien.js` : jeton signé `HUBRISE_LIEN_SECRET`, 30 min, HS256, `but` contrôlé ;
+  - `api-hubrise.js` : échange du code et révocation, délai 5 s, rien dans les journaux ;
+  - `oauth.js` : `/integrations/hubrise/connexion` et `/retour` ; nonce consommé avant tout
+    appel ; jeton révoqué si refus ;
+  - `admin.js` : état, lien, couper ;
+  - `page.js` ; une ligne de montage dans `src/integration/index.js`.
+- **Admin** : section « Hubrise » de la fiche marchand (état, lien à copier ou ouvrir,
+  « Couper »).
+
+**Preuves (Node 24.22.2)** :
+- **Filet 595/595**, tests navigateur compris :
+  - section « 31. Hubrise H1a » : 18 contrôles contre un **faux Hubrise** local ;
+  - `tests/navigateur/admin_hubrise.js` : 3/3.
+- Ce que le filet couvre :
+  - non configuré ;
+  - 401 ;
+  - parcours complet (302 vers l'autorisation avec le bon scope et le bon `redirect_uri`,
+    Basic correct, formulaire) ;
+  - jeton jamais en clair, déchiffrable seulement avec la clé et la bonne ligne ; un bit
+    modifié, un autre marchand, une autre location ou une autre clé → refusé ;
+  - rejeu ; lien expiré, faux ou jeton admin ;
+  - location prise (409 + révocation) ;
+  - reconnexion ; autorisation refusée ;
+  - Hubrise en panne ; réponse sans location ;
+  - marchand inactif ;
+  - état admin sans jeton ;
+  - couper (puis révocation) ;
+  - gardes en base, RLS ;
+  - **aucun jeton ni secret** dans les réponses, le journal du serveur ou la base.
+- **Contre-épreuve** (code en production `ae7b367`, plus la migration et le nouveau filet) :
+  - les 464 contrôles existants et le contrôle de la migration passent ;
+  - la section H1a échoue dès son premier appel (routes absentes, 404), puis s'arrête faute
+    du module.
+
+**Hypothèses et limites** :
+- une seule instance ;
+- la clé de chiffrement est unique, sans rotation codée (le format `v1` est prêt pour) ;
+- **le journal HTTP (morgan) écrit l'adresse des deux routes OAuth** : le lien (`l=`) et, au
+  retour, le `code` et le `state`. Ce sont des valeurs à usage unique, consommées aussitôt,
+  jamais le jeton Hubrise. À masquer si l'on veut des journaux sans elles (une ligne dans
+  `src/index.js`, non faite : hors module) ;
+- reconnexion du même marchand : l'ancien jeton n'est pas révoqué chez Hubrise (il peut être
+  le même que le nouveau ; non vérifiable sans le compte dev) ; il est effacé chez nous ;
+- `hubrise_liens_utilises` n'est pas purgé automatiquement (une ligne par lien ouvert) ;
+- le nom de la location vient de `location_name` dans la réponse du jeton, s'il existe (à
+  vérifier sur le compte dev) ;
+- **le filet teste un faux Hubrise** : la forme réelle des réponses se vérifie avec le compte
+  dev (recette).
+
+**Mise en production (sur feu vert de Yass)** :
+1. Migration **075**, puis son bloc VÉRIFICATION (attendu `true | true | true | true | 0`).
+2. Les variables Railway : `HUBRISE_CLIENT_ID`, `HUBRISE_CLIENT_SECRET`,
+   `HUBRISE_JETON_CLE`, `HUBRISE_LIEN_SECRET` (les deux dernières : `openssl rand -base64 32`).
+   Sans elles, la section affiche « non configuré » et rien ne casse.
+3. Push.
+4. Recette sur le compte dev : lien, autorisation, « Connecté », couper.
+
+**H1b** (abonnement aux commandes, récepteur sans crédit) : attend l'app Hubrise et les
+clés de Yass.
+
+**Rebase du 07/11** (après l'incident Pizz'Amore) : les 4 commits Hubrise rebasés **en local** sur
+`6d6c569` (correctif D2 en production). La migration est renumérotée **075**, la section du filet
+devient « 32 » (le 31 est D2). Les conflits portaient seulement sur des ajouts au même endroit
+(passation, fin du filet) : les deux textes sont gardés. **Filet complet après le rebase, tests
+navigateur compris : 600/600** (section 31 D2 et section 32 Hubrise ensemble). La
+contre-épreuve sur le code en production (`6d6c569`) sera refaite avant tout push de Hubrise.
+Rien n'est poussé.
+
+**Mise en production (08/11)** :
+- compte dev Hubrise `1bp94` ; client OAuth « WinWin Card »,
+  `client_id` = `894184615467.clients.hubrise.com` (public ; le secret est chez Yass) ;
+- URL de retour : `https://app.winwin-card.com/integrations/hubrise/retour`, passée dans l'URL
+  d'autorisation (aucune déclaration préalable chez Hubrise) ;
+- `briques/h0-telephone-pays` : déjà sur GitHub (`14c5405`, vérifié le 08/11) ;
+- **contre-épreuve** sur `6d6c569` (+ 075 + nouveau filet) : 470 contrôles bons (tous les
+  existants et celui de la 075) ; la section H1a s'arrête faute du module, comme attendu ;
+- **migration 075 exécutée par Yass le 08/11** : vérification `true | true | true | true | 0` ;
+- étapes suivantes, chacune sur feu vert : 4 variables Railway (`HUBRISE_CLIENT_ID`,
+  `HUBRISE_CLIENT_SECRET`, `HUBRISE_JETON_CLE`, `HUBRISE_LIEN_SECRET`) et contrôle de
+  `API_BASE_URL` = `https://app.winwin-card.com` ; push ; recette sur le compte dev.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
@@ -9461,6 +9597,19 @@ contrat §7 (diagnostic, validation, puis code).
 - le contrôle « D2 une seule fois » cherche la forme exacte « signal OU aucun jeton Apple » :
   la règle « vrai client » de 059 (`recalculer_visible`, « signal OU un jeton ») n'est pas D2 ;
 - `api-v1/migrations.js` : le message est coupé aussi pour un renvoi (il l'était déjà).
+
+**2026-11-06 — H1a, choix d'exécution** (à valider) :
+- le lien de connexion sert aussi de `state` OAuth (un seul jeton signé) ;
+- nonce consommé dès le retour, avant l'échange du code : un échec ensuite brûle le lien, et
+  il faut en créer un autre ;
+- le jeton obtenu est révoqué chez Hubrise s'il n'est pas gardé (location prise, réponse
+  sans location, base indisponible) ;
+- reconnexion du même marchand sur la même location : l'ancienne connexion est coupée chez
+  nous, sans révocation chez Hubrise ;
+- le marchand doit être actif pour créer le lien, l'ouvrir et enregistrer la connexion ;
+- morgan non modifié (le `code` et le lien, à usage unique, restent visibles dans le journal
+  HTTP).
+
 **2026-11-05 — H0, choix d'exécution** (à valider) :
 - pays initial déduit de la langue (`fr` → `FR`), au premier passage de la 074 seulement,
   avec une liste à valider avant (bloc A) ;

@@ -1,6 +1,12 @@
 # H1 — Connexion d'un marchand à Hubrise : cadrage (06/11/2026, rien codé)
 
-> **Statut** : cadrage seul. Zéro code avant le go de Yass, rien en prod.
+> **Statut au 06/11** :
+> - cadrage validé par le pilotage (5 décisions, §8) ;
+> - **H1a codé en local** : migration **075** (écrite en 074, renumérotée le 07/11 : le 074 est le correctif D2), `src/integration/hubrise/`, section admin ;
+>   filet 595/595 contre un faux Hubrise ;
+> - rien n'est poussé, la 075 n'est pas exécutée ;
+> - H1b attend l'app Hubrise et les clés ;
+> - détail et limites : passation §15 undecies septuagies.
 >
 > **Périmètre** : le flux « Connecter » lancé depuis l'admin WinWin, l'autorisation OAuth
 > Hubrise, le stockage chiffré du jeton, puis l'abonnement aux ventes de la location.
@@ -118,7 +124,7 @@ les routes Hubrise.
 
 ## 3. Base de données (une migration, exécutée avant le code)
 
-**Numéro** : je propose **074** pour H1. H0, gelé sur `briques/h0-telephone-pays`, sera
+**Numéro** : proposé **074** pour H1 (06/11) ; **devenu 075 le 07/11**, le 074 ayant été pris par le correctif D2 (incident Pizz'Amore). H0, gelé sur `briques/h0-telephone-pays`, sera
 renuméroté à sa reprise, comme f04 (066 → 067 → 068) : c'est la migration exécutée en
 premier qui garde le numéro.
 

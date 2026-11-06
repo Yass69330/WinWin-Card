@@ -3728,6 +3728,194 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
       [v.statut, lignesG(iphVente.serial), m.statut, lignesG(iphMigr.serial)], [200, 2, 200, 1]);
     s31.processus.kill();
   }
+
+  // ── 32. Hubrise H1a : connexion d'un marchand (migration 075, 06/11) ───────
+  titre('32. Hubrise H1a : connexion d\'un marchand (OAuth), jeton chiffré, admin (migration 075, 06/11)');
+  {
+    const http = require('http'), path = require('path'), fs = require('fs');
+    const m075 = fs.readFileSync(path.join(__dirname, '..', 'database', 'migration_075_hubrise_connexions.sql'), 'utf8');
+    sql(m075);   // rejeu
+    verifier('migration 075 rejouée : contrôle « true, true, true, true, 0 »',
+      sql(`SELECT (SELECT to_regclass('public.hubrise_connexions') IS NOT NULL AND to_regclass('public.hubrise_liens_utilises') IS NOT NULL AND to_regclass('public.hubrise_evenements') IS NOT NULL),
+                  (SELECT count(*) = 1 FROM pg_indexes WHERE indexname = 'hubrise_connexions_location_active'),
+                  (SELECT bool_and(relrowsecurity) FROM pg_class WHERE oid IN ('public.hubrise_connexions'::regclass, 'public.hubrise_liens_utilises'::regclass, 'public.hubrise_evenements'::regclass)),
+                  (SELECT count(*) = 2 FROM pg_proc WHERE proname IN ('hubrise_enregistrer_connexion', 'hubrise_couper_connexion')),
+                  (SELECT count(*) FROM hubrise_connexions)`), 't|t|t|t|0');
+
+    // Faux Hubrise : échange du code et révocation (adresses du pilotage, 06/11).
+    const recu = { token: [], revoke: [] };
+    const reponses = {};
+    let panne = false;
+    const faux = http.createServer((req, res) => {
+      let b = '';
+      req.on('data', c => { b += c; });
+      req.on('end', () => {
+        const f = Object.fromEntries(new URLSearchParams(b));
+        if (req.method === 'POST' && req.url === '/oauth2/v1/token') {
+          recu.token.push({ auth: req.headers.authorization, type: req.headers['content-type'], code: f.code });
+          if (panne) { res.writeHead(500); return res.end(); }
+          const r = reponses[f.code];
+          res.writeHead(r ? 200 : 400, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify(r || { error: 'invalid_grant' }));
+        }
+        if (req.method === 'POST' && req.url === '/oauth2/v1/revoke') {
+          recu.revoke.push({ auth: req.headers.authorization, token: f.token });
+          res.writeHead(200); return res.end();
+        }
+        res.writeHead(404); res.end();
+      });
+    });
+    await new Promise(r => faux.listen(0, '127.0.0.1', r));
+    const urlFaux = `http://127.0.0.1:${faux.address().port}`;
+    const ID = 'winwin-filet', SECRET = 'secret-app-filet-' + crypto.randomBytes(8).toString('hex');
+    const CLE = crypto.randomBytes(32).toString('base64'), LSEC = crypto.randomBytes(32).toString('hex');
+    const BASE = 'http://winwin.filet';
+    const sH = await demarrerServeur('hubrise', urlSupabase, { HUBRISE_CLIENT_ID: ID, HUBRISE_CLIENT_SECRET: SECRET,
+      HUBRISE_JETON_CLE: CLE, HUBRISE_LIEN_SECRET: LSEC, HUBRISE_MANAGER_URL: urlFaux, API_BASE_URL: BASE });
+    const sOff = await demarrerServeur('hubrise-off', urlSupabase, {});
+    const reponsesVues = [];
+    const appel = (s, methode, chemin, auth, corps) => fetch(s.url + chemin, { method: methode, redirect: 'manual',
+      headers: { 'Content-Type': 'application/json', ...(auth ? { Authorization: auth } : {}) },
+      body: corps === undefined ? undefined : JSON.stringify(corps) })
+      .then(async r => { const t = await r.text(); reponsesVues.push(t); let c; try { c = JSON.parse(t); } catch { c = t; }
+        return { statut: r.status, corps: c, location: r.headers.get('location') || '' }; });
+    const adm = (s, methode, chemin, corps) => appel(s, methode, chemin, `Bearer ${jetonAdmin}`, corps);
+    const MH = '80000000-0000-4000-8000-000000000008', MH2 = '81000000-0000-4000-8000-000000000008', MH3 = '82000000-0000-4000-8000-000000000008';
+    sql(`INSERT INTO marchands (id, nom, slug, forfait, type_programme, max_value, langue) VALUES
+         ('${MH}', 'Naan Lyon', 'filet-naan', 'pro', 'points', 500, 'fr'), ('${MH2}', 'Autre', 'filet-autre', 'pro', 'points', 500, 'fr'),
+         ('${MH3}', 'Fermé', 'filet-ferme', 'pro', 'points', 500, 'fr')`);
+    const nouveauLien = async m => {
+      const r = await adm(sH, 'POST', `/api/admin/marchands/${m}/hubrise/lien`, {});
+      return { ...r, l: new URL(r.corps.url || BASE).searchParams.get('l') || '' };
+    };
+    const retour = (state, code) => appel(sH, 'GET', `/integrations/hubrise/retour?${new URLSearchParams(code === null ? { state, error: 'access_denied' } : { state, code })}`);
+    const lignes = m => sql(`SELECT count(*) FROM hubrise_connexions WHERE marchand_id = '${m}'`);
+    const tok = () => 'hr_' + crypto.randomBytes(24).toString('hex');
+
+    // Non configuré.
+    const e0 = await adm(sOff, 'GET', `/api/admin/marchands/${MH}/hubrise`);
+    const l0 = await adm(sOff, 'POST', `/api/admin/marchands/${MH}/hubrise/lien`, {});
+    const c0 = await appel(sOff, 'GET', '/integrations/hubrise/connexion?l=x');
+    verifier('serveur sans réglages Hubrise : état « non configuré », lien refusé (503, noms des variables manquantes, jamais de valeur), page de connexion 503 ; le reste répond',
+      [e0.statut, e0.corps.configure, l0.statut, l0.corps.manquants, c0.statut, (await appel(sOff, 'GET', '/health/db')).statut],
+      [200, false, 503, ['HUBRISE_CLIENT_ID', 'HUBRISE_CLIENT_SECRET', 'HUBRISE_JETON_CLE', 'HUBRISE_LIEN_SECRET'], 503, 200]);
+    verifier('admin Hubrise sans jeton admin : 401 (état, lien, couper)',
+      [(await appel(sH, 'GET', `/api/admin/marchands/${MH}/hubrise`)).statut, (await appel(sH, 'POST', `/api/admin/marchands/${MH}/hubrise/lien`, null, {})).statut,
+       (await appel(sH, 'POST', `/api/admin/hubrise/connexions/${MH}/couper`, null, {})).statut], [401, 401, 401]);
+
+    // Parcours complet.
+    const L1 = await nouveauLien(MH);
+    const vers = await appel(sH, 'GET', `/integrations/hubrise/connexion?l=${encodeURIComponent(L1.l)}`);
+    const a = new URL(vers.location || 'http://x');
+    verifier('lien : 201, adresse WinWin /integrations/hubrise/connexion, 30 min ; ouvert → 302 vers l\'autorisation Hubrise (client_id, redirect_uri, scope location[orders.read,customer_list.read], state = le lien)',
+      [L1.statut, String(L1.corps.url).startsWith(`${BASE}/integrations/hubrise/connexion?l=`), Math.round((Date.parse(L1.corps.expire_le) - Date.now()) / 60000),
+       vers.statut, a.origin + a.pathname, a.searchParams.get('client_id'), a.searchParams.get('redirect_uri'), a.searchParams.get('scope'), a.searchParams.get('state') === L1.l],
+      [201, true, 30, 302, `${urlFaux}/oauth2/v1/authorize`, ID, `${BASE}/integrations/hubrise/retour`, 'location[orders.read,customer_list.read]', true]);
+    const T1 = tok();
+    reponses.c1 = { access_token: T1, account_id: 'acc-1', location_id: 'loc-1a', customer_list_id: 'cl-1', location_name: 'Naan Lyon Part-Dieu' };
+    const r1 = await retour(L1.l, 'c1');
+    const ligne = sql(`SELECT account_id || '|' || location_id || '|' || customer_list_id || '|' || nom_location || '|' || scope || '|' || (coupee_le IS NULL) FROM hubrise_connexions WHERE marchand_id = '${MH}'`);
+    verifier('retour : page « Connecté à Hubrise » (nom de la location) ; échange du code serveur à serveur, Basic base64(client_id:secret), formulaire code=… ; connexion écrite',
+      [r1.statut, String(r1.corps).includes('Connecté à Hubrise'), String(r1.corps).includes('Naan Lyon Part-Dieu'),
+       recu.token[0] && recu.token[0].auth === 'Basic ' + Buffer.from(`${ID}:${SECRET}`).toString('base64'),
+       recu.token[0] && recu.token[0].type, recu.token[0] && recu.token[0].code, ligne],
+      [200, true, true, true, 'application/x-www-form-urlencoded', 'c1', 'acc-1|loc-1a|cl-1|Naan Lyon Part-Dieu|location[orders.read,customer_list.read]|true']);
+
+    // Le coffre.
+    const stocke = sql(`SELECT jeton_chiffre FROM hubrise_connexions WHERE marchand_id = '${MH}'`);
+    const cleAvant = process.env.HUBRISE_JETON_CLE;
+    process.env.HUBRISE_JETON_CLE = CLE;
+    const coffre = require('../src/integration/hubrise/coffre');
+    const [v, iv, tag, texte] = stocke.split(':');
+    const modifie = `${v}:${iv}:${tag}:${Buffer.from(Buffer.from(texte, 'base64').map((x, i) => (i === 0 ? x ^ 1 : x))).toString('base64')}`;
+    const essais = [coffre.dechiffrer(stocke, MH, 'loc-1a') === T1, coffre.dechiffrer(stocke, MH2, 'loc-1a'), coffre.dechiffrer(stocke, MH, 'loc-autre'),
+      coffre.dechiffrer(modifie, MH, 'loc-1a'), coffre.chiffrer(T1, MH, 'loc-1a') !== coffre.chiffrer(T1, MH, 'loc-1a')];
+    process.env.HUBRISE_JETON_CLE = crypto.randomBytes(32).toString('base64');
+    essais.push(coffre.dechiffrer(stocke, MH, 'loc-1a'));
+    if (cleAvant === undefined) delete process.env.HUBRISE_JETON_CLE; else process.env.HUBRISE_JETON_CLE = cleAvant;
+    verifier('jeton en base : « v1:iv:étiquette:texte », jamais le clair ; se déchiffre avec la clé ET la ligne (marchand, location) seulement ; texte modifié d\'un bit, autre marchand, autre location ou autre clé → refusé ; IV neuf à chaque chiffrement',
+      [/^v1:[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+$/.test(stocke), stocke.includes(T1), ...essais], [true, false, true, null, null, null, true, null]);
+
+    // Refus.
+    const rejeu = await retour(L1.l, 'c1');
+    verifier('state rejoué (même lien) : « Lien déjà utilisé », Hubrise pas rappelé, rien écrit ; le lien lui-même ne rouvre plus',
+      [rejeu.statut, String(rejeu.corps).includes('déjà utilisé'), recu.token.length, lignes(MH),
+       (await appel(sH, 'GET', `/integrations/hubrise/connexion?l=${encodeURIComponent(L1.l)}`)).statut], [400, true, 1, '1', 400]);
+    const jwt = require('jsonwebtoken');
+    const expire = jwt.sign({ but: 'hubrise_connexion', m: MH, n: crypto.randomUUID() }, LSEC, { expiresIn: -10 });
+    const autreSecret = jwt.sign({ but: 'hubrise_connexion', m: MH, n: crypto.randomUUID() }, 'un-autre-secret-de-plus-de-32-caracteres');
+    const autreBut = jwt.sign({ role: 'admin', m: MH, n: crypto.randomUUID() }, LSEC);
+    verifier('lien expiré → « Lien expiré » ; signé avec un autre secret (ex. le jeton admin) ou sans le bon but → « Lien invalide » ; rien écrit, Hubrise pas appelé',
+      [(await retour(expire, 'c1')).statut, String((await appel(sH, 'GET', `/integrations/hubrise/connexion?l=${expire}`)).corps).includes('expiré'),
+       String((await retour(autreSecret, 'c1')).corps).includes('invalide'), String((await retour(jetonAdmin, 'c1')).corps).includes('invalide'),
+       String((await retour(autreBut, 'c1')).corps).includes('invalide'), recu.token.length, sql('SELECT count(*) FROM hubrise_connexions')],
+      [400, true, true, true, true, 1, '1']);
+    const L2 = await nouveauLien(MH2);
+    const T2 = tok();
+    reponses.c2 = { access_token: T2, account_id: 'acc-2', location_id: 'loc-1a' };
+    const r2 = await retour(L2.l, 'c2');
+    verifier('location déjà active chez un AUTRE marchand : 409 « déjà relié », rien écrit pour lui, le jeton obtenu est révoqué chez Hubrise (Basic)',
+      [r2.statut, String(r2.corps).includes('déjà relié'), lignes(MH2), recu.revoke.some(x => x.token === T2 && x.auth === recu.token[0].auth)], [409, true, '0', true]);
+    const L3 = await nouveauLien(MH);
+    const T3 = tok();
+    reponses.c3 = { access_token: T3, account_id: 'acc-1', location_id: 'loc-1a' };
+    const r3 = await retour(L3.l, 'c3');
+    verifier('même marchand, même location (reconnexion) : 200 ; l\'ancienne connexion est coupée (par WinWin, jeton effacé), une seule active',
+      [r3.statut, sql(`SELECT string_agg(coalesce(coupee_par, 'active') || ':' || (jeton_chiffre IS NULL), ' ' ORDER BY cree_le) FROM hubrise_connexions WHERE marchand_id = '${MH}'`),
+       sql(`SELECT count(*) FROM hubrise_connexions WHERE location_id = 'loc-1a' AND coupee_le IS NULL`)], [200, 'winwin:true active:false', '1']);
+    const L4 = await nouveauLien(MH);
+    const refuse = await retour(L4.l, null);
+    verifier('autorisation refusée sur Hubrise (?error=access_denied) : « Connexion annulée », rien écrit, le lien est consommé',
+      [refuse.statut, String(refuse.corps).includes('annulée'), lignes(MH), (await appel(sH, 'GET', `/integrations/hubrise/connexion?l=${encodeURIComponent(L4.l)}`)).statut],
+      [400, true, '2', 400]);
+    const L5 = await nouveauLien(MH);
+    panne = true;
+    const r5 = await retour(L5.l, 'c1');
+    panne = false;
+    const L6 = await nouveauLien(MH);
+    const T6 = tok();
+    reponses.c6 = { access_token: T6, account_id: 'acc-1' };
+    const r6 = await retour(L6.l, 'c6');
+    verifier('Hubrise en panne (500) : 502 « ne répond pas », rien écrit ; réponse sans location : « Connexion incomplète », rien écrit, jeton révoqué',
+      [r5.statut, String(r5.corps).includes('ne répond pas'), r6.statut, String(r6.corps).includes('incomplète'), lignes(MH), recu.revoke.some(x => x.token === T6)],
+      [502, true, 400, true, '2', true]);
+    const L7 = await nouveauLien(MH3);
+    sql(`UPDATE marchands SET actif = false WHERE id = '${MH3}'`);
+    verifier('marchand devenu inactif entre le lien et l\'ouverture : 404 ; lien pour un marchand inactif : 404',
+      [(await appel(sH, 'GET', `/integrations/hubrise/connexion?l=${encodeURIComponent(L7.l)}`)).statut, (await adm(sH, 'POST', `/api/admin/marchands/${MH3}/hubrise/lien`, {})).statut],
+      [404, 404]);
+
+    // Admin : état et coupure.
+    const etat = await adm(sH, 'GET', `/api/admin/marchands/${MH}/hubrise`);
+    verifier('admin, état : configuré, 2 connexions (1 active), jamais le jeton (ni chiffré ni en clair) ; un autre marchand ne voit pas les connexions de celui-ci',
+      [etat.statut, etat.corps.configure, etat.corps.connexions.length, etat.corps.connexions.filter(c => !c.coupee_le).length,
+       etat.corps.connexions.some(c => 'jeton_chiffre' in c), JSON.stringify(etat.corps).includes('v1:'), (await adm(sH, 'GET', `/api/admin/marchands/${MH2}/hubrise`)).corps.connexions.length],
+      [200, true, 2, 1, false, false, 0]);
+    const active = etat.corps.connexions.find(c => !c.coupee_le).id;
+    const cp = await adm(sH, 'POST', `/api/admin/hubrise/connexions/${active}/couper`, {});
+    verifier('couper : connexion coupée par WinWin, jeton effacé en base, puis révoqué chez Hubrise ; recouper : « deja_coupee » ; inconnue : 404',
+      [cp.statut, cp.corps, sql(`SELECT coupee_par || '|' || (jeton_chiffre IS NULL) FROM hubrise_connexions WHERE id = '${active}'`), recu.revoke.some(x => x.token === T3),
+       (await adm(sH, 'POST', `/api/admin/hubrise/connexions/${active}/couper`, {})).corps.deja_coupee, (await adm(sH, 'POST', `/api/admin/hubrise/connexions/${crypto.randomUUID()}/couper`, {})).statut],
+      [200, { ok: true, deja_coupee: false, revoque: true }, 'winwin|true', true, true, 404]);
+
+    // Gardes en base.
+    sql(`INSERT INTO hubrise_connexions (marchand_id, account_id, location_id, scope, jeton_chiffre) VALUES ('${MH2}', 'a', 'loc-z', 's', 'v1:AA==:AA==:AA==')`);
+    verifier('la base refuse : une 2e connexion active sur la même location (autre marchand), une connexion active sans jeton, un jeton qui n\'a pas la forme chiffrée, une coupure sans auteur',
+      [refuseParLaBase(`INSERT INTO hubrise_connexions (marchand_id, account_id, location_id, scope, jeton_chiffre) VALUES ('${MH}', 'a', 'loc-z', 's', 'v1:AA==:AA==:AA==')`),
+       refuseParLaBase(`INSERT INTO hubrise_connexions (marchand_id, account_id, location_id, scope) VALUES ('${MH}', 'a', 'loc-y', 's')`),
+       refuseParLaBase(`INSERT INTO hubrise_connexions (marchand_id, account_id, location_id, scope, jeton_chiffre) VALUES ('${MH}', 'a', 'loc-x', 's', 'jeton-en-clair')`),
+       refuseParLaBase(`UPDATE hubrise_connexions SET coupee_le = now() WHERE location_id = 'loc-z'`)], [true, true, true, true]);
+    verifier('tables Hubrise : RLS active, aucun droit pour anon ni authenticated (le serveur seul)',
+      sql(`SELECT bool_or(has_table_privilege(r, t, 'SELECT')) FROM unnest(ARRAY['anon', 'authenticated']) r, unnest(ARRAY['hubrise_connexions', 'hubrise_liens_utilises', 'hubrise_evenements']) t`), 'f');
+
+    // Aucune fuite.
+    const secrets = [T1, T2, T3, T6, SECRET, CLE, LSEC];
+    const base = sql(`SELECT coalesce(string_agg(row_to_json(t)::text, ' '), '') FROM hubrise_connexions t`) + sql(`SELECT coalesce(string_agg(row_to_json(t)::text, ' '), '') FROM hubrise_liens_utilises t`);
+    verifier('aucun jeton ni secret (jetons Hubrise, client_secret, clé de chiffrement, secret des liens) dans les réponses, le journal du serveur ou la base',
+      secrets.map(x => [reponsesVues.some(t => t.includes(x)), sH.journal().includes(x), base.includes(x)]), secrets.map(() => [false, false, false]));
+    sH.processus.kill(); sOff.processus.kill();
+    await new Promise(r => faux.close(r));
+  }
 }
 
 module.exports = { FIXTURES, jouer, M, B };

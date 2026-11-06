@@ -796,6 +796,25 @@
         <div id="api-cles-statut" class="field-hint" style="margin-top:6px"></div>
       </div>
 
+      <!-- Section : Hubrise (H1a, 06/11, mode édition) — docs/hubrise/02-h1-connexion.md -->
+      <div class="form-section" id="section-hubrise" style="display:none">
+        <div class="form-section-title">Hubrise</div>
+        <div class="field-hint" style="margin-bottom:8px">Relie le point de vente Hubrise du marchand (caisse en France). Le lien de connexion est à usage unique et vaut 30 minutes : ouvrez-le sur place avec le marchand, ou envoyez-le lui. C'est le marchand qui se connecte à son compte Hubrise.</div>
+        <div id="hubrise-etat" style="display:flex;flex-direction:column;gap:8px"></div>
+        <div id="hubrise-lien" style="display:none;background:var(--surface2);border:1px solid var(--warning);border-radius:10px;padding:12px;margin-top:8px">
+          <div style="font-weight:600;font-size:13px">Lien de connexion (30 min, une seule fois)</div>
+          <code id="hubrise-lien-valeur" style="display:block;word-break:break-all;font-size:12px;margin:8px 0;user-select:all"></code>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn btn-outline btn-sm" id="btn-hubrise-copier">Copier</button>
+            <a class="btn btn-outline btn-sm" id="btn-hubrise-ouvrir" target="_blank" rel="noopener noreferrer">Ouvrir</a>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <button type="button" class="btn btn-outline btn-sm" id="btn-hubrise-lien">Créer un lien de connexion</button>
+        </div>
+        <div id="hubrise-statut" class="field-hint" style="margin-top:6px"></div>
+      </div>
+
       <!-- Section : Avancé -->
       <div class="form-section">
         <div class="form-section-title">Avancé</div>
@@ -1205,6 +1224,67 @@ function lireLieuxGeo() {
 }
 document.getElementById('btn-geo-ajouter').addEventListener('click', () => ajouterLieuGeo());
 
+// ════════════════════════════════════
+// HUBRISE (H1a, 06/11) — src/integration/hubrise/admin.js
+// Jamais de jeton ici : l'état, le lien de connexion signé, la coupure.
+// ════════════════════════════════════
+async function chargerHubrise() {
+  const etat = document.getElementById('hubrise-etat');
+  const bouton = document.getElementById('btn-hubrise-lien');
+  etat.innerHTML = '<span class="field-hint">Chargement…</span>';
+  try {
+    const res = await api(`/api/admin/marchands/${S.editId}/hubrise`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'Erreur');
+    bouton.disabled = !d.configure;
+    const actives = d.connexions.filter(c => !c.coupee_le);
+    etat.innerHTML = (d.configure ? '' : '<span class="field-hint" style="color:var(--warning)">Hubrise n\'est pas configuré sur ce serveur (variables HUBRISE_*).</span>')
+      + (actives.length ? '' : '<span class="field-hint">Non connecté.</span>');
+    for (const c of d.connexions.slice(0, 5)) {
+      const div = document.createElement('div');
+      div.className = 'hubrise-connexion';
+      div.style.cssText = 'display:flex;gap:10px;align-items:center;background:var(--surface2);border-radius:10px;padding:10px;font-size:13px';
+      const coupee = c.coupee_le ? ` · <strong style="color:var(--error)">coupée le ${esc(dateCourte(c.coupee_le))}${c.coupee_par === 'hubrise' ? ' (par Hubrise)' : ''}</strong>` : '';
+      div.innerHTML = `<div style="flex:1">${c.coupee_le ? '' : '<strong>Connecté</strong> · '}${esc(c.nom_location || 'location')} <code>${esc(c.location_id)}</code>
+        <div class="field-hint">depuis le ${esc(dateCourte(c.cree_le))}${coupee}</div></div>
+        ${c.coupee_le ? '' : `<button type="button" class="btn btn-ghost btn-sm" data-hubrise-couper="${esc(c.id)}">Couper</button>`}`;
+      etat.appendChild(div);
+    }
+  } catch (e) {
+    etat.innerHTML = `<span class="field-hint" style="color:var(--error)">${esc(e.message)}</span>`;
+  }
+}
+document.getElementById('btn-hubrise-lien').addEventListener('click', async () => {
+  const statut = document.getElementById('hubrise-statut');
+  statut.textContent = '';
+  try {
+    const res = await api(`/api/admin/marchands/${S.editId}/hubrise/lien`, { method: 'POST', body: '{}' });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'Erreur');
+    document.getElementById('hubrise-lien-valeur').textContent = d.url;
+    document.getElementById('btn-hubrise-ouvrir').href = d.url;
+    document.getElementById('hubrise-lien').style.display = 'block';
+    statut.textContent = `Valable jusqu'à ${dateCourte(d.expire_le)}.`;
+  } catch (e) { statut.textContent = 'Lien impossible : ' + e.message; }
+});
+document.getElementById('btn-hubrise-copier').addEventListener('click', () => {
+  try { navigator.clipboard.writeText(document.getElementById('hubrise-lien-valeur').textContent); document.getElementById('hubrise-statut').textContent = 'Lien copié.'; } catch {}
+});
+document.getElementById('hubrise-etat').addEventListener('click', async e => {
+  const b = e.target.closest('[data-hubrise-couper]');
+  if (!b) return;
+  if (!confirm('Couper la connexion Hubrise ? WinWin ne recevra plus les ventes de ce point de vente. Le marchand devra se reconnecter avec un nouveau lien.')) return;
+  b.disabled = true;
+  const statut = document.getElementById('hubrise-statut');
+  try {
+    const res = await api(`/api/admin/hubrise/connexions/${b.dataset.hubriseCouper}/couper`, { method: 'POST', body: '{}' });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'Erreur');
+    statut.textContent = d.revoque ? 'Connexion coupée, accès révoqué chez Hubrise.' : 'Connexion coupée chez WinWin (révocation chez Hubrise non confirmée).';
+  } catch (err) { statut.textContent = 'Coupure impossible : ' + err.message; }
+  chargerHubrise();
+});
+
 // ── f17 : thèmes de carte ───────────────────────────────────────────────────
 // ════════════════════════════════════
 // CLÉS D'API DES CAISSES (20/10) — src/integration/api-v1/admin-cles.js
@@ -1560,6 +1640,9 @@ function resetForm() {
   document.getElementById('section-geo').style.display = 'none';
   document.getElementById('section-themes').style.display = 'none';
   document.getElementById('section-api').style.display = 'none';
+  document.getElementById('section-hubrise').style.display = 'none';
+  document.getElementById('hubrise-lien').style.display = 'none';
+  document.getElementById('hubrise-statut').textContent = '';
   document.getElementById('api-cle-nouvelle').style.display = 'none';
   document.getElementById('api-cle-valeur').textContent = '';
   document.getElementById('api-cles-statut').textContent = '';
@@ -1648,6 +1731,9 @@ function fillForm(m) {
   document.getElementById('f-api-aed-par-point').value = ((m.fils_par_point ?? 100) / 100).toFixed(2);
   document.getElementById('f-api-plafond-aed').value = Math.round((m.plafond_vente_fils ?? 5000000) / 100);
   chargerClesApi();
+  // Hubrise (H1a) : tous forfaits, mode édition.
+  document.getElementById('section-hubrise').style.display = '';
+  chargerHubrise();
   renderStripTiers(m.images_tiers);
   // Workflows : Pro ET Pro+ (basic exclu). Miroir exact de FORFAITS_WORKFLOWS
   // côté cron — sans ça, un Pro n'aurait aucun interrupteur à cocher.
