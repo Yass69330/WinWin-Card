@@ -64,6 +64,8 @@ indiquée.
   dans la production le 22/10** après la migration 068 ; ne plus s'en servir.
 - Branche de travail des sessions : jamais poussée (consigne de Yass), sauf feu vert
   explicite. Le crochet d'arrêt qui demande de la pousser est ignoré.
+- **Migration 074 (D2 sur les envois groupés, incident Pizz'Amore) : EXÉCUTÉE le 07/11** (contrôles
+  bons). Le code correspondant attend le push n°1 (§15 duodecies septuagies).
 - Dernière migration exécutée en production : **070** (27/10, f10 : règle 7 à 30 jours ;
   contrôle : true, 0). 069 (22/10, migration des points au journal
   des ajustements ; contrôle : true, true, true, 0). 068 (22/10, téléphone : normalisation,
@@ -8807,6 +8809,148 @@ mise à jour silencieuse immédiate des cartes déjà installées (à chiffrer :
 **Décisions hors pilotage** (à valider) : libellé vide au-dessus du lien ; https obligatoire (et
 ni guillemet ni chevron dans l'URL) ; la version EN est codée (aucun marchand EN n'a le champ).
 
+## 15 duodecies septuagies. INCIDENT PIZZ'AMORE (07/11) : RÈGLE D2 SUR LES ENVOIS GROUPÉS SEULEMENT (migration 074 EXÉCUTÉE le 07/11, code non poussé)
+
+**Incident (07/11, caisse Pizz'Amore)** :
+- Le client Zakaria (carte `…d263fcfe3`, mode points, seuil 200) présente sa carte Google
+  Wallet, **figée à 200/200 dorée**. Le scan passe (52 → 53).
+- **Diagnostic prouvé par SQL et par les journaux** :
+  - une seule carte, la bonne ;
+  - historique : 0 → 200 le 19/09, remise 200 → 13 le 03/10, puis 26, 51, 52, 53 ;
+  - un jeton Apple depuis le 19/09 ; `google_ouvert_le` vide ;
+  - registre : Google mis à jour le 03/10 et le 10/10, **plus rien depuis** (Apple seulement) ;
+  - journaux Railway : la carte Apple se télécharge bien (200 à chaque scan).
+- **Cause** : la règle D2 (étape 23, en service le 13/10) voit « jeton Apple, sans signal
+  Google » et coupe tout envoi Google. Or le client a les **deux** cartes, et son signal n'a
+  jamais été posé (lien Google direct d'avant le 13/10). C'est la sortie silencieuse
+  `mise-a-jour-carte.js:41` : ni envoi, ni registre, ni journal.
+- Risque noté à l'étape 23 (« un client … ne reçoit plus Google, risque accepté »).
+  **Recensement** (Q5 du 07/11) : 795 cartes à jeton Apple, sans signal, actives depuis le
+  13/10 (dont 117 chez Pizz'Amore). Seules celles qui ont aussi une carte Google étaient
+  figées.
+
+**Décisions du pilotage (07/11)** :
+- **Aucune requête Google récurrente** (vérification `hasUsers` périodique refusée).
+- **D2 seulement sur les envois groupés** :
+  - campagnes du dashboard (`campagne_lot_google`) ;
+  - tout le cron : inactive, near_reward, birthday (`reserver_relances`) ;
+  - bascule de thème (`theme_lot_google`).
+- **Sans D2** : scan, parrainage, ajustement, annulation, avis, **API ventes et migrations**.
+  Le flux de caisse de Black Tulip est unitaire. Une rafale ponctuelle (import, rattrapage)
+  est tolérée, puisque le scan suivant corrige la carte.
+- **Route API migrations : sans message Google** : un import ne fait sonner aucun téléphone.
+- **Version consolidée** : une seule définition SQL de D2, la fonction morte
+  `cartes_google_campagne` supprimée. Migration **074** ; H1a (Hubrise, local) renuméroté
+  en 075.
+
+**Livré (branche locale `correctif/d2-groupes`, partie de `ae7b367`)** :
+- **`database/migration_074_d2_envois_groupes.sql`** :
+  - `google_utile(lien, signal, serial)` = LA règle D2 ;
+  - `reserver_relances`, `campagne_lot_google` et `theme_lot_google` recopiées à
+    l'identique de leur dernière version (059, 059, 063), condition D2 remplacée par l'appel ;
+  - `cartes_google_campagne` supprimée ;
+  - **contrôle en fin de migration** : les 3 fonctions appellent `google_utile` sans copie du
+    critère, sinon arrêt.
+- **Serveur** :
+  - `servirGoogle` supprimée (`canal-google.js` ne garde que `lireCanaux`, jetons Apple
+    seulement) ;
+  - plus de condition sur les envois unitaires : `mise-a-jour-carte.js` (scan, parrainage,
+    ventes et migrations API), `clients.js` (ajustement, annulation), `avis.js` ;
+  - `isConfigured()` gardé ;
+  - `api-v1/migrations.js` : `message: false`.
+- **Filet** :
+  - section 22 : 2 contrôles unitaires inversés (scan et ajustement d'une carte iPhone
+    seule : Google mis à jour) ; contrôles groupés gardés ; la vérification de
+    `cartes_google_campagne` passe sur `google_utile` ;
+  - section 23 : l'« ancienne voie » retirée ;
+  - **nouvelle section 31** (5 contrôles) : rejeu ; D2 une seule fois en base ; table de
+    `google_utile` ; aucune trace de `servirGoogle` côté serveur ; API vente et migration
+    (sans message).
+
+**Preuves (Node 24.22.2)** :
+- **Filet complet, tests navigateur compris : 579/579.**
+- **Contre-épreuve** (code en production `ae7b367`, plus la 074 et le nouveau filet) :
+  **465/469**. Les 4 échecs sont exactement les changements de comportement : scan et
+  ajustement d'une carte iPhone seule, `servirGoogle` présent, API vente et migration.
+  Les contrôles de la 074 passent avec l'ancien code : la migration est compatible avec lui.
+
+**Zakaria** : sa carte Google se remet à jour **à son prochain scan** après le déploiement,
+sans rattrapage ni écriture. Condition : son objet Google existe encore (dernier envoi
+accepté le 10/10).
+
+**Mise en production (feu vert de Yass à CHAQUE étape)** :
+1. Requêtes R1, R2 et angle mort (ordres de grandeur, lecture seule ; demandées avant la
+   mise en production).
+2. **Empreintes AVANT** (bloc VÉRIFICATION de la 074). Attendu, tel que construit depuis le
+   dépôt :
+
+| fonction | md5(prosrc) |
+|---|---|
+| `campagne_lot_google` | `963218dc53164a36797ecf183b311726` |
+| `cartes_google_campagne` | `0b26c00aa04c170d211bd49ae00487ec` |
+| `reserver_relances` | `9610956071024a8cb201b3acc7a9c1cd` |
+| `theme_lot_google` | `c5bb8144d181a03be63cfe44bfdfa3db` |
+
+   Une empreinte différente veut dire que la production a divergé du dépôt (§3.10) :
+   **ne pas exécuter**, revenir à la session.
+3. Migration 074, puis son contrôle APRÈS (`true | true | true`).
+4. Push de `correctif/d2-groupes` en avance rapide sur la branche de production, **seul**
+   (sans les commits Hubrise). Contrôle à l'œil : un scan, et une ligne `google` au registre
+   pour une carte à jeton Apple.
+
+**Lectures de Yass (07/11, soir, lecture seule)** :
+- **R1** : 662 scans et 6 ajustements en 14 jours sur des cartes exclues par D2. Cela donne
+  **95,4 appels Google réintroduits par jour**, pour **100 par jour aujourd'hui**. Le
+  correctif double presque le trafic Google (environ 195 par jour, ≈ 0,002 appel par
+  seconde, après la réponse au client).
+- **R2** : D2 retire **2 153 cartes sur 3 062 (70 %)** d'une campagne « tous » ; 53 % chez
+  Pizz'Amore ; kasa-grill 4,5 % (clients surtout sur Google).
+- **Angle mort** (jeton Apple refusé 410, sans signal Google) : **0 carte** (registre sur
+  90 jours).
+- **Empreintes AVANT** : `theme_lot_google` et `cartes_google_campagne` sont conformes ;
+  **`campagne_lot_google` (`343800f8…`) et `reserver_relances` (`133d2435…`) diffèrent**.
+  Leur texte réel (`pg_get_functiondef`) a été reconstitué : l'empreinte recalculée retombe
+  exactement sur celle de la production. Le diff avec le dépôt ne porte **que sur des
+  commentaires** : 1 ligne dans `campagne_lot_google` ; 8 lignes et un commentaire de fin de
+  ligne dans `reserver_relances`. **Le code exécutable est identique.** La migration 059 a
+  été exécutée sans ces commentaires (ajoutés au fichier, ou retirés au collage). La 074
+  peut donc remplacer ces fonctions sans rien perdre.
+- **Empreintes attendues APRÈS la 074** (base reconstruite depuis le dépôt) :
+  - `campagne_lot_google` : `82922fa7f7a6005c7c3cb00056c389e0` ;
+  - `google_utile` : `c4c343bbba7e50d17b59b981db58d116` ;
+  - `reserver_relances` : `5ee24d56bfa7098b3628bbcd5f26c189` ;
+  - `theme_lot_google` : `261d7973c9a71571394358bbffe11d75` ;
+  - `cartes_google_campagne` : absente.
+
+  Après la 074, la production et le dépôt sont identiques sur ces fonctions.
+
+**Migration 074 exécutée par Yass (07/11, soir)**, sur feu vert du pilotage. Contrôles :
+- vérification : `true | true | true` ;
+- empreintes conformes à la liste ci-dessus (production = dépôt) ;
+- critère en dur comparé à `google_utile` sur toutes les cartes visibles : **0 écart**. Les
+  envois groupés n'ont pas changé.
+
+Le code serveur (sans D2 sur l'unitaire) part au **push n°1, seul**, sur un feu vert séparé.
+Ensuite vient le contrôle terrain : un scan d'une carte à jeton Apple doit écrire 1 ligne
+`apple` et 2 lignes `google`, avec `ok`. Hubrise est rebasé ensuite, en local, avec H1a
+renuméroté en 075.
+
+**Hypothèses (ce qui ferait casser) et limites** :
+- **Angle mort accepté** : un porteur à deux cartes sans signal ne reçoit pas les envois
+  **groupés** sur Google. Il les reçoit sur son iPhone si son jeton Apple est vivant ; son
+  solde Google est juste à chaque passage. Le vrai trou est « jeton Apple mort et carte
+  Google » : la requête « angle mort » (refus APNs 410) le borne.
+- **Envois Google en plus** : les cartes iPhone seules reçoivent une mise à jour et un
+  message par passage (≈ 80 par jour au volume de mi-octobre, à confirmer par R1).
+- Deux scans très rapprochés : Google garde la dernière arrivée (déjà vrai pour Android).
+- Plafond Google de 3 messages par 24 h : les messages de scan d'un porteur à deux cartes
+  le consomment, comme pour un Android.
+- Une rafale API (import de points, rattrapage après coupure) envoie toute sa part iPhone à
+  Google (accepté par le pilotage).
+- Pistes sans trafic Google, **non faites** : réécrire, sur la landing, l'ancien lien Google
+  gardé en mémoire vers la route de suivi (`landing.html:1060-1061`) ; purger les jetons
+  Apple sur un refus 410 (dette).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
@@ -9058,6 +9202,14 @@ mensuelle.
 Toute décision prise sans passer par le pilotage (Yass) se note ici : date, décision,
 raison, effet constaté. Une entrée vaut aveu, pas justification — la règle reste le
 contrat §7 (diagnostic, validation, puis code).
+
+**2026-11-07 — Incident Pizz'Amore, correctif D2, choix d'exécution** (à valider) :
+- `google_utile` prend les colonnes de la carte déjà lues (lien, signal, serial) plutôt que
+  de relire `passes` : aucune requête de plus dans les lots ;
+- `lireCanaux` ne lit plus le signal Google (plus aucun lecteur) ;
+- le contrôle « D2 une seule fois » cherche la forme exacte « signal OU aucun jeton Apple » :
+  la règle « vrai client » de 059 (`recalculer_visible`, « signal OU un jeton ») n'est pas D2 ;
+- `api-v1/migrations.js` : le message est coupé aussi pour un renvoi (il l'était déjà).
 
 **2026-10-17 — t43, choix d'exécution** :
 - une clé vide (`''`) ou `null` est traitée comme absente : 400 et alerte ;

@@ -93,8 +93,10 @@ router.post('/', asyncHandler(async (req, res) => {
     : notif('passProgress', lang, { prenom: client.prenom, value: apres, max: displayMax, amount: b.points });
   const canaux = lireCanaux(serial);
   suivre(notifierMiseAJourPass(serial, req.marchandId, canaux).catch(e => console.error('[api-v1] push Apple:', e.message)));
+  // Google : mise à jour du solde, SANS message (décision du pilotage du 07/11) :
+  // un import de points d'avant ne fait sonner aucun téléphone Android.
   suivre(mettreAJourGoogleWallet(serial, req.marchandId, apres, maxValue, displayMax, message, marchand.images_tiers, client.prenom,
-    marchand.couleur_fond, marchand.couleur_fond_reward, marchand, { message: !deja, canaux })
+    marchand.couleur_fond, marchand.couleur_fond_reward, marchand, { message: false })
     .catch(e => console.error('[api-v1] push Google:', e.message)));
 }));
 

@@ -1888,14 +1888,16 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     const DEUX = carte('LesDeux', { apple: true, ouvert: true }); // a les deux cartes
     carte('Aucune', { google: false });                          // ni Apple ni lien Google
 
-    // ── Cron (reserver_relances) et campagnes (cartes_google_campagne), dans la base ──
+    // ── Cron (reserver_relances) et règle D2 unique (google_utile, migration 074), dans la base ──
     const res = sqlOuNull(`SELECT reserver_relances('${MG}', 'inactive', gen_random_uuid(), '{"*": "x"}', 10, 30)`);
     const google = {};
     for (const c of (res ? JSON.parse(res).clients : [])) google[c.serial] = c.google;
     verifier('cron : Google pour la carte Google et pour le client qui a les deux, PAS pour la carte iPhone seule',
       [google[IPH.serial], google[AND.serial], google[DEUX.serial]], [false, true, true]);
-    const camp = (sqlOuNull(`SELECT string_agg(serial_number, ',') FROM cartes_google_campagne('${MG}', NULL, 50)`) || '').split(',');
-    verifier('campagne, voie Google : la carte Google et le client aux deux cartes, pas la carte iPhone seule ni la carte sans lien',
+    // cartes_google_campagne (fonction morte, copie de D2) supprimée par la migration 074 :
+    // la règle unique google_utile, telle que l'appliquent les envois groupés.
+    const camp = (sqlOuNull(`SELECT string_agg(serial_number, ',') FROM passes WHERE marchand_id = '${MG}' AND google_utile(google_pass_url, google_ouvert_le, serial_number)`) || '').split(',');
+    verifier('règle D2 (envois groupés) : la carte Google et le client aux deux cartes, pas la carte iPhone seule ni la carte sans lien',
       [camp.includes(AND.serial), camp.includes(DEUX.serial), camp.includes(IPH.serial), camp.length], [true, true, false, 2]);
     // Vérification étendue (migration 058) : les cartes qui seraient masquées — lien
     // Google, sans signal, sans jeton Apple, jamais scannées. Les cartes iPhone de
@@ -1959,8 +1961,9 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     await attendre(() => lignes(IPH.serial, 'apple', 'scan') > 0, 8000);
     await attendreMs(500);
     const lecturesJetons = vues.filter(u => u.startsWith('/rest/v1/device_tokens')).length;
-    verifier('scan d\'une carte iPhone seule : 200, push Apple, AUCUN appel Google (avant : mise à jour + message), une seule lecture des jetons',
-      [statutIph, lignes(IPH.serial, 'apple', 'scan'), lignes(IPH.serial, 'google', 'scan'), lecturesJetons], [200, 1, 0, 1]);
+    await attendre(() => lignes(IPH.serial, 'google', 'scan') >= 2, 8000);
+    verifier('scan d\'une carte iPhone seule : 200, push Apple ET mise à jour + message Google (envoi unitaire, sans D2 depuis la migration 074 ; avant : aucun appel Google, incident Pizz\'Amore), une seule lecture des jetons',
+      [statutIph, lignes(IPH.serial, 'apple', 'scan'), lignes(IPH.serial, 'google', 'scan'), lecturesJetons], [200, 1, 2, 1]);
     await scanner(AND.serial);
     await attendre(() => lignes(AND.serial, 'google', 'scan') >= 2, 8000);
     await scanner(DEUX.serial);
@@ -1997,8 +2000,8 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     await syncPassAfterAdjustment(AND.serial, MG, 'And', 7);
     await syncPassAfterAdjustment(DEUX.serial, MG, 'Deux', 7);
     const appelsDe = c => appelsGoogle.filter(s => s === c.serial).length;
-    verifier('ajustement du solde : rien vers Google pour la carte iPhone seule ; carte Google et deux cartes : mise à jour + message',
-      [appelsDe(IPH), appelsDe(AND), appelsDe(DEUX)], [0, 2, 2]);
+    verifier('ajustement du solde : mise à jour + message Google pour TOUTES les cartes, iPhone seule comprise (envoi unitaire, sans D2 depuis la migration 074)',
+      [appelsDe(IPH), appelsDe(AND), appelsDe(DEUX)], [2, 2, 2]);
     delete require.cache[cheminGoogle];
 
     // ── Vérification unique, dans ce processus, Google imité ──
@@ -2134,10 +2137,9 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     sql(`UPDATE clients SET date_anniversaire = (now() AT TIME ZONE 'UTC')::date - interval '30 years' WHERE id IN ('${fantome.id}', '${C.andr.id}')`);
     const anniv = JSON.parse(sqlOuNull(`SELECT reserver_relances('${MS}', 'birthday', gen_random_uuid(), '{"*": "x"}', 10)`) || '{"clients":[]}');
     const annivIds = anniv.clients.map(x => x.client_id);
-    const ancienne = (sqlOuNull(`SELECT string_agg(serial_number, ',') FROM cartes_google_campagne('${MS}', NULL, 100)`) || '').split(',');
-    verifier('relance anniversaire : le vrai client oui, le fantôme non (avant : message Google à une carte jamais ajoutée) ; ancienne voie Google : pas le fantôme',
-      [annivIds.includes(C.andr.id), annivIds.includes(fantome.id), ancienne.includes(fantome.serial), ancienne.includes(C.andr.serial)],
-      [true, false, false, true]);
+    // (L'« ancienne voie Google », cartes_google_campagne, est supprimée par la migration 074.)
+    verifier('relance anniversaire : le vrai client oui, le fantôme non (avant : message Google à une carte jamais ajoutée)',
+      [annivIds.includes(C.andr.id), annivIds.includes(fantome.id)], [true, false]);
     sql(`DELETE FROM workflow_executions WHERE client_id = '${C.andr.id}' AND workflow_type = 'birthday'`);
 
     // ── Segments : compteur ──
@@ -3667,6 +3669,64 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     verifier('la vente d\'un autre commerçant est introuvable avec sa clé (404)',
       (await appel(`/api/v1/ventes/${r2}/annulation`, kT)).statut, 404);
     s5.processus.kill();
+  }
+  // ── 31. D2 sur les envois groupés seulement (migration 074, 07/11) ─────────
+  titre('31. Règle D2 sur les envois groupés seulement, définie une fois (migration 074, incident Pizz\'Amore, 07/11)');
+  {
+    const path = require('path'), fs = require('fs');
+    const attendreMs = ms => new Promise(ok => setTimeout(ok, ms));
+    const m074 = fs.readFileSync(path.join(__dirname, '..', 'database', 'migration_074_d2_envois_groupes.sql'), 'utf8');
+    sql(m074);   // rejeu
+    verifier('migration 074 rejouée : contrôle « true, true, true » (règle unique, 3 surfaces groupées qui l\'appellent, fonction morte supprimée)',
+      sql(`SELECT (SELECT count(*) = 1 FROM pg_proc WHERE proname = 'google_utile'),
+                  (SELECT count(*) = 3 FROM pg_proc WHERE proname IN ('reserver_relances', 'campagne_lot_google', 'theme_lot_google')
+                      AND prosrc LIKE '%google_utile(%' AND prosrc NOT LIKE '%google_ouvert_le IS NOT NULL%'),
+                  (SELECT count(*) = 0 FROM pg_proc WHERE proname = 'cartes_google_campagne')`), 't|t|t');
+    // Forme de D2 : « signal Google OU AUCUN jeton Apple ». (recalculer_visible porte
+    // « signal OU UN jeton » : c'est la règle « vrai client » de 059, pas D2.)
+    verifier('le critère D2 n\'existe qu\'UNE fois en base : seule google_utile porte « signal Google OU aucun jeton Apple »',
+      sql(`SELECT coalesce(string_agg(proname, ',' ORDER BY proname), '-') FROM pg_proc WHERE pronamespace = 'public'::regnamespace
+            AND prosrc ~ 'google_ouvert_le IS NOT NULL\\s+OR NOT EXISTS'`), 'google_utile');
+    const MD = '90000000-0000-4000-8000-000000000009';
+    sql(`INSERT INTO marchands (id, nom, slug, forfait, type_programme, max_value, langue) VALUES ('${MD}', 'Filet D2', 'filet-d2', 'pro', 'points', 200, 'fr')`);
+    const carteD2 = ({ apple = false, signal = false, lien = true } = {}) => {
+      const c = client(MD);
+      sql(`UPDATE passes SET google_pass_url = ${lien ? `'https://pay.google.com/x'` : 'NULL'}, google_ouvert_le = ${signal ? 'now()' : 'NULL'} WHERE serial_number = '${c.serial}'`);
+      if (apple) sql(`INSERT INTO device_tokens (pass_id, client_id, marchand_id, serial_number, device_id, push_token)
+                      SELECT id, '${c.id}', '${MD}', serial_number, 'dev-${c.id}', 'jeton-${c.id}' FROM passes WHERE serial_number = '${c.serial}'`);
+      return c;
+    };
+    const iph = carteD2({ apple: true }), andr = carteD2(), deux = carteD2({ apple: true, signal: true }), sansLien = carteD2({ lien: false });
+    const utile = c => sql(`SELECT google_utile(google_pass_url, google_ouvert_le, serial_number) FROM passes WHERE serial_number = '${c.serial}'`);
+    verifier('google_utile : carte Google sans iPhone oui ; deux cartes (signal) oui ; iPhone seul sans signal non ; sans lien Google non',
+      [utile(andr), utile(deux), utile(iph), utile(sansLien)], ['t', 't', 'f', 'f']);
+
+    // Aucune copie de D2 côté serveur.
+    const fichiers = [];
+    const parcourir = d => { for (const f of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, f.name);
+      if (f.isDirectory()) parcourir(p); else if (f.name.endsWith('.js')) fichiers.push(p);
+    } };
+    parcourir(path.join(__dirname, '..', 'src'));
+    const avec = motif => fichiers.filter(f => motif.test(fs.readFileSync(f, 'utf8'))).map(f => path.relative(path.join(__dirname, '..'), f)).sort();
+    verifier('serveur : plus aucune trace de servirGoogle ; google_ouvert_le seulement là où le signal est donné ou POSÉ (lien du bouton Google, bouton, vérification unique)',
+      [avec(/servirGoogle/), avec(/google_ouvert_le/)], [[], ['src/routes/clients.js', 'src/routes/passes.js', 'src/services/verification-google.js']]);
+
+    // API (envois unitaires) : ventes et migrations poussent Google sans D2 ; migrations sans message.
+    const s31 = await demarrerServeur('d2', urlSupabase, { API_V1_MAX_PAR_MINUTE: '5000' });
+    const appel = (chemin, auth, corps) => fetch(s31.url + chemin, { method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: auth }, body: JSON.stringify(corps) })
+      .then(async r => ({ statut: r.status, corps: await r.json().catch(() => ({})) }));
+    const cle = (await appel(`/api/admin/marchands/${MD}/cles-api`, `Bearer ${jetonAdmin}`, { environnement: 'live' })).corps.cle;
+    const lignesG = s => Number(sql(`SELECT count(*) FROM notification_envois WHERE serial_number = '${s}' AND plateforme = 'google'`));
+    const iphVente = carteD2({ apple: true }), iphMigr = carteD2({ apple: true });
+    const v = await appel('/api/v1/ventes', `Bearer ${cle}`, { reference: `D2-${Date.now()}`, carte: iphVente.serial, montant: 1000 });
+    const m = await appel('/api/v1/migrations', `Bearer ${cle}`, { carte: iphMigr.serial, points: 40 });
+    await attendre(() => lignesG(iphVente.serial) >= 2 && lignesG(iphMigr.serial) >= 1, 8000);
+    await attendreMs(500);
+    verifier('API, carte iPhone seule sans signal : vente → mise à jour + message Google (sans D2) ; migration de points → mise à jour Google SANS message (aucun téléphone ne sonne)',
+      [v.statut, lignesG(iphVente.serial), m.statut, lignesG(iphMigr.serial)], [200, 2, 200, 1]);
+    s31.processus.kill();
   }
 }
 

@@ -218,11 +218,11 @@ router.post('/', authScanner, asyncHandler(async (req, res) => {
   // base perdue → 500, audit 02 §3.2 ligne c). Les deux sont sans effet si la
   // carte est déjà à jour — sauf le message Google, qui s'afficherait deux fois
   // sur Android : il n'est envoyé qu'au premier passage.
-  // Une seule lecture des jetons Apple, partagée : elle rapporte aussi le signal
-  // Google (règle D2, étape 23, services/canal-google.js) — aucune requête de plus.
+  // Une lecture des jetons Apple (push iPhone). Google : envoi unitaire, sans
+  // condition (règle D2 réservée aux envois groupés, migration 074).
   const canaux = lireCanaux(serial);
   suivre(notifierMiseAJourPass(serial, req.marchandId, canaux).catch(e => console.error('[scan] push Apple:', e.message)));
-  suivre(mettreAJourGoogleWallet(serial, req.marchandId, apresScan, maxValue, displayMaxValue, scanMessage, client.marchands.images_tiers, client.prenom, client.marchands.couleur_fond, client.marchands.couleur_fond_reward, client.marchands, { message: !dejaEnregistre, canaux }).catch(e => console.error('[scan] push Google:', e.message)));
+  suivre(mettreAJourGoogleWallet(serial, req.marchandId, apresScan, maxValue, displayMaxValue, scanMessage, client.marchands.images_tiers, client.prenom, client.marchands.couleur_fond, client.marchands.couleur_fond_reward, client.marchands, { message: !dejaEnregistre }).catch(e => console.error('[scan] push Google:', e.message)));
 
   // Parrainage — crédit au parrain au premier tampon/point du filleul, UNE
   // SEULE FOIS à vie. avantScan === 0 est le déclencheur (plutôt que
@@ -337,15 +337,14 @@ async function creditReferrerIfApplicable(filleulClientId, marchandId, bonusPoin
     .eq('serial_number', parrain.pass_serial_number)
     .eq('marchand_id', marchandId);
 
-  // Push Apple + Google au parrain (une lecture des jetons, partagée ; règle D2)
+  // Push Apple + Google au parrain (Google : envoi unitaire, sans condition)
   const canauxParrain = lireCanaux(parrain.pass_serial_number);
   suivre(notifierMiseAJourPass(parrain.pass_serial_number, marchandId, canauxParrain)
     .catch(e => console.error('[scan] referral push Apple:', e.message)));
   suivre(mettreAJourGoogleWallet(
     parrain.pass_serial_number, marchandId, newValue, maxValue, displayMax,
     msg, parrain.marchands.images_tiers, parrain.prenom,
-    parrain.marchands.couleur_fond, parrain.marchands.couleur_fond_reward, parrain.marchands,
-    { canaux: canauxParrain }
+    parrain.marchands.couleur_fond, parrain.marchands.couleur_fond_reward, parrain.marchands
   ).catch(e => console.error('[scan] referral push Google:', e.message)));
 
   console.log(`[scan] referral credit OK parrain=${parrainClientId} +${bonusPoints}pts → ${newValue}/${maxValue}`);

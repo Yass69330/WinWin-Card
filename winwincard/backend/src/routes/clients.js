@@ -445,9 +445,9 @@ async function syncPassAfterAdjustment(serialNumber, marchandId, prenom, newValu
 
   const lot = require('../services/notif-registre').creerLot(source, marchandId);
 
-  // Une lecture des jetons Apple, qui rapporte aussi le signal Google (règle D2,
-  // étape 23, services/canal-google.js).
-  const { lireCanaux, servirGoogle } = require('../services/canal-google');
+  // Une lecture des jetons Apple (push iPhone). Google : envoi unitaire, sans
+  // condition (règle D2 réservée aux envois groupés, migration 074).
+  const { lireCanaux } = require('../services/canal-google');
   const canaux = await lireCanaux(serialNumber);
 
   // Apple Wallet — silent APNs push si configuré
@@ -470,7 +470,7 @@ async function syncPassAfterAdjustment(serialNumber, marchandId, prenom, newValu
 
   // Google Wallet — update points, tier hero image, and push notification
   const { updateLoyaltyObjectPoints, addMessageToLoyaltyObject, isConfigured: isGoogleConfigured } = require('../services/google-pass');
-  if (isGoogleConfigured() && servirGoogle(canaux)) {
+  if (isGoogleConfigured()) {
     let errUpd = null;
     await updateLoyaltyObjectPoints(serialNumber, marchandId, newValue, marchand.max_value, marchand.display_max_value || marchand.max_value, marchand.images_tiers, prenom, marchand.couleur_fond, marchand.couleur_fond_reward, marchand)
       .catch(e => { errUpd = e; console.error('[clients] Google update:', e.message); });

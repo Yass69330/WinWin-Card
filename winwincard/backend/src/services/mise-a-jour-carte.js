@@ -10,9 +10,9 @@
 // sont tracés dans notification_envois sous la source « scan » (CLAUDE.md).
 // ════════════════════════════════════════════════════════════════════════════
 
-const { lireCanaux, servirGoogle } = require('./canal-google');   // règle D2 (étape 23)
+const { lireCanaux } = require('./canal-google');
 
-// `canaux` : lecture partagée avec mettreAJourGoogleWallet (lireCanaux).
+// `canaux` : la lecture des jetons Apple (lireCanaux), faite une fois par l'appelant.
 async function notifierMiseAJourPass(serialNumber, marchandId, canaux = lireCanaux(serialNumber)) {
   const tokens = (await canaux).jetons.map(push_token => ({ push_token }));
 
@@ -33,12 +33,12 @@ async function notifierMiseAJourPass(serialNumber, marchandId, canaux = lireCana
 }
 
 // options.message = false : met à jour l'objet (solde, visuel) sans ajouter de
-// message — renvoi d'un scan déjà enregistré (le message s'afficherait deux fois).
-// options.canaux : lecture partagée avec le push Apple. Règle D2 (étape 23) :
-// carte sur iPhone seulement (jeton Apple, lien Google jamais ouvert) → rien
-// vers Google, ni mise à jour ni message.
-async function mettreAJourGoogleWallet(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, scanMessage, imagesTiers, prenom, couleurFond, couleurFondReward, marchand, { message = true, canaux = lireCanaux(serialNumber) } = {}) {
-  if (!servirGoogle(await canaux)) return;
+// message — renvoi d'un scan déjà enregistré (le message s'afficherait deux fois),
+// ou import de points d'avant (API migrations : aucun téléphone ne sonne).
+// Envoi UNITAIRE : sans condition de jeton Apple (règle D2 réservée aux envois
+// groupés depuis la migration 074, incident Pizz'Amore du 07/11). Un porteur qui
+// a aussi la carte Google la voit à jour à chaque passage.
+async function mettreAJourGoogleWallet(serialNumber, marchandId, storedValue, maxValue, displayMaxValue, scanMessage, imagesTiers, prenom, couleurFond, couleurFondReward, marchand, { message = true } = {}) {
   const { updateLoyaltyObjectPoints, addMessageToLoyaltyObject } = require('./google-pass');
   const registre = require('./notif-registre');
   const lot = registre.creerLot('scan', marchandId);

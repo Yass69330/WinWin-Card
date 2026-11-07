@@ -149,7 +149,7 @@ router.post('/', asyncHandler(async (req, res) => {
   const canaux = lireCanaux(serial);
   suivre(notifierMiseAJourPass(serial, req.marchandId, canaux).catch(e => console.error('[api-v1] push Apple:', e.message)));
   suivre(mettreAJourGoogleWallet(serial, req.marchandId, apres, maxValue, displayMax, message, marchand.images_tiers, client.prenom,
-    marchand.couleur_fond, marchand.couleur_fond_reward, marchand, { message: !deja, canaux })
+    marchand.couleur_fond, marchand.couleur_fond_reward, marchand, { message: !deja })
     .catch(e => console.error('[api-v1] push Google:', e.message)));
   if (remise && !deja) require('../../services/avis').planifier({ marchand, prenom: client.prenom, serial });
 }));

@@ -152,9 +152,9 @@ async function envoyer({ marchandId, langue, prenom, serial }) {
 
   const lot = registre.creerLot('avis', marchandId);
 
-  // Une lecture des jetons Apple, qui rapporte aussi le signal Google (règle D2,
-  // étape 23, canal-google.js).
-  const { lireCanaux, servirGoogle } = require('./canal-google');
+  // Une lecture des jetons Apple (push iPhone). Google : envoi unitaire, sans
+  // condition (règle D2 réservée aux envois groupés, migration 074).
+  const { lireCanaux } = require('./canal-google');
   const canaux = await lireCanaux(serial);
   if (canaux.erreur) console.error('[avis] device_tokens:', canaux.erreur.message);
 
@@ -169,7 +169,7 @@ async function envoyer({ marchandId, langue, prenom, serial }) {
   }
 
   const { addMessageToLoyaltyObject, isConfigured: googleConfigure } = require('./google-pass');
-  if (googleConfigure() && servirGoogle(canaux)) {
+  if (googleConfigure()) {
     let errG = null;
     await addMessageToLoyaltyObject(serial, null, msg)
       .catch(e => { errG = e; console.error('[avis] Google addMessage:', e.message); });
