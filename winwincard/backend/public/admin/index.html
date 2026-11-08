@@ -1245,8 +1245,14 @@ async function chargerHubrise() {
       div.className = 'hubrise-connexion';
       div.style.cssText = 'display:flex;gap:10px;align-items:center;background:var(--surface2);border-radius:10px;padding:10px;font-size:13px';
       const coupee = c.coupee_le ? ` · <strong style="color:var(--error)">coupée le ${esc(dateCourte(c.coupee_le))}${c.coupee_par === 'hubrise' ? ' (par Hubrise)' : ''}</strong>` : '';
+      // H1b : abonnement aux ventes de la location (une connexion d'avant H1b, ou un
+      // abonnement raté, propose « Abonner aux ventes »).
+      const ventes = c.coupee_le ? ''
+        : c.abonne ? ` · abonné aux ventes${c.dernier_evenement_le ? ` (dernière vente reçue le ${esc(dateCourte(c.dernier_evenement_le))})` : ''}`
+        : ' · <strong style="color:var(--warning)">pas d\'abonnement aux ventes</strong>';
       div.innerHTML = `<div style="flex:1">${c.coupee_le ? '' : '<strong>Connecté</strong> · '}${esc(c.nom_location || 'location')} <code>${esc(c.location_id)}</code>
-        <div class="field-hint">depuis le ${esc(dateCourte(c.cree_le))}${coupee}</div></div>
+        <div class="field-hint">depuis le ${esc(dateCourte(c.cree_le))}${coupee}${ventes}</div></div>
+        ${c.coupee_le || c.abonne ? '' : `<button type="button" class="btn btn-outline btn-sm" data-hubrise-abonner="${esc(c.id)}">Abonner aux ventes</button>`}
         ${c.coupee_le ? '' : `<button type="button" class="btn btn-ghost btn-sm" data-hubrise-couper="${esc(c.id)}">Couper</button>`}`;
       etat.appendChild(div);
     }
@@ -1271,6 +1277,19 @@ document.getElementById('btn-hubrise-copier').addEventListener('click', () => {
   try { navigator.clipboard.writeText(document.getElementById('hubrise-lien-valeur').textContent); document.getElementById('hubrise-statut').textContent = 'Lien copié.'; } catch {}
 });
 document.getElementById('hubrise-etat').addEventListener('click', async e => {
+  const ab = e.target.closest('[data-hubrise-abonner]');
+  if (ab) {
+    ab.disabled = true;
+    const statut = document.getElementById('hubrise-statut');
+    try {
+      const res = await api(`/api/admin/hubrise/connexions/${ab.dataset.hubriseAbonner}/abonner`, { method: 'POST', body: '{}' });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error === 'jeton_mort' ? 'le marchand a retiré l\'app chez Hubrise : connexion coupée, à refaire avec un nouveau lien' : (d.error || 'Erreur'));
+      statut.textContent = 'Abonné aux ventes : WinWin reçoit désormais les commandes de ce point de vente (sans crédit).';
+    } catch (err) { statut.textContent = 'Abonnement impossible : ' + err.message; }
+    chargerHubrise();
+    return;
+  }
   const b = e.target.closest('[data-hubrise-couper]');
   if (!b) return;
   if (!confirm('Couper la connexion Hubrise ? WinWin ne recevra plus les ventes de ce point de vente. Le marchand devra se reconnecter avec un nouveau lien.')) return;
@@ -1281,6 +1300,7 @@ document.getElementById('hubrise-etat').addEventListener('click', async e => {
     const d = await res.json();
     if (!res.ok) throw new Error(d.error || 'Erreur');
     statut.textContent = d.revoque ? 'Connexion coupée, accès révoqué chez Hubrise.' : 'Connexion coupée chez WinWin (révocation chez Hubrise non confirmée).';
+    if (d.revoque && !d.desabonne) statut.textContent += ' Désabonnement des ventes non confirmé (sans effet : WinWin ignore désormais ces ventes).';
   } catch (err) { statut.textContent = 'Coupure impossible : ' + err.message; }
   chargerHubrise();
 });

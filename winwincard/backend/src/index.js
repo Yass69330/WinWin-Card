@@ -41,7 +41,10 @@ app.use(cors({
   ],
   credentials: true
 }));
-app.use(express.json({ limit: '2mb' }));
+// verify (H1b, Hubrise) : garde les octets reçus pour la SEULE route du callback,
+// dont la signature HMAC porte sur le corps brut. Référence, pas de copie.
+app.use(express.json({ limit: '2mb', verify: (req, _res, buf) => {
+  if (req.originalUrl.startsWith('/integrations/hubrise/callback')) req.corpsBrut = buf; } }));
 // Express 5 (étape 20b) : sans corps JSON, req.body vaut undefined (Express 4 :
 // {}). Les routes déstructurent req.body : sans cette ligne, un appel sans corps
 // répondrait 500 au lieu de 400.
@@ -67,7 +70,9 @@ app.use(rateLimit({
   // /api/v1 (API des caisses, 20/10) : limiteur propre PAR CLÉ
   // (src/integration/api-v1) ; un serveur central de caisse ne doit pas être
   // freiné par ce compteur par adresse.
-  skip: req => req.path.startsWith('/v1/') || req.path.startsWith('/api/v1/'),
+  // Callbacks Hubrise (H1b) : quelques adresses Hubrise pour tous les marchands ;
+  // limiteur propre dans src/integration/hubrise/callback.js.
+  skip: req => req.path.startsWith('/v1/') || req.path.startsWith('/api/v1/') || req.path === '/integrations/hubrise/callback',
 }));
 
 // Rate limiters dédiés (anti brute-force logins).

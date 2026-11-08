@@ -9,7 +9,9 @@
 //       2. échange du code (serveur à serveur, Basic) ;
 //       3. jeton chiffré (coffre.js), connexion écrite en un appel SQL
 //          (hubrise_enregistrer_connexion : refus si la location est active chez
-//          un autre marchand ; alors le jeton obtenu est révoqué, rien n'est gardé).
+//          un autre marchand ; alors le jeton obtenu est révoqué, rien n'est gardé) ;
+//       4. (H1b) abonnement aux ventes de la location (abonnement.js) ; un échec
+//          garde la connexion, l'admin propose « Abonner aux ventes ».
 // Le marchand ne vient JAMAIS d'un paramètre d'adresse, seulement du lien signé.
 // Jamais de jeton dans une réponse ni un journal.
 // ════════════════════════════════════════════════════════════════════════════
@@ -23,6 +25,7 @@ const config = require('./config');
 const lien = require('./lien');
 const coffre = require('./coffre');
 const hubrise = require('./api-hubrise');
+const abonnement = require('./abonnement');
 const { page } = require('./page');
 
 const RE_ID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -105,6 +108,12 @@ router.get('/integrations/hubrise/retour', nonConfigure, asyncHandler(async (req
     return echec(res, r.reason === 'location_prise' ? 409 : 404, r.reason === 'location_prise' ? 'location_prise' : 'marchand_introuvable');
   }
   const nom = typeof d.location_name === 'string' && d.location_name ? ` (${d.location_name})` : '';
+  // H1b : abonnement aux ventes de la location. Un échec ne défait pas la
+  // connexion : la fiche admin propose « Abonner aux ventes ».
+  const ab = await abonnement.abonner({ id: r.connexion_id, marchand_id: v.marchandId, location_id: String(d.location_id) }, jeton);
+  if (!ab.ok) {
+    return page(res, 200, 'Connecté à Hubrise', `Votre point de vente Hubrise${nom} est relié à WinWin, mais l'abonnement aux ventes est à refaire depuis WinWin. Vous pouvez fermer cette page.`);
+  }
   return page(res, 200, 'Connecté à Hubrise', `Votre point de vente Hubrise${nom} est relié à WinWin. Vous pouvez fermer cette page.`);
 }));
 

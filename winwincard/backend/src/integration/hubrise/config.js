@@ -6,6 +6,7 @@
 //   HUBRISE_JETON_CLE                         32 octets en base64 : chiffre les jetons
 //   HUBRISE_LIEN_SECRET                       32 caractères au moins : signe les liens
 //   HUBRISE_REDIRECT_URI (facultatif)         défaut <API_BASE_URL>/integrations/hubrise/retour
+//   HUBRISE_DIAGNOSTIC_LOCATIONS (facultatif) locations relevées (H1b), séparées par des virgules
 //   HUBRISE_MANAGER_URL, HUBRISE_API_URL      (facultatif) adresses Hubrise ; le filet
 //                                             les fait pointer sur un faux serveur
 // Réglage absent ou invalide : les routes Hubrise répondent « non configuré » ;
@@ -35,4 +36,12 @@ const redirectUri = () => process.env.HUBRISE_REDIRECT_URI || `${base()}/integra
 const managerUrl = () => (process.env.HUBRISE_MANAGER_URL || 'https://manager.hubrise.com').replace(/\/+$/, '');
 const apiUrl = () => (process.env.HUBRISE_API_URL || 'https://api.hubrise.com/v1').replace(/\/+$/, '');
 
-module.exports = { SCOPE, etat, cleJeton, base, redirectUri, managerUrl, apiUrl };
+const callbackUrl = () => `${base()}/integrations/hubrise/callback`;
+
+// Locations dont la structure des commandes est relevée dans les journaux (H1b,
+// diagnostic jetable : chemins, types, longueurs, forme de carte — jamais une
+// valeur). Vide = aucune.
+const locationsDiagnostic = () => new Set(String(process.env.HUBRISE_DIAGNOSTIC_LOCATIONS || '')
+  .split(',').map(x => x.trim()).filter(Boolean));
+
+module.exports = { SCOPE, etat, cleJeton, base, redirectUri, managerUrl, apiUrl, callbackUrl, locationsDiagnostic };

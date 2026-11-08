@@ -1,6 +1,11 @@
 # H1b — Réception des ventes Hubrise, sans crédit : cadrage (08/11/2026, rien codé)
 
-> **Statut** : cadrage seul. Zéro code avant le go de Yass, rien en prod.
+> **Statut au 08/11** :
+> - décisions D1 à D4 prises (D1 : 401 ; D2 : journaux seulement, pas de migration ;
+>   D3 : `callback_id` suffit ; D4 : valeurs techniques et `total`) ;
+> - **H1b codé en local** : filet 615/615, contre-épreuve conforme ;
+> - rien n'est poussé ;
+> - détail et mise en production : passation §15 tredecies septuagies.
 >
 > **Point de départ** : H1a est en production (`faa1a4a`). hamza-salon est connecté à la
 > location de test `1bp94-0` (jeton chiffré). Cette connexion **reste active** : elle sert à

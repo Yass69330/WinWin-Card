@@ -9362,6 +9362,94 @@ Rien n'est poussé.
   - Le « Couper » réel et le rejeu se testeront plus tard, sur une connexion dédiée, pas sur
     hamza-salon (pilotage, 08/11).
 
+## 15 tredecies septuagies. HUBRISE H1b : ABONNEMENT AUX VENTES, RÉCEPTION SANS CRÉDIT (08/11, codé en local, rien poussé, AUCUNE migration)
+
+**Décisions du pilotage (08/11)** :
+- D1 : signature invalide → ignorée, **401**.
+- D2 : relevé de structure **dans les journaux seulement** (diagnostic jetable), activable par
+  `HUBRISE_DIAGNOSTIC_LOCATIONS`, coupé par défaut ; **pas de colonne, pas de migration**.
+- D3 : `callback_id` non nul suffit (pas de colonne `abonne_le`).
+- D4 : valeurs techniques gardées : statut, type d'événement, type de ressource, type de
+  service, devise, `total`.
+
+Cadrage : `docs/hubrise/03-h1b-reception.md`.
+
+**Livré (local)** :
+- **`src/integration/hubrise/`** :
+  - `api-hubrise.js` : `abonner` (`POST /callback`) et `desabonner` (`DELETE /callback`),
+    `X-Access-Token`, délai de 5 s ;
+  - `abonnement.js` : abonne une connexion. Sur un 401, la connexion est coupée
+    « par Hubrise », jeton effacé ;
+  - `oauth.js` : abonnement au retour OAuth. Un échec garde la connexion et la page le dit ;
+  - `admin.js` :
+    - `POST /api/admin/hubrise/connexions/:id/abonner` (idempotent ; 409 `jeton_mort`) ;
+    - « Couper » : coupure chez nous, puis `DELETE /callback`, puis révocation ;
+    - l'état renvoie `abonne` (oui / non), jamais `callback_id` ;
+  - `callback.js` : `POST /integrations/hubrise/callback`. Il vérifie le HMAC-SHA256 du corps
+    brut (client secret, hexa, temps constant ; différence → 401, rien en base) puis lit
+    location, commande, événement et statut de façon tolérante (racine, puis `new_state`).
+    Décisions au journal `hubrise_evenements`, **sans donnée personnelle** : `recu`,
+    `connexion_inconnue`, `connexion_coupee`, `structure_inattendue`. Il pose
+    `dernier_evenement_le`. Réponses : 200 ; corps illisible 400 ; base en panne 503 +
+    `Retry-After`. Relais `express.raw` si le `Content-Type` n'est pas JSON. Limiteur propre :
+    1 200 par minute et par adresse. **Aucun crédit.**
+  - `structure.js` : relevé pur. Chemins (tableaux réduits à `[]`), types, longueurs,
+    `forme_carte` (numéro de série ou code court de 6 caractères hexadécimaux), valeurs des
+    seuls champs techniques de D4. **Jamais une valeur personnelle.**
+- **`src/index.js`, 2 lignes** :
+  - `express.json({ verify })` garde le corps brut de la seule route du callback ;
+  - le limiteur global ignore `/integrations/hubrise/callback`.
+- **Admin** : la fiche affiche « abonné aux ventes (dernière vente reçue le …) » ou « pas
+  d'abonnement aux ventes », avec le bouton **« Abonner aux ventes »**. Le message du
+  « Couper » signale un désabonnement non confirmé.
+
+**Preuves (Node 24.22.2)** :
+- **Filet complet, tests navigateur compris : 615/615.**
+  - **Section 33** (15 contrôles, faux Hubrise local) :
+    - abonnement à la connexion (jeton, URL, événements) ; abonnement en échec : connexion
+      gardée ;
+    - bouton « Abonner » idempotent ; 401 de Hubrise : connexion coupée par Hubrise ;
+    - vente signée : `recu`, aucun scan, aucun solde changé ;
+    - signature fausse, absente, corps modifié ou tronqué : 401, rien en base ;
+    - location inconnue ou coupée, corps sans location ;
+    - corps illisible : 400 ; `text/plain` signé : reçu ;
+    - 310 appels de la même adresse : jamais de 429 ;
+    - relevé : `new_state.customer.loyalty_cards[].ref` marqué `forme_carte` ; types et
+      longueurs ; valeurs techniques seulement ;
+    - **aucune valeur personnelle ni référence de carte, ni au journal ni en base** ;
+    - location hors diagnostic : aucun relevé ;
+    - « Couper » : `DELETE`, puis révocation, puis ventes ignorées ;
+    - aucun jeton ni secret au journal ;
+    - base en panne : 503.
+  - **Section 32** adaptée : son faux Hubrise répond à `/v1/callback` (le filet ne parle
+    jamais au vrai Hubrise), et le « Couper » renvoie aussi `desabonne`.
+- **Contre-épreuve** (code en production `faa1a4a`, nouveau filet) : **486 contrôles bons**.
+  Les échecs sont seulement les nouveaux comportements (« Couper » avec désabonnement, section
+  33), puis la section 33 s'arrête.
+
+**Mise en production (feu vert de Yass à chaque étape ; CI t30 non requis, aucun crédit)** :
+1. Variable Railway **`HUBRISE_DIAGNOSTIC_LOCATIONS=1bp94-0`** (relevé de la location de test
+   seulement).
+2. Push (avec les commits de doc `199e8c4` et `0509ce4`).
+3. Admin, fiche hamza-salon, **« Abonner aux ventes »** : sa connexion date d'avant H1b, elle
+   n'a pas d'abonnement.
+4. **Commande de test** sur `1bp94-0` : saisir le **code court d'une carte de test** dans le
+   champ fidélité proposé, puis passer la commande en `completed`.
+5. Lire `[hubrise] structure location=1bp94-0 …` dans les journaux Railway : le chemin marqué
+   `forme_carte: true` est le champ carte de H2. Lire aussi `hubrise_evenements` (décisions,
+   statuts reçus). Ensuite, **retirer la variable**.
+
+**Hypothèses et limites** :
+- une seule instance (limiteur en mémoire) ;
+- la forme du corps du callback n'est pas confirmée : la lecture est tolérante, et
+  `structure_inattendue` sinon ;
+- si Hubrise envoie un appel de test à l'abonnement, il est reçu comme un événement ordinaire ;
+- `forme_carte` peut aussi marquer un texte qui ressemble par hasard à 6 caractères
+  hexadécimaux : le test se fait avec un code de carte connu ;
+- journal `hubrise_evenements` sans purge (à ajouter au cron, 90 jours, avant les volumes
+  réels) ;
+- base en panne plus d'une heure : vente perdue (sans enjeu en H1b, rattrapage à voir en H2).
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
@@ -9613,6 +9701,15 @@ mensuelle.
 Toute décision prise sans passer par le pilotage (Yass) se note ici : date, décision,
 raison, effet constaté. Une entrée vaut aveu, pas justification — la règle reste le
 contrat §7 (diagnostic, validation, puis code).
+
+**2026-11-08 — H1b, choix d'exécution** (à valider) :
+- signature invalide : ligne `console.warn` seulement, pas de ligne en base (une requête non
+  signée ne touche pas la base) ;
+- connexion de la location : la plus récente (active ou coupée) décide de la décision ;
+- limiteur propre au callback : 1 200 par minute et par adresse
+  (`HUBRISE_CALLBACK_MAX_PAR_MINUTE`) ;
+- « Couper » : désabonnement avant révocation (le désabonnement exige un jeton valide) ;
+- valeurs techniques du relevé limitées à 40 caractères ; relevé limité à 400 chemins.
 
 **2026-11-07 — Incident Pizz'Amore, correctif D2, choix d'exécution** (à valider) :
 - `google_utile` prend les colonnes de la carte déjà lues (lien, signal, serial) plutôt que
