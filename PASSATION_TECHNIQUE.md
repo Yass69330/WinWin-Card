@@ -68,8 +68,9 @@ indiquée.
   bons). Code poussé le 07/11 (**`6d6c569`**, seul), déploiement vert, contrôle terrain bon
   (§15 duodecies septuagies). **Chantier clos.**
 - **Migration 075 (Hubrise H1a, connexion) : EXÉCUTÉE le 08/11** (contrôle : true, true, true,
-  true, 0) ; code en local, push après les variables Railway (§15 undecies septuagies). Écrite
-  sous le n° 074, renumérotée le 07/11.
+  true, 0). Code poussé le 08/11 (**`faa1a4a`**), recette bonne : hamza-salon est connecté à la
+  location de test `1bp94-0` (§15 undecies septuagies). Écrite sous le n° 074, renumérotée le
+  07/11.
 - **Migration « 074 » de H0 (téléphone selon le pays) : écrite et testée, NON exécutée, GELÉE le
   06/11**, rangée sur la branche `briques/h0-telephone-pays`, absente de la branche de production
   (§15 novoquinquagies sexagies). **Le n° 074 est pris (D2) et le 075 aussi (H1a)** : à sa reprise,
@@ -9224,7 +9225,7 @@ marchand ne voit que ses données.
 directe depuis l'admin (l'admin s'authentifie par un jeton `Bearer`, qu'une redirection ne
 peut pas porter).
 
-## 15 undecies septuagies. HUBRISE H1a : CONNEXION D'UN MARCHAND, CODÉE EN LOCAL (06/11 ; migration 075 EXÉCUTÉE le 08/11, code non poussé)
+## 15 undecies septuagies. HUBRISE H1a : CONNEXION D'UN MARCHAND (migration 075 le 08/11 ; code `faa1a4a` en production le 08/11 ; recette bonne)
 
 **Décisions du pilotage (06/11)** :
 - lien signé : oui ;
@@ -9334,9 +9335,22 @@ Rien n'est poussé.
 - **contre-épreuve** sur `6d6c569` (+ 075 + nouveau filet) : 470 contrôles bons (tous les
   existants et celui de la 075) ; la section H1a s'arrête faute du module, comme attendu ;
 - **migration 075 exécutée par Yass le 08/11** : vérification `true | true | true | true | 0` ;
-- étapes suivantes, chacune sur feu vert : 4 variables Railway (`HUBRISE_CLIENT_ID`,
-  `HUBRISE_CLIENT_SECRET`, `HUBRISE_JETON_CLE`, `HUBRISE_LIEN_SECRET`) et contrôle de
-  `API_BASE_URL` = `https://app.winwin-card.com` ; push ; recette sur le compte dev.
+- 4 variables Railway posées par Yass (`HUBRISE_CLIENT_ID`, `HUBRISE_CLIENT_SECRET`,
+  `HUBRISE_JETON_CLE`, `HUBRISE_LIEN_SECRET`) ; déploiement vert ;
+- **push** sur « go push H1a » : `6d6c569..faa1a4a`, en avance rapide (3 commits de doc +
+  H1a) ; déploiement vert ;
+- **recette (Yass, 08/11)** : lien, autorisation sur `manager.hubrise.com`, retour
+  « Connecté à Hubrise ». En base, une connexion active pour **hamza-salon** :
+  `account_id = 1bp94`, `location_id = 1bp94-0`, `nom_location = France` (le
+  `location_name` renvoyé par Hubrise est donc bien lu), `customer_list_id = wxemp`,
+  `scope = location[orders.read,customer_list.read]`, jeton au format chiffré
+  (`format_chiffre = true`, 89 caractères).
+  - **Non refaits en production** : le rejeu du lien et « Couper ». Ils sont couverts par
+    le filet (section 32 : rejeu refusé, coupure puis révocation contre le faux Hubrise).
+  - La révocation réelle chez Hubrise n'a donc pas encore été observée : à vérifier au
+    premier « Couper ».
+- **Suite** : H1b (abonnement aux commandes, récepteur sans crédit), sur la connexion active
+  de hamza-salon.
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
