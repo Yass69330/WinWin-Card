@@ -9350,7 +9350,17 @@ Rien n'est poussé.
   - La révocation réelle chez Hubrise n'a donc pas encore été observée : à vérifier au
     premier « Couper ».
 - **Suite** : H1b (abonnement aux commandes, récepteur sans crédit), sur la connexion active
-  de hamza-salon.
+  de hamza-salon. **Cadrage du 08/11** : `docs/hubrise/03-h1b-reception.md` (rien codé).
+  - Abonnement à la connexion et bouton admin « Abonner » (hamza-salon n'a pas d'abonnement) ;
+    `DELETE /callback` au « Couper ».
+  - Récepteur : HMAC du corps brut, journal sans donnée personnelle, 200, aucun crédit.
+  - Deux lignes dans `src/index.js`.
+  - **Relevé de structure** limité à `HUBRISE_DIAGNOSTIC_LOCATIONS=1bp94-0` : chemins,
+    types, longueurs et indicateur `forme_carte`, sans valeur. Il sert à trouver le champ
+    carte de H2.
+  - Décisions D1 à D4 demandées.
+  - Le « Couper » réel et le rejeu se testeront plus tard, sur une connexion dédiée, pas sur
+    hamza-salon (pilotage, 08/11).
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
