@@ -76,13 +76,21 @@ function appliquerTheme(marchand) {
   // fond du thème (décision du pilotage, 03/11). strip-cache dessine alors la
   // bannière de la fiche standard (même fichier que hors thème, aucun calcul).
   const banniereStandard = aBanniereCustom(marchand);
-  if (!banniereStandard) for (const c of COULEURS_BANNIERE) m[c] = null;
+  // Mode « logo du marchand » (registre : logo_marchand, 11/11) : le disque
+  // garde SA couleur (couleur_pastille_fond, sinon crème opaque imposée par le
+  // générateur) : recalculée sur un fond de thème sombre, elle deviendrait
+  // quasi transparente et un logo noir serait illisible.
+  const garderDisque = modeLogoMarchand(marchand);
+  if (!banniereStandard) for (const c of COULEURS_BANNIERE) if (!(garderDisque && c === 'couleur_pastille_fond')) m[c] = null;
   // Le doré de la récompense garde la priorité (décision 2) : couleur_fond_reward,
   // couleur_texte_reward et logo_reward_url ne sont pas touchés.
   m._theme = { id: t.id, nom: t.nom, texte_case: t.texte_case || null, empreinte: empreinte(t),
     ...(banniereStandard ? { ficheStandard: marchand } : {}) };
   return m;
 }
+
+const modeLogoMarchand = m => m.strip_theme === 'illustration'
+  && !!(require('./illustrations').obtenir(m.strip_illustration) || {}).logo;
 
 // Même condition que la lecture du fond personnalisé (strip-cache, _fetchCustomBg).
 const aBanniereCustom = m => !!m.strip_custom_background_url && m.forfait === 'pro_plus';

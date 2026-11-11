@@ -245,6 +245,7 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
     // Thème illustration : DANS LES DEUX listes. Absentes de VISUAL_FIELDS,
     // changer d'illustration servirait l'ancienne image en cache indéfiniment.
     'strip_illustration', 'strip_produit', 'strip_vide',
+    'strip_texte', 'strip_texte_recompense',   // textes de la strip (migration 076)
     'type_programme',
     'couleur_pastille_fond', 'couleur_pastille_contour', 'couleur_pastille_icone',
     'couleur_label_strip',
@@ -274,6 +275,7 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
     // Champs générateur de strip (aucun gating forfait côté admin)
     'strip_mode', 'strip_theme', 'stamp_icon', 'strip_custom_background_url', 'strip_label',
     'strip_illustration', 'strip_produit', 'strip_vide',
+    'strip_texte', 'strip_texte_recompense',   // textes de la strip (migration 076)
     'freq_seuil_bas', 'freq_seuil_haut',
     // Avis Google — ABSENT de VISUAL_FIELDS : le lien vit au dos de la carte, il
     // n'entre dans aucun strip, donc aucun bump de strip_config_version (un bump
@@ -357,6 +359,16 @@ router.patch('/marchands/:id', authAdmin, asyncHandler(async (req, res) => {
   if (updates.freq_seuil_bas !== undefined && updates.freq_seuil_haut !== undefined
       && updates.freq_seuil_bas > updates.freq_seuil_haut) {
     return res.status(400).json({ error: 'freq_seuil_bas doit être ≤ freq_seuil_haut' });
+  }
+
+  // Textes de la strip (migration 076) : vides → NULL (texte automatique) ;
+  // sinon 40 caractères au plus, ni " < > & (même règle que le CHECK).
+  for (const c of ['strip_texte', 'strip_texte_recompense']) {
+    if (updates[c] === undefined) continue;
+    const v = updates[c] === null ? '' : String(updates[c]).trim();
+    if (!v) { updates[c] = null; continue; }
+    if (v.length > 40 || /["<>&]/.test(v)) return res.status(400).json({ error: `${c} : 40 caractères au plus, sans " < > &` });
+    updates[c] = v;
   }
 
   // Thème illustration : la clé doit exister DANS LE REGISTRE, pas seulement
@@ -564,6 +576,8 @@ router.get('/marchands/:id/strip-preview', authAdmin, asyncHandler(async (req, r
     strip_illustration: req.query.illustration ?? marchand.strip_illustration,
     strip_produit:      req.query.produit      ?? marchand.strip_produit,
     strip_vide:         req.query.vide         ?? marchand.strip_vide,
+    strip_texte:            req.query.texte            ?? marchand.strip_texte,
+    strip_texte_recompense: req.query.texte_recompense ?? marchand.strip_texte_recompense,
   };
 
   const { render } = require('../services/strip-generator');

@@ -624,6 +624,13 @@
               <div class="field-hint">Un seul mot. Sert au sous-titre : « LE 12ÈME KEBAB OFFERT ». Vide = « LE 12ÈME OFFERT ».</div>
             </div>
             <div class="field" style="margin-bottom:12px">
+              <label for="f-strip-texte">Texte de la strip <span style="color:var(--muted)">(vide = texte automatique ci-dessus)</span></label>
+              <input id="f-strip-texte" type="text" maxlength="40" placeholder="ex. YOUR {n} VISIT IS ON US">
+              <input id="f-strip-texte-recompense" type="text" maxlength="40" placeholder="À la récompense, ex. YOUR REWARD IS READY" style="margin-top:6px">
+              <button type="button" class="btn btn-ghost btn-sm" id="btn-strip-textes-gabarit" style="margin-top:6px">Pré-remplir (langue du marchand)</button>
+              <div class="field-hint">{n} = le passage offert (6TH, 6ÈME…). 40 caractères au plus, sans " &lt; &gt; &amp;. Écrit en capitales sur la strip.</div>
+            </div>
+            <div class="field" style="margin-bottom:12px">
               <label for="f-strip-vide">Passages restants</label>
               <select id="f-strip-vide">
                 <option value="">Illustration en transparence (recommandé)</option>
@@ -1622,6 +1629,8 @@ function resetForm() {
   document.getElementById('f-strip-mode').value  = 'stamps';
   document.getElementById('f-strip-theme').value = 'icon_metier';
   document.getElementById('f-strip-produit').value = '';
+  document.getElementById('f-strip-texte').value = '';
+  document.getElementById('f-strip-texte-recompense').value = '';
   document.getElementById('f-strip-vide').value = '';
   document.getElementById('f-stamp-icon').value  = 'coffee';
   document.getElementById('f-strip-label').checked = true;
@@ -1785,6 +1794,8 @@ function fillForm(m) {
   document.getElementById('f-strip-mode').value  = m.strip_mode || '';
   document.getElementById('f-strip-theme').value = m.strip_theme || 'icon_metier';
   document.getElementById('f-strip-produit').value = m.strip_produit || '';
+  document.getElementById('f-strip-texte').value = m.strip_texte || '';
+  document.getElementById('f-strip-texte-recompense').value = m.strip_texte_recompense || '';
   document.getElementById('f-strip-vide').value    = m.strip_vide || '';
   const savedIcon = m.stamp_icon || 'coffee';
   document.getElementById('f-stamp-icon').value  = savedIcon;
@@ -2058,6 +2069,8 @@ function collectForm() {
   body.strip_label = document.getElementById('f-strip-label').checked ? 'on' : 'off';
   body.strip_illustration = document.getElementById('f-strip-illustration').value || null;
   body.strip_produit      = document.getElementById('f-strip-produit').value.trim() || null;
+  body.strip_texte            = document.getElementById('f-strip-texte').value.trim() || null;
+  body.strip_texte_recompense = document.getElementById('f-strip-texte-recompense').value.trim() || null;
   body.strip_vide         = document.getElementById('f-strip-vide').value || null;
   // Couleurs manuelles des pastilles (optionnel) — vide → null → repli WCAG auto.
   // Champ texte : accepte hex, rgba() ou « transparent ».
@@ -2340,6 +2353,19 @@ document.getElementById('f-strip-theme').addEventListener('change', function() {
   majSectionIllustration();
 });
 document.getElementById('f-strip-vide').addEventListener('change', verifierLogoAlpha);
+
+// Textes de la strip (migration 076) : gabarit selon la langue du marchand, modifiable.
+const GABARITS_TEXTES_STRIP = {
+  en: ['YOUR {n} VISIT IS ON US', 'YOUR REWARD IS READY'],
+  fr: ['TON {n} PASSAGE EST OFFERT', 'TA RÉCOMPENSE T\'ATTEND'],
+};
+document.getElementById('btn-strip-textes-gabarit').addEventListener('click', () => {
+  const langue = (document.getElementById('f-langue') || {}).value === 'fr' ? 'fr' : 'en';
+  const [normal, recompense] = GABARITS_TEXTES_STRIP[langue];
+  document.getElementById('f-strip-texte').value = normal;
+  document.getElementById('f-strip-texte-recompense').value = recompense;
+  document.getElementById('f-strip-texte').dispatchEvent(new Event('input', { bubbles: true }));
+});
 document.getElementById('f-strip-illustration').addEventListener('change', function() {
   majBandeauIllustration(this.value);
 });
@@ -2420,6 +2446,8 @@ function loadStripPreview(id, mode, theme, icon, label, maxVal) {
   if (theme === 'illustration') {
     params.set('illustration', document.getElementById('f-strip-illustration').value || '');
     params.set('produit',      document.getElementById('f-strip-produit').value.trim());
+    params.set('texte',        document.getElementById('f-strip-texte').value.trim());
+    params.set('texte_recompense', document.getElementById('f-strip-texte-recompense').value.trim());
     params.set('vide',         document.getElementById('f-strip-vide').value || '');
   }
 

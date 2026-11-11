@@ -9458,6 +9458,64 @@ Cadrage : `docs/hubrise/03-h1b-reception.md`.
   réels) ;
 - base en panne plus d'une heure : vente perdue (sans enjeu en H1b, rattrapage à voir en H2).
 
+## 15 quattuordecies septuagies. ORES : STRIP « LOGO DU MARCHAND » ET TEXTES DE STRIP (11/11, local)
+
+Nouveau marchand ORES (Dubaï, EN, tampons, 5 passages, le 6e offert), pas encore en production ;
+présentation au propriétaire au plus tôt. **Diagnostic** (rien codé, validé le 11/11) :
+- le registre des illustrations n'avait qu'une entrée (`kebab`, celle de Hilal) ;
+- sous un thème, la strip illustration est bien redessinée sur le fond du thème (`appliquerTheme`
+  → `couleur_fond`, cache par thème, précalcul en admin) ; ses couleurs (titre, accent, disque)
+  ne viennent pas du thème mais sont recalculées d'après la luminosité du fond ; `images_tiers`
+  passe avant tout (la strip Canva d'ORES reste crème sous un thème) ;
+- fond clair : géré (seuil `lum < 0.18`, textes assombris) ;
+- `computeLayout(5)` : une ligne de 5 ; texte automatique EN : « YOUR 6TH FREE ».
+
+**Décisions du pilotage (11/11)** : go A (logo_marchand + textes modifiables, un seul push) avec
+deux exigences : disque **opaque et clair** même sous un thème ; textes normal / récompense avec
+{n}, vides = texte automatique, gabarit FR/EN dans l'admin. **B (champ en haut à droite du pass,
+`pass_display_name`) : rien codé** (il ne touche ni Google ni les smart notifs ; Yass corrige à la
+main le message de thème qui en tirait `{nom}`) ; dette notée ci-dessous.
+
+**Livré (local)** :
+- **Registre** : entrée `logo_marchand` ajoutée à la suite (`logo: true`, sans dessin), « kebab »
+  inchangé ; l'admin la propose seule (liste lue dans le registre). Pas de migration : le CHECK de
+  `strip_illustration` (migration 043) accepte la clé.
+- **Générateur** (`strip-generator.js`) : en `logo_marchand`, chaque passage est un disque
+  **opaque** (`couleur_pastille_fond` du marchand, sinon crème `#FFF8EC` imposée), contour à
+  l'accent, logo (`logo_url`, normalisé par `normalizeLogoForStamp`, plus grand dans ce mode) ;
+  passage restant = disque et logo à 18 %. `render` lit le logo aussi dans ce mode.
+- **Thèmes** (`themes.js`) : en `logo_marchand`, `couleur_pastille_fond` n'est plus remise à zéro
+  sous un thème (les autres couleurs de bannière, si). **Garantie double** : couleur du marchand
+  gardée, et crème opaque imposée par le générateur quand il n'en a pas.
+- **Textes** (migration 076) : `strip_texte`, `strip_texte_recompense` (40 caractères, ni " < > &,
+  CHECK + contrôle admin + échappement) ; `{n}` = passage offert écrit comme le texte automatique
+  (6TH, 6ÈME) ; écrits en capitales ; vides → texte automatique (`illustrationSousTitre`)
+  inchangé. Dans `VISUAL_FIELDS` (version de strip augmentée, classe Google re-synchronisée) et
+  dans les 6 lectures des cartes qui lisent `strip_produit`. Admin : 2 champs, bouton
+  « Pré-remplir (langue du marchand) » (EN : « YOUR {n} VISIT IS ON US » / « YOUR REWARD IS
+  READY » ; FR : « TON {n} PASSAGE EST OFFERT » / « TA RÉCOMPENSE T'ATTEND »), aperçu de strip.
+- Landing : non concernée (5 disques CSS décoratifs, aucun texte de strip).
+
+**Preuves** : **6 147 rendus SVG comparés** (code en production vs nouveau code, marchands sans
+les nouveaux champs : thèmes illustration / icône / logo, FR/EN, titre, produit, mode des passages
+restants, fonds sombre et clair, thème actif ou non, 5 à 14 passages, mode points) : **0
+différence** ; Hilal (kebab, 11 passages) identique au pixel près (3 paliers × 3 variantes).
+Rendus ORES (logo de remplacement « ORES », pas le vrai logo) : paliers 0, 3, 5 sur crème, palier
+3 sous Fête Nationale. **Filet 509/509** (section 31), **suite complète 622/622**. **Contre-épreuve**
+sur `c23efea` avec la 076 en base : tout passe jusqu'à la section 31 (registre sans
+`logo_marchand`) — la migration seule ne casse rien, scans compris.
+
+**Hypothèses et limites** : il faut un logo à fond **transparent** (un fond opaque irrégulier
+donnerait un carré estompé ; `trim` ne coupe que des marges unies) ; sous un thème qui a son propre
+logo, c'est le logo du thème qui va dans les disques ; `logo_marchand` est la seule entrée
+« dynamique » du registre ; les textes ne s'appliquent qu'au thème illustration (les autres thèmes
+n'ont pas de sous-titre) ; les cartes déjà installées prennent la nouvelle strip à leur prochaine
+mise à jour (aucun envoi immédiat pour un changement de strip).
+
+**Décisions hors pilotage** (à valider) : `{n}` écrit en ordinal (6TH / 6ÈME) et non en chiffre
+seul, pour suivre le texte automatique et l'exemple « YOUR 6TH VISIT IS ON US » ; textes passés en
+capitales ; crème du disque `#FFF8EC` ; libellés du gabarit FR.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
@@ -9703,6 +9761,14 @@ faille joignable** : un appel `uuid.v5(nom, espace, buf)` ou équivalent. **À f
 uuid 14 (vérifier que `v5` rend le même identifiant pour ESPACE_VENTES : l'idempotence des
 ventes en dépend) et node-cron 4 (vérifier `cron.schedule` et le fuseau). Revoir à la routine
 mensuelle.
+
+### Champ « haut à droite du pass » vidé dans l'admin : jamais enregistré (11/11)
+
+`public/admin/index.html` envoie `pass_display_name: valeur || undefined` : un champ vidé n'est pas
+envoyé, la valeur précédente reste (impossible de revenir au nom du marchand depuis l'admin).
+Rien codé (décision du pilotage, B du 11/11). Correctif le jour venu : envoyer `null` quand le
+champ est vide. Rappel : ce champ ne sert qu'au haut à droite du pass Apple et au `{nom}` des
+thèmes (copie d'un gabarit, aperçu « Ma carte »), jamais à Google ni aux smart notifs.
 
 ## 17. DÉCISIONS HORS PILOTAGE
 

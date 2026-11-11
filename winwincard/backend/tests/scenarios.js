@@ -3118,6 +3118,71 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     s30.processus.kill();
   }
 
+  titre('31. Strip illustration : mode « logo du marchand » et textes modifiables (ORES, migration 076, 11/11)');
+  {
+    const path = require('path'), fs = require('fs');
+    sql(fs.readFileSync(path.join(__dirname, '..', 'database', 'migration_076_textes_strip.sql'), 'utf8'));
+    verifier('migration 076 rejouée : contrôle « 2, 2, 0 »',
+      sql(`SELECT (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'marchands'
+                    AND column_name IN ('strip_texte', 'strip_texte_recompense')),
+                  (SELECT count(*) FROM pg_constraint WHERE conname IN ('marchands_strip_texte_check', 'marchands_strip_texte_recompense_check')),
+                  (SELECT count(*) FROM marchands WHERE strip_texte IS NOT NULL OR strip_texte_recompense IS NOT NULL)`), '2|2|0');
+    const ill = require('../src/services/illustrations');
+    const g = require('../src/services/strip-generator');
+    const envT = { SUPABASE_URL: process.env.SUPABASE_URL, SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY };
+    Object.assign(process.env, { SUPABASE_URL: urlSupabase, SUPABASE_SERVICE_KEY: cleService });
+    const T = require('../src/services/themes');
+    for (const [k, v] of Object.entries(envT)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    verifier('registre : « kebab » inchangé, « logo_marchand » ajouté à la suite (logo, sans dessin), proposé par l\'admin',
+      [ill.listerCles(), !!ill.obtenir('kebab').svg, ill.obtenir('logo_marchand').logo, ill.obtenir('logo_marchand').svg], [['kebab', 'logo_marchand'], true, true, undefined]);
+    const base = { slug: 'ores', langue: 'en', type_programme: 'stamps', strip_mode: 'stamps', strip_theme: 'illustration', strip_illustration: 'logo_marchand',
+      max_value: 5, couleur_fond: '#FBEBD3', strip_label: 'on' };
+    const logoB64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+    const svg = (m, f) => g.buildSvg({ marchand: m, filledCount: f, logoB64 });
+    const s3 = svg(base, 3);
+    verifier('logo_marchand : 5 disques crème OPAQUES (#FFF8EC, aucun fond translucide) portant le logo ; 3 pleins, 2 à 18 % ; aucune illustration kebab',
+      [(s3.match(/<circle [^>]*fill="#FFF8EC"/g) || []).length, (s3.match(/<g opacity="1">/g) || []).length, (s3.match(/<g opacity="0.18">/g) || []).length,
+       (s3.match(/<image href="data:image\/png;base64,/g) || []).length, /rgba\(/.test(s3.split('</text>').pop())], [5, 3, 2, 5, false]);
+    const theme = { id: 't', nom: 'FN', couleur_fond: '#00703C', etat: 'en_cours' };
+    const sousTheme = T.appliquerTheme({ ...base, theme_actif: theme });
+    const sousThemePerso = T.appliquerTheme({ ...base, couleur_pastille_fond: '#F2E6CF', theme_actif: theme });
+    const kebabTheme = T.appliquerTheme({ ...base, strip_illustration: 'kebab', couleur_pastille_fond: '#F2E6CF', theme_actif: theme });
+    verifier('sous un thème sombre (#00703C) : en logo_marchand le disque reste crème opaque, ou garde la couleur du marchand (le thème ne la remet plus à zéro) ; autres illustrations : remise à zéro comme avant',
+      [/<circle [^>]*fill="#FFF8EC"/.test(svg(sousTheme, 3)), sousThemePerso.couleur_pastille_fond, /<circle [^>]*fill="#F2E6CF"/.test(svg(sousThemePerso, 3)), kebabTheme.couleur_pastille_fond, sousTheme.couleur_fond],
+      [true, '#F2E6CF', true, null, '#00703C']);
+    const sous = (m, r) => g.sousTitreStrip({ marchand: m, maxValue: m.max_value, isReward: r });
+    verifier('textes : {n} = passage offert (6TH en anglais, 6ÈME en français), en capitales ; récompense ; vides ou blancs → texte automatique inchangé ; échappés',
+      [sous({ ...base, strip_texte: 'Your {n} visit is on us' }, false), sous({ ...base, strip_texte_recompense: 'Your reward is ready' }, true),
+       sous({ ...base, langue: 'fr', strip_texte: 'ton {n} passage est offert' }, false), sous({ ...base, strip_texte: '  ' }, false), sous(base, true),
+       sous({ ...base, strip_texte: 'A & B' }, false)],
+      ['YOUR 6TH VISIT IS ON US', 'YOUR REWARD IS READY', 'TON 6ÈME PASSAGE EST OFFERT', 'YOUR 6TH FREE', "IT'S FREE", 'A &amp; B']);
+    // Admin : validation, enregistrement, illustration acceptée (serveur à part : limiteur global).
+    const s31 = await demarrerServeur('strip-textes');
+    const api = (methode, chemin, jt, corps) => fetch(s31.url + chemin, { method: methode,
+      headers: { 'Content-Type': 'application/json', ...(jt ? { Authorization: `Bearer ${jt}` } : {}) },
+      body: corps === undefined ? undefined : JSON.stringify(corps) })
+      .then(async r => ({ statut: r.status, corps: await r.json().catch(() => ({})) }));
+    const version = () => Number(sql(`SELECT strip_config_version FROM marchands WHERE id = '${M.tampons}'`));
+    const v0 = version();
+    const ok = await api('PATCH', `/api/admin/marchands/${M.tampons}`, jetonAdmin,
+      { strip_theme: 'illustration', strip_illustration: 'logo_marchand', strip_texte: ' Your {n} visit is on us ', strip_texte_recompense: 'Your reward is ready' });
+    const lu = sql(`SELECT strip_illustration || '|' || strip_texte || '|' || strip_texte_recompense FROM marchands WHERE id = '${M.tampons}'`);
+    const v1 = version();
+    const refus = [(await api('PATCH', `/api/admin/marchands/${M.tampons}`, jetonAdmin, { strip_texte: '<b>' })).statut,
+      (await api('PATCH', `/api/admin/marchands/${M.tampons}`, jetonAdmin, { strip_texte: 'x'.repeat(41) })).statut];
+    const vide = await api('PATCH', `/api/admin/marchands/${M.tampons}`, jetonAdmin, { strip_texte: '', strip_texte_recompense: null, strip_theme: 'icon_metier', strip_illustration: null });
+    verifier('admin : logo_marchand accepté, textes enregistrés (nettoyés) et version de strip augmentée (champ visuel) ; « < » ou plus de 40 caractères → 400 ; vidés → NULL (texte automatique)',
+      [ok.statut, lu, v1 > v0, refus, vide.statut, sql(`SELECT coalesce(strip_texte, 'NULL') || '|' || coalesce(strip_texte_recompense, 'NULL') FROM marchands WHERE id = '${M.tampons}'`)],
+      [200, 'logo_marchand|Your {n} visit is on us|Your reward is ready', true, [400, 400], 200, 'NULL|NULL']);
+    // Les lectures des cartes portent les deux colonnes (même endroits que strip_produit).
+    const sources = ['services/colonnes-carte.js', 'routes/passes.js', 'routes/scan.js', 'routes/clients.js']
+      .map(f => fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8'));
+    const lectures = sources.flatMap(t => t.split('\n').filter(l => /strip_produit/.test(l) && /select\(|COLONNES_MARCHAND_CARTE =|SELECT_CLIENT =/.test(l)));
+    verifier('chaque lecture de la fiche qui lit strip_produit (6) lit aussi strip_texte et strip_texte_recompense',
+      [lectures.length, lectures.every(l => /strip_texte, strip_texte_recompense/.test(l))], [6, true]);
+    s31.processus.kill();
+  }
+
   titre('API v1, étape 1 : clés d\'API, réglages de conversion, canal (20/10)');
   {
     const sha = x => crypto.createHash('sha256').update(x).digest('hex');

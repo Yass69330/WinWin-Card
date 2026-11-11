@@ -533,6 +533,19 @@ function illustrationSousTitre({ langue, produit, maxValue, isReward }) {
   return fr ? `LE ${ord} ${p} OFFERT` : `YOUR ${ord} ${p} FREE`;
 }
 
+// Textes du marchand (migration 076, 11/11) : strip_texte (normal) et
+// strip_texte_recompense, {n} = passage offert (max_value + 1), écrit comme le
+// texte automatique (6TH, 6ÈME). En capitales, comme le texte automatique.
+// Vides → texte automatique INCHANGÉ (illustrationSousTitre) : aucun marchand
+// existant ne bouge. Le CHECK de la migration refuse " < > & ; escAttr est la
+// seconde ceinture.
+function sousTitreStrip({ marchand, maxValue, isReward }) {
+  const brut = isReward ? marchand.strip_texte_recompense : marchand.strip_texte;
+  const texte = typeof brut === 'string' ? brut.trim() : '';
+  if (!texte) return illustrationSousTitre({ langue: marchand.langue, produit: marchand.strip_produit, maxValue, isReward });
+  return escAttr(texte.toUpperCase().split('{N}').join(ordinal((maxValue || 0) + 1, marchand.langue)));
+}
+
 // ── Taille de l'illustration ──────────────────────────────────────────────
 // Un multiplicateur fixe du rayon ne marche pas : computeLayout resserre les
 // tampons quand n grandit, et déborde pour n = 6, 8, 14, 16, 20. La taille se
@@ -599,6 +612,23 @@ function disqueVideSvg({ cx, cy, r, fond, accent, logoB64, idx }) {
     + ` width="${taille}" height="${taille}" clip-path="url(#${clip})" preserveAspectRatio="xMidYMid meet" opacity="0.55"/>`;
 }
 
+// Passage en mode « logo du marchand » (registre : logo_marchand) : disque
+// OPAQUE et CLAIR (crème par défaut, ou couleur_pastille_fond du marchand, que
+// le thème ne remet pas à zéro dans ce mode : themes.js), contour à l'accent,
+// logo plein ; passage restant = le même disque ET le même logo à 18 %. Un logo
+// noir reste donc lisible sur n'importe quel fond, thème sombre compris.
+const CREME_DISQUE = '#FFF8EC';
+function disqueLogoSvg({ cx, cy, r, fond, accent, logoB64, idx, opacite }) {
+  const clip = `lmclip${idx}`;
+  const taille = +(r * 1.5).toFixed(1);
+  const logo = logoB64
+    ? `<image href="data:image/png;base64,${logoB64}" x="${+(cx - taille / 2).toFixed(1)}" y="${+(cy - taille / 2).toFixed(1)}"`
+      + ` width="${taille}" height="${taille}" clip-path="url(#${clip})" preserveAspectRatio="xMidYMid meet"/>`
+    : '';
+  return `<defs><clipPath id="${clip}"><circle cx="${cx}" cy="${cy}" r="${r}"/></clipPath></defs>`
+    + `<g opacity="${opacite}"><circle cx="${cx}" cy="${cy}" r="${r}" fill="${fond}" stroke="${accent}" stroke-width="2.5"/>${logo}</g>`;
+}
+
 // ── Constructeur du thème illustration ────────────────────────────────────
 function buildIllustrationSvg({ marchand, filledCount, logoB64, w, h, isReward, maxValue }) {
   const scaleX = w / 750;
@@ -630,7 +660,8 @@ function buildIllustrationSvg({ marchand, filledCount, logoB64, w, h, isReward, 
   }
   const illW = entree ? entree.w : 200;
   const illH = entree ? entree.h : 140;
-  const fragment = entree ? entree.svg() : null;
+  const modeLogo = !!(entree && entree.logo);   // logo_marchand : disques au logo
+  const fragment = entree && !modeLogo ? entree.svg() : null;
 
   const positions = computeLayout(maxValue, { showLabel });
   const { largeur, hauteur } = tailleIllustration(positions, illW, illH, showLabel);
@@ -647,6 +678,11 @@ function buildIllustrationSvg({ marchand, filledCount, logoB64, w, h, isReward, 
     const ht = hauteur * k;
     const acquis = isReward || i < filledCount;
 
+    if (modeLogo) {
+      return disqueLogoSvg({ cx, cy, r: +(rDisque * k).toFixed(1), fond: marchand.couleur_pastille_fond || CREME_DISQUE,
+        accent, logoB64, idx: i, opacite: acquis ? 1 : 0.18 });
+    }
+
     if (acquis && fragment) {
       return illustrationSvg({ cx, cy, largeur: lg, hauteur: ht, illW, illH, fragment, opacite: 1 });
     }
@@ -657,9 +693,7 @@ function buildIllustrationSvg({ marchand, filledCount, logoB64, w, h, isReward, 
   }).join('');
 
   const titre = langue === 'fr' ? 'CARTE DE FIDÉLITÉ' : 'LOYALTY CARD';
-  let sousTitre = illustrationSousTitre({
-    langue, produit: marchand.strip_produit, maxValue, isReward,
-  });
+  let sousTitre = sousTitreStrip({ marchand, maxValue, isReward });
 
   // Ajustement de taille — en espace 750, avant mise à l'échelle de la variante.
   // Point de départ : la zone sûre Apple moins la même marge de 10 px que les
@@ -843,10 +877,14 @@ async function render({ marchand, filledCount, logoBuffer, customBgBuffer, stati
   // dans le mode où il le dessine (strip_vide = 'logo'). Inutile de payer la
   // normalisation sharp quand les passages restants sont des illustrations.
   let logoB64 = null;
+  const entreeIll = theme === 'illustration' ? obtenirIllustration(marchand.strip_illustration) : null;
+  const modeLogo  = !!(entreeIll && entreeIll.logo);   // logo_marchand (11/11)
   const veutLogo = theme === 'logo_stamp'
-    || (theme === 'illustration' && marchand.strip_vide === 'logo');
+    || (theme === 'illustration' && (marchand.strip_vide === 'logo' || modeLogo));
   if (veutLogo && logoBuffer) {
-    const refRadius = Math.max(16, Math.min(30, (750 - 72) / maxValue / 2 - 5));
+    // logo_marchand : le logo remplit un grand disque (jusqu'à ≈ 1,5 × 60 px en
+    // espace 750, × 1,5 en strip3x) : normalisé plus grand pour rester net.
+    const refRadius = modeLogo ? 80 : Math.max(16, Math.min(30, (750 - 72) / maxValue / 2 - 5));
     logoB64 = await normalizeLogoForStamp(logoBuffer, refRadius).catch(e => {
       console.warn('[strip-generator] Logo normalisation échouée:', e.message);
       return null;
@@ -875,4 +913,4 @@ async function render({ marchand, filledCount, logoBuffer, customBgBuffer, stati
 
 module.exports = { render, buildSvg, computeLayout, normalizeLogoForStamp, valeurAffichee, PLAFOND_EXACT, VARIANTS, ICONS,
   // Exposés pour vérification hors ligne du thème illustration
-  ordinal, illustrationSousTitre, tailleIllustration, largeurTexte, tailleQuiRentre };
+  ordinal, illustrationSousTitre, sousTitreStrip, tailleIllustration, largeurTexte, tailleQuiRentre };

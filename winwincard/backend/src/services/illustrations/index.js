@@ -28,8 +28,15 @@
 // jamais un nombre magique dans le générateur.
 // ════════════════════════════════════════════════════════════════════════════
 
+// Entrée à part : `logo: true` (11/11, ORES). Pas de dessin à couleurs figées :
+// chaque passage est un DISQUE OPAQUE ET CLAIR portant le logo du marchand
+// (logo_url) — plein quand le passage est validé, estompé (18 %) quand il reste.
+// Réutilisable par tout marchand qui a un logo propre (fond transparent). Le
+// générateur la traite à part (strip-generator.js, buildIllustrationSvg) ; elle
+// n'a donc pas de svg(). Même règle : la clé ne se renomme ni ne se supprime.
 const ILLUSTRATIONS = Object.freeze({
   kebab: Object.freeze({ svg: require('./kebab'), w: 200, h: 140, label: 'Kebab' }),
+  logo_marchand: Object.freeze({ logo: true, w: 200, h: 200, label: 'Logo du marchand (disque clair)' }),
 });
 
 // Clé connue du registre ? Utilisé par la validation admin et par le rendu.
