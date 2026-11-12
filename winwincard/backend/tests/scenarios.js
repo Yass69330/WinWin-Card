@@ -2984,10 +2984,13 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     const o2 = await choisir(auj);
     const o3 = await choisir(dans(1));
     const o4 = await choisir(dans(2));
-    verifier('ouverture : 1re ouverture tout de suite (date notée) ; arrêt toujours libre ; rouvrir aujourd\'hui ou demain à 08:00 UTC (< 24 h) → 409 « ouverture_trop_recente » avec la date possible, rien changé ; après-demain → programmé',
+    verifier('ouverture : 1re ouverture tout de suite (date notée) ; arrêt toujours libre ; rouvrir aujourd\'hui → 409 « ouverture_trop_recente » avec la date possible, rien changé ; demain 08:00 UTC → 409 si c\'est à moins de 24 h, sinon accepté ; après-demain → programmé',
       [o1.corps.etat, ouvertLe, stop.statut, o2.statut, o2.corps.error, Math.abs(Date.parse(o2.corps.possible_le) - Date.now() - 864e5) < 120e3,
        o3.statut, o4.statut, o4.corps.etat],
-      ['en_cours', 't', 200, 409, 'ouverture_trop_recente', true, 409, 200, 'programme']);
+      // Demain 08:00 UTC n'est à moins de 24 h que si le test tourne après 08:00 UTC
+      // (corrigé le 12/11 : le contrôle supposait l'heure du jour).
+      ['en_cours', 't', 200, 409, 'ouverture_trop_recente', true,
+       Date.parse(`${dans(1)}T08:00:00Z`) < Date.now() + 864e5 ? 409 : 200, 200, 'programme']);
     sql(`UPDATE marchands SET theme_ouvert_le = now() - interval '25 hours' WHERE id = '${MV}'`);
     const o5 = await choisir(auj);
     await bascule();
@@ -3143,6 +3146,9 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     verifier('logo_marchand : 5 disques crème OPAQUES (#FFF8EC, aucun fond translucide) portant le logo ; 3 pleins, 2 à 18 % ; aucune illustration kebab',
       [(s3.match(/<circle [^>]*fill="#FFF8EC"/g) || []).length, (s3.match(/<g opacity="1">/g) || []).length, (s3.match(/<g opacity="0.18">/g) || []).length,
        (s3.match(/<image href="data:image\/png;base64,/g) || []).length, /rgba\(/.test(s3.split('</text>').pop())], [5, 3, 2, 5, false]);
+    verifier('logo_marchand : petite ombre portée sous chaque disque (un filtre de flou, 5 ombres) ; aucune ombre dans les autres thèmes',
+      [(s3.match(/<filter id="lmombre"/g) || []).length, (s3.match(/filter="url\(#lmombre\)"/g) || []).length,
+       /lmombre/.test(svg({ ...base, strip_illustration: 'kebab' }, 3))], [1, 5, false]);
     const theme = { id: 't', nom: 'FN', couleur_fond: '#00703C', etat: 'en_cours' };
     const sousTheme = T.appliquerTheme({ ...base, theme_actif: theme });
     const sousThemePerso = T.appliquerTheme({ ...base, couleur_pastille_fond: '#F2E6CF', theme_actif: theme });

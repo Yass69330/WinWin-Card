@@ -625,8 +625,18 @@ function disqueLogoSvg({ cx, cy, r, fond, accent, logoB64, idx, opacite }) {
     ? `<image href="data:image/png;base64,${logoB64}" x="${+(cx - taille / 2).toFixed(1)}" y="${+(cy - taille / 2).toFixed(1)}"`
       + ` width="${taille}" height="${taille}" clip-path="url(#${clip})" preserveAspectRatio="xMidYMid meet"/>`
     : '';
+  // Petite ombre portée sous le disque (12/11, rendu « premium » demandé par le
+  // pilotage) : un disque sombre décalé vers le bas-droite et flouté. Visible sur
+  // fond clair ; sur fond sombre, elle se fond (sans gêne). Estompée avec le
+  // disque pour un passage restant. Filtre défini par disqueLogoDefs.
+  const ombre = `<circle cx="${+(cx + r * 0.06).toFixed(1)}" cy="${+(cy + r * 0.12).toFixed(1)}" r="${r}" fill="#000" opacity="0.45" filter="url(#lmombre)"/>`;
   return `<defs><clipPath id="${clip}"><circle cx="${cx}" cy="${cy}" r="${r}"/></clipPath></defs>`
-    + `<g opacity="${opacite}"><circle cx="${cx}" cy="${cy}" r="${r}" fill="${fond}" stroke="${accent}" stroke-width="2.5"/>${logo}</g>`;
+    + `<g opacity="${opacite}">${ombre}<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fond}" stroke="${accent}" stroke-width="2.5"/>${logo}</g>`;
+}
+// Flou de l'ombre, une fois par SVG (proportionnel au rayon : même rendu en 2x,
+// 3x et hero).
+function disqueLogoDefs(r) {
+  return `<defs><filter id="lmombre" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="${+(r * 0.07).toFixed(2)}"/></filter></defs>`;
 }
 
 // ── Constructeur du thème illustration ────────────────────────────────────
@@ -737,7 +747,7 @@ function buildIllustrationSvg({ marchand, filledCount, logoB64, w, h, isReward, 
 
   // bgSvg SANS customBgB64 : le fond photo est ignoré dans ce thème (cf. entête).
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${w}" height="${h}">
-  ${bgSvg({ w, h, couleurFond: bgColor, customBgB64: null })}
+  ${bgSvg({ w, h, couleurFond: bgColor, customBgB64: null })}${modeLogo ? disqueLogoDefs(rDisque * k) : ''}
   ${blocTexte}
   ${contenu}
 </svg>`;

@@ -9516,6 +9516,20 @@ mise à jour (aucun envoi immédiat pour un changement de strip).
 seul, pour suivre le texte automatique et l'exemple « YOUR 6TH VISIT IS ON US » ; textes passés en
 capitales ; crème du disque `#FFF8EC` ; libellés du gabarit FR.
 
+**En production** (`c6ab15d`, 12/11, migration 076 exécutée avant : 2, 2, 0) ; contrôle de Yass :
+déploiement vert, « tout est bon » (bascule d'ORES faite avec son vrai logo).
+
+**Ombre portée sous les disques** (12/11, demande du pilotage, local) : en `logo_marchand`
+seulement, un disque noir décalé vers le bas-droite (6 % et 12 % du rayon), flou gaussien (7 % du
+rayon), opacité 45 %, estompé avec le disque pour un passage restant ; visible sur fond clair, se
+fond sur fond sombre (accepté). Un seul filtre par SVG. Les 6 147 rendus des autres modes restent
+identiques au caractère près, Hilal au pixel près. Test ajouté (section 31) ; contre-épreuve sur
+`c6ab15d` : seul ce contrôle échoue.
+- **Test corrigé au passage** (section 29, morceau 4 de f17) : « rouvrir demain à 08:00 UTC →
+  409 » supposait que le test tourne après 08:00 UTC ; à 03:17 UTC, demain 08:00 est à plus de
+  24 h et l'ouverture est (à raison) acceptée. Le contrôle calcule maintenant l'attendu selon
+  l'heure. Le code n'avait pas de défaut. Filet 510/510.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
