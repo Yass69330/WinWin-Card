@@ -9529,6 +9529,21 @@ identiques au caractère près, Hilal au pixel près. Test ajouté (section 31) 
   409 » supposait que le test tourne après 08:00 UTC ; à 03:17 UTC, demain 08:00 est à plus de
   24 h et l'ouverture est (à raison) acceptée. Le contrôle calcule maintenant l'attendu selon
   l'heure. Le code n'avait pas de défaut. Filet 510/510.
+- **Poussé** (`5f4fee5`, 12/11) ; contrôle de Yass : déploiement vert, ombre ok sur ORES.
+- **Délai de 24 h pendant les tests de thèmes** (13/11) : décocher puis recocher « cartes à thème »
+  dans la fiche admin ne le lève pas (`theme_ouvert_le` n'est écrit que par `ouvrir_theme` et
+  jamais effacé ; décocher termine en plus le thème en cours). Pour un test : `UPDATE marchands SET
+  theme_ouvert_le = NULL WHERE slug = '<slug>'` (cette seule ligne). Bouton admin « lever le
+  délai » proposé (≈ 30 min), non demandé.
+- **Logo de thème dans les disques (13/11)** : sous un thème, le mode « logo du marchand » dessine
+  le logo du THÈME (`appliquerTheme` remplace `logo_url`). Règle de `normalizeLogoForStamp` :
+  `trim({ threshold: 20 })` (bords égaux au pixel haut-gauche à 20 près ; tout pixel plus différent,
+  halo ou étincelle compris, élargit le cadre), puis carré de 192 px en `contain` sans marge, dessiné
+  à 1,5 × le rayon (75 % du diamètre), centré, coins coupés par le cercle. **Préparer un logo de
+  thème** : fond transparent, rogné au plus près, sans halo ni élément qui déborde, proche du
+  carré, l'essentiel dans un cercle central. Option « garder le logo de base dans les disques sous
+  un thème » chiffrée (≈ 1 h 30, sans migration, empreinte de cache à marquer) : **écartée par le
+  pilotage** (« pas besoin »).
 
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
