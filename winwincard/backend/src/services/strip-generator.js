@@ -437,10 +437,9 @@ function pointsBarSvg({ w, h, valeur, maxValue, langue, showLabel, principale, s
 // fond, titre, sous-titre, disques des passages restants.
 //
 // Correspondance des réglages (décisions de pilotage) :
-//   fond            ← couleur_fond            (MÊME en état doré — surtout pas
-//                                              couleur_fond_reward : l'effet
-//                                              doré vient des 11 dessins
-//                                              allumés, pas d'un fond jaune)
+//   fond            ← couleur_fond ; à la récompense couleur_fond_reward,
+//                                              sinon #c9a84c (13/11 : la strip suit
+//                                              le pass doré, comme les autres thèmes)
 //   titre           ← couleur_label_strip     (sinon WCAG, même règle exacte
 //                                              que labelSvg, recopiée ici parce
 //                                              que labelSvg ne doit pas bouger)
@@ -650,15 +649,23 @@ function buildIllustrationSvg({ marchand, filledCount, logoB64, w, h, isReward, 
   const showLabel = marchand.strip_label !== 'off';
   const langue    = marchand.langue;
 
-  // Fond : couleur_fond dans TOUS les états, doré compris (décision de pilotage).
-  const bgColor = marchand.couleur_fond || '#1a1a2e';
+  // Fond : couleur_fond ; à la RÉCOMPENSE, la couleur du pass doré
+  // (couleur_fond_reward, sinon #c9a84c), comme les autres thèmes — décision du
+  // pilotage du 13/11, qui remplace « jamais doré » (sinon une strip crème sur
+  // une carte dorée). Un marchand qui ne veut pas de doré règle sa couleur de
+  // récompense (couleur_fond_reward) dans l'admin.
+  const bgColor = isReward ? (marchand.couleur_fond_reward || '#c9a84c') : (marchand.couleur_fond || '#1a1a2e');
   const lum     = relativeLuminance(bgColor);
   // Même règle que labelSvg, recopiée plutôt qu'appelée : labelSvg fixe sa
   // baseline à y=60, or ce thème a DEUX lignes de texte. La recopier laisse
   // labelSvg strictement intacte, donc les autres thèmes au bit près.
-  const couleurTitre = marchand.couleur_label_strip || (lum < 0.18 ? 'white' : darken(bgColor, 0.62));
-  const opaciteTitre = marchand.couleur_label_strip ? '1' : (lum < 0.18 ? '0.5' : '0.80');
-  const accent       = marchand.couleur_pastille_contour || (lum < 0.18 ? lighten(bgColor, 0.75) : darken(bgColor, 0.55));
+  // À la récompense, titre et accent manuels (choisis pour le fond normal) sont
+  // ignorés : calcul automatique sur le doré, comme les autres thèmes (décision C).
+  const titreManuel  = isReward ? null : marchand.couleur_label_strip;
+  const accentManuel = isReward ? null : marchand.couleur_pastille_contour;
+  const couleurTitre = titreManuel || (lum < 0.18 ? 'white' : darken(bgColor, 0.62));
+  const opaciteTitre = titreManuel ? '1' : (lum < 0.18 ? '0.5' : '0.80');
+  const accent       = accentManuel || (lum < 0.18 ? lighten(bgColor, 0.75) : darken(bgColor, 0.55));
   const fondDisque   = marchand.couleur_pastille_fond || (lum < 0.18 ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)');
 
   // Registre. AUCUNE substitution : une clé inconnue rend tous les passages en
@@ -786,7 +793,7 @@ function buildSvg({ marchand, filledCount, logoB64, customBgB64, w = 750, h = 24
   // ── SORTIE ANTICIPÉE : thème « illustration » ────────────────────────────
   // Bloc autonome, défini plus haut. Il recalcule ce dont il a besoin plutôt
   // que d'hériter de bgColor/colors : ses règles de couleur diffèrent (fond
-  // jamais doré, pas de palette WCAG sur le dessin lui-même).
+  // doré seulement à la récompense, pas de palette WCAG sur le dessin lui-même).
   // Mode points : le thème est IGNORÉ — une barre de progression n'a pas de
   // passages à illustrer. Seul le mode tampons entre ici.
   if (theme === 'illustration' && iStamps && maxValue > 0) {

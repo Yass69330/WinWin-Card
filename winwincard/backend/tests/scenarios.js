@@ -3149,6 +3149,17 @@ async function jouer({ sql, sqlEnFond, verifier, api, secretJwt, demarrerServeur
     verifier('logo_marchand : petite ombre portée sous chaque disque (un filtre de flou, 5 ombres) ; aucune ombre dans les autres thèmes',
       [(s3.match(/<filter id="lmombre"/g) || []).length, (s3.match(/filter="url\(#lmombre\)"/g) || []).length,
        /lmombre/.test(svg({ ...base, strip_illustration: 'kebab' }, 3))], [1, 5, false]);
+    const fondDe = x => (x.match(/<rect width="\d+" height="\d+" fill="([^"]+)"/) || [])[1];
+    const cache = (() => { const e = { SUPABASE_URL: process.env.SUPABASE_URL, SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY };
+      Object.assign(process.env, { SUPABASE_URL: urlSupabase, SUPABASE_SERVICE_KEY: cleService });
+      const c = require('../src/services/strip-cache');
+      for (const [k, v] of Object.entries(e)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } return c; })();
+    verifier('thème illustration, récompense (13/11) : fond de la strip = couleur du pass doré (couleur_fond_reward, sinon #c9a84c) ; titre manuel ignoré sur le doré ; hors récompense : fond normal ; clé de cache à part (« _or ») pour la récompense seulement',
+      [fondDe(svg(base, 5)), fondDe(svg({ ...base, couleur_fond_reward: '#123456' }, 5)), fondDe(svg(base, 4)),
+       /fill="#FF0000"/.test(svg({ ...base, couleur_label_strip: '#FF0000' }, 5)), /fill="#FF0000"/.test(svg({ ...base, couleur_label_strip: '#FF0000' }, 4)),
+       cache.storageKey(base, 5, 'strip2x').endsWith('stamps_5_or_strip2x.png'), cache.storageKey(base, 4, 'strip2x').endsWith('stamps_4_strip2x.png'),
+       cache.storageKey({ ...base, strip_theme: 'icon_metier' }, 5, 'strip2x').endsWith('stamps_5_strip2x.png')],
+      ['#c9a84c', '#123456', '#FBEBD3', false, true, true, true, true]);
     const theme = { id: 't', nom: 'FN', couleur_fond: '#00703C', etat: 'en_cours' };
     const sousTheme = T.appliquerTheme({ ...base, theme_actif: theme });
     const sousThemePerso = T.appliquerTheme({ ...base, couleur_pastille_fond: '#F2E6CF', theme_actif: theme });

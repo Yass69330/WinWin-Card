@@ -40,6 +40,10 @@ function storageKey(marchand, filledCount, variant) {
   let mode = 'static';
   if (marchand.strip_mode === 'stamps') {
     mode = `stamps_${filledCount}`;
+    // Thème illustration, récompense : fond doré depuis le 13/11. Clé à part, pour
+    // que les images de récompense déjà en cache (fond normal) soient redessinées
+    // sans ré-enregistrer chaque fiche.
+    if (marchand.strip_theme === 'illustration' && filledCount >= (marchand.max_value || 10)) mode += '_or';
   } else if (marchand.strip_mode === 'points_bar') {
     // La clé DOIT utiliser la même valeur que celle dessinée dans l'image,
     // sinon on servirait une image affichant un solde différent de celui du

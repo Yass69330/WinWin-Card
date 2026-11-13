@@ -9545,6 +9545,23 @@ identiques au caractère près, Hilal au pixel près. Test ajouté (section 31) 
   un thème » chiffrée (≈ 1 h 30, sans migration, empreinte de cache à marquer) : **écartée par le
   pilotage** (« pas besoin »).
 
+**Fond doré de la strip illustration à la récompense** (13/11, décision du pilotage, local) :
+retour de Yass : à 5/5, le pass passe au doré mais la strip d'ORES restait crème. Le thème
+illustration gardait `couleur_fond` dans tous les états (décision d'origine pour Hilal : « l'effet
+doré vient des dessins allumés »). **Décision (portée la plus simple, tout le thème illustration)** :
+à la récompense, le fond de la strip prend la couleur du pass doré (`couleur_fond_reward`, sinon
+`#c9a84c`), comme les thèmes icône et logo ; titre et accent manuels ignorés sur le doré (calcul
+automatique, comme la décision C des autres thèmes) ; disques et logo inchangés. Un marchand qui ne
+veut pas de doré (Hilal si besoin) règle sa couleur de récompense dans l'admin.
+- **Cache** : clé à part pour la récompense en thème illustration (`stamps_<n>_or`) : les images de
+  récompense déjà en cache (fond normal) sont redessinées sans ré-enregistrer les fiches ; les
+  autres états gardent leur clé.
+- **Preuves** : 6 147 rendus SVG comparés (production vs nouveau code) : **seules** les récompenses
+  du thème illustration changent, tout le reste identique au caractère près ; Hilal hors
+  récompense identique au pixel près. Rendus : ORES 5/5 (crème → doré, et sous Fête Nationale),
+  Hilal 11/11 avant / après. Filet 511/511 ; contre-épreuve sur `5f4fee5` : seul le nouveau
+  contrôle échoue.
+
 ## 16. DETTE — MISE À JOUR (compléter §4)
 
 ### Petits correctifs à glisser plus tard (décision du pilotage, 13/10)
